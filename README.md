@@ -2,6 +2,10 @@
 
 A responsive trade-compliance frontend for small manufacturers, inspired by the supplied editorial design reference. Built with React, TypeScript, Vite, Lucide icons, and Papa Parse.
 
+## Deployment
+
+Production: [exportmate.vercel.app](https://exportmate.vercel.app). Vercel project: `exportmate` under `stephanies-projects-5bf9fd09`. Build configuration is in `vercel.json`; temporary files and local environment files are excluded by `.vercelignore`.
+
 ## Run
 
 ```sh
