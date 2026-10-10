@@ -15,6 +15,42 @@ npm run dev
 
 Open the local URL printed by Vite (normally http://127.0.0.1:5173). `npm run build` type-checks and produces `dist/`; `npm run preview` serves the production build. No environment variables or credentials are required for the prototype.
 
+## AI features (Google Cloud)
+
+All AI code lives in [`ai/`](ai/): the chat UI in [`ai/chat/`](ai/chat/), News watch in [`ai/news/`](ai/news/), and one Node service in [`ai/server/`](ai/server/) that serves every `/api/*` route.
+
+- **Assistant (RAG agent):** a launcher at the bottom-right of every screen; `#/chat` is the full-screen view with the session's audit trail. Gemini on Vertex AI plans and calls tools in a loop ([`ai/server/agent.js`](ai/server/agent.js)): `search_knowledge` (vector search), `query_inventory` and `get_alerts` (exact Firestore lookups), `calculate` (arithmetic, so figures are traceable) and `get_scan_status`. Every fact is cited with a numbered source. Before an answer is returned, an auditor step checks that citations resolve to retrieved evidence and that figures appear in tool results; a failing draft goes back to the model once.
+- **Vector database:** Firestore vector search over `gemini-embedding-001` embeddings (768 dimensions, cosine), in the `kb` collection ([`ai/server/rag.js`](ai/server/rag.js)). Indexed: stock items, news articles, alerts, sources and help guides ([`ai/server/seed/guides.js`](ai/server/seed/guides.js)). Each scan indexes its new articles and alerts; `npm run index` rebuilds everything and removes stale entries.
+- **Audit trail:** each answer streams its steps live (NDJSON) and stores an audit record in `audits`: question, reasoning summaries, every tool call with arguments and retrieved evidence (with similarity scores), auditor findings, checks, citations, model, token usage and timing. Open "Audit" under any answer, or the side panel on `#/chat`, which reloads the session's records from Firestore. Records can be downloaded as JSON. `GET /api/audits?session=<id>` returns only that session's records.
+- **News watch** (`#/workspace/news`, plus a section on Overview): every day at 07:00 Asia/Ho_Chi_Minh, Cloud Scheduler calls `POST /api/scan`. The service reads the enabled RSS/Atom sources, skips articles it has already analysed, and asks Gemini which stock items each new article could affect. Alerts store severity, direction (risk/opportunity/watch), affected SKUs with reasons, stock value exposed, and a next step.
+- **Data:** Firestore (`asia-southeast1`) holds `inventory` (31 synthetic SKUs for a Vietnamese wood-products and furniture exporter), `sources`, `articles`, `impacts`, `scans`, `kb` (vector index) and `audits`. The industry was chosen because current news moves it: EUDR, US Section 232 timber/furniture tariffs, plywood trade cases. Stock is fictional; news is real.
+- **Sources:** seven built-in feeds (Timber Trades Journal, VnExpress International, European Commission press corner, four Google News searches). Users can add any public HTTPS feed; the server tests it first and blocks private/metadata addresses.
+
+### Google Cloud resources (project `exportmate-app`)
+
+| Resource | Name |
+| --- | --- |
+| Cloud Run service | `exportmate-ai` (asia-southeast1), runs as `exportmate-chat@…` with `roles/aiplatform.user` and `roles/datastore.user` |
+| Firestore | `(default)` database, native mode, asia-southeast1; vector indexes on `kb.embedding` and `(kb.type, kb.embedding)` |
+| Cloud Scheduler | `exportmate-daily-news-scan`, OIDC-signed as `exportmate-scheduler@…` |
+| Models | `gemini-2.5-flash` for the agent and scans (`GEMINI_MODEL`), `gemini-embedding-001` for embeddings (`EMBED_MODEL`), both via Vertex AI |
+
+`vercel.json` rewrites `/api/*` to the Cloud Run URL; locally `vite.config.ts` proxies `/api` to `127.0.0.1:8080`.
+
+### Run and deploy
+
+```sh
+gcloud auth application-default login
+cd ai/server && npm install
+npm run seed   # load synthetic stock and default sources, then rebuild the vector index
+npm run scan   # run one news scan now (add --lookback=14 to re-read two weeks)
+npm run index  # rebuild the vector index; `node rag.js "<query>"` runs a test search
+npm run dev    # API on :8080 (run `npm run dev` in the repo root too)
+gcloud run deploy exportmate-ai --source . --region asia-southeast1 --project exportmate-app
+```
+
+The API is public for the prototype (max 3 instances). "Scan now" is limited to one scan per 10 minutes; the signed scheduler request skips that limit. Chat questions and answers are stored in `audits`. Alerts and answers are AI assessments of headlines and snippets, not legal advice. Orders and playbook rules live in the browser, so the assistant cannot see them yet.
+
 ## Explore
 
 The public landing at `#/` includes full How it works, About, and Contact sections with parallax photography and 3D layers. Account pages include `#/login`, `#/signup`, `#/verify-email`, `#/forgot-password`, `#/check-email`, `#/reset-password`, `#/onboarding`, and `#/logout`. Use the demo CTA to enter `#/workspace`; profile settings are at `#/workspace/account`. Forms are connected preview flows, not real authentication. No passwords are stored or emails sent.

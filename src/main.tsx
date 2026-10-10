@@ -27,6 +27,7 @@ import {
   Trash2,
   UserRound,
   LogOut,
+  Newspaper,
 } from "lucide-react";
 import Papa from "papaparse";
 import {
@@ -43,9 +44,12 @@ import "./styles.css";
 import Landing from "./Landing";
 import AccountPage, { AccountSettings } from "./Account";
 import { getProfile, hasSession } from "./account-store";
+import ChatPage, { ChatWidget } from "../ai/chat/Chat";
+import NewsWatchPage, { NewsHighlights } from "../ai/news/NewsWatch";
 const nav = [
   ["", "Overview"],
   ["orders", "Orders"],
+  ["news", "News watch"],
   ["rules", "Rule watch"],
   ["data", "Data room"],
   ["playbook", "Playbook"],
@@ -408,6 +412,7 @@ function App() {
             const Icon = [
               Globe2,
               Package,
+              Newspaper,
               ShieldCheck,
               Upload,
               Settings2,
@@ -709,6 +714,7 @@ function App() {
                   </div>
                 </section>
               </div>
+              <NewsHighlights />
               <div className="section-heading order-section">
                 <h2>Orders on the move.</h2>
                 <button className="text-link" onClick={() => go("orders")}>
@@ -946,6 +952,7 @@ function App() {
               )}
             </>
           )}
+          {route === "news" && <NewsWatchPage />}
           {route === "rules" && (
             <>
               <PageHeading
@@ -1588,7 +1595,7 @@ function Root() {
   const workspace =
     path === "workspace" ||
     path.startsWith("workspace/") ||
-    /^(orders|rules|data|playbook)(\/|$)/.test(path);
+    /^(orders|news|rules|data|playbook)(\/|$)/.test(path);
   useEffect(() => {
     const update = () => {
       const value = location.hash.replace(/^#\/?/, "");
@@ -1609,9 +1616,21 @@ function Root() {
       location.hash = "/login";
     }
   }, [path, workspace]);
-  if (path === "") return <Landing section={section} />;
-  if (workspace) return hasSession() ? <App /> : null;
-  return <AccountPage route={path} />;
+  if (path === "chat") return <ChatPage />;
+  return (
+    <>
+      {path === "" ? (
+        <Landing section={section} />
+      ) : workspace ? (
+        hasSession() ? (
+          <App />
+        ) : null
+      ) : (
+        <AccountPage route={path} />
+      )}
+      <ChatWidget />
+    </>
+  );
 }
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
