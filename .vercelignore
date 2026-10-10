@@ -7,3 +7,4 @@ docs
 *.tsbuildinfo
 .env*
 .DS_Store
+ai/server
