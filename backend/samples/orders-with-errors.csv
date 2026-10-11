@@ -1,0 +1,5 @@
+id,product,supplier,destination,value,shipDate,hsCode
+PO-6001,Birch plywood · 12 mm,Mekong Timber,"Osaka, JP",-200,2026-12-04,4412.32
+PO-6002,Rubberwood panels,An Cuong Wood,"Busan, KR",9100,04/12/2026,4418.99
+PO-6003,Acacia plywood · 18 mm,Binh Phu Wood,"Antwerp, BE",12000,2026-12-20,44-12
+PO-2291,Acacia plywood · 18 mm,Binh Phu Wood,"Rotterdam, NL",24000,2026-10-27,4412.33

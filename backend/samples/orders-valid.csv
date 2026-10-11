@@ -1,0 +1,4 @@
+id,product,supplier,destination,value,shipDate,hsCode
+PO-5001,Acacia plywood · 15 mm,Binh Phu Wood,"Rotterdam, NL",21500,2026-12-04,4412.33
+PO-5002,Rubberwood dining table,An Cuong Wood,"Singapore, SG",8750.50,2026-12-11,9403.60
+PO-5003,Oak veneer sheets,Mekong Timber,"Hamburg, DE",6400,2026-12-18,4408.10
