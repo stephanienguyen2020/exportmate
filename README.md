@@ -13,7 +13,21 @@ npm install
 npm run dev
 ```
 
-Open the local URL printed by Vite (normally http://127.0.0.1:5173). `npm run build` type-checks and produces `dist/`; `npm run preview` serves the production build. No environment variables or credentials are required for the prototype.
+Open the local URL printed by Vite (normally http://127.0.0.1:5173). `npm run build` type-checks and produces `dist/`; `npm run preview` serves the production build. The sample demo needs no credentials. Signed-in workspaces require the backend and Firebase configuration below.
+
+## Company API integration
+
+The signed-in workspace uses the FastAPI contracts in `backend/app/schemas`: account/profile and onboarding, paginated orders and original CSV row details, overview, two-step CSV validation/commit, and playbook CRUD. Firebase handles sign-in, signup, email verification and password recovery. Requests use refreshed Firebase ID tokens. Viewer accounts cannot import or change rules; company settings require an owner.
+
+Copy `.env.example` to `.env.local` and fill in the Firebase **web app** configuration. For Vercel, set `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_APP_ID`, and the server-side `BACKEND_URL` (the deployed FastAPI HTTPS origin), then redeploy. Enable Firebase email/password sign-in and authorize `exportmate.vercel.app` in Firebase Authentication. The backend must use the same Firebase project. Never put service-account keys or database credentials in `VITE_*` variables.
+
+`/api/v1/*` is routed through `api/backend.ts` to `BACKEND_URL`; the broader `/api/*` AI rewrite remains separate. Missing backend configuration returns a clear 503 rather than routing company requests to the AI service. `VITE_BACKEND_API_URL` can optionally point directly to a backend `/api/v1` endpoint when its CORS allows the frontend. Local Vite routes `/api/v1` to port 8000 and `/api` to port 8080.
+
+For local backend development, use `VITE_AUTH_MODE=dev` together with backend `AUTH_MODE=dev`, seed the backend, and sign in as `lan@example.com` with any password of at least eight characters. Development tokens are disabled in production builds. “Explore the demo” remains an explicitly browser-local sample workspace; it never falls back from a failed API request to sample records. Live order statuses and currencies come from the server. Exposure reports, analysis and supplier actions remain pending backend phases and are not presented as live reports.
+
+CSV imports use server validation and explicit commit; repeated clicks are blocked. The Vercel upload path uses a 4 MB file limit to leave room for multipart overhead. Backend uploads made directly support the backend's 5 MB limit.
+
+Verification: `npm run build`; `npx playwright install chromium` once, then `npm test`. Browser integration tests exercise contract-shaped API responses, pagination, bearer headers, errors, roles, imports, playbook mutations, profile updates, onboarding, logout and demo isolation. With the local backend running, `TEST_REAL_BACKEND=1 npm test` also exercises a real FastAPI/Postgres round trip in a separate test company. Deployed Firebase authentication still needs its own end-to-end check.
 
 ## AI features (Google Cloud)
 
@@ -49,11 +63,11 @@ npm run dev    # API on :8080 (run `npm run dev` in the repo root too)
 gcloud run deploy exportmate-ai --source . --region asia-southeast1 --project exportmate-app
 ```
 
-The API is public for the prototype (max 3 instances). "Scan now" is limited to one scan per 10 minutes; the signed scheduler request skips that limit. Chat questions and answers are stored in `audits`. Alerts and answers are AI assessments of headlines and snippets, not legal advice. Orders and playbook rules live in the browser, so the assistant cannot see them yet.
+The API is public for the prototype (max 3 instances). "Scan now" is limited to one scan per 10 minutes; the signed scheduler request skips that limit. Chat questions and answers are stored in `audits`. Alerts and answers are AI assessments of headlines and snippets, not legal advice. Signed-in orders and playbook rules live in the FastAPI backend; the assistant cannot see them yet. Sample-demo records remain browser-local.
 
 ## Explore
 
-The public landing at `#/` includes full How it works, About, and Contact sections with parallax photography and 3D layers. Account pages include `#/login`, `#/signup`, `#/verify-email`, `#/forgot-password`, `#/check-email`, `#/reset-password`, `#/onboarding`, and `#/logout`. Use the demo CTA to enter `#/workspace`; profile settings are at `#/workspace/account`. Forms are connected preview flows, not real authentication. No passwords are stored or emails sent.
+The public landing at `#/` includes full How it works, About, and Contact sections with parallax photography and 3D layers. Account pages include `#/login`, `#/signup`, `#/verify-email`, `#/forgot-password`, `#/check-email`, `#/reset-password`, `#/onboarding`, and `#/logout`. Use the demo CTA to enter `#/workspace`; profile settings are at `#/workspace/account`. Account forms use Firebase when configured. The sample-demo entry remains available without an account.
 
 - **Overview:** corridor snapshot, exposure metrics and prioritized action.
 - **Orders:** search, status filters and order-impact detail.
@@ -81,4 +95,4 @@ Port photography: [Unsplash image](https://images.unsplash.com/photo-15785754371
 
 ## Scope
 
-This delivery implements the frontend and backend plan. Authentication, live regulation crawling, Gemini/ADK execution, verified citations, document extraction, durable server storage and real notification delivery are described in the backend plan and are not implemented.
+The frontend integrates the available phase-one company APIs and the existing AI service. Live company access requires the deployed backend URL and Firebase web configuration. Regulation analysis, supplier message delivery, document extraction and chat access to company orders remain future backend work.

@@ -7,6 +7,8 @@ export type Order = {
   shipDate: string;
   hsCode: string;
   risk: boolean;
+  currency?: string;
+  status?: "awaiting_analysis" | "clear" | "exposed" | "needs_data";
 };
 export type Rule = {
   id: string;

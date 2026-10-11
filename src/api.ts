@@ -1,0 +1,204 @@
+import { getToken } from "./auth";
+import type { Order, Rule } from "./data";
+import { defaultProfile, putProfile, type Profile } from "./account-store";
+
+export type Account = {
+  user: {
+    id: string;
+    email: string;
+    name: string;
+    alerts: boolean;
+    digest: boolean;
+  };
+  company: {
+    id: string;
+    name: string;
+    businessRole: string;
+    origin: string;
+    destination: string;
+    currency: string;
+  } | null;
+  role: "owner" | "editor" | "viewer" | null;
+  onboarded: boolean;
+};
+export type ApiOrder = Omit<Order, "value" | "risk"> & {
+  valueMinor: number;
+  currency: string;
+  status: "awaiting_analysis" | "clear" | "exposed" | "needs_data";
+};
+export type Overview = {
+  totalOrders: number;
+  countsByStatus: Record<string, number>;
+  valueAtRiskByCurrency: Record<string, number>;
+  nearestAffectedShipDate: string | null;
+  sourcesCheckedAt: string | null;
+};
+export type OrderDetail = {
+  order: ApiOrder;
+  source: {
+    importId: string;
+    rowNumber: number;
+    raw: Record<string, string>;
+    rowHash: string;
+  } | null;
+  exposures: unknown[];
+};
+export type ImportPreview = {
+  id: string;
+  filename: string;
+  status: "validated" | "invalid" | "committed";
+  rowCount: number;
+  errors: { row: number | null; field: string | null; message: string }[];
+  preview: (Omit<ApiOrder, "status"> & { rowNumber: number })[];
+  duplicateOfImportId: string | null;
+};
+type Envelope<T> = {
+  data: T;
+  meta: { nextCursor?: string | null; total?: number; revision?: number };
+};
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+    public code: string,
+  ) {
+    super(message);
+  }
+}
+const base = (import.meta.env.VITE_BACKEND_API_URL || "/api/v1").replace(
+  /\/$/,
+  "",
+);
+export async function request<T>(
+  path: string,
+  options: RequestInit = {},
+): Promise<Envelope<T>> {
+  const headers = new Headers(options.headers);
+  headers.set("Authorization", `Bearer ${await getToken()}`);
+  if (options.body && !(options.body instanceof FormData))
+    headers.set("Content-Type", "application/json");
+  const response = await fetch(base + path, {
+    ...options,
+    headers,
+    signal: options.signal
+      ? AbortSignal.any([options.signal, AbortSignal.timeout(30000)])
+      : AbortSignal.timeout(30000),
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) {
+    const fields = body?.error?.fieldErrors;
+    const details = fields
+      ? Object.entries(fields)
+          .map(([key, value]) => `${key}: ${value}`)
+          .join("; ")
+      : "";
+    throw new ApiError(
+      [body?.error?.message || `Request failed (${response.status}).`, details]
+        .filter(Boolean)
+        .join(" "),
+      response.status,
+      body?.error?.code || "request_failed",
+    );
+  }
+  if (!body || !("data" in body))
+    throw new Error(
+      "The backend returned an unexpected response. Check the API deployment configuration.",
+    );
+  return body;
+}
+export function asOrder(order: ApiOrder): Order {
+  return {
+    ...order,
+    value: order.valueMinor / 100,
+    risk: order.status === "exposed",
+  };
+}
+export function cacheAccount(account: Account): Profile {
+  const profile: Profile = {
+    ...defaultProfile,
+    ...account.user,
+    company: account.company?.name || "",
+    role: account.company?.businessRole || "Manufacturer",
+    origin: account.company?.origin || "Vietnam",
+    destination: account.company?.destination || "European Union",
+    onboarded: account.onboarded,
+  };
+  putProfile(profile);
+  return profile;
+}
+export const api = {
+  me: (signal?: AbortSignal) =>
+    request<Account>("/me", { signal }).then((r) => r.data),
+  updateMe: (p: Pick<Profile, "name" | "alerts" | "digest">) =>
+    request<Account>("/me", { method: "PATCH", body: JSON.stringify(p) }).then(
+      (r) => r.data,
+    ),
+  updateCompany: (p: Profile) =>
+    request("/company", {
+      method: "PATCH",
+      body: JSON.stringify({
+        name: p.company,
+        businessRole: p.role,
+        origin: p.origin,
+        destination: p.destination,
+      }),
+    }),
+  onboard: (p: Profile) =>
+    request<Account>("/onboarding", {
+      method: "POST",
+      body: JSON.stringify({
+        companyName: p.company,
+        businessRole: p.role,
+        origin: p.origin,
+        destination: p.destination,
+        currency: "USD",
+      }),
+    }).then((r) => r.data),
+  logout: () => request("/me/logout", { method: "POST" }),
+  overview: (signal?: AbortSignal) =>
+    request<Overview>("/overview", { signal }).then((r) => r.data),
+  async orders(signal?: AbortSignal) {
+    const orders: Order[] = [];
+    let cursor: string | null | undefined;
+    do {
+      const query = new URLSearchParams({ limit: "200" });
+      if (cursor) query.set("cursor", cursor);
+      const page = await request<ApiOrder[]>(`/orders?${query}`, { signal });
+      orders.push(...page.data.map(asOrder));
+      cursor = page.meta.nextCursor;
+    } while (cursor);
+    return orders;
+  },
+  detail: (id: string) =>
+    request<OrderDetail>(`/orders/${encodeURIComponent(id)}`).then(
+      (r) => r.data,
+    ),
+  rules: (signal?: AbortSignal) =>
+    request<Rule[]>("/playbook/rules", { signal }).then((r) => r.data),
+  addRule: (rule: Omit<Rule, "id">) =>
+    request<Rule>("/playbook/rules", {
+      method: "POST",
+      body: JSON.stringify(rule),
+    }).then((r) => r.data),
+  toggleRule: (rule: Rule) =>
+    request<Rule>(`/playbook/rules/${rule.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ enabled: !rule.enabled }),
+    }).then((r) => r.data),
+  deleteRule: (id: string) =>
+    request(`/playbook/rules/${id}`, { method: "DELETE" }),
+  upload: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return request<ImportPreview>("/imports", {
+      method: "POST",
+      body: form,
+    }).then((r) => r.data);
+  },
+  import: (id: string) =>
+    request<ImportPreview>(`/imports/${id}`).then((r) => r.data),
+  commit: (id: string) =>
+    request<{ ordersCreated: number }>(`/imports/${id}/commit`, {
+      method: "POST",
+    }).then((r) => r.data),
+};
