@@ -43,14 +43,17 @@ export function putProfile(p: Profile) {
 }
 export function hasSession() {
   try {
-    return sessionStorage.getItem("em-session") === "demo";
+    return ["demo", "api"].includes(sessionStorage.getItem("em-session") || "");
   } catch {
     return false;
   }
 }
-export function startSession() {
+export function isApiSession() {
+  return sessionStorage.getItem("em-session") === "api";
+}
+export function startSession(mode: "demo" | "api" = "demo") {
   try {
-    sessionStorage.setItem("em-session", "demo");
+    sessionStorage.setItem("em-session", mode);
     return true;
   } catch {
     return false;

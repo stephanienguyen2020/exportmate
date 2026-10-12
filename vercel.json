@@ -6,6 +6,10 @@
   "installCommand": "npm ci",
   "rewrites": [
     {
+      "source": "/api/v1/:path*",
+      "destination": "/api/backend?path=:path*"
+    },
+    {
       "source": "/api/:path*",
       "destination": "https://exportmate-ai-288740653400.asia-southeast1.run.app/api/:path*"
     }

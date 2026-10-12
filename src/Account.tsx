@@ -18,9 +18,23 @@ import {
   openDemo,
   navigate,
   intendedRoute,
+  isApiSession,
   type Profile,
 } from "./account-store";
 import "./account.css";
+import { api, cacheAccount, type Account } from "./api";
+import {
+  signIn,
+  signUp,
+  verifyEmail,
+  resendVerification,
+  resetEmail,
+  resetPassword,
+  signOutAccount,
+  errorMessage,
+  authConfigured,
+  devAuth,
+} from "./auth";
 function PasswordField({
   label = "Password",
   value,
@@ -58,7 +72,15 @@ function PasswordField({
     </label>
   );
 }
-export function AccountSettings({ onUpdate }: { onUpdate: () => void }) {
+export function AccountSettings({
+  onUpdate,
+  account,
+}: {
+  onUpdate: () => void;
+  account: Account | null;
+}) {
+  const live = isApiSession();
+  const [busy, setBusy] = useState(false);
   const [p, setP] = useState(getProfile);
   const [saved, setSaved] = useState("");
   const update = (key: keyof Profile, value: string | boolean) => {
@@ -78,8 +100,29 @@ export function AccountSettings({ onUpdate }: { onUpdate: () => void }) {
         </a>
       </div>
       <form
-        onSubmit={(e) => {
+        onSubmit={async (e) => {
           e.preventDefault();
+          if (busy) return;
+          if (live) {
+            setBusy(true);
+            setSaved("");
+            try {
+              await api.updateMe({
+                name: p.name,
+                alerts: p.alerts,
+                digest: p.digest,
+              });
+              if (account?.role === "owner") await api.updateCompany(p);
+              cacheAccount(await api.me());
+              setSaved("Saved to your account.");
+              onUpdate();
+            } catch (error) {
+              setSaved(errorMessage(error));
+            } finally {
+              setBusy(false);
+            }
+            return;
+          }
           if (putProfile(p)) {
             setSaved("Saved in this browser.");
             onUpdate();
@@ -107,6 +150,7 @@ export function AccountSettings({ onUpdate }: { onUpdate: () => void }) {
               Company
               <input
                 required
+                disabled={live && account?.role !== "owner"}
                 value={p.company}
                 onChange={(e) => update("company", e.target.value)}
               />
@@ -114,6 +158,7 @@ export function AccountSettings({ onUpdate }: { onUpdate: () => void }) {
             <label className="ac-field">
               Role
               <select
+                disabled={live && account?.role !== "owner"}
                 value={p.role}
                 onChange={(e) => update("role", e.target.value)}
               >
@@ -148,9 +193,9 @@ export function AccountSettings({ onUpdate }: { onUpdate: () => void }) {
             <div className="ac-storage-note">
               <ShieldCheck size={19} />
               <span>
-                Demo profile. Saved locally.
-                <br />
-                No passwords are stored.
+                {live
+                  ? "Profile saved to your company account."
+                  : "Demo profile. Saved locally."}
               </span>
             </div>
             <a className="text-link" href="#/privacy">
@@ -160,7 +205,7 @@ export function AccountSettings({ onUpdate }: { onUpdate: () => void }) {
           </section>
         </div>
         <div className="ac-save">
-          <button className="btn" type="submit">
+          <button className="btn" type="submit" disabled={busy}>
             Save changes
             <Check size={16} />
           </button>
@@ -171,6 +216,8 @@ export function AccountSettings({ onUpdate }: { onUpdate: () => void }) {
   );
 }
 export default function AccountPage({ route }: { route: string }) {
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState("");
   const [p, setP] = useState(getProfile);
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
@@ -184,42 +231,77 @@ export default function AccountPage({ route }: { route: string }) {
     setPassword("");
     setConfirm("");
     setDone(false);
-    if (route === "logout") endSession();
+    if (route === "onboarding") {
+      setP(getProfile());
+      setStep(0);
+    }
+    if (route === "logout") {
+      const live = isApiSession();
+      endSession();
+      if (live) {
+        setBusy(true);
+        api
+          .logout()
+          .catch((error) =>
+            setError(
+              `Signed out locally. Could not revoke other sessions: ${errorMessage(error)}`,
+            ),
+          )
+          .finally(() =>
+            signOutAccount()
+              .catch((error) => setError(errorMessage(error)))
+              .finally(() => setBusy(false)),
+          );
+      }
+    }
   }, [route]);
-  const completeSignIn = () => {
-    if (!startSession()) {
-      setError("Browser storage is unavailable. Enable it to continue.");
-      return;
+  async function run(action: () => Promise<void>) {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await action();
+    } catch (error) {
+      setError(errorMessage(error));
+    } finally {
+      setBusy(false);
     }
-    const profile = {
-      ...getProfile(),
-      email: email.trim() || getProfile().email,
-    };
-    if (!putProfile(profile)) {
-      setError("Profile could not be saved.");
-      return;
-    }
-    navigate(intendedRoute());
-  };
+  }
+  async function enterWorkspace() {
+    const account = await api.me();
+    cacheAccount(account);
+    if (!startSession("api"))
+      throw new Error("Browser storage is unavailable. Enable it to continue.");
+    navigate(account.onboarded ? intendedRoute() : "onboarding");
+  }
+  const completeSignIn = () =>
+    run(async () => {
+      const verified = await signIn(email.trim(), password);
+      setPassword("");
+      if (!verified) {
+        putProfile({ ...getProfile(), email: email.trim() });
+        navigate("verify-email");
+        return;
+      }
+      await enterWorkspace();
+    });
   const signup = (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
-    if (password.length < 8) return;
-    const profile = {
-      ...defaultProfile,
-      name: name.trim(),
-      email: email.trim(),
-      company: "",
-      onboarded: false,
-    };
-    if (!putProfile(profile)) {
-      setError("Browser storage is unavailable.");
-      return;
-    }
-    endSession();
-    setP(profile);
-    setPassword("");
-    navigate("verify-email");
+    void run(async () => {
+      endSession();
+      await signUp(name.trim(), email.trim(), password);
+      putProfile({
+        ...defaultProfile,
+        name: name.trim(),
+        email: email.trim(),
+        company: "",
+        onboarded: false,
+      });
+      setPassword("");
+      if (devAuth) await enterWorkspace();
+      else navigate("verify-email");
+    });
   };
   const titles: Record<string, [string, string]> = {
     login: ["BACK IN", "BUSINESS."],
@@ -287,7 +369,7 @@ export default function AccountPage({ route }: { route: string }) {
                   <a className="ac-small-link" href="#/forgot-password">
                     Forgot password?
                   </a>
-                  <button className="ac-primary" type="submit">
+                  <button className="ac-primary" type="submit" disabled={busy}>
                     Sign in
                     <ArrowRight size={18} />
                   </button>
@@ -351,7 +433,7 @@ export default function AccountPage({ route }: { route: string }) {
                       .
                     </span>
                   </label>
-                  <button className="ac-primary" type="submit">
+                  <button className="ac-primary" type="submit" disabled={busy}>
                     Create account
                     <ArrowRight size={18} />
                   </button>
@@ -367,17 +449,35 @@ export default function AccountPage({ route }: { route: string }) {
                 <h2>Verify your email.</h2>
                 <p className="ac-lead">{getProfile().email}</p>
                 <div className="ac-preview-box">
-                  Preview only. No verification email was sent.
+                  Open the verification link sent to your email, then continue
+                  here.
                 </div>
                 <button
                   className="ac-primary"
-                  onClick={() => {
-                    if (startSession()) navigate("onboarding");
-                    else setError("Browser storage is unavailable.");
-                  }}
+                  disabled={busy}
+                  onClick={() =>
+                    void run(async () => {
+                      await verifyEmail(
+                        new URLSearchParams(location.search).get("oobCode"),
+                      );
+                      await enterWorkspace();
+                    })
+                  }
                 >
-                  Preview verification
+                  I’ve verified my email
                   <ArrowRight size={18} />
+                </button>
+                <button
+                  className="ac-small-link"
+                  disabled={busy}
+                  onClick={() =>
+                    void run(async () => {
+                      await resendVerification();
+                      setNotice("Verification email sent.");
+                    })
+                  }
+                >
+                  Resend verification email
                 </button>
                 <a className="ac-small-link" href="#/signup">
                   Use another email
@@ -392,8 +492,11 @@ export default function AccountPage({ route }: { route: string }) {
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
-                    setPassword("");
-                    navigate("check-email");
+                    void run(async () => {
+                      await resetEmail(email.trim());
+                      setPassword("");
+                      navigate("check-email");
+                    });
                   }}
                 >
                   <label className="ac-field">
@@ -407,7 +510,7 @@ export default function AccountPage({ route }: { route: string }) {
                       autoComplete="email"
                     />
                   </label>
-                  <button className="ac-primary" type="submit">
+                  <button className="ac-primary" type="submit" disabled={busy}>
                     Continue
                     <ArrowRight size={18} />
                   </button>
@@ -420,18 +523,13 @@ export default function AccountPage({ route }: { route: string }) {
             {route === "check-email" && (
               <>
                 <Mail className="ac-large-icon" size={40} />
-                <h2>Recovery, previewed.</h2>
-                <p className="ac-lead">No reset email was sent.</p>
+                <h2>Check your email.</h2>
+                <p className="ac-lead">
+                  If an account matches, you’ll receive a password reset link.
+                </p>
                 <div className="ac-preview-box">
-                  Explore the next screen without an email token.
+                  Open the secure link in your email to choose a new password.
                 </div>
-                <button
-                  className="ac-primary"
-                  onClick={() => navigate("reset-password")}
-                >
-                  Preview password reset
-                  <ArrowRight size={18} />
-                </button>
                 <a className="ac-small-link" href="#/forgot-password">
                   Try another email
                 </a>
@@ -441,8 +539,10 @@ export default function AccountPage({ route }: { route: string }) {
               (done ? (
                 <>
                   <Check className="ac-large-icon" size={40} />
-                  <h2>Reset preview complete.</h2>
-                  <p className="ac-lead">No account password was changed.</p>
+                  <h2>Password updated.</h2>
+                  <p className="ac-lead">
+                    You can now sign in with your new password.
+                  </p>
                   <a className="ac-primary" href="#/login">
                     Back to sign in
                     <ArrowRight size={18} />
@@ -459,10 +559,24 @@ export default function AccountPage({ route }: { route: string }) {
                         setError("Passwords don’t match.");
                         return;
                       }
-                      setPassword("");
-                      setConfirm("");
-                      setError("");
-                      setDone(true);
+                      void run(async () => {
+                        const code = new URLSearchParams(location.search).get(
+                          "oobCode",
+                        );
+                        if (!code)
+                          throw new Error(
+                            "Open the password reset link from your email.",
+                          );
+                        await resetPassword(code, password);
+                        setPassword("");
+                        setConfirm("");
+                        setDone(true);
+                        history.replaceState(
+                          null,
+                          "",
+                          location.pathname + location.hash,
+                        );
+                      });
                     }}
                   >
                     <PasswordField
@@ -477,8 +591,12 @@ export default function AccountPage({ route }: { route: string }) {
                       value={confirm}
                       onChange={setConfirm}
                     />
-                    <button className="ac-primary" type="submit">
-                      Preview reset
+                    <button
+                      className="ac-primary"
+                      type="submit"
+                      disabled={busy}
+                    >
+                      Reset password
                       <ArrowRight size={18} />
                     </button>
                   </form>
@@ -503,9 +621,12 @@ export default function AccountPage({ route }: { route: string }) {
                       setStep(step + 1);
                       return;
                     }
-                    if (putProfile({ ...p, onboarded: true }) && startSession())
+                    void run(async () => {
+                      const account = await api.onboard(p);
+                      cacheAccount(account);
+                      startSession("api");
                       navigate("workspace/data");
-                    else setError("Browser storage is unavailable.");
+                    });
                   }}
                 >
                   {step === 0 && (
@@ -590,7 +711,7 @@ export default function AccountPage({ route }: { route: string }) {
                       <p>Next: import your orders.</p>
                     </div>
                   )}
-                  <button className="ac-primary" type="submit">
+                  <button className="ac-primary" type="submit" disabled={busy}>
                     {step === 2 ? "Open workspace" : "Continue"}
                     <ArrowRight size={18} />
                   </button>
@@ -611,7 +732,9 @@ export default function AccountPage({ route }: { route: string }) {
               <>
                 <LogOut className="ac-large-icon" size={38} />
                 <h2>You’re signed out.</h2>
-                <p className="ac-lead">Your local workspace is saved.</p>
+                <p className="ac-lead">
+                  {busy ? "Ending your session…" : "Your workspace is saved."}
+                </p>
                 <a className="ac-primary" href="#/login">
                   Sign in again
                   <ArrowRight size={18} />
@@ -628,14 +751,17 @@ export default function AccountPage({ route }: { route: string }) {
                 <div className="ac-policy">
                   <h3>Stored here</h3>
                   <p>
-                    Demo profile, preferences, imports, playbook rules and
-                    inquiry drafts stay in this browser. The session uses
-                    session storage. Passwords are never stored.
+                    Sample-demo records and inquiry drafts stay in this browser.
+                    Signed-in company orders, imports, profiles and playbook
+                    rules are stored by the backend. Firebase handles account
+                    credentials; this app does not store passwords.
                   </p>
                   <h3>External requests</h3>
                   <p>
-                    Fonts load from Google Fonts. No analytics, account service
-                    or message provider is connected.
+                    Fonts load from Google Fonts. Account requests go to
+                    Firebase and the company backend. Chat and news use the AI
+                    service; chat questions and answers are stored in its audit
+                    trail.
                   </p>
                   <h3>Your control</h3>
                   <p>
@@ -656,9 +782,10 @@ export default function AccountPage({ route }: { route: string }) {
                 <div className="ac-policy">
                   <h3>A product preview</h3>
                   <p>
-                    Account flows, rule analyses and supplier messages are
-                    demonstrations. No real account is created and no message is
-                    delivered.
+                    Account and company data are saved through connected
+                    services when configured. Rule-change simulations and
+                    supplier messages remain demonstrations; no supplier message
+                    is delivered.
                   </p>
                   <h3>Sample decisions</h3>
                   <p>
@@ -688,6 +815,7 @@ export default function AccountPage({ route }: { route: string }) {
                 </a>
               </>
             )}
+            {notice && <p role="status">{notice}</p>}
             {error && (
               <p className="ac-error" role="alert">
                 {error}
@@ -695,9 +823,17 @@ export default function AccountPage({ route }: { route: string }) {
             )}
             {!["privacy", "terms", "logout"].includes(route) && (
               <p className="ac-demo-note">
-                DEMO FLOW · USE SAMPLE DETAILS
+                {authConfigured
+                  ? devAuth
+                    ? "LOCAL DEVELOPMENT SIGN-IN"
+                    : "SECURE ACCOUNT ACCESS"
+                  : "ACCOUNT SETUP PENDING"}
                 <br />
-                <span>No authentication or email service connected.</span>
+                <span>
+                  {authConfigured
+                    ? "Your orders and settings are saved to your company workspace."
+                    : "Account access needs deployment configuration. The sample demo is available from the home page."}
+                </span>
               </p>
             )}
           </div>

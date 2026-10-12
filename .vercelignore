@@ -8,3 +8,6 @@ docs
 .env*
 .DS_Store
 ai/server
+
+backend
+tests
