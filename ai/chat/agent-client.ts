@@ -1,4 +1,7 @@
 // Client for the agent API: streams audit steps (NDJSON) and returns the answer.
+import { isApiSession } from "../../src/account-store";
+import { getToken } from "../../src/auth";
+
 export type Citation = {
   ref: number;
   type: string;
@@ -73,13 +76,24 @@ export function sessionId(reset = false) {
   }
 }
 
+// In a company workspace the assistant also knows the company: the AI service
+// fetches its profile from the backend with this token. The demo stays anonymous.
+async function companyAuth(): Promise<Record<string, string>> {
+  if (!isApiSession()) return {};
+  try {
+    return { Authorization: `Bearer ${await getToken()}` };
+  } catch {
+    return {};
+  }
+}
+
 export async function askAgent(
   messages: Message[],
   onStep: (step: AuditStep) => void,
 ): Promise<{ reply: string; citations: Citation[]; audit: Audit }> {
   const res = await fetch(`${API}/chat`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(await companyAuth()) },
     body: JSON.stringify({
       sessionId: sessionId(),
       // Earlier answers carry the titles they cited so follow-ups can refer to them.

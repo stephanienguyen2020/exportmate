@@ -4,7 +4,7 @@ export const GUIDES = [
     id: "overview",
     title: "Overview page",
     url: "#/workspace",
-    text: "The Overview shows the Vietnam → Singapore → Europe trade corridor at a glance: open orders, orders that need attention, estimated value at risk and days until the next affected shipment. Below are the priority action, the top three news alerts from the daily scan and recent orders. 'Run demo' walks through a sample rule change step by step.",
+    text: "The Overview shows your trade corridor at a glance (the route set at signup, e.g. Vietnam → Singapore → European Union; change it in Account › About company): open orders, orders that need attention, estimated value at risk and days until the next affected shipment. Below are the priority action, the top three news alerts from the daily scan and recent orders. 'Run demo' walks through a sample rule change step by step.",
   },
   {
     id: "orders",
@@ -52,6 +52,6 @@ export const GUIDES = [
     id: "views-account",
     title: "Maker/Buyer view and account settings",
     url: "#/workspace/account",
-    text: "The Maker/Buyer switch in the top bar shows separately prepared estimates for the manufacturer (USD) and the Singapore buyer (SGD); it is not a currency conversion or a separate login. Account settings hold the profile, company, role, trade corridor and alert preferences. Sign-in is a demo preview without real authentication.",
+    text: "The Maker/Buyer switch in the top bar shows separately prepared estimates for the manufacturer (USD) and the Singapore buyer (SGD); it is not a currency conversion or a separate login. Account settings hold the profile, company, role, trade route (where you ship from, any transit stops, and your primary destination) and alert preferences. Sign-in is a demo preview without real authentication.",
   },
 ];

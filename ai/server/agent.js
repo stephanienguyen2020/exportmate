@@ -28,14 +28,25 @@ const clamp = (n, lo, hi, fallback) => (Number.isInteger(n) ? Math.min(hi, Math.
 const has = (value, wanted) => !wanted || String(value).toLowerCase().includes(String(wanted).toLowerCase());
 const SEVERITY = { high: 0, medium: 1, low: 2 };
 
-function system() {
+// Who the assistant works for. A signed-in company's profile comes from the backend
+// (GET /api/v1/company/knowledge); without one, the demo company.
+function workspace(company) {
+  if (!company)
+    return "The workspace belongs to Binh Duong Wood Co., a Vietnamese wood-products and furniture exporter. Its stock data is synthetic demo data; its news articles are real, from approved sources.";
+  const c = company.company;
+  return `You are working for ${c.name} (${c.businessRole}, based in ${c.origin}, primary market ${c.destination}). Its own company profile (what it does and makes, materials, certifications, sites, size, website) comes from get_company_profile. The stock items and news alerts in the other tools are synthetic demo data for a sample wood exporter, not ${c.name}'s own records: say so when you use them. News articles are real, from approved sources.`;
+}
+
+function system(company) {
   return `You are the ExportMate assistant, an AI agent inside ExportMate, a trade-compliance workspace.
-The workspace belongs to Binh Duong Wood Co., a Vietnamese wood-products and furniture exporter. Its stock data is synthetic demo data; its news articles are real, from approved sources. Today is ${new Date().toISOString().slice(0, 10)}.
+${workspace(company)} Today is ${new Date().toISOString().slice(0, 10)}.
 
 How to work:
 - For anything about the company's stock, news alerts, news, sources or how to use ExportMate, call tools first, every time, including follow-up questions. Never answer those from memory; earlier answers in the conversation are not a data source.
-- query_inventory gives exact stock facts (SKUs, counts, totals, filters). get_alerts gives the daily news-scan alerts. search_knowledge searches the vector index of news articles, alerts, stock items, sources and help guides. get_scan_status reports scan and source health.
+${company ? "- For anything about the company itself (what it does, products, materials, certifications, sites, markets, size, website), call get_company_profile and cite it. Don't guess company details.\n" : ""}- query_inventory gives exact stock facts (SKUs, counts, totals, filters). get_alerts gives the news-scan alerts. search_knowledge searches the vector index of news articles, alerts, stock items, sources and help guides. get_scan_status reports scan and source health.
+- get_alerts returns open alerts from every scan so far, not just the latest one. For what the latest (or today's) scan flagged, call get_alerts with latestScanOnly=true together with get_scan_status, and report only those alerts.
 - Be thorough before answering. For questions about exposure, risk or impact, gather all relevant alerts with get_alerts (not just one search hit), check the items with query_inventory, and use search_knowledge for the underlying news. Call tools in parallel when you can, and again with refined arguments when results are thin.
+- For exposure to a topic (e.g. "US plywood trade cases", "EUDR"), call get_alerts with topic keywords and no direction or severity filter: stock under "watch" and "opportunity" alerts is exposed too. If every returned alert is about the topic, report exposure.stockValueUsd (each SKU counted once) and cite exposure.ref. If some are off topic, call get_alerts again with the ids of the on-topic alerts and report that exposure instead. If nothing matches, retry with broader words or no keywords before saying no stock is exposed. Filter by direction or severity only when the user asks for just risks, opportunities or a severity.
 - Take numbers only from tool results. For a total across several SKUs, call query_inventory with those skus and use its totalStockValueUsd (cite the query's ref), so each item is counted once. For any other arithmetic (sums, differences, averages, percentages) use calculate; never do math in your head.
 - Cite every fact taken from a tool result with its ref number in square brackets, e.g. "PLY-103 has no geolocation data [3]." Cite only refs that appear in tool results, including calculate results. Don't add a reference list or explain the numbers; the app shows the sources.
 - In follow-up questions, resolve references such as "those items" or "that alert" yourself by calling the tools again. Don't ask the user for anything the tools can look up; ask only when the request is genuinely ambiguous.
@@ -93,14 +104,26 @@ const DECLARATIONS = [
   {
     name: "get_alerts",
     description:
-      "News-impact alerts from the daily AI news scan, most severe first. Each alert includes its headline, severity, direction, why it matters, every affected SKU (name, reason, stock value, markets, timber origin, geolocation status), the total stock value exposed, the next step and the source article.",
+      "News-impact alerts from the daily AI news scans, most severe first. By default it returns open alerts from every scan so far; set latestScanOnly for the most recent scan only. Each alert includes its headline, severity, direction, why it matters, every affected SKU (name, reason, stock value, markets, timber origin, geolocation status), the total stock value exposed, the next step and the source article. Also returns the exposure across all matching alerts: the distinct affected SKUs and their combined stock value, each SKU counted once. Filters combine with AND.",
     parameters: {
       type: Type.OBJECT,
       properties: {
-        severity: { type: Type.STRING, enum: ["high", "medium", "low"] },
-        direction: { type: Type.STRING, enum: ["risk", "opportunity", "watch"] },
+        latestScanOnly: { type: Type.BOOLEAN, description: "Only alerts raised by the most recent completed scan" },
+        keywords: {
+          type: Type.ARRAY,
+          items: { type: Type.STRING },
+          description:
+            "Topic filter: alerts whose headline, article title or explanation mentions any of these topic words, e.g. [\"plywood\", \"antidumping\"] or [\"EUDR\", \"deforestation\"]. Generic words (trade, case, court, market...) and country codes like US or EU are ignored, so it can return off-topic alerts; check each one.",
+        },
+        ids: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Only these alerts, by the id returned with each alert" },
+        severity: { type: Type.STRING, enum: ["high", "medium", "low"], description: "Only when the user asks for this severity" },
+        direction: {
+          type: Type.STRING,
+          enum: ["risk", "opportunity", "watch"],
+          description: "Only when the user asks for just risks, opportunities or watch items",
+        },
         skus: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Only alerts affecting any of these SKUs" },
-        limit: { type: Type.INTEGER, description: "Default 10" },
+        limit: { type: Type.INTEGER, description: "Alerts to return, default 10, max 30 (exposure always covers every match)" },
       },
     },
   },
@@ -116,7 +139,13 @@ const DECLARATIONS = [
   },
   {
     name: "get_scan_status",
-    description: "When the daily news scan last ran, how many articles it read and alerts it raised, the schedule, and each news source's status.",
+    description:
+      "When the daily news scan last ran, how many articles it read and alerts it raised, the schedule, and each news source's status. For which alerts it raised, call get_alerts with latestScanOnly.",
+  },
+  {
+    name: "get_company_profile",
+    description:
+      "The signed-in company's own profile from its ExportMate account (About company): name, role, where it is based, primary market, description, products, main materials and origin, certifications, website, year founded, team size and its sites. Only available in a company workspace.",
   },
 ];
 
@@ -178,7 +207,52 @@ function citeAlert(refs, a) {
   });
 }
 
+function citeScan(refs, s) {
+  return refs.cite(`scan:${s.id}`, {
+    type: "scan",
+    id: s.id,
+    title: `News scan, ${s.finishedAt.slice(0, 16).replace("T", " ")} UTC`,
+    url: "#/workspace/news",
+  });
+}
+
+// The most recent finished scan (a newer one may still be running or have failed).
+async function lastDoneScan() {
+  const snap = await scans.orderBy("startedAt", "desc").limit(5).get();
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() })).find((s) => s.status === "done") ?? null;
+}
+
+// Names a filtered query in its citation, e.g. "skus=PLY-101/PLY-102, market=EU".
+const describe = (args, skip) =>
+  Object.entries(args)
+    .filter(([k]) => !skip.includes(k))
+    .map(([k, v]) => `${k}=${Array.isArray(v) ? v.join("/") : v}`)
+    .join(", ");
+
+// Keyword filter: phrases split into singular words of 3+ letters, minus words most trade news shares.
+// A word matches at the start of a word, so "plywood" finds "plywood case" and "tariff" finds "tariffs".
+const GENERIC = new Set(["trade", "case", "court", "news", "alert", "stock", "exposure", "exposed", "risk", "impact", "market", "company", "product", "goods", "rule", "regulation", "the", "and", "for", "with", "from", "about"]);
+const topicPatterns = (keywords) =>
+  [
+    ...new Set(
+      keywords
+        .flatMap((k) => String(k).toLowerCase().match(/[a-z0-9]+/g) || [])
+        .map((w) => w.replace(/(?<!s)s$/, ""))
+        .filter((w) => w.length >= 3 && !GENERIC.has(w)),
+    ),
+  ].map((w) => new RegExp(`(^|[^a-z0-9])${w}`, "i"));
+
 const TOOLS = {
+  async get_company_profile(_args, refs, { company }) {
+    if (!company) throw new Error("No company profile in this session.");
+    const { id, updatedAt, ...profile } = company.company;
+    const title = `${profile.name} · company profile (updated ${updatedAt.slice(0, 10)})`;
+    const ref = refs.cite(`company:${id}`, { type: "company", id, title, url: "#/workspace/account" });
+    return {
+      output: { ref, ...profile, updatedAt: updatedAt.slice(0, 10), sites: company.sites },
+      audit: { count: 1, results: [{ ref, type: "company", title }] },
+    };
+  },
   async search_knowledge({ query, types, limit }, refs) {
     const q = String(query || "").trim().slice(0, 300);
     if (!q) throw new Error("query is required");
@@ -237,10 +311,7 @@ const TOOLS = {
       warehouse: i.warehouse,
     }));
     const total = rows.reduce((s, i) => s + i.stockValueUsd, 0);
-    const filters = Object.entries(args)
-      .filter(([k]) => !["limit", "sortBy"].includes(k))
-      .map(([k, v]) => `${k}=${Array.isArray(v) ? v.join("/") : v}`)
-      .join(", ");
+    const filters = describe(args, ["limit", "sortBy"]);
     // The query itself is citable, for counts and totals.
     const ref = refs.cite(`query:${filters}`, {
       type: "query",
@@ -262,19 +333,46 @@ const TOOLS = {
   },
 
   async get_alerts(args, refs) {
-    const [all, items] = await Promise.all([cached("impacts", () => list(impacts)), cached("inventory", () => list(inventory))]);
+    const [all, items, latest] = await Promise.all([
+      cached("impacts", () => list(impacts)),
+      cached("inventory", () => list(inventory)),
+      args.latestScanOnly ? lastDoneScan() : null,
+    ]);
     const bySku = new Map(items.map((i) => [i.sku, i]));
-    const rows = all
+    const skus = (Array.isArray(args.skus) ? args.skus : []).map((k) => String(k).toUpperCase());
+    const ids = Array.isArray(args.ids) ? args.ids.map(String) : [];
+    const terms = topicPatterns(Array.isArray(args.keywords) ? args.keywords : []);
+    const matching = all
       .filter(
         (a) =>
+          (!ids.length || ids.includes(a.id)) &&
+          (!args.latestScanOnly || a.scanId === latest?.id) &&
           (!args.severity || a.severity === args.severity) &&
           (!args.direction || a.direction === args.direction) &&
-          (!Array.isArray(args.skus) || !args.skus.length || a.affected.some((x) => args.skus.map((k) => String(k).toUpperCase()).includes(x.sku))),
+          (!skus.length || a.affected.some((x) => skus.includes(x.sku))) &&
+          (!terms.length || terms.some((t) => t.test(`${a.headline} ${a.title} ${a.why}`))),
       )
-      .sort((a, b) => SEVERITY[a.severity] - SEVERITY[b.severity] || (b.publishedAt || "").localeCompare(a.publishedAt || ""))
+      .sort((a, b) => SEVERITY[a.severity] - SEVERITY[b.severity] || (b.publishedAt || "").localeCompare(a.publishedAt || ""));
+    // Each affected SKU counted once across every matching alert, valued like query_inventory.
+    const exposed = new Map();
+    for (const a of matching)
+      for (const x of a.affected) {
+        const it = bySku.get(x.sku);
+        exposed.set(x.sku, it ? Math.round(it.qtyOnHand * it.unitCostUsd) : x.stockValueUsd);
+      }
+    const exposure = [...exposed.values()].reduce((s, v) => s + v, 0);
+    const filters = describe(args, ["limit"]);
+    const exposureRef = refs.cite(`alerts:${filters}`, {
+      type: "query",
+      id: filters || "all",
+      title: `Alert exposure${filters ? ` (${filters})` : ""}: ${matching.length} alerts, ${exposed.size} SKUs, USD ${exposure.toLocaleString("en-US")}`,
+      url: "#/workspace/news",
+    });
+    const rows = matching
       .slice(0, clamp(args.limit, 1, 30, 10))
       .map((a) => ({
         ref: citeAlert(refs, a),
+        id: a.id,
         severity: a.severity,
         direction: a.direction,
         headline: a.headline,
@@ -294,9 +392,29 @@ const TOOLS = {
         publisher: a.publisher,
         publishedAt: a.publishedAt?.slice(0, 10),
       }));
+    const scope = !args.latestScanOnly
+      ? "Open alerts from every scan so far"
+      : latest
+        ? `Only alerts raised by the latest scan, finished ${latest.finishedAt}`
+        : "No scan has finished yet";
     return {
-      output: { total: all.length, alerts: rows },
-      audit: { count: rows.length, results: rows.map((a) => ({ ref: a.ref, type: "alert", title: a.headline })) },
+      output: {
+        scope,
+        latestScan: latest
+          ? { ref: citeScan(refs, latest), finishedAt: latest.finishedAt, articlesAnalysed: latest.articlesAnalysed, alertsRaised: latest.impactsFound }
+          : undefined,
+        matching: matching.length,
+        exposure: { ref: exposureRef, skus: [...exposed.keys()].sort(), stockValueUsd: exposure },
+        alerts: rows,
+      },
+      audit: {
+        count: rows.length,
+        totalStockValueUsd: exposure,
+        results: [
+          { ref: exposureRef, type: "query", title: `${matching.length} matching alerts, ${exposed.size} SKUs, USD ${exposure.toLocaleString("en-US")} exposed` },
+          ...rows.map((a) => ({ ref: a.ref, type: "alert", title: a.headline })),
+        ],
+      },
     };
   },
 
@@ -307,20 +425,11 @@ const TOOLS = {
   },
 
   async get_scan_status(_args, refs) {
-    const [snap, srcs] = await Promise.all([
-      scans.orderBy("startedAt", "desc").limit(5).get(),
-      cached("sources", () => list(sources)),
-    ]);
-    const last = snap.docs.map((d) => ({ id: d.id, ...d.data() })).find((s) => s.status === "done");
+    const [last, srcs] = await Promise.all([lastDoneScan(), cached("sources", () => list(sources))]);
     const output = {
       schedule: "Daily at 07:00 Asia/Ho_Chi_Minh (Cloud Scheduler)",
       lastScan: last && {
-        ref: refs.cite(`scan:${last.id}`, {
-          type: "scan",
-          id: last.id,
-          title: `News scan, ${last.finishedAt.slice(0, 16).replace("T", " ")} UTC`,
-          url: "#/workspace/news",
-        }),
+        ref: citeScan(refs, last),
         finishedAt: last.finishedAt,
         trigger: last.trigger,
         lookbackDays: last.lookbackDays,
@@ -413,7 +522,7 @@ function review(answer, retrieved, evidence, usedTools) {
  * Runs one agent turn. `messages` is the conversation ({role: "user"|"model", text}),
  * ending with the user's question. `onStep` receives audit steps as they happen.
  */
-export async function runAgent({ messages, sessionId, onStep = () => {} }) {
+export async function runAgent({ messages, sessionId, company = null, onStep = () => {} }) {
   const started = Date.now();
   const refs = makeRefs();
   // Earlier answers lose their [n] markers (refs restart each turn) but keep the titles they cited.
@@ -430,6 +539,7 @@ export async function runAgent({ messages, sessionId, onStep = () => {} }) {
   }));
   const audit = {
     sessionId,
+    companyId: company?.company.id,
     createdAt: new Date(started).toISOString(),
     question: messages.at(-1).text,
     model: MODEL,
@@ -458,8 +568,8 @@ export async function runAgent({ messages, sessionId, onStep = () => {} }) {
         model: MODEL,
         contents,
         config: {
-          systemInstruction: system(),
-          tools: [{ functionDeclarations: DECLARATIONS }],
+          systemInstruction: system(company),
+          tools: [{ functionDeclarations: company ? DECLARATIONS : DECLARATIONS.filter((d) => d.name !== "get_company_profile") }],
           toolConfig: final ? { functionCallingConfig: { mode: FunctionCallingConfigMode.NONE } } : undefined,
           temperature: 0.2,
           maxOutputTokens: 4096,
@@ -516,7 +626,7 @@ export async function runAgent({ messages, sessionId, onStep = () => {} }) {
           try {
             const tool = TOOLS[c.name];
             if (!tool) throw new Error(`Unknown tool ${c.name}`);
-            const { output, audit: details } = await tool(c.args || {}, refs);
+            const { output, audit: details } = await tool(c.args || {}, refs, { company });
             addEvidence(JSON.stringify(output));
             push({ kind: "tool", name: c.name, args: c.args || {}, latencyMs: Date.now() - t1, ...details });
             return { functionResponse: { id: c.id, name: c.name, response: { output } } };

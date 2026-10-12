@@ -8,7 +8,9 @@ from app.database.models import Base
 
 config = context.config
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # Keep loggers created before migrations run (tests migrate in-process); by default
+    # fileConfig disables every existing logger, which silences the app's logs.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 # The URL comes from DATABASE_URL (see app/core/config.py), not alembic.ini.

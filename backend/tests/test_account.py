@@ -1,3 +1,4 @@
+import pytest
 from conftest import add_member, auth_header, onboard
 
 from app.database.models import Role
@@ -59,6 +60,7 @@ def test_onboarding_makes_user_owner_once(client):
             "businessRole": "Manufacturer",
             "origin": "Vietnam",
             "destination": "Japan",
+            "description": "Another company.",
         },
     )
     assert again.status_code == 409
@@ -72,7 +74,7 @@ def test_onboarding_validates_input(client):
     )
     assert response.status_code == 422
     fields = response.json()["error"]["fieldErrors"]
-    assert set(fields) == {"companyName", "businessRole", "destination"}
+    assert set(fields) == {"companyName", "businessRole", "destination", "description"}
 
 
 def test_update_profile_and_company(client):
@@ -83,6 +85,45 @@ def test_update_profile_and_company(client):
 
     company = client.patch("/api/v1/company", headers=headers, json={"destination": "Japan"})
     assert company.json()["data"]["destination"] == "Japan"
+
+
+def test_trade_route_set_at_onboarding_and_edited_after(client):
+    headers = auth_header("lan@example.com")
+    response = client.post(
+        "/api/v1/onboarding",
+        headers=headers,
+        json={
+            "companyName": "Binh Duong Wood Co.",
+            "businessRole": "Manufacturer",
+            "origin": "Vietnam",
+            "transit": [" Singapore "],
+            "destination": "European Union",
+            "description": "Plywood maker.",
+        },
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["data"]["company"]["transit"] == ["Singapore"]
+
+    changed = client.patch(
+        "/api/v1/company", headers=headers, json={"transit": ["Malaysia", "Sri Lanka"]}
+    )
+    assert changed.json()["data"]["transit"] == ["Malaysia", "Sri Lanka"]
+    direct = client.patch("/api/v1/company", headers=headers, json={"transit": []})
+    assert direct.json()["data"]["transit"] == []
+    untouched = client.patch("/api/v1/company", headers=headers, json={"name": "BDW"})
+    assert untouched.json()["data"]["transit"] == []
+
+
+def test_onboarding_without_transit_is_direct(client):
+    headers = onboard(client, "lan@example.com")
+    assert client.get("/api/v1/me", headers=headers).json()["data"]["company"]["transit"] == []
+
+
+@pytest.mark.parametrize("transit", [None, ["  "], ["A", "B", "C", "D"], ["x" * 101]])
+def test_transit_is_validated(client, transit):
+    headers = onboard(client, "lan@example.com")
+    response = client.patch("/api/v1/company", headers=headers, json={"transit": transit})
+    assert response.status_code == 422, transit
 
 
 def test_only_owner_edits_company(client):
