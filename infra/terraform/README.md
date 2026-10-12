@@ -61,7 +61,24 @@ curl -s "https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=<apiKey>"
 # → localId is the uid, idToken is the Bearer token (valid 1 hour)
 ```
 
-The backend rejects unverified emails (`403 email_not_verified`). For a test user, mark it verified in the Firebase console (Authentication → Users), or send the verification email from the frontend.
+The backend rejects unverified emails (`403 email_not_verified`). Mark a test user verified:
+
+```sh
+curl -s -X POST "https://identitytoolkit.googleapis.com/v1/projects/$PROJECT_ID/accounts:update" \
+  -H "Authorization: Bearer $(gcloud auth print-access-token)" -H "x-goog-user-project: $PROJECT_ID" \
+  -H "Content-Type: application/json" -d '{"localId":"<uid>","emailVerified":true}'
+```
+
+Get a fresh ID token later (same `apiKey`):
+
+```sh
+curl -s "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=<apiKey>" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"lan@example.com","password":"<password>","returnSecureToken":true}'
+```
+
+If the project already has Firebase (added in the console), import it before the first apply:
+`terraform import google_firebase_project.default projects/$PROJECT_ID`.
 
 ## Every code change
 
