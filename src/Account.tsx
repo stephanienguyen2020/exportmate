@@ -8,6 +8,9 @@ import {
   Mail,
   LogOut,
   ShieldCheck,
+  Sparkles,
+  Plus,
+  X,
 } from "lucide-react";
 import {
   defaultProfile,
@@ -19,6 +22,15 @@ import {
   navigate,
   intendedRoute,
   isApiSession,
+  BUSINESS_ROLES,
+  ORIGIN_OPTIONS,
+  DESTINATION_OPTIONS,
+  TRANSIT_OPTIONS,
+  MAX_TRANSIT_STOPS,
+  TEAM_SIZES,
+  withCurrent,
+  routeStops,
+  placeCode,
   type Profile,
 } from "./account-store";
 import "./account.css";
@@ -72,21 +84,141 @@ function PasswordField({
     </label>
   );
 }
+// Where goods ship from, the stops on the way, and where they go. Set at onboarding,
+// changed later in Account › About company.
+function RouteFields({
+  route,
+  onChange,
+  disabled = false,
+}: {
+  route: Pick<Profile, "origin" | "transit" | "destination">;
+  onChange: (change: Partial<Profile>) => void;
+  disabled?: boolean;
+}) {
+  const nextStop =
+    TRANSIT_OPTIONS.find((place) => !route.transit.includes(place)) ||
+    TRANSIT_OPTIONS[0];
+  return (
+    <fieldset className="ac-route ac-wide" disabled={disabled}>
+      <legend>Trade route</legend>
+      <div className="ac-route-legs">
+        <label className="ac-field">
+          Ships from
+          <select
+            value={route.origin}
+            onChange={(e) => onChange({ origin: e.target.value })}
+          >
+            {withCurrent(ORIGIN_OPTIONS, route.origin).map((v) => (
+              <option key={v}>{v}</option>
+            ))}
+          </select>
+        </label>
+        <div className="ac-field">
+          Via (optional)
+          {route.transit.map((stop, i) => (
+            <span className="ac-route-stop" key={i}>
+              <select
+                aria-label={`Stop ${i + 1}`}
+                value={stop}
+                onChange={(e) =>
+                  onChange({
+                    transit: route.transit.map((s, j) =>
+                      j === i ? e.target.value : s,
+                    ),
+                  })
+                }
+              >
+                {withCurrent(TRANSIT_OPTIONS, stop).map((v) => (
+                  <option key={v}>{v}</option>
+                ))}
+              </select>
+              {!disabled && (
+                <button
+                  type="button"
+                  aria-label={`Remove stop ${stop}`}
+                  onClick={() =>
+                    onChange({
+                      transit: route.transit.filter((_, j) => j !== i),
+                    })
+                  }
+                >
+                  <X size={15} />
+                </button>
+              )}
+            </span>
+          ))}
+          {!disabled && route.transit.length < MAX_TRANSIT_STOPS && (
+            <button
+              type="button"
+              className="ac-small-link"
+              onClick={() =>
+                onChange({ transit: [...route.transit, nextStop] })
+              }
+            >
+              <Plus size={13} />
+              Add a stop
+            </button>
+          )}
+          {route.transit.length === 0 && disabled && <small>Direct</small>}
+        </div>
+        <label className="ac-field">
+          Primary destination
+          <select
+            value={route.destination}
+            onChange={(e) => onChange({ destination: e.target.value })}
+          >
+            {withCurrent(DESTINATION_OPTIONS, route.destination).map((v) => (
+              <option key={v}>{v}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <p className="ac-route-preview">{routeStops(route).join(" → ")}</p>
+    </fieldset>
+  );
+}
+const COMPANY_FIELDS = [
+  "company",
+  "role",
+  "origin",
+  "transit",
+  "destination",
+  "description",
+  "products",
+  "materials",
+  "certifications",
+  "website",
+  "foundedYear",
+  "teamSize",
+] as const;
 export function AccountSettings({
   onUpdate,
   account,
 }: {
-  onUpdate: () => void;
+  onUpdate: (account?: Account) => void;
   account: Account | null;
 }) {
   const live = isApiSession();
   const [busy, setBusy] = useState(false);
   const [p, setP] = useState(getProfile);
+  // Last saved values, so company details are only sent when they changed.
+  const [baseline, setBaseline] = useState(getProfile);
   const [saved, setSaved] = useState("");
-  const update = (key: keyof Profile, value: string | boolean) => {
-    setP((v) => ({ ...v, [key]: value }));
+  // Company details belong to the company: in a connected workspace only its owner edits them.
+  const canEditCompany = !live || account?.role === "owner";
+  // By value: transit is a list.
+  const companyChanged = COMPANY_FIELDS.some(
+    (key) => JSON.stringify(p[key]) !== JSON.stringify(baseline[key]),
+  );
+  const change = (fields: Partial<Profile>) => {
+    setP((v) => ({ ...v, ...fields }));
     setSaved("");
   };
+  const update = (key: keyof Profile, value: string | boolean) =>
+    change({ [key]: value });
+  const access = account?.role
+    ? account.role[0].toUpperCase() + account.role.slice(1)
+    : "";
   return (
     <section className="account-settings">
       <div className="page-heading">
@@ -112,10 +244,13 @@ export function AccountSettings({
                 alerts: p.alerts,
                 digest: p.digest,
               });
-              if (account?.role === "owner") await api.updateCompany(p);
-              cacheAccount(await api.me());
+              if (canEditCompany && companyChanged) await api.updateCompany(p);
+              const me = await api.me();
+              const fresh = cacheAccount(me);
+              setP(fresh);
+              setBaseline(fresh);
               setSaved("Saved to your account.");
-              onUpdate();
+              onUpdate(me);
             } catch (error) {
               setSaved(errorMessage(error));
             } finally {
@@ -124,6 +259,7 @@ export function AccountSettings({
             return;
           }
           if (putProfile(p)) {
+            setBaseline(p);
             setSaved("Saved in this browser.");
             onUpdate();
           } else
@@ -145,26 +281,6 @@ export function AccountSettings({
               Email
               <input type="email" value={p.email} readOnly />
               <small>Email changes require backend verification.</small>
-            </label>
-            <label className="ac-field">
-              Company
-              <input
-                required
-                disabled={live && account?.role !== "owner"}
-                value={p.company}
-                onChange={(e) => update("company", e.target.value)}
-              />
-            </label>
-            <label className="ac-field">
-              Role
-              <select
-                disabled={live && account?.role !== "owner"}
-                value={p.role}
-                onChange={(e) => update("role", e.target.value)}
-              >
-                <option>Manufacturer</option>
-                <option>Buyer / trader</option>
-              </select>
             </label>
           </section>
           <section className="panel">
@@ -202,6 +318,160 @@ export function AccountSettings({
               Privacy details
               <ArrowRight size={15} />
             </a>
+          </section>
+          <section className="panel ac-company" aria-labelledby="about-company">
+            <div className="ac-panel-head">
+              <h2 id="about-company">About company</h2>
+              <span className="eyebrow">
+                {live ? "CREATED AT SIGNUP" : "DEMO COMPANY"}
+              </span>
+            </div>
+            <p className="ac-muted">
+              {live
+                ? canEditCompany
+                  ? "Set up when you signed up. Changes are saved to your company workspace."
+                  : "Set up when your company signed up. Only the company owner can change these details."
+                : "The demo company from signup. Saved in this browser."}
+            </p>
+            <div className="ac-kb-note">
+              <Sparkles size={16} />
+              <span>
+                {live
+                  ? "The ExportMate assistant reads these details to answer questions about your company, so describe what you make and how in plain words."
+                  : "In a company workspace, the ExportMate assistant reads these details to answer questions about your company."}
+              </span>
+            </div>
+            <div className="ac-company-fields">
+              <label className="ac-field">
+                Company name
+                <input
+                  required
+                  disabled={!canEditCompany}
+                  value={p.company}
+                  onChange={(e) => update("company", e.target.value)}
+                  pattern=".*\S.*"
+                />
+              </label>
+              <label className="ac-field">
+                You are a
+                <select
+                  disabled={!canEditCompany}
+                  value={p.role}
+                  onChange={(e) => update("role", e.target.value)}
+                >
+                  {withCurrent(BUSINESS_ROLES, p.role).map((v) => (
+                    <option key={v}>{v}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="ac-field ac-wide">
+                Company description
+                <textarea
+                  required={live}
+                  disabled={!canEditCompany}
+                  maxLength={2000}
+                  rows={4}
+                  value={p.description}
+                  onChange={(e) => update("description", e.target.value)}
+                  placeholder="What your company does, where it produces and who it sells to."
+                />
+                <small>{p.description.length} / 2000</small>
+              </label>
+              <label className="ac-field ac-wide">
+                What you make or sell
+                <textarea
+                  disabled={!canEditCompany}
+                  maxLength={1000}
+                  rows={2}
+                  value={p.products}
+                  onChange={(e) => update("products", e.target.value)}
+                  placeholder="e.g. Acacia plywood, engineered flooring, garden furniture"
+                />
+              </label>
+              <label className="ac-field">
+                Main materials and origin
+                <textarea
+                  disabled={!canEditCompany}
+                  maxLength={1000}
+                  rows={2}
+                  value={p.materials}
+                  onChange={(e) => update("materials", e.target.value)}
+                  placeholder="e.g. Plantation acacia (Vietnam), birch veneer (imported)"
+                />
+              </label>
+              <label className="ac-field">
+                Certifications
+                <textarea
+                  disabled={!canEditCompany}
+                  maxLength={1000}
+                  rows={2}
+                  value={p.certifications}
+                  onChange={(e) => update("certifications", e.target.value)}
+                  placeholder="e.g. FSC Chain of Custody, VNTLAS, ISO 9001"
+                />
+              </label>
+              <RouteFields
+                route={p}
+                onChange={change}
+                disabled={!canEditCompany}
+              />
+              <label className="ac-field">
+                Website
+                <input
+                  disabled={!canEditCompany}
+                  inputMode="url"
+                  maxLength={300}
+                  value={p.website}
+                  onChange={(e) => update("website", e.target.value)}
+                  placeholder="https://yourcompany.com"
+                />
+              </label>
+              <label className="ac-field">
+                Year founded
+                <input
+                  disabled={!canEditCompany}
+                  type="number"
+                  min={1800}
+                  max={new Date().getFullYear()}
+                  value={p.foundedYear}
+                  onChange={(e) => update("foundedYear", e.target.value)}
+                  placeholder="e.g. 2009"
+                />
+              </label>
+              <label className="ac-field">
+                Team size
+                <select
+                  disabled={!canEditCompany}
+                  value={p.teamSize}
+                  onChange={(e) => update("teamSize", e.target.value)}
+                >
+                  <option value="">Not set</option>
+                  {withCurrent(TEAM_SIZES, p.teamSize).map((v) => (
+                    <option key={v} value={v}>
+                      {v} people
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {live && account?.company && (
+                <label className="ac-field">
+                  Order currency
+                  <input value={account.company.currency} readOnly />
+                  <small>Set at signup. Imported order values use it.</small>
+                </label>
+              )}
+              {live && access && (
+                <label className="ac-field">
+                  Your access
+                  <input value={access} readOnly />
+                  <small>
+                    {account?.role === "owner"
+                      ? "You can change company details."
+                      : "Ask the company owner to change company details."}
+                  </small>
+                </label>
+              )}
+            </div>
           </section>
         </div>
         <div className="ac-save">
@@ -338,7 +608,7 @@ export default function AccountPage({ route }: { route: string }) {
             <strong>{title[1]}</strong>
           </h1>
           <span className="ac-visual-footer">
-            VN — SG — EU <span>EST. 2026</span>
+            {routeStops(p).map(placeCode).join(" — ")} <span>EST. 2026</span>
           </span>
         </aside>
         <section className="ac-form-pane">
@@ -617,6 +887,11 @@ export default function AccountPage({ route }: { route: string }) {
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
+                    if (step === 0 && !p.description.trim()) {
+                      setError("Describe what your company does.");
+                      return;
+                    }
+                    setError("");
                     if (step < 2) {
                       setStep(step + 1);
                       return;
@@ -649,54 +924,41 @@ export default function AccountPage({ route }: { route: string }) {
                           value={p.role}
                           onChange={(e) => setP({ ...p, role: e.target.value })}
                         >
-                          <option>Manufacturer</option>
-                          <option>Buyer / trader</option>
+                          {BUSINESS_ROLES.map((v) => (
+                            <option key={v}>{v}</option>
+                          ))}
                         </select>
+                      </label>
+                      <label className="ac-field">
+                        What does your company do?
+                        <textarea
+                          required
+                          maxLength={2000}
+                          rows={4}
+                          value={p.description}
+                          onChange={(e) =>
+                            setP({ ...p, description: e.target.value })
+                          }
+                          placeholder="What you make, where you produce and who you sell to."
+                        />
+                        <small>
+                          The ExportMate assistant uses this to answer
+                          questions about your company. You can add more in
+                          Account later.
+                        </small>
                       </label>
                     </>
                   )}
                   {step === 1 && (
                     <>
-                      <label className="ac-field">
-                        Based in
-                        <select
-                          value={p.origin}
-                          onChange={(e) =>
-                            setP({ ...p, origin: e.target.value })
-                          }
-                        >
-                          {[
-                            "Vietnam",
-                            "Singapore",
-                            "Indonesia",
-                            "Thailand",
-                            "Other",
-                          ].map((v) => (
-                            <option key={v}>{v}</option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="ac-field">
-                        Primary destination
-                        <select
-                          value={p.destination}
-                          onChange={(e) =>
-                            setP({ ...p, destination: e.target.value })
-                          }
-                        >
-                          {[
-                            "European Union",
-                            "Singapore",
-                            "United States",
-                            "Japan",
-                            "Other",
-                          ].map((v) => (
-                            <option key={v}>{v}</option>
-                          ))}
-                        </select>
-                      </label>
+                      <RouteFields
+                        route={p}
+                        onChange={(change) => setP({ ...p, ...change })}
+                      />
                       <p className="ac-muted">
-                        The demo analyses the VN → SG → EU corridor.
+                        Add the hubs your goods pass through, such as
+                        Singapore, or remove them for a direct route. You can
+                        change your route later in Account.
                       </p>
                     </>
                   )}
@@ -705,9 +967,8 @@ export default function AccountPage({ route }: { route: string }) {
                       <span>{p.name}</span>
                       <h3>{p.company}</h3>
                       <p>{p.role}</p>
-                      <b>
-                        {p.origin} → {p.destination}
-                      </b>
+                      <p className="ac-review-description">{p.description}</p>
+                      <b>{routeStops(p).join(" → ")}</b>
                       <p>Next: import your orders.</p>
                     </div>
                   )}

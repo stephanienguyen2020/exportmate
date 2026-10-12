@@ -9,7 +9,7 @@ cp .env.example .env
 docker compose up -d                 # Postgres on 127.0.0.1:5433 (+ exportmate_test DB)
 uv sync
 uv run alembic upgrade head
-uv run python -m app.seed_demo_data --email lan@example.com   # demo company, 12 orders, 3 rules
+uv run python -m app.seed_demo_data --email lan@example.com   # demo company, 12 orders, 3 rules, map data
 uv run uvicorn app.main:app --reload --port 8000
 ```
 
@@ -24,6 +24,25 @@ curl -H "Authorization: Bearer dev:lan@example.com" http://127.0.0.1:8000/api/v1
 ```
 
 `dev-unverified:<email>` simulates an unverified email. Production (`ENV=production`) refuses to start unless `AUTH_MODE=firebase`.
+
+Trade map data lives in Postgres. Shared reference data (markets, countries, ports, document kinds,
+per-market checklists, sample satellite observations) comes from `app/seed_data/*.json`:
+
+```sh
+uv run python -m app.seed_reference_data   # also run by seed_demo_data and by deploy.sh
+```
+
+The demo seed adds the demo company's suppliers, their documents and its sites
+(`app/seed_data/demo_company.json`, which also holds its About company profile). Checklists are illustrative; observations are samples.
+
+## Logging
+
+Every log line carries the request ID (also returned as `X-Request-ID`). Each request logs one
+`request.completed` line with method, path, status, duration and the caller's user and company
+IDs; services log what they changed (`import.committed`, `trade_map.built`, ...). Production
+(`ENV=production`) writes JSON that Cloud Logging parses, grouped by Cloud Trace. Set
+`LOG_LEVEL` / `LOG_FORMAT` to change it. Tokens, passwords, file contents and email addresses
+are never logged.
 
 ## Test and lint
 
@@ -66,3 +85,8 @@ PROJECT_ID=<project> backend/deploy.sh   # build image, run migrations, roll out
 Every company-scoped route takes a `ViewerContext` / `EditorContext` / `OwnerContext`. The company always comes from the caller's membership, never from the request. Another company's records return `404`.
 
 Responses: `{"data": ..., "meta": {...}}`. Errors: `{"error": {"code", "message", "fieldErrors", "requestId"}}`.
+
+| Area | Endpoints |
+| --- | --- |
+| Company knowledge | `GET /company/knowledge`: the About company profile and sites, read by the AI service with the user's token |
+| Trade map | `GET /trade-map` (markets, placed orders with document checks, suppliers, sites, observations), `GET /trade-map/compare?orderId=&market=` |

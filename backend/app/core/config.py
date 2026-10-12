@@ -23,6 +23,13 @@ class Settings(BaseSettings):
     allowed_origins: str = "http://127.0.0.1:5173,http://localhost:5173"
     max_upload_bytes: int = 5 * 1024 * 1024
     max_import_rows: int = 10_000
+    # "json" gives one JSON object per line, which Cloud Logging parses into fields.
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    log_format: Literal["text", "json"] | None = None  # default: json in production
+    # Lets Cloud Logging group log lines by request (X-Cloud-Trace-Context).
+    google_cloud_project: str | None = None
+    # Suppliers and sites this close to an observed flood extent get a check-in prompt.
+    flood_check_radius_km: float = 25.0
 
     @model_validator(mode="after")
     def no_dev_auth_in_production(self):
@@ -33,6 +40,10 @@ class Settings(BaseSettings):
     @property
     def origins(self) -> list[str]:
         return [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
+
+    @property
+    def resolved_log_format(self) -> Literal["text", "json"]:
+        return self.log_format or ("json" if self.env == "production" else "text")
 
 
 @lru_cache

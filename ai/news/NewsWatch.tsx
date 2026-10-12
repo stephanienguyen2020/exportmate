@@ -90,7 +90,7 @@ const when = (s?: string) =>
 const bySeverity = (a: Impact, b: Impact) =>
   SEVERITY[a.severity] - SEVERITY[b.severity] || (b.publishedAt || "").localeCompare(a.publishedAt || "");
 
-function useImpacts() {
+export function useImpacts() {
   const [impacts, setImpacts] = useState<Impact[] | null>(null);
   const [scan, setScan] = useState<Scan | null>(null);
   const [error, setError] = useState("");

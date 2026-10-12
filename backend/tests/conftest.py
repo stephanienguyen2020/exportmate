@@ -74,6 +74,7 @@ def onboard(client: TestClient, email: str, company: str = "Binh Duong Wood Co."
             "businessRole": "Manufacturer",
             "origin": "Vietnam",
             "destination": "European Union",
+            "description": "Plywood and wooden furniture maker in Binh Duong, Vietnam.",
         },
     )
     assert response.status_code == 201, response.text

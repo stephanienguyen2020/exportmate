@@ -1,3 +1,4 @@
+import logging
 import uuid
 
 from sqlalchemy.exc import IntegrityError
@@ -8,8 +9,18 @@ from app.core.errors import AppError
 from app.database.models import Company, Membership, Role, User
 from app.database.queries import audit as audit_queries
 from app.database.queries import companies as company_queries
+from app.database.queries import trade_map as map_queries
 from app.database.queries import users as user_queries
-from app.schemas.account import CompanyUpdate, OnboardingIn, UserUpdate
+from app.schemas.account import (
+    CompanyKnowledgeOut,
+    CompanyOut,
+    CompanySiteOut,
+    CompanyUpdate,
+    OnboardingIn,
+    UserUpdate,
+)
+
+log = logging.getLogger(__name__)
 
 
 def get_or_create_user(db: Session, *, uid: str, email: str, name: str) -> User:
@@ -19,13 +30,16 @@ def get_or_create_user(db: Session, *, uid: str, email: str, name: str) -> User:
         if user.email != email:  # email changed in Firebase
             user.email = email
             db.commit()
+            log.info("account.email_synced", extra={"user_id": str(user.id)})
         return user
     try:
         user = user_queries.create_user(db, firebase_uid=uid, email=email, name=name)
         db.commit()
+        log.info("account.user_created", extra={"user_id": str(user.id)})
     except IntegrityError:  # two first requests at once
         db.rollback()
         user = user_queries.get_user_by_firebase_uid(db, uid)
+        log.info("account.user_created_concurrently", extra={"user_id": str(user.id)})
     return user
 
 
@@ -44,8 +58,10 @@ def onboard_user(db: Session, user: User, payload: OnboardingIn) -> tuple[Compan
         name=payload.company_name,
         business_role=payload.business_role,
         origin=payload.origin,
+        transit=payload.transit,
         destination=payload.destination,
         currency=payload.currency,
+        description=payload.description,
     )
     user_queries.add_membership(db, user_id=user.id, company_id=company.id, role=Role.owner)
     audit_queries.record_audit_event(
@@ -58,18 +74,24 @@ def onboard_user(db: Session, user: User, payload: OnboardingIn) -> tuple[Compan
         data=payload.model_dump(),
     )
     db.commit()
+    log.info(
+        "account.company_created", extra={"company_id": str(company.id), "user_id": str(user.id)}
+    )
     return company, Role.owner
 
 
 def update_user_profile(db: Session, user: User, payload: UserUpdate) -> User:
-    for field, value in payload.model_dump(exclude_unset=True, exclude_none=True).items():
+    changes = payload.model_dump(exclude_unset=True, exclude_none=True)
+    for field, value in changes.items():
         setattr(user, field, value)
     db.commit()
+    log.info("account.profile_updated", extra={"user_id": str(user.id), "fields": sorted(changes)})
     return user
 
 
 def update_company_profile(db: Session, ctx: CompanyContext, payload: CompanyUpdate) -> Company:
-    changes = payload.model_dump(exclude_unset=True, exclude_none=True)
+    # Only fields that were sent; null clears an optional field (website, year, team size).
+    changes = payload.model_dump(exclude_unset=True)
     for field, value in changes.items():
         setattr(ctx.company, field, value)
     audit_queries.record_audit_event(
@@ -82,4 +104,27 @@ def update_company_profile(db: Session, ctx: CompanyContext, payload: CompanyUpd
         data=changes,
     )
     db.commit()
+    log.info(
+        "account.company_updated",
+        extra={"company_id": str(ctx.company_id), "fields": sorted(changes)},
+    )
     return ctx.company
+
+
+def build_company_knowledge(db: Session, ctx: CompanyContext) -> CompanyKnowledgeOut:
+    """The company profile and sites, for the AI assistant. Read through the API only."""
+    sites = map_queries.list_company_sites(db, ctx.company_id)
+    company = CompanyOut.model_validate(ctx.company)
+    profile_fields = ("description", "products", "materials", "certifications", "website")
+    log.info(
+        "company.knowledge_served",
+        extra={
+            "company_id": str(ctx.company_id),
+            "filled_fields": sum(bool(getattr(company, f)) for f in profile_fields),
+            "sites": len(sites),
+        },
+    )
+    return CompanyKnowledgeOut(
+        company=company,
+        sites=[CompanySiteOut(name=s.name, kind=s.kind, place=s.place) for s in sites],
+    )

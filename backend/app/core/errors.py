@@ -52,17 +52,25 @@ _HTTP_CODES = {
 
 def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
-    async def app_error(_: Request, exc: AppError):
+    async def app_error(request: Request, exc: AppError):
+        log.log(
+            logging.ERROR if exc.status >= 500 else logging.INFO,
+            "request.rejected",
+            extra={"code": exc.code, "status": exc.status, "path": request.url.path},
+        )
         return JSONResponse(
             _error_body(exc.code, exc.message, exc.field_errors), status_code=exc.status
         )
 
     @app.exception_handler(RequestValidationError)
-    async def validation_error(_: Request, exc: RequestValidationError):
+    async def validation_error(request: Request, exc: RequestValidationError):
         fields = {}
         for err in exc.errors():
             loc = [str(p) for p in err["loc"] if p not in ("body", "query", "path")]
-            fields[".".join(loc) or "request"] = err["msg"]
+            # Our validators raise ValueError; Pydantic prefixes those with "Value error, ".
+            fields[".".join(loc) or "request"] = err["msg"].removeprefix("Value error, ")
+        # Field names only; values could be personal data.
+        log.info("request.invalid", extra={"path": request.url.path, "fields": sorted(fields)})
         return JSONResponse(
             _error_body("invalid_input", "Some fields are invalid.", fields), status_code=422
         )
@@ -73,6 +81,9 @@ def register_error_handlers(app: FastAPI) -> None:
         return JSONResponse(_error_body(code, str(exc.detail)), status_code=exc.status_code)
 
     @app.exception_handler(Exception)
-    async def unexpected(_: Request, exc: Exception):
-        log.exception("Unhandled error", extra={"request_id": current_request_id()})
+    async def unexpected(request: Request, exc: Exception):
+        log.exception(
+            "request.unhandled_error",
+            extra={"path": request.url.path, "error_type": type(exc).__name__},
+        )
         return JSONResponse(_error_body("internal", "Something went wrong."), status_code=500)

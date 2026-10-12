@@ -32,7 +32,7 @@ cd ../..
 PROJECT_ID=$PROJECT_ID backend/deploy.sh
 ```
 
-Demo data for a real Firebase user (create the user first, see below):
+Demo data for a real Firebase user (create the user first, see below). It also loads the shared trade-map reference data and the demo company's suppliers, documents and sites:
 
 ```sh
 gcloud run jobs execute exportmate-backend-task --region asia-southeast1 --wait \

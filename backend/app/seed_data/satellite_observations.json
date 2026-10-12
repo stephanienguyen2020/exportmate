@@ -1,0 +1,31 @@
+{
+  "_note": "Sample observations shaped like a satellite flood-extent product; not a live feed. Loaded with is_sample=true by `python -m app.seed_reference_data`. Without an `extent`, the loader draws an irregular sample outline from the centre and radius.",
+  "observations": [
+    {
+      "sourceRef": "sample:kon-river-2026-10-06",
+      "kind": "flood",
+      "title": "Flooding on the Kon river floodplain",
+      "place": "Tay Son – An Nhon, Binh Dinh",
+      "center": [109.03, 13.9],
+      "radiusKm": 12,
+      "areaKm2": 41,
+      "observedOn": "2026-10-06",
+      "sensor": "Sentinel-1 radar",
+      "confidence": "high",
+      "confidenceNote": "Radar sees through cloud, so standing water is reliably detected."
+    },
+    {
+      "sourceRef": "sample:hau-river-2026-10-05",
+      "kind": "flood",
+      "title": "Possible flooding along the Hau river",
+      "place": "Thot Not, Can Tho",
+      "center": [105.55, 10.2],
+      "radiusKm": 9,
+      "areaKm2": 18,
+      "observedOn": "2026-10-05",
+      "sensor": "Sentinel-2 optical",
+      "confidence": "low",
+      "confidenceNote": "About 40% cloud cover; the extent may be over- or under-counted."
+    }
+  ]
+}

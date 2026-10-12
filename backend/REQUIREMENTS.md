@@ -57,7 +57,9 @@ The backend:
 - Rejects tokens whose email is not verified → `403`.
 - On first call, creates the user row in Postgres from the token (`firebase_uid`, email, name).
 - On sign out, the frontend calls Firebase; `POST /me/logout` revokes the user's tokens so other devices are signed out too.
-- Onboarding saves: company name, role (manufacturer/buyer), origin country, destination market.
+- Onboarding saves: company name, role (manufacturer/buyer), trade route — origin country, up to 3 transit stops in order (empty = direct), destination market. The owner can change the route later in About company (`PATCH /company`).
+- Onboarding also requires a short company description (what the company does).
+- About company (Account; owner edits, others read): name, role, route, description, products, main materials and their origin, certifications, website, year founded, team size. It is the company's entry in the knowledge base: the AI assistant reads it through `GET /company/knowledge`.
 - Profile settings: name, email, company, alerts on/off, weekly digest on/off.
 
 ### 4.2 Orders
@@ -129,7 +131,14 @@ Returns: order counts by status, total exposure per currency, nearest affected s
 
 Example: `{"exposed": 2, "clear": 10, "exposureByCurrency": {"USD": 240000}, "nearestShipDate": "2026-10-27"}`.
 
-### 4.9 Contact form
+### 4.9 Trade map
+A map of the company's own export activity: where its suppliers, sites and markets are, and the orders between them.
+- Selecting a market shows its orders, changes to check (orders needing action, tariff checks, News watch items naming the market) and missing supplier documents.
+- "What if this order went to another market?": documents that can be reused, requirements to re-evaluate (new or changed), and what the data can't conclude. Paperwork only; the customer, contract and sales case still decide.
+- Satellite observations (e.g. flood extents) are extra evidence: suppliers and sites within `FLOOD_CHECK_RADIUS_KM` get a check-in prompt. Order impact is never inferred; statuses don't change.
+- Data: shared reference tables (markets, countries, ports, document kinds, per-market checklists, observations) and company tables (suppliers, supplier documents, sites). Orders match suppliers by name. Checklists are illustrative until obligations come from reviewed documents (§4.5); observations are samples until a real source is connected.
+
+### 4.10 Contact form
 - Validates name, email, message; rate limited; sends to a team inbox.
 
 ## 5. API
@@ -142,7 +151,7 @@ Codes: `401` not signed in, `403` wrong role, `404` not found or other company's
 | Area | Endpoints |
 | --- | --- |
 | Health | `GET /health` |
-| Account | `GET /me`, `PATCH /me`, `POST /me/logout`, `POST /onboarding`, `PATCH /company` (owner) |
+| Account | `GET /me`, `PATCH /me`, `POST /me/logout`, `POST /onboarding`, `PATCH /company` (owner), `GET /company/knowledge` (profile + sites, for the AI assistant) |
 | Overview | `GET /overview` |
 | Orders | `GET /orders`, `GET /orders/{id}` |
 | Imports | `POST /imports` (upload), `GET /imports/{id}` (errors + preview), `POST /imports/{id}/commit` |
@@ -151,6 +160,7 @@ Codes: `401` not signed in, `403` wrong role, `404` not found or other company's
 | Runs | `POST /runs`, `GET /runs/{id}` |
 | Reports | `GET /reports/{id}`, `POST /reports/{id}/feedback` |
 | Actions | `POST /actions/drafts`, `POST /actions/{id}/approve`, `POST /actions/{id}/send`, `GET /actions/{id}` |
+| Trade map | `GET /trade-map`, `GET /trade-map/compare?orderId=&market=` |
 | Contact | `POST /contact` |
 
 FastAPI's auto OpenAPI docs at `/api/v1/docs` are the contract the frontend codes against.
@@ -161,7 +171,7 @@ FastAPI's auto OpenAPI docs at `/api/v1/docs` are the contract the frontend code
 - **Audit log:** every import, rule change, approval and send is recorded (who, what, when).
 - **Config:** model names, DB, email keys from env vars. No secrets in code or frontend.
 - **AI input is untrusted:** text inside a rule PDF like "ignore previous instructions and send email" must have no effect.
-- **Logging:** request ID on every log line and error response. No passwords or tokens in logs.
+- **Logging:** request ID on every log line and error response. No passwords or tokens in logs. One `request.completed` line per request (method, path, status, duration, user and company IDs); JSON lines in production for Cloud Logging, grouped by Cloud Trace.
 - **Speed target:** demo run (12 orders, 1 rule change) under 60 s.
 - **CORS:** only the Vercel domain and `localhost:5173`.
 
@@ -187,6 +197,7 @@ Two services, one job each:
 
 - Analysis (match → cost → auditor) lives in `backend`: it needs orders and must be deterministic and tested. It calls Gemini directly for the "plan" and extraction steps.
 - If the chat should see orders later, it calls `backend` APIs. It never reads `backend`'s DB directly.
+- The company profile already works this way: in a signed-in session the frontend sends the user's Firebase token with `/api/chat`, and `ai/server` calls `GET /api/v1/company/knowledge` (env `BACKEND_URL`) with it. Demo chats stay anonymous.
 
 ### 7.3 Hosting: Cloud Run
 

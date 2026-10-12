@@ -213,7 +213,8 @@ svg {
     11px "DM Mono",
     monospace;
   display: flex;
-  gap: 16px;
+  flex-wrap: wrap;
+  gap: 4px 16px;
   margin-top: 20px;
 }
 .mini-corridor span {
@@ -441,7 +442,8 @@ h1 {
 }
 .corridor {
   display: flex;
-  gap: 18px;
+  flex-wrap: wrap;
+  gap: 4px 18px;
   align-items: center;
   font-size: 26px;
   letter-spacing: -0.7px;

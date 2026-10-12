@@ -6,7 +6,7 @@ services:
       POSTGRES_PASSWORD: exportmate
       POSTGRES_DB: exportmate
     ports:
-      - "5433:5432"
+      - "${DB_PORT:-5433}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./scripts/create-test-db.sql:/docker-entrypoint-initdb.d/create-test-db.sql:ro

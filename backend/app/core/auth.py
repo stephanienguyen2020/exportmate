@@ -1,9 +1,10 @@
 """Who is calling (Firebase token) and what they may touch (Postgres membership)."""
 
+import logging
 from typing import Annotated
 
 import firebase_admin
-from fastapi import Depends, Header
+from fastapi import Depends, Header, Request
 from firebase_admin import auth as fb_auth
 from sqlalchemy.orm import Session
 
@@ -15,6 +16,8 @@ from app.database.session import get_db
 from app.services import accounts
 
 _ROLE_RANK = {Role.viewer: 0, Role.editor: 1, Role.owner: 2}
+
+log = logging.getLogger(__name__)
 
 
 def _verify_dev(token: str) -> TokenClaims:
@@ -43,7 +46,9 @@ def _verify_firebase(token: str) -> TokenClaims:
         decoded = fb_auth.verify_id_token(token, app=_firebase_app(), check_revoked=True)
     except fb_auth.RevokedIdTokenError:
         raise AppError(401, "session_revoked", "Session ended. Please sign in again.")
-    except (ValueError, fb_auth.InvalidIdTokenError, fb_auth.ExpiredIdTokenError):
+    except (ValueError, fb_auth.InvalidIdTokenError, fb_auth.ExpiredIdTokenError) as error:
+        # The error type says why (expired, wrong project, malformed); the token is never logged.
+        log.info("auth.token_rejected", extra={"reason": type(error).__name__})
         raise AppError(401, "unauthenticated", "Invalid or expired sign-in token.")
     return TokenClaims(
         uid=decoded["uid"],
@@ -64,6 +69,7 @@ def revoke_sessions(uid: str) -> None:
     if get_settings().auth_mode == "dev":
         return
     fb_auth.revoke_refresh_tokens(uid, app=_firebase_app())
+    log.info("auth.sessions_revoked")
 
 
 def current_claims(authorization: Annotated[str | None, Header()] = None) -> TokenClaims:
@@ -84,13 +90,17 @@ def current_user(
 
 
 def current_context(
+    request: Request,
     user: Annotated[User, Depends(current_user)],
     db: Annotated[Session, Depends(get_db)],
 ) -> CompanyContext:
+    # The request log line in main.py reads these, so each request is tied to who made it.
+    request.state.user_id = str(user.id)
     found = accounts.find_user_company_membership(db, user.id)
     if not found:
         raise AppError(403, "onboarding_required", "Finish onboarding to create your company.")
     membership, company = found
+    request.state.company_id = str(company.id)
     return CompanyContext(user=user, company=company, role=membership.role)
 
 
@@ -99,6 +109,7 @@ def require_role(role: Role):
 
     def check_role(ctx: Annotated[CompanyContext, Depends(current_context)]) -> CompanyContext:
         if _ROLE_RANK[ctx.role] < _ROLE_RANK[role]:
+            log.info("auth.role_too_low", extra={"role": ctx.role.value, "needed": role.value})
             raise AppError(403, "forbidden", f"This needs the {role.value} role.")
         return ctx
 

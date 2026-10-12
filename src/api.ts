@@ -1,3 +1,4 @@
+import type { Polygon } from "geojson";
 import { getToken } from "./auth";
 import type { Order, Rule } from "./data";
 import { defaultProfile, putProfile, type Profile } from "./account-store";
@@ -15,8 +16,17 @@ export type Account = {
     name: string;
     businessRole: string;
     origin: string;
+    transit: string[];
     destination: string;
     currency: string;
+    description: string;
+    products: string;
+    materials: string;
+    certifications: string;
+    website: string | null;
+    foundedYear: number | null;
+    teamSize: string | null;
+    updatedAt: string;
   } | null;
   role: "owner" | "editor" | "viewer" | null;
   onboarded: boolean;
@@ -51,6 +61,109 @@ export type ImportPreview = {
   errors: { row: number | null; field: string | null; message: string }[];
   preview: (Omit<ApiOrder, "status"> & { rowNumber: number })[];
   duplicateOfImportId: string | null;
+};
+export type GeoPoint = { latitude: number; longitude: number };
+export type MapMarket = {
+  code: string;
+  name: string;
+  shortName: string;
+  hub: GeoPoint;
+  countryIds: string[];
+  searchTerms: string[];
+};
+export type CheckStatus =
+  | "on_file"
+  | "missing"
+  | "mismatch"
+  | "prepare"
+  | "check"
+  | "unknown";
+export type RequirementCheck = {
+  requirementKey: string;
+  title: string;
+  level: "supplier" | "shipment" | "check";
+  status: CheckStatus;
+  note: string;
+};
+export type MapOrder = {
+  order: ApiOrder;
+  placement: {
+    city: string;
+    country: string | null;
+    market: string | null;
+    location: GeoPoint | null;
+    approximate: boolean;
+  };
+  checks: RequirementCheck[];
+  gapCount: number;
+};
+export type MapSupplier = {
+  id: string | null;
+  name: string;
+  place: string | null;
+  location: GeoPoint | null;
+  supplies: string | null;
+  documents:
+    | { kind: string; label: string; detail: string; standards: string[] }[]
+    | null;
+  orderIds: string[];
+};
+export type MapSite = {
+  key: string;
+  kind: "factory" | "port" | "warehouse";
+  name: string;
+  shortName: string;
+  place: string;
+  location: GeoPoint;
+  note: string;
+  isRouteOrigin: boolean;
+};
+export type NearbyPlace = {
+  type: "supplier" | "site";
+  ref: string;
+  name: string;
+  distanceKm: number;
+};
+export type SatelliteObservation = {
+  id: string;
+  kind: string;
+  title: string;
+  place: string;
+  center: GeoPoint;
+  radiusKm: number;
+  areaKm2: number;
+  observedOn: string;
+  sensor: string;
+  confidence: "high" | "low";
+  confidenceNote: string;
+  extent: Polygon;
+  isSample: boolean;
+  sourceUrl: string | null;
+  nearby: NearbyPlace[];
+};
+export type TradeMap = {
+  markets: MapMarket[];
+  orders: MapOrder[];
+  suppliers: MapSupplier[];
+  sites: MapSite[];
+  observations: SatelliteObservation[];
+  documentKinds: { kind: string; label: string }[];
+  homeCountryIds: string[];
+  checkRadiusKm: number;
+};
+export type ComparisonItem = {
+  title: string;
+  note: string;
+  tag: "New" | "Changes" | null;
+};
+export type MarketComparison = {
+  orderId: string;
+  fromMarket: string | null;
+  toMarket: string;
+  reuse: ComparisonItem[];
+  reevaluate: ComparisonItem[];
+  unknown: ComparisonItem[];
+  dropped: string[];
 };
 type Envelope<T> = {
   data: T;
@@ -120,7 +233,17 @@ export function cacheAccount(account: Account): Profile {
     company: account.company?.name || "",
     role: account.company?.businessRole || "Manufacturer",
     origin: account.company?.origin || "Vietnam",
+    transit: account.company?.transit ?? defaultProfile.transit,
     destination: account.company?.destination || "European Union",
+    description: account.company?.description || "",
+    products: account.company?.products || "",
+    materials: account.company?.materials || "",
+    certifications: account.company?.certifications || "",
+    website: account.company?.website || "",
+    foundedYear: account.company?.foundedYear
+      ? String(account.company.foundedYear)
+      : "",
+    teamSize: account.company?.teamSize || "",
     onboarded: account.onboarded,
   };
   putProfile(profile);
@@ -140,7 +263,16 @@ export const api = {
         name: p.company,
         businessRole: p.role,
         origin: p.origin,
+        transit: p.transit,
         destination: p.destination,
+        description: p.description,
+        products: p.products,
+        materials: p.materials,
+        certifications: p.certifications,
+        // Empty optional fields are sent as null, which clears them.
+        website: p.website.trim() || null,
+        foundedYear: p.foundedYear ? Number(p.foundedYear) : null,
+        teamSize: p.teamSize || null,
       }),
     }),
   onboard: (p: Profile) =>
@@ -150,8 +282,10 @@ export const api = {
         companyName: p.company,
         businessRole: p.role,
         origin: p.origin,
+        transit: p.transit,
         destination: p.destination,
         currency: "USD",
+        description: p.description.trim(),
       }),
     }).then((r) => r.data),
   logout: () => request("/me/logout", { method: "POST" }),
@@ -201,4 +335,11 @@ export const api = {
     request<{ ordersCreated: number }>(`/imports/${id}/commit`, {
       method: "POST",
     }).then((r) => r.data),
+  tradeMap: (signal?: AbortSignal) =>
+    request<TradeMap>("/trade-map", { signal }).then((r) => r.data),
+  compareMarkets: (orderId: string, market: string, signal?: AbortSignal) =>
+    request<MarketComparison>(
+      `/trade-map/compare?${new URLSearchParams({ orderId, market })}`,
+      { signal },
+    ).then((r) => r.data),
 };

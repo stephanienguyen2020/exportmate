@@ -1,0 +1,204 @@
+{
+  "_note": "The fictional demo company (Binh Duong Wood Co.): its profile (About company), suppliers with their documents, and its sites. Loaded by `python -m app.seed_demo_data`. Coordinates are [longitude, latitude].",
+  "profile": {
+    "description": "Binh Duong Wood Co. makes plywood, engineered flooring and wooden furniture in Binh Duong province, Vietnam. We buy plantation acacia, rubberwood and imported veneers from regional suppliers, process them in our own factory and export through Cat Lai and Quy Nhon ports to buyers in the European Union, Japan, South Korea and Singapore.",
+    "products": "Acacia and veneered plywood, rubberwood panels, engineered flooring, indoor and outdoor wooden furniture, kitchen cabinets and vanities.",
+    "materials": "Plantation acacia and eucalyptus (Vietnam), rubberwood (Vietnam), birch and okoume veneers (imported), oak and walnut for furniture (imported).",
+    "certifications": "FSC Chain of Custody (FSC Mix), VNTLAS timber legality, ISO 9001.",
+    "website": "https://binhduongwood.example",
+    "foundedYear": 2009,
+    "teamSize": "51-200",
+    "transit": ["Singapore"]
+  },
+  "suppliers": [
+    {
+      "name": "Binh Phu Wood",
+      "place": "Dong Xoai, Binh Phuoc",
+      "country": "VN",
+      "at": [
+        106.9,
+        11.54
+      ],
+      "supplies": "Acacia plywood, outdoor furniture, cabinets",
+      "documents": [
+        {
+          "kind": "legality",
+          "detail": "VNTLAS legality dossier"
+        },
+        {
+          "kind": "species",
+          "detail": "Acacia mangium · Vietnam"
+        },
+        {
+          "kind": "formaldehyde",
+          "detail": "Test report, Mar 2026",
+          "standards": [
+            "EN 717-1"
+          ]
+        },
+        {
+          "kind": "chain",
+          "detail": "FSC Mix"
+        }
+      ]
+    },
+    {
+      "name": "An Cuong Wood",
+      "place": "Tan Chau, Tay Ninh",
+      "country": "VN",
+      "at": [
+        106.17,
+        11.56
+      ],
+      "supplies": "Rubberwood panels, tables, cabinets, flooring",
+      "documents": [
+        {
+          "kind": "legality",
+          "detail": "VNTLAS legality dossier"
+        },
+        {
+          "kind": "geolocation",
+          "detail": "Plot polygons for 14 plantation lots"
+        },
+        {
+          "kind": "species",
+          "detail": "Rubberwood, acacia · Vietnam"
+        },
+        {
+          "kind": "formaldehyde",
+          "detail": "Test reports, Jan 2026",
+          "standards": [
+            "TSCA Title VI",
+            "EN 717-1"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Mekong Timber",
+      "place": "Can Tho",
+      "country": "VN",
+      "at": [
+        105.78,
+        10.03
+      ],
+      "supplies": "Veneered plywood, flooring, furniture",
+      "documents": [
+        {
+          "kind": "legality",
+          "detail": "VNTLAS dossier + veneer import legality file"
+        },
+        {
+          "kind": "geolocation",
+          "detail": "Plot coordinates for 2026 veneer lots"
+        },
+        {
+          "kind": "species",
+          "detail": "Birch, okoume, oak veneer · eucalyptus core"
+        },
+        {
+          "kind": "formaldehyde",
+          "detail": "Test report, Feb 2026",
+          "standards": [
+            "JIS A 1460 (F★★★★)",
+            "EN 717-1"
+          ]
+        },
+        {
+          "kind": "inputs",
+          "detail": "Core-veneer origin certificates, 2026 lots"
+        }
+      ]
+    },
+    {
+      "name": "Quy Nhon Forest Products",
+      "place": "Tay Son, Binh Dinh",
+      "country": "VN",
+      "at": [
+        108.93,
+        13.97
+      ],
+      "supplies": "Film-faced plywood, pellets, sofa frames",
+      "documents": [
+        {
+          "kind": "legality",
+          "detail": "VNTLAS legality dossier"
+        },
+        {
+          "kind": "geolocation",
+          "detail": "Plot polygons, Binh Dinh plantations"
+        },
+        {
+          "kind": "species",
+          "detail": "Acacia, eucalyptus · Vietnam"
+        },
+        {
+          "kind": "inputs",
+          "detail": "Core-veneer origin certificates"
+        },
+        {
+          "kind": "chain",
+          "detail": "FSC 100%"
+        }
+      ]
+    },
+    {
+      "name": "Savannakhet Timber",
+      "place": "Savannakhet, Laos",
+      "country": "LA",
+      "at": [
+        104.76,
+        16.57
+      ],
+      "supplies": "Eucalyptus outdoor furniture",
+      "documents": [
+        {
+          "kind": "species",
+          "detail": "Eucalyptus · Laos"
+        }
+      ]
+    }
+  ],
+  "sites": [
+    {
+      "key": "factory",
+      "kind": "factory",
+      "name": "Your factory",
+      "shortName": "Factory",
+      "place": "Thu Dau Mot, Binh Duong",
+      "country": "VN",
+      "at": [
+        106.65,
+        10.98
+      ],
+      "note": "Production and warehouses WH-1, WH-2.",
+      "isRouteOrigin": true
+    },
+    {
+      "key": "cat-lai",
+      "kind": "port",
+      "name": "Cat Lai bonded warehouse",
+      "shortName": "Cat Lai",
+      "place": "Ho Chi Minh City port",
+      "country": "VN",
+      "at": [
+        106.79,
+        10.76
+      ],
+      "note": "Main export gateway for southern suppliers."
+    },
+    {
+      "key": "quy-nhon",
+      "kind": "warehouse",
+      "name": "Quy Nhon warehouse",
+      "shortName": "Quy Nhon WH",
+      "place": "Quy Nhon port, Binh Dinh",
+      "country": "VN",
+      "at": [
+        109.24,
+        13.76
+      ],
+      "note": "Export gateway for central Vietnam and Laos."
+    }
+  ]
+}

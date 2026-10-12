@@ -54,6 +54,17 @@ def list_orders_page(
     return list(rows), total
 
 
+def list_company_orders(db: Session, company_id: uuid.UUID) -> list[Order]:
+    """Every order of one company, by ship date. For views that need them all (the map)."""
+    return list(
+        db.scalars(
+            select(Order)
+            .where(Order.company_id == company_id)
+            .order_by(Order.ship_date, Order.external_id)
+        )
+    )
+
+
 def get_order_by_external_id(db: Session, company_id: uuid.UUID, external_id: str) -> Order | None:
     return db.scalar(
         select(Order).where(Order.company_id == company_id, Order.external_id == external_id)

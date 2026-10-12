@@ -1,5 +1,6 @@
 """Playbook rules. Every change saves a new revision snapshot; old revisions are kept."""
 
+import logging
 import uuid
 from datetime import UTC, datetime
 
@@ -11,6 +12,8 @@ from app.database.models import PlaybookRule
 from app.database.queries import audit as audit_queries
 from app.database.queries import playbook as playbook_queries
 from app.schemas.playbook import RuleIn, RuleOut, RuleUpdate
+
+log = logging.getLogger(__name__)
 
 
 def list_playbook_rules(db: Session, ctx: CompanyContext) -> tuple[list[PlaybookRule], int]:
@@ -37,6 +40,10 @@ def _save_revision(db: Session, ctx: CompanyContext, action: str, rule: Playbook
         data={"revision": revision, "text": rule.text, "enabled": rule.enabled},
     )
     db.commit()
+    log.info(
+        action,
+        extra={"company_id": str(ctx.company_id), "rule_id": str(rule.id), "revision": revision},
+    )
     return revision
 
 

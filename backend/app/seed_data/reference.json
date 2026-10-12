@@ -1,0 +1,148 @@
+{
+  "_note": "Shared reference data for the trade map, loaded into Postgres by `python -m app.seed_reference_data`. Coordinates are [longitude, latitude]. Requirement checklists are illustrative, not legal guidance, until obligations come from reviewed regulation documents (REQUIREMENTS.md 4.5).",
+  "documentKinds": [
+    { "kind": "legality", "label": "Timber legality evidence" },
+    { "kind": "geolocation", "label": "Plot-level geolocation" },
+    { "kind": "species", "label": "Species & harvest-country declaration" },
+    { "kind": "formaldehyde", "label": "Formaldehyde emission test" },
+    { "kind": "inputs", "label": "Core-veneer origin certification" },
+    { "kind": "chain", "label": "Chain-of-custody certificate" }
+  ],
+  "markets": [
+    { "code": "EU", "name": "European Union", "shortName": "EU", "hub": [9, 50.5], "searchTerms": ["EU", "EUDR", "European", "Europe"] },
+    { "code": "UK", "name": "United Kingdom", "shortName": "UK", "hub": [-4, 54.5], "searchTerms": ["UK", "U.K.", "United Kingdom", "Britain", "British"] },
+    { "code": "US", "name": "United States", "shortName": "US", "hub": [-97, 38.5], "searchTerms": ["US", "U.S.", "USA", "United States", "American", "Section 232", "Lacey"] },
+    { "code": "CA", "name": "Canada", "shortName": "Canada", "hub": [-100, 57], "searchTerms": ["Canada", "Canadian"] },
+    { "code": "JP", "name": "Japan", "shortName": "Japan", "hub": [138.5, 36.5], "searchTerms": ["Japan", "Japanese"] },
+    { "code": "KR", "name": "South Korea", "shortName": "Korea", "hub": [127.8, 36.4], "searchTerms": ["Korea", "Korean"] },
+    { "code": "SG", "name": "Singapore", "shortName": "Singapore", "hub": [103.8, 1.35], "searchTerms": ["Singapore"] },
+    { "code": "AU", "name": "Australia", "shortName": "Australia", "hub": [134, -25.5], "searchTerms": ["Australia", "Australian"] }
+  ],
+  "countries": [
+    { "alpha2": "AT", "numeric": "040", "name": "Austria", "market": "EU" },
+    { "alpha2": "BE", "numeric": "056", "name": "Belgium", "market": "EU", "center": [4.5, 50.6] },
+    { "alpha2": "BG", "numeric": "100", "name": "Bulgaria", "market": "EU" },
+    { "alpha2": "HR", "numeric": "191", "name": "Croatia", "market": "EU" },
+    { "alpha2": "CY", "numeric": "196", "name": "Cyprus", "market": "EU" },
+    { "alpha2": "CZ", "numeric": "203", "name": "Czechia", "market": "EU" },
+    { "alpha2": "DK", "numeric": "208", "name": "Denmark", "market": "EU", "center": [9.5, 56] },
+    { "alpha2": "EE", "numeric": "233", "name": "Estonia", "market": "EU" },
+    { "alpha2": "FI", "numeric": "246", "name": "Finland", "market": "EU" },
+    { "alpha2": "FR", "numeric": "250", "name": "France", "market": "EU", "center": [2.3, 46.6] },
+    { "alpha2": "DE", "numeric": "276", "name": "Germany", "market": "EU", "center": [10.4, 51.1] },
+    { "alpha2": "GR", "numeric": "300", "name": "Greece", "market": "EU", "center": [22, 39.1] },
+    { "alpha2": "HU", "numeric": "348", "name": "Hungary", "market": "EU" },
+    { "alpha2": "IE", "numeric": "372", "name": "Ireland", "market": "EU", "center": [-8, 53.2] },
+    { "alpha2": "IT", "numeric": "380", "name": "Italy", "market": "EU", "center": [12.5, 42.8] },
+    { "alpha2": "LV", "numeric": "428", "name": "Latvia", "market": "EU" },
+    { "alpha2": "LT", "numeric": "440", "name": "Lithuania", "market": "EU" },
+    { "alpha2": "LU", "numeric": "442", "name": "Luxembourg", "market": "EU" },
+    { "alpha2": "MT", "numeric": "470", "name": "Malta", "market": "EU" },
+    { "alpha2": "NL", "numeric": "528", "name": "Netherlands", "market": "EU", "center": [5.3, 52.1] },
+    { "alpha2": "PL", "numeric": "616", "name": "Poland", "market": "EU", "center": [19.4, 52.1] },
+    { "alpha2": "PT", "numeric": "620", "name": "Portugal", "market": "EU", "center": [-8.2, 39.6] },
+    { "alpha2": "RO", "numeric": "642", "name": "Romania", "market": "EU" },
+    { "alpha2": "SK", "numeric": "703", "name": "Slovakia", "market": "EU" },
+    { "alpha2": "SI", "numeric": "705", "name": "Slovenia", "market": "EU" },
+    { "alpha2": "ES", "numeric": "724", "name": "Spain", "market": "EU", "center": [-3.7, 40.3] },
+    { "alpha2": "SE", "numeric": "752", "name": "Sweden", "market": "EU", "center": [15, 60.1] },
+    { "alpha2": "GB", "numeric": "826", "name": "United Kingdom", "market": "UK", "center": [-1.5, 52.6] },
+    { "alpha2": "US", "numeric": "840", "name": "United States", "market": "US", "center": [-97, 38.5] },
+    { "alpha2": "CA", "numeric": "124", "name": "Canada", "market": "CA", "center": [-96, 56] },
+    { "alpha2": "JP", "numeric": "392", "name": "Japan", "market": "JP", "center": [138, 36.2] },
+    { "alpha2": "KR", "numeric": "410", "name": "South Korea", "market": "KR", "center": [127.8, 36.3] },
+    { "alpha2": "SG", "numeric": "702", "name": "Singapore", "market": "SG", "center": [103.8, 1.35] },
+    { "alpha2": "AU", "numeric": "036", "name": "Australia", "market": "AU", "center": [134, -25.5] },
+    { "alpha2": "VN", "numeric": "704", "name": "Vietnam" },
+    { "alpha2": "LA", "numeric": "418", "name": "Laos" }
+  ],
+  "ports": [
+    { "name": "Rotterdam", "country": "NL", "at": [4.4, 51.92] },
+    { "name": "Antwerp", "country": "BE", "at": [4.4, 51.22] },
+    { "name": "Hamburg", "country": "DE", "at": [9.97, 53.55] },
+    { "name": "Bremerhaven", "country": "DE", "at": [8.58, 53.54] },
+    { "name": "Felixstowe", "country": "GB", "at": [1.35, 51.96] },
+    { "name": "Southampton", "country": "GB", "at": [-1.4, 50.9] },
+    { "name": "Le Havre", "country": "FR", "at": [0.11, 49.49] },
+    { "name": "Gdansk", "country": "PL", "at": [18.65, 54.35] },
+    { "name": "Valencia", "country": "ES", "at": [-0.33, 39.45] },
+    { "name": "Barcelona", "country": "ES", "at": [2.17, 41.38] },
+    { "name": "Genoa", "country": "IT", "at": [8.93, 44.41] },
+    { "name": "Piraeus", "country": "GR", "at": [23.63, 37.94] },
+    { "name": "Dublin", "country": "IE", "at": [-6.2, 53.35] },
+    { "name": "Los Angeles", "country": "US", "at": [-118.27, 33.74] },
+    { "name": "Long Beach", "country": "US", "at": [-118.19, 33.77] },
+    { "name": "Oakland", "country": "US", "at": [-122.29, 37.8] },
+    { "name": "Seattle", "country": "US", "at": [-122.34, 47.6] },
+    { "name": "Houston", "country": "US", "at": [-95.27, 29.73] },
+    { "name": "Savannah", "country": "US", "at": [-81.09, 32.08] },
+    { "name": "Charleston", "country": "US", "at": [-79.93, 32.78] },
+    { "name": "Norfolk", "country": "US", "at": [-76.3, 36.85] },
+    { "name": "New York", "country": "US", "at": [-74, 40.67] },
+    { "name": "Vancouver", "country": "CA", "at": [-123.1, 49.29] },
+    { "name": "Montreal", "country": "CA", "at": [-73.55, 45.5] },
+    { "name": "Toronto", "country": "CA", "at": [-79.38, 43.65] },
+    { "name": "Tokyo", "country": "JP", "at": [139.78, 35.62] },
+    { "name": "Yokohama", "country": "JP", "at": [139.64, 35.45] },
+    { "name": "Osaka", "country": "JP", "at": [135.43, 34.64] },
+    { "name": "Kobe", "country": "JP", "at": [135.2, 34.68] },
+    { "name": "Nagoya", "country": "JP", "at": [136.88, 35.08] },
+    { "name": "Busan", "country": "KR", "at": [129.04, 35.1] },
+    { "name": "Incheon", "country": "KR", "at": [126.6, 37.46] },
+    { "name": "Singapore", "country": "SG", "at": [103.84, 1.26] },
+    { "name": "Sydney", "country": "AU", "at": [151.2, -33.86] },
+    { "name": "Melbourne", "country": "AU", "at": [144.92, -37.83] },
+    { "name": "Brisbane", "country": "AU", "at": [153.17, -27.38] }
+  ],
+  "requirements": {
+    "EU": [
+      { "key": "legality", "title": "Timber legality evidence", "level": "supplier", "documentKind": "legality", "why": "The buyer's due diligence must show the wood was harvested legally." },
+      { "key": "geolocation", "title": "Plot-level geolocation", "level": "supplier", "documentKind": "geolocation", "why": "EU deforestation rules ask for the plots where the wood was harvested." },
+      { "key": "dds", "title": "Due diligence data for the EU importer", "level": "shipment", "form": "Lot data with geolocation and legality references", "why": "Your buyer files a due diligence statement for each shipment." },
+      { "key": "formaldehyde", "title": "Formaldehyde emission test", "level": "supplier", "documentKind": "formaldehyde", "acceptedStandards": ["EN 717-1"], "hsPrefixes": ["4412", "9403"], "why": "Formaldehyde limits for wood-based panels and furniture." },
+      { "key": "origin", "title": "Proof of origin", "level": "shipment", "form": "EVFTA origin statement", "why": "Issued per shipment. The form decides which tariff preference applies." },
+      { "key": "ispm15", "title": "ISPM 15 wood packaging", "level": "shipment", "form": "Heat-treated, marked pallets and crates", "why": "Applies to wooden packaging in every market on this map." }
+    ],
+    "UK": [
+      { "key": "legality", "title": "Timber legality evidence", "level": "supplier", "documentKind": "legality", "why": "UK timber rules prohibit illegally harvested wood." },
+      { "key": "formaldehyde", "title": "Formaldehyde emission test", "level": "supplier", "documentKind": "formaldehyde", "acceptedStandards": ["EN 717-1"], "hsPrefixes": ["4412", "9403"], "why": "Buyers expect emission class evidence for panels and furniture." },
+      { "key": "origin", "title": "Proof of origin", "level": "shipment", "form": "UKVFTA origin statement", "why": "Issued per shipment. The form decides which tariff preference applies." },
+      { "key": "ispm15", "title": "ISPM 15 wood packaging", "level": "shipment", "form": "Heat-treated, marked pallets and crates", "why": "Applies to wooden packaging in every market on this map." }
+    ],
+    "US": [
+      { "key": "legality", "title": "Timber legality evidence", "level": "supplier", "documentKind": "legality", "why": "The Lacey Act prohibits illegally harvested wood." },
+      { "key": "species", "title": "Species & harvest-country declaration", "level": "supplier", "documentKind": "species", "why": "Feeds the Lacey Act plant declaration." },
+      { "key": "lacey", "title": "Lacey Act declaration", "level": "shipment", "form": "PPQ 505 species and harvest-country data", "why": "Filed for each shipment of covered wood products." },
+      { "key": "formaldehyde", "title": "Formaldehyde emission test", "level": "supplier", "documentKind": "formaldehyde", "acceptedStandards": ["TSCA Title VI"], "hsPrefixes": ["4412", "9403"], "why": "Composite wood in panels and furniture needs TSCA Title VI certification." },
+      { "key": "inputs", "title": "Core-veneer origin certification", "level": "supplier", "documentKind": "inputs", "hsPrefixes": ["4412"], "why": "US trade-remedy certification for plywood made in Vietnam." },
+      { "key": "tariff", "title": "Section 232 tariff category", "level": "check", "hsPrefixes": ["940161", "940340"], "why": "Upholstered seating and kitchen cabinets & vanities can carry an added US tariff. Recheck landed cost." },
+      { "key": "origin", "title": "Proof of origin", "level": "shipment", "form": "Non-preferential certificate of origin (no FTA)", "why": "Issued per shipment. The form decides which tariff preference applies." },
+      { "key": "ispm15", "title": "ISPM 15 wood packaging", "level": "shipment", "form": "Heat-treated, marked pallets and crates", "why": "Applies to wooden packaging in every market on this map." }
+    ],
+    "CA": [
+      { "key": "formaldehyde", "title": "Formaldehyde emission test", "level": "supplier", "documentKind": "formaldehyde", "acceptedStandards": ["TSCA Title VI"], "hsPrefixes": ["4412", "9403"], "why": "Canada's composite-wood rules accept TSCA Title VI certification." },
+      { "key": "origin", "title": "Proof of origin", "level": "shipment", "form": "CPTPP origin statement", "why": "Issued per shipment. The form decides which tariff preference applies." },
+      { "key": "ispm15", "title": "ISPM 15 wood packaging", "level": "shipment", "form": "Heat-treated, marked pallets and crates", "why": "Applies to wooden packaging in every market on this map." }
+    ],
+    "JP": [
+      { "key": "legality", "title": "Timber legality evidence", "level": "supplier", "documentKind": "legality", "why": "The Clean Wood Act asks importers to confirm legality." },
+      { "key": "formaldehyde", "title": "Formaldehyde emission test", "level": "supplier", "documentKind": "formaldehyde", "acceptedStandards": ["JIS A 1460 (F★★★★)"], "hsPrefixes": ["4412"], "why": "Plywood is graded by formaldehyde class (F★★★★)." },
+      { "key": "origin", "title": "Proof of origin", "level": "shipment", "form": "CPTPP or VJEPA proof of origin", "why": "Issued per shipment. The form decides which tariff preference applies." },
+      { "key": "ispm15", "title": "ISPM 15 wood packaging", "level": "shipment", "form": "Heat-treated, marked pallets and crates", "why": "Applies to wooden packaging in every market on this map." }
+    ],
+    "KR": [
+      { "key": "legality", "title": "Timber legality evidence", "level": "supplier", "documentKind": "legality", "why": "Legal timber import declaration for covered wood products." },
+      { "key": "origin", "title": "Proof of origin", "level": "shipment", "form": "VKFTA certificate of origin", "why": "Issued per shipment. The form decides which tariff preference applies." },
+      { "key": "ispm15", "title": "ISPM 15 wood packaging", "level": "shipment", "form": "Heat-treated, marked pallets and crates", "why": "Applies to wooden packaging in every market on this map." }
+    ],
+    "SG": [
+      { "key": "origin", "title": "Proof of origin", "level": "shipment", "form": "ATIGA Form D", "why": "Issued per shipment. The form decides which tariff preference applies." },
+      { "key": "ispm15", "title": "ISPM 15 wood packaging", "level": "shipment", "form": "Heat-treated, marked pallets and crates", "why": "Applies to wooden packaging in every market on this map." }
+    ],
+    "AU": [
+      { "key": "legality", "title": "Timber legality evidence", "level": "supplier", "documentKind": "legality", "why": "Illegal logging rules require importer due diligence." },
+      { "key": "origin", "title": "Proof of origin", "level": "shipment", "form": "CPTPP or AANZFTA proof of origin", "why": "Issued per shipment. The form decides which tariff preference applies." },
+      { "key": "ispm15", "title": "ISPM 15 wood packaging", "level": "shipment", "form": "Heat-treated, marked pallets and crates", "why": "Applies to wooden packaging in every market on this map." }
+    ]
+  }
+}

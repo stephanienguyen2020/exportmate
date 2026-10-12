@@ -15,6 +15,8 @@ npm run dev
 
 Open the local URL printed by Vite (normally http://127.0.0.1:5173). `npm run build` type-checks and produces `dist/`; `npm run preview` serves the production build. The sample demo needs no credentials. Signed-in workspaces require the backend and Firebase configuration below.
 
+To run the whole stack (Postgres, backend, AI service and frontend) with one command, use `./dev.sh`. It needs Docker and [uv](https://docs.astral.sh/uv/), installs dependencies when lockfiles change, migrates and seeds the database, and uses dev sign-in: log in as `lan@example.com` with any password of 8+ characters. Ctrl+C stops everything except Postgres.
+
 ## Company API integration
 
 The signed-in workspace uses the FastAPI contracts in `backend/app/schemas`: account/profile and onboarding, paginated orders and original CSV row details, overview, two-step CSV validation/commit, and playbook CRUD. Firebase handles sign-in, signup, email verification and password recovery. Requests use refreshed Firebase ID tokens. Viewer accounts cannot import or change rules; company settings require an owner.

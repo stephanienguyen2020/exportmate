@@ -1,4 +1,11 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, {
+  Fragment,
+  lazy,
+  Suspense,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { createRoot } from "react-dom/client";
 import {
   ArrowUpRight,
@@ -28,6 +35,7 @@ import {
   UserRound,
   LogOut,
   Newspaper,
+  Map as MapIcon,
 } from "lucide-react";
 import Papa from "papaparse";
 import {
@@ -48,6 +56,8 @@ import {
   hasSession,
   isApiSession,
   navigate,
+  routeStops,
+  placeCode,
 } from "./account-store";
 import ChatPage, { ChatWidget } from "../ai/chat/Chat";
 import NewsWatchPage, { NewsHighlights } from "../ai/news/NewsWatch";
@@ -62,9 +72,11 @@ import {
   type OrderDetail,
 } from "./api";
 import { errorMessage } from "./auth";
+const TradeMapPage = lazy(() => import("./TradeMap"));
 const nav = [
   ["", "Overview"],
   ["orders", "Orders"],
+  ["map", "Trade map"],
   ["news", "News watch"],
   ["rules", "Rule watch"],
   ["data", "Data room"],
@@ -586,6 +598,7 @@ function App() {
             const Icon = [
               Globe2,
               Package,
+              MapIcon,
               Newspaper,
               ShieldCheck,
               Upload,
@@ -613,9 +626,16 @@ function App() {
         <div className="sidebar-bottom">
           <div className="watching">
             <span className="pulse" /> Your trade corridor.
-            <p>Vietnam to Europe.</p>
+            <p>
+              {profile.origin} to {profile.destination}.
+            </p>
             <div className="mini-corridor">
-              VN <span>→</span> SG <span>→</span> EU
+              {routeStops(profile).map((place, i) => (
+                <Fragment key={i}>
+                  {i > 0 && <span>→</span>}
+                  {placeCode(place)}
+                </Fragment>
+              ))}
             </div>
           </div>
           <button className="profile" onClick={() => go("account")}>
@@ -646,7 +666,8 @@ function App() {
             <strong>
               {detail
                 ? "Order impact"
-                : nav.find(([p]) => p === route)?.[1] || "Overview"}
+                : nav.find(([p]) => p === route.split("/")[0])?.[1] ||
+                  "Overview"}
             </strong>
           </div>
           <div className="top-actions">
@@ -753,11 +774,12 @@ function App() {
                     <div className="port-bottom">
                       <div>
                         <div className="corridor">
-                          <span>Vietnam</span>
-                          <ArrowRight />
-                          <span>Singapore</span>
-                          <ArrowRight />
-                          <span>Europe</span>
+                          {routeStops(profile).map((place, i) => (
+                            <Fragment key={i}>
+                              {i > 0 && <ArrowRight />}
+                              <span>{place}</span>
+                            </Fragment>
+                          ))}
                         </div>
                         <p>Your first trade corridor.</p>
                       </div>
@@ -1080,6 +1102,18 @@ function App() {
                       <b>{detail.hsCode}</b>
                     </div>
                   </div>
+                  {live && (
+                    <button
+                      className="text-link order-map-link"
+                      onClick={() =>
+                        go("map/order/" + encodeURIComponent(detail.id))
+                      }
+                    >
+                      <MapIcon size={15} />
+                      If this order went to another market, what would change?
+                      <ArrowUpRight size={15} />
+                    </button>
+                  )}
                   {live ? (
                     <section className="panel">
                       <h2>{status(detail)}</h2>
@@ -1256,6 +1290,27 @@ function App() {
                   )}
                 </>
               )}
+              {route.split("/")[0] === "map" && (
+                <Suspense
+                  fallback={
+                    <section className="panel" role="status">
+                      <Loader2 size={20} /> Loading the map…
+                    </section>
+                  }
+                >
+                  <TradeMapPage
+                    key={route}
+                    live={live}
+                    focus={route.slice(4)}
+                    toneOf={(o) =>
+                      o.risk ? "red" : isClear(o) ? "green" : "amber"
+                    }
+                    renderStatus={status}
+                    onNavigate={go}
+                    signature={`${profile.name} · ${profile.company || "Your company"}`}
+                  />
+                </Suspense>
+              )}
               {route === "news" && <NewsWatchPage />}
               {route === "rules" && (
                 <>
@@ -1414,6 +1469,14 @@ function App() {
                         <Download size={15} />
                         Download the template
                       </button>
+                      <a
+                        className="text-link template"
+                        href="/samples/exportmate-sample-orders.csv"
+                        download
+                      >
+                        <Download size={15} />
+                        Download sample orders (24 rows)
+                      </a>
                     </section>
                     <section className="data-help">
                       <span className="eyebrow">A GOOD FIRST STEP</span>
@@ -1694,9 +1757,11 @@ function App() {
               {route === "account" && (
                 <AccountSettings
                   account={account}
-                  onUpdate={() => {
+                  onUpdate={(me) => {
                     setProfile(getProfile());
-                    if (live) void refreshWorkspace();
+                    // Profile and company details don't change orders, so update
+                    // the account in place instead of reloading the workspace.
+                    if (me) setAccount(me);
                   }}
                 />
               )}
@@ -1706,6 +1771,7 @@ function App() {
               {!(live && route.startsWith("orders/")) &&
                 route !== "" &&
                 !nav.some(([p]) => p === route) &&
+                route.split("/")[0] !== "map" &&
                 !detail && (
                   <section className="empty">
                     <h2>We couldn’t find that page.</h2>
@@ -1983,7 +2049,7 @@ function Root() {
   const workspace =
     path === "workspace" ||
     path.startsWith("workspace/") ||
-    /^(orders|news|rules|data|playbook)(\/|$)/.test(path);
+    /^(orders|map|news|rules|data|playbook)(\/|$)/.test(path);
   useEffect(() => {
     const update = () => {
       const value = location.hash.replace(/^#\/?/, "");

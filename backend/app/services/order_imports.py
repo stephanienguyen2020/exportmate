@@ -1,6 +1,7 @@
 """CSV import: upload → validate → preview → commit (all-or-nothing)."""
 
 import hashlib
+import logging
 import uuid
 from datetime import UTC, date, datetime
 from pathlib import PurePath
@@ -19,6 +20,8 @@ from app.schemas.imports import CommitOut, ImportOut, PreviewRowOut
 from app.services.order_csv import parse_order_csv, reject_existing_order_ids
 
 PREVIEW_LIMIT = 200
+
+log = logging.getLogger(__name__)
 
 
 def _to_json_fields(order: dict) -> dict:
@@ -112,6 +115,17 @@ def upload_order_csv(db: Session, ctx: CompanyContext, filename: str, content: b
         data={"filename": item.filename, "rows": item.row_count, "errors": len(item.errors)},
     )
     db.commit()
+    log.info(
+        "import.uploaded",
+        extra={
+            "company_id": str(ctx.company_id),
+            "import_id": str(item.id),
+            "status": item.status.value,
+            "rows": item.row_count,
+            "errors": len(item.errors),
+            "size_bytes": item.size_bytes,
+        },
+    )
     return item
 
 
@@ -162,6 +176,10 @@ def commit_order_import(db: Session, ctx: CompanyContext, import_id: uuid.UUID) 
         order_queries.add_orders(db, orders)
     except IntegrityError:
         db.rollback()
+        log.warning(
+            "import.commit_conflict",
+            extra={"company_id": str(ctx.company_id), "import_id": str(import_id)},
+        )
         raise AppError(409, "orders_already_exist", "Some orders were added at the same time.")
 
     item.status = ImportStatus.committed
@@ -176,4 +194,12 @@ def commit_order_import(db: Session, ctx: CompanyContext, import_id: uuid.UUID) 
         data={"ordersCreated": len(orders)},
     )
     db.commit()
+    log.info(
+        "import.committed",
+        extra={
+            "company_id": str(ctx.company_id),
+            "import_id": str(item.id),
+            "orders_created": len(orders),
+        },
+    )
     return CommitOut(import_id=item.id, orders_created=len(orders))

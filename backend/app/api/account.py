@@ -3,11 +3,12 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.core.auth import CurrentClaims, CurrentUser, OwnerContext, revoke_sessions
+from app.core.auth import CurrentClaims, CurrentUser, OwnerContext, ViewerContext, revoke_sessions
 from app.database.models import Company, Role, User
 from app.database.session import get_db
 from app.schemas.account import (
     AccountOut,
+    CompanyKnowledgeOut,
     CompanyOut,
     CompanyUpdate,
     OnboardingIn,
@@ -61,3 +62,10 @@ def complete_onboarding(payload: OnboardingIn, user: CurrentUser, db: Db):
 def update_company(payload: CompanyUpdate, ctx: OwnerContext, db: Db):
     company = accounts.update_company_profile(db, ctx, payload)
     return success_response(CompanyOut.model_validate(company))
+
+
+@router.get("/company/knowledge", response_model=SuccessResponse[CompanyKnowledgeOut])
+def get_company_knowledge(ctx: ViewerContext, db: Db):
+    """The caller's company profile and sites. The AI service fetches this with the user's own
+    token to answer questions about the company; it never reads the database directly."""
+    return success_response(accounts.build_company_knowledge(db, ctx))

@@ -20,6 +20,33 @@ const SCAN_COOLDOWN_MS = 10 * 60_000;
 const SCHEDULER_SA = process.env.SCHEDULER_SA || "";
 const SCAN_AUDIENCE = process.env.SCAN_AUDIENCE || "";
 const authClient = new OAuth2Client();
+// Company backend (FastAPI) origin, for the signed-in company's profile. Chat never reads its
+// database; it calls the API with the user's own token (backend/REQUIREMENTS.md 7.2).
+const BACKEND_URL = (process.env.BACKEND_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
+
+// The caller's company profile and sites, or null (demo chat, signed out, backend down).
+// The user's token is only ever sent to BACKEND_URL and is never logged.
+async function companyKnowledge(authorization) {
+  if (!/^Bearer \S+$/.test(authorization || "")) return null;
+  const local = /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(BACKEND_URL);
+  if (!local && !BACKEND_URL.startsWith("https://")) return null;
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/v1/company/knowledge`, {
+      headers: { Authorization: authorization },
+      signal: AbortSignal.timeout(5000),
+      redirect: "error",
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      console.warn(`Company profile unavailable (${res.status} ${body.error?.code || ""}); answering without it.`);
+      return null;
+    }
+    return body.data;
+  } catch (e) {
+    console.warn(`Company profile unavailable (${e.name}); answering without it.`);
+    return null;
+  }
+}
 
 async function fromScheduler(req) {
   const token = (req.headers.authorization || "").match(/^Bearer (.+)$/)?.[1];
@@ -78,7 +105,7 @@ function parseMessages(messages) {
 }
 
 // Streams the agent's audit steps as NDJSON, then the final answer and audit record.
-async function streamChat(res, body, origin) {
+async function streamChat(req, res, body, origin) {
   const messages = parseMessages(body.messages);
   if (!messages) return send(res, 400, { error: "Expected messages ending with a user message" }, origin);
   if (!SESSION.test(body.sessionId || "")) return send(res, 400, { error: "Expected a sessionId" }, origin);
@@ -90,7 +117,13 @@ async function streamChat(res, body, origin) {
   });
   const write = (event) => res.write(JSON.stringify(event) + "\n");
   try {
-    const result = await runAgent({ messages, sessionId: body.sessionId, onStep: (step) => write({ type: "step", step }) });
+    const company = await companyKnowledge(req.headers.authorization);
+    const result = await runAgent({
+      messages,
+      sessionId: body.sessionId,
+      company,
+      onStep: (step) => write({ type: "step", step }),
+    });
     if (result.status === "error") write({ type: "error", error: "The assistant is unavailable right now.", auditId: result.id });
     else write({ type: "done", reply: result.answer, citations: result.citations, audit: result });
   } catch (e) {
@@ -188,7 +221,7 @@ http
       res.writeHead(204, {
         "Access-Control-Allow-Origin": ALLOWED_ORIGINS.includes(origin) ? origin : "",
         "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
         "Access-Control-Max-Age": "3600",
       });
       return res.end();
@@ -204,7 +237,7 @@ http
         return send(res, 400, { error: "Invalid JSON" }, origin);
       }
     }
-    if (req.method === "POST" && path === "/api/chat") return streamChat(res, body, origin);
+    if (req.method === "POST" && path === "/api/chat") return streamChat(req, res, body, origin);
     try {
       const [status, payload] = await route(req.method, path, body, req, url.searchParams);
       send(res, status, payload, origin);

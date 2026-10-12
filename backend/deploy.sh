@@ -17,9 +17,11 @@ gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
 docker build --platform linux/amd64 -t "$IMAGE" .
 docker push "$IMAGE"
 
-echo "==> Running migrations"
+echo "==> Running migrations and loading reference data (markets, checklists, ...)"
+# The job runs `sh -c "<args>"`. The reference seed is idempotent: it updates rows in place.
 gcloud run jobs update exportmate-backend-task \
-  --project "$PROJECT_ID" --region "$REGION" --image "$IMAGE" --args="alembic upgrade head"
+  --project "$PROJECT_ID" --region "$REGION" --image "$IMAGE" \
+  --args="alembic upgrade head && python -m app.seed_reference_data"
 gcloud run jobs execute exportmate-backend-task --project "$PROJECT_ID" --region "$REGION" --wait
 
 echo "==> Deploying service"
