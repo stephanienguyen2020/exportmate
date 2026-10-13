@@ -1,6 +1,8 @@
 """Who is calling (Firebase token) and what they may touch (Postgres membership)."""
 
 import logging
+import threading
+import time
 from typing import Annotated
 
 import firebase_admin
@@ -16,6 +18,15 @@ from app.database.session import get_db
 from app.services import accounts
 
 _ROLE_RANK = {Role.viewer: 0, Role.editor: 1, Role.owner: 2}
+
+# Checking whether a session was revoked means asking Firebase about the user, a network round
+# trip on every request. The answer is kept per user for a minute: a sign-out-everywhere is
+# honoured at once on this instance and within REVOCATION_TTL_SECONDS on the others.
+REVOCATION_TTL_SECONDS = 60
+_revocations: dict[
+    str, tuple[float, int, bool]
+] = {}  # uid -> (checked_at, valid_after_ms, disabled)
+_revocations_lock = threading.Lock()
 
 log = logging.getLogger(__name__)
 
@@ -41,15 +52,38 @@ def _firebase_app() -> firebase_admin.App:
     return firebase_admin.get_app()
 
 
+def _session_state(uid: str) -> tuple[int, bool]:
+    """(tokens valid after, in ms; account disabled) for a user, cached briefly."""
+    now = time.monotonic()
+    with _revocations_lock:
+        hit = _revocations.get(uid)
+    if hit and now - hit[0] < REVOCATION_TTL_SECONDS:
+        return hit[1], hit[2]
+    try:
+        user = fb_auth.get_user(uid, app=_firebase_app())
+    except fb_auth.UserNotFoundError:
+        raise AppError(401, "unauthenticated", "Invalid or expired sign-in token.")
+    state = (now, user.tokens_valid_after_timestamp or 0, bool(user.disabled))
+    with _revocations_lock:
+        if len(_revocations) > 10_000:
+            _revocations.clear()
+        _revocations[uid] = state
+    return state[1], state[2]
+
+
 def _verify_firebase(token: str) -> TokenClaims:
     try:
-        decoded = fb_auth.verify_id_token(token, app=_firebase_app(), check_revoked=True)
-    except fb_auth.RevokedIdTokenError:
-        raise AppError(401, "session_revoked", "Session ended. Please sign in again.")
+        decoded = fb_auth.verify_id_token(token, app=_firebase_app())
     except (ValueError, fb_auth.InvalidIdTokenError, fb_auth.ExpiredIdTokenError) as error:
         # The error type says why (expired, wrong project, malformed); the token is never logged.
         log.info("auth.token_rejected", extra={"reason": type(error).__name__})
         raise AppError(401, "unauthenticated", "Invalid or expired sign-in token.")
+    # Same rule as firebase-admin's check_revoked, with the user lookup cached.
+    valid_after_ms, disabled = _session_state(decoded["uid"])
+    if disabled:
+        raise AppError(401, "account_disabled", "This account is disabled.")
+    if decoded.get("iat", 0) * 1000 < valid_after_ms:
+        raise AppError(401, "session_revoked", "Session ended. Please sign in again.")
     return TokenClaims(
         uid=decoded["uid"],
         email=decoded.get("email", ""),
@@ -69,6 +103,8 @@ def revoke_sessions(uid: str) -> None:
     if get_settings().auth_mode == "dev":
         return
     fb_auth.revoke_refresh_tokens(uid, app=_firebase_app())
+    with _revocations_lock:
+        _revocations.pop(uid, None)
     log.info("auth.sessions_revoked")
 
 

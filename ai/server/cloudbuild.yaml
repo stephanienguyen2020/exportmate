@@ -1,0 +1,8 @@
+# Image build for the AI service, run by ai/server/deploy.sh with the exportmate-builder
+# service account (infra/terraform/build.tf). _IMAGE is set by the script.
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ["build", "-t", "${_IMAGE}", "."]
+images: ["${_IMAGE}"]
+options:
+  logging: CLOUD_LOGGING_ONLY

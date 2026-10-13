@@ -51,6 +51,8 @@ def find_user_company_membership(
 
 def onboard_user(db: Session, user: User, payload: OnboardingIn) -> tuple[Company, Role]:
     """Create the user's company and make them its owner."""
+    # Two onboarding requests at once (double submit, two tabs) would both pass the check below.
+    user_queries.lock_user(db, user.id)
     if user_queries.get_user_company_membership(db, user.id):
         raise AppError(409, "already_onboarded", "You already belong to a company.")
     company = company_queries.create_company(

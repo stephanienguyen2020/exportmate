@@ -70,5 +70,7 @@ def build_overview(db: Session, ctx: CompanyContext) -> OverviewOut:
         nearest_affected_ship_date=order_queries.find_nearest_ship_date(
             db, ctx.company_id, OrderStatus.exposed, today
         ),
+        # News sources are read by the AI service; the backend learns of checks once rule
+        # sources move here (REQUIREMENTS 4.5). The dashboard shows the scan time from /api/impacts.
         sources_checked_at=None,
     )

@@ -1,6 +1,7 @@
 import uuid
+from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.database.models import Import, ImportRow, ImportStatus
@@ -31,6 +32,14 @@ def list_import_rows(db: Session, import_id: uuid.UUID) -> list[ImportRow]:
             select(ImportRow).where(ImportRow.import_id == import_id).order_by(ImportRow.row_number)
         )
     )
+
+
+def delete_uncommitted_imports_before(db: Session, cutoff: datetime) -> int:
+    """Deletes imports never committed (their rows go with them). Returns how many."""
+    result = db.execute(
+        delete(Import).where(Import.status != ImportStatus.committed, Import.created_at < cutoff)
+    )
+    return result.rowcount
 
 
 def find_committed_import_by_checksum(

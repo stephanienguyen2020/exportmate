@@ -78,6 +78,9 @@ svg {
   display: flex;
   flex-direction: column;
   z-index: 20;
+  /* Short screens: scroll so the profile and Sign out stay reachable. */
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .brand {
   font-size: 24px;
@@ -328,6 +331,12 @@ svg {
 }
 .icon-btn:hover {
   background: #71836015;
+}
+.icon-btn.confirm-delete {
+  gap: 4px;
+  color: var(--red);
+  border: 1px solid #e3b3a7;
+  font-size: 11px;
 }
 .mobile-menu {
   display: none;
@@ -786,7 +795,8 @@ footer {
   justify-content: space-between;
   align-items: center;
   border-top: 1px solid var(--line);
-  padding: 24px 0;
+  /* Room below the last line for the floating assistant button. */
+  padding: 24px 0 96px;
   margin-top: 45px;
   gap: 15px;
 }
@@ -1307,6 +1317,11 @@ footer > span:last-child {
   font-size: 12px;
   border: 1px solid #809174;
 }
+.toast.error {
+  background: #fff4f1;
+  color: var(--red);
+  border-color: #e3b3a7;
+}
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -1473,6 +1488,17 @@ footer > span:last-child {
 }
 .mobile-nav {
   display: none;
+}
+@media (max-height: 760px) and (min-width: 761px) {
+  .workspace {
+    margin: 24px -1px 18px;
+  }
+  .sidebar-bottom {
+    padding-top: 28px;
+  }
+  .watching {
+    padding-bottom: 16px;
+  }
 }
 @media (min-width: 1600px) {
   .hero-heading h1 {
@@ -1743,12 +1769,14 @@ footer > span:last-child {
   .breadcrumb {
     margin-right: auto;
     margin-left: 12px;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
-  .demo-badge {
-    display: none;
-  }
+  .demo-badge,
   .perspective {
-    font-size: 10px;
+    display: none;
   }
   .top-actions {
     gap: 10px;
@@ -1764,6 +1792,69 @@ footer > span:last-child {
   .mobile-nav a {
     padding: 8px;
     font-size: 12px;
+    border-radius: 3px;
+  }
+  .mobile-nav a.active {
+    background: #ffffff1f;
+    color: var(--lime);
+  }
+  .mobile-nav .mobile-signout {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+    opacity: 0.85;
+  }
+  footer {
+    padding-bottom: 80px;
+  }
+  /* Orders become cards so status and value stay on screen. */
+  .orders-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+  }
+  .orders-table,
+  .orders-table tbody,
+  .orders-table td {
+    display: block;
+    width: 100%;
+  }
+  .orders-table tr {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    gap: 10px 14px;
+    padding: 14px 4px 14px 2px;
+    border-bottom: 1px solid var(--line);
+  }
+  .orders-table td {
+    border: 0;
+    padding: 0;
+    white-space: normal;
+  }
+  .orders-table td:first-child {
+    grid-column: 1 / 3;
+    padding-left: 0;
+  }
+  .orders-table td.order-open {
+    grid-column: 3;
+    grid-row: 1;
+    width: auto;
+  }
+  .orders-table td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font:
+      9px "DM Mono",
+      monospace;
+    letter-spacing: 0.35px;
+    color: #8b9481;
+    margin-bottom: 4px;
+  }
+  .orders-table tr:hover td {
+    background: none;
   }
   main {
     padding: 24px 22px 0;

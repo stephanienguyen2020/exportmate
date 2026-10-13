@@ -142,7 +142,8 @@ export function endSession() {
   } catch {}
 }
 export function openDemo() {
-  if (startSession()) location.hash = "/workspace";
+  // Back to the workspace page that sent the visitor to sign in, if any.
+  if (startSession()) location.hash = "/" + intendedRoute();
   else alert("Please enable browser storage to open the demo.");
 }
 export function navigate(path: string) {
@@ -154,7 +155,7 @@ export function intendedRoute() {
     const p = sessionStorage.getItem("em-next");
     sessionStorage.removeItem("em-next");
     return p &&
-      /^workspace(?:\/(?:orders(?:\/[^?#]+)?|rules|data|playbook|account))?$/.test(
+      /^workspace(?:\/(?:(?:orders|map)(?:\/[^?#]+)?|news|rules|data|playbook|account))?$/.test(
         p,
       )
       ? p

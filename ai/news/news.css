@@ -70,6 +70,16 @@
   color: var(--green);
   font-weight: 500;
 }
+.news-more {
+  display: block;
+  text-align: left;
+  margin: 6px 0 0 16px;
+  padding: 0;
+  font-size: 11px;
+  color: var(--green);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 .news-action {
   font-size: 11px;
   line-height: 1.7;
@@ -236,6 +246,13 @@
 }
 .news-toggle input:checked + span::after {
   transform: translateX(13px);
+}
+.news-toggle input:disabled,
+.news-toggle:has(input:disabled) {
+  cursor: not-allowed;
+}
+.news-toggle input:disabled + span {
+  opacity: 0.55;
 }
 .news-toggle input:focus-visible + span {
   outline: 2px solid #8fb35a;

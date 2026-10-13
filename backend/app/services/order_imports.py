@@ -3,7 +3,7 @@
 import hashlib
 import logging
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import PurePath
 
 from sqlalchemy.exc import IntegrityError
@@ -127,6 +127,14 @@ def upload_order_csv(db: Session, ctx: CompanyContext, filename: str, content: b
         },
     )
     return item
+
+
+def delete_stale_imports(db: Session, older_than: timedelta) -> int:
+    """Removes uploads nobody committed. Committed imports stay: orders cite their rows."""
+    deleted = import_queries.delete_uncommitted_imports_before(db, datetime.now(UTC) - older_than)
+    db.commit()
+    log.info("import.stale_deleted", extra={"deleted": deleted, "older_than_days": older_than.days})
+    return deleted
 
 
 def get_order_import(db: Session, ctx: CompanyContext, import_id: uuid.UUID) -> Import:

@@ -17,6 +17,11 @@ def create_user(db: Session, *, firebase_uid: str, email: str, name: str) -> Use
     return user
 
 
+def lock_user(db: Session, user_id: uuid.UUID) -> None:
+    """Row lock until commit, so two requests for the same user run one after the other."""
+    db.execute(select(User.id).where(User.id == user_id).with_for_update())
+
+
 def get_user_company_membership(
     db: Session, user_id: uuid.UUID
 ) -> tuple[Membership, Company] | None:

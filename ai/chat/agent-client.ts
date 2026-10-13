@@ -12,13 +12,25 @@ export type Citation = {
   source?: string;
 };
 
-export type AuditResult = { ref: number; type: string; title: string; score?: number; excerpt?: string };
+export type AuditResult = {
+  ref: number;
+  type: string;
+  title: string;
+  score?: number;
+  // Hybrid retrieval: BM25 match of the query's exact terms, 0-1.
+  lexical?: number;
+  // Age of the news it came from, in days.
+  ageDays?: number;
+  excerpt?: string;
+};
+
+// A third-party passage the guard withheld from the model (prompt injection).
+export type GuardFlag = { where: string; match: string };
 
 export type AuditStep = {
   at: number;
   kind: "plan" | "tool" | "draft" | "review" | "answer";
   latencyMs?: number;
-  thought?: string;
   note?: string;
   calls?: { name: string; args: Record<string, unknown> }[];
   tokens?: { prompt?: number; output?: number; thinking?: number };
@@ -30,6 +42,11 @@ export type AuditStep = {
   result?: number;
   results?: AuditResult[];
   error?: string;
+  // Why a tool call failed: invalid_args | denied | budget | unknown_tool | timeout | unavailable | failed.
+  errorKind?: string;
+  // Present when a transient failure was retried.
+  attempts?: number;
+  flags?: GuardFlag[];
   problems?: string[];
   excerpt?: string;
   finishReason?: string;
@@ -49,8 +66,12 @@ export type Audit = {
   checks: { name: string; ok: boolean; detail: string }[];
   usage: { promptTokens: number; outputTokens: number; thinkingTokens: number; modelCalls: number };
   latencyMs: number;
+  // ok | needs_review (auditor checks still fail after the revision) | max_steps | error
   status: string;
   error?: string;
+  policyVersion?: string;
+  requestId?: string;
+  flags?: GuardFlag[];
 };
 
 export type Message = { role: "user" | "model"; text: string; citations?: Citation[]; audit?: Audit };
@@ -76,9 +97,10 @@ export function sessionId(reset = false) {
   }
 }
 
-// In a company workspace the assistant also knows the company: the AI service
-// fetches its profile from the backend with this token. The demo stays anonymous.
-async function companyAuth(): Promise<Record<string, string>> {
+// In a company workspace the AI service checks this token with the backend: chat
+// uses it to load the company profile, News watch to allow source changes. The
+// demo stays anonymous.
+export async function companyAuth(): Promise<Record<string, string>> {
   if (!isApiSession()) return {};
   try {
     return { Authorization: `Bearer ${await getToken()}` };
@@ -90,9 +112,11 @@ async function companyAuth(): Promise<Record<string, string>> {
 export async function askAgent(
   messages: Message[],
   onStep: (step: AuditStep) => void,
+  signal?: AbortSignal,
 ): Promise<{ reply: string; citations: Citation[]; audit: Audit }> {
   const res = await fetch(`${API}/chat`, {
     method: "POST",
+    signal,
     headers: { "Content-Type": "application/json", ...(await companyAuth()) },
     body: JSON.stringify({
       sessionId: sessionId(),
@@ -128,8 +152,9 @@ export async function askAgent(
   }
 }
 
+// A company chat's audits are only returned with that company's token.
 export async function sessionAudits(): Promise<Audit[]> {
-  const res = await fetch(`${API}/audits?session=${encodeURIComponent(sessionId())}`);
+  const res = await fetch(`${API}/audits?session=${encodeURIComponent(sessionId())}`, { headers: await companyAuth() });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || "Couldn't load the audit trail.");
   return data.audits;

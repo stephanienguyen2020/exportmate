@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # The Vercel proxy test imports api/backend.ts directly, which needs Node's type stripping.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      # Mocked API contracts; tests/local-backend.spec.ts skips itself without TEST_REAL_BACKEND.
+      - run: npm test
+
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: exportmate
+          POSTGRES_PASSWORD: exportmate
+          POSTGRES_DB: exportmate_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U exportmate"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://exportmate:exportmate@127.0.0.1:5432/exportmate_test
+      TEST_DATABASE_URL: postgresql+psycopg://exportmate:exportmate@127.0.0.1:5432/exportmate_test
+    steps:
+      - uses: actions/checkout@v7
+      # Matches the production image (backend/Dockerfile).
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      # Fails when the models and the migrations disagree.
+      - run: uv run alembic upgrade head && uv run alembic check
+      - run: uv run pytest
+
+  ai-server:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ai/server
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: ai/server/package-lock.json
+      - run: npm ci
+      - run: for f in *.js seed/*.js eval/*.js test/*.js; do node --check "$f"; done
+      # Harness unit tests (gateway, guard, auditor, policy, retrieval, metrics, eval scoring); no
+      # GCP access needed. The golden-set eval (npm run eval) calls Gemini and runs by hand.
+      - run: npm test

@@ -696,12 +696,14 @@ a.chat-cite:hover {
 
 @media (max-width: 480px) {
   .chat-launcher {
-    right: 16px;
-    bottom: 16px;
+    right: 14px;
+    bottom: 14px;
+    width: 46px;
+    height: 46px;
   }
   .chat-panel {
     right: 16px;
-    bottom: 84px;
+    bottom: 72px;
   }
 }
 @media (prefers-reduced-motion: reduce) {
