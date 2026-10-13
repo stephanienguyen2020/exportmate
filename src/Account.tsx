@@ -35,6 +35,7 @@ import {
 } from "./account-store";
 import "./account.css";
 import { api, cacheAccount, type Account } from "./api";
+import { clearChat } from "../ai/chat/Chat";
 import {
   signIn,
   signUp,
@@ -59,6 +60,8 @@ function PasswordField({
   id?: string;
 }) {
   const [visible, setVisible] = useState(false);
+  // Sign-in takes whatever password the account has; the 8-character rule is for new ones.
+  const isNew = id !== "password";
   return (
     <label className="ac-field" htmlFor={id}>
       {label}
@@ -69,9 +72,9 @@ function PasswordField({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           required
-          minLength={8}
-          autoComplete={id === "password" ? "current-password" : "new-password"}
-          placeholder="At least 8 characters"
+          minLength={isNew ? 8 : undefined}
+          autoComplete={isNew ? "new-password" : "current-password"}
+          placeholder={isNew ? "At least 8 characters" : "Your password"}
         />
         <button
           type="button"
@@ -508,6 +511,8 @@ export default function AccountPage({ route }: { route: string }) {
     if (route === "logout") {
       const live = isApiSession();
       endSession();
+      // The conversation may mention this company; the next account starts fresh.
+      clearChat();
       if (live) {
         setBusy(true);
         api
@@ -541,6 +546,7 @@ export default function AccountPage({ route }: { route: string }) {
   async function enterWorkspace() {
     const account = await api.me();
     cacheAccount(account);
+    clearChat();
     if (!startSession("api"))
       throw new Error("Browser storage is unavailable. Enable it to continue.");
     navigate(account.onboarded ? intendedRoute() : "onboarding");
@@ -649,7 +655,7 @@ export default function AccountPage({ route }: { route: string }) {
                 </div>
                 <button className="ac-secondary" onClick={openDemo}>
                   Explore the demo
-                  <ArrowUp />
+                  <ArrowRight size={16} />
                 </button>
                 <p className="ac-switch">
                   New here? <a href="#/signup">Create an account</a>
@@ -727,9 +733,26 @@ export default function AccountPage({ route }: { route: string }) {
                   disabled={busy}
                   onClick={() =>
                     void run(async () => {
-                      await verifyEmail(
-                        new URLSearchParams(location.search).get("oobCode"),
+                      const code = new URLSearchParams(location.search).get(
+                        "oobCode",
                       );
+                      let signedIn: boolean;
+                      try {
+                        signedIn = await verifyEmail(code);
+                      } finally {
+                        // The code works once; drop it so a retry doesn't reuse it.
+                        if (code)
+                          history.replaceState(
+                            null,
+                            "",
+                            location.pathname + location.hash,
+                          );
+                      }
+                      if (!signedIn) {
+                        navigate("login");
+                        setNotice("Email verified. Sign in to continue.");
+                        return;
+                      }
                       await enterWorkspace();
                     })
                   }
@@ -1060,7 +1083,7 @@ export default function AccountPage({ route }: { route: string }) {
                   </p>
                 </div>
                 <a className="ac-small-link" href="#/signup">
-                  Create a demo profile
+                  Create an account
                   <ArrowRight size={15} />
                 </a>
               </>
@@ -1107,7 +1130,4 @@ export default function AccountPage({ route }: { route: string }) {
       </footer>
     </div>
   );
-}
-function ArrowUp() {
-  return <ArrowRight size={16} />;
 }

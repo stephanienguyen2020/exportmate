@@ -66,9 +66,11 @@ export default async function handler(
     for await (const chunk of req) {
       const buffer = Buffer.from(chunk);
       size += buffer.length;
-      if (size > 5 * 1024 * 1024 + 65536) {
+      // Uploads are capped at 4 MB everywhere (Vercel functions take bodies up to about
+      // 4.5 MB); the extra 64 KB is room for the multipart envelope.
+      if (size > 4 * 1024 * 1024 + 65536) {
         logEvent("warn", "proxy.body_too_large", { requestId, path, size });
-        fail(413, "File must be smaller than 5 MB.");
+        fail(413, "File must be smaller than 4 MB.");
         return;
       }
       chunks.push(buffer);

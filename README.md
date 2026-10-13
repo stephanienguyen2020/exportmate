@@ -29,7 +29,7 @@ For local backend development, use `VITE_AUTH_MODE=dev` together with backend `A
 
 CSV imports use server validation and explicit commit; repeated clicks are blocked. The Vercel upload path uses a 4 MB file limit to leave room for multipart overhead. Backend uploads made directly support the backend's 5 MB limit.
 
-Verification: `npm run build`; `npx playwright install chromium` once, then `npm test`. Browser integration tests exercise contract-shaped API responses, pagination, bearer headers, errors, roles, imports, playbook mutations, profile updates, onboarding, logout and demo isolation. With the local backend running, `TEST_REAL_BACKEND=1 npm test` also exercises a real FastAPI/Postgres round trip in a separate test company. Deployed Firebase authentication still needs its own end-to-end check.
+Verification: `npm run build`; `npx playwright install chromium` once, then `npm test` (Node 22.18+ for the proxy test). Browser integration tests exercise contract-shaped API responses, pagination, bearer headers, errors, roles, imports, playbook mutations, profile updates, onboarding, logout, demo isolation and who may change News watch sources. GitHub Actions (`.github/workflows/ci.yml`) runs these plus the backend's ruff, `alembic check` and pytest on every push to main and every pull request. With the local backend running, `TEST_REAL_BACKEND=1 npm test` also exercises a real FastAPI/Postgres round trip in a separate test company. Deployed Firebase authentication still needs its own end-to-end check.
 
 ## AI features (Google Cloud)
 
@@ -40,15 +40,20 @@ All AI code lives in [`ai/`](ai/): the chat UI in [`ai/chat/`](ai/chat/), News w
 - **Audit trail:** each answer streams its steps live (NDJSON) and stores an audit record in `audits`: question, reasoning summaries, every tool call with arguments and retrieved evidence (with similarity scores), auditor findings, checks, citations, model, token usage and timing. Open "Audit" under any answer, or the side panel on `#/chat`, which reloads the session's records from Firestore. Records can be downloaded as JSON. `GET /api/audits?session=<id>` returns only that session's records.
 - **News watch** (`#/workspace/news`, plus a section on Overview): every day at 07:00 Asia/Ho_Chi_Minh, Cloud Scheduler calls `POST /api/scan`. The service reads the enabled RSS/Atom sources, skips articles it has already analysed, and asks Gemini which stock items each new article could affect. Alerts store severity, direction (risk/opportunity/watch), affected SKUs with reasons, stock value exposed, and a next step.
 - **Data:** Firestore (`asia-southeast1`) holds `inventory` (31 synthetic SKUs for a Vietnamese wood-products and furniture exporter), `sources`, `articles`, `impacts`, `scans`, `kb` (vector index) and `audits`. The industry was chosen because current news moves it: EUDR, US Section 232 timber/furniture tariffs, plywood trade cases. Stock is fictional; news is real.
-- **Sources:** seven built-in feeds (Timber Trades Journal, VnExpress International, European Commission press corner, four Google News searches). Users can add any public HTTPS feed; the server tests it first and blocks private/metadata addresses.
+- **Sources:** seven built-in feeds (Timber Trades Journal, VnExpress International, European Commission press corner, four Google News searches). Signed-in company owners and editors can add any public HTTPS feed and switch sources on or off; sources are shared by every workspace, so the service checks the caller's role with the backend (`GET /api/v1/me`, which needs `BACKEND_URL` set on the service). The server tests a new feed first and blocks private/metadata addresses. The sample demo and viewer accounts see the sources read-only.
 
-### Google Cloud resources (project `exportmate-app`)
+### Google Cloud resources
+
+Everything runs in one project, `skilful-scarab-511320-q9`, defined in [`infra/terraform`](infra/terraform/) (`ai_service.tf`, `build.tf`). Until the move in [`infra/terraform/README.md`](infra/terraform/README.md#moving-the-ai-service-from-exportmate-app) is finished, the live AI service and its data are still in `exportmate-app`.
 
 | Resource | Name |
 | --- | --- |
-| Cloud Run service | `exportmate-ai` (asia-southeast1), runs as `exportmate-chat@…` with `roles/aiplatform.user` and `roles/datastore.user` |
+| Cloud Run service | `exportmate-ai` (asia-southeast1), runs as `exportmate-ai@…` with `roles/aiplatform.user` and `roles/datastore.user` only |
+| Cloud Run job | `exportmate-ai-task` (same image): seed, re-index, scan, eval, ops |
 | Firestore | `(default)` database, native mode, asia-southeast1; vector indexes on `kb.embedding` and `(kb.type, kb.embedding)` |
 | Cloud Scheduler | `exportmate-daily-news-scan`, OIDC-signed as `exportmate-scheduler@…` |
+| Cloud Build | images built as `exportmate-builder@…` into the `exportmate` Artifact Registry repo |
+| Cloud Logging / Monitoring | JSON logs; log-based metrics `exportmate_ai/chat_answers`, `chat_latency`, `guard_withheld`, `scan_failures` |
 | Models | `gemini-2.5-flash` for the agent and scans (`GEMINI_MODEL`), `gemini-embedding-001` for embeddings (`EMBED_MODEL`), both via Vertex AI |
 
 `vercel.json` rewrites `/api/*` to the Cloud Run URL; locally `vite.config.ts` proxies `/api` to `127.0.0.1:8080`.
@@ -62,10 +67,11 @@ npm run seed   # load synthetic stock and default sources, then rebuild the vect
 npm run scan   # run one news scan now (add --lookback=14 to re-read two weeks)
 npm run index  # rebuild the vector index; `node rag.js "<query>"` runs a test search
 npm run dev    # API on :8080 (run `npm run dev` in the repo root too)
-gcloud run deploy exportmate-ai --source . --region asia-southeast1 --project exportmate-app
+npm test       # harness unit tests; `npm run eval` runs the golden set against Gemini
+PROJECT_ID=skilful-scarab-511320-q9 ./deploy.sh   # build on Cloud Build, roll out the service and job
 ```
 
-The API is public for the prototype (max 3 instances). "Scan now" is limited to one scan per 10 minutes; the signed scheduler request skips that limit. Chat questions and answers are stored in `audits`. Alerts and answers are AI assessments of headlines and snippets, not legal advice. Signed-in orders and playbook rules live in the FastAPI backend; the assistant cannot see them yet. Sample-demo records remain browser-local.
+The API is public for the prototype (max 3 instances). Chat is capped per hour at 40 questions per client and 200 per instance (`CHAT_LIMIT_PER_CLIENT`, `CHAT_LIMIT_PER_INSTANCE`). "Scan now" is limited to one scan per 10 minutes; the signed scheduler request skips that limit. Chat questions and answers are stored in `audits`. Alerts and answers are AI assessments of headlines and snippets, not legal advice. Signed-in orders and playbook rules live in the FastAPI backend; the assistant cannot see them yet. Sample-demo records remain browser-local.
 
 ## Explore
 

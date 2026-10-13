@@ -13,6 +13,8 @@ from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
+from app.core.currencies import is_currency
+
 REQUIRED_COLUMNS = ["id", "product", "supplier", "destination", "value", "shipDate", "hsCode"]
 MAX_LENGTHS = {"id": 100, "product": 300, "supplier": 300, "destination": 200}
 MAX_VALUE = Decimal(1000000000000)  # 1 trillion; anything above is a typo
@@ -20,7 +22,6 @@ MAX_VALUE = Decimal(1000000000000)  # 1 trillion; anything above is a typo
 DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 # 4412 / 4412.33 / 441233 / 4412.33.00 — kept as text so "0401.10" keeps its zero.
 HS_CODE_PATTERN = re.compile(r"^\d{4}(\.?\d{2}){0,3}$")
-CURRENCY_PATTERN = re.compile(r"^[A-Z]{3}$")
 
 
 @dataclass
@@ -56,7 +57,11 @@ def hash_row(raw: dict[str, str]) -> str:
 
 
 def _parse_value_minor(text: str) -> int | None:
-    """'24000' → 2400000; '19.99' → 1999. None if not a positive amount with ≤ 2 decimals."""
+    """'24000' → 2400000; '19.99' → 1999. None if not a positive amount with ≤ 2 decimals.
+
+    Hundredths of the currency unit for every currency, also JPY and VND (which have no
+    minor unit), so readers always divide by 100.
+    """
     try:
         amount = Decimal(text.replace(",", ""))
     except InvalidOperation:
@@ -105,7 +110,7 @@ def _validate_row(
         fail("hsCode", "hsCode must look like 4412.33 (digits, optional dots).")
 
     currency = (cells.get("currency") or default_currency).upper()
-    if not CURRENCY_PATTERN.match(currency):
+    if not is_currency(currency):
         fail("currency", "currency must be a 3-letter code like USD.")
 
     if errors:

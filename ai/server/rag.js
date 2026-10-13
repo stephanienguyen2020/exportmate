@@ -8,6 +8,8 @@ import { FieldValue } from "@google-cloud/firestore";
 import { GoogleGenAI } from "@google/genai";
 import { db, PROJECT, inventory, sources, articles, impacts, list } from "./db.js";
 import { GUIDES } from "./seed/guides.js";
+import { rerank } from "./rerank.js";
+import { isShared } from "./access.js";
 
 export const EMBED_MODEL = process.env.EMBED_MODEL || "gemini-embedding-001";
 export const DIMENSIONS = 768; // must match the Firestore vector index
@@ -35,6 +37,13 @@ export async function embed(texts, taskType) {
   return out;
 }
 
+// Which sources a record came from and who owns them, so searches only return what the
+// asking company may see (access.js). Records from before sources had owners have neither.
+const origin = (r) => ({
+  ...(r.sourceIds ? { sourceIds: r.sourceIds } : r.sourceId ? { sourceIds: [r.sourceId] } : {}),
+  ...(r.sourceCompanyIds ? { sourceCompanyIds: r.sourceCompanyIds } : {}),
+});
+
 // One searchable document per record. `text` is what gets embedded.
 export const toDoc = {
   item: (i) => ({
@@ -53,6 +62,7 @@ export const toDoc = {
     id: `alert:${a.articleId}`,
     type: "alert",
     refId: a.articleId,
+    ...origin(a),
     title: a.headline,
     url: a.url,
     publishedAt: a.publishedAt,
@@ -66,6 +76,7 @@ export const toDoc = {
     id: `article:${a.id}`,
     type: "article",
     refId: a.id,
+    ...origin(a),
     title: a.title,
     url: a.url,
     publishedAt: a.publishedAt,
@@ -76,6 +87,8 @@ export const toDoc = {
     id: `source:${s.id}`,
     type: "source",
     refId: s.id,
+    sourceIds: [s.id],
+    sourceCompanyIds: [isShared(s) ? null : s.companyId],
     title: s.name,
     url: s.url,
     text: `News source "${s.name}" (${s.kind}), ${s.enabled ? "enabled" : "disabled"}, feed ${s.url}. ${s.builtIn ? "Built-in source." : "Custom source added by the user."}`,
@@ -130,29 +143,34 @@ export async function reindexAll() {
   return { documents: docs.length, ...result, removed: stale.length };
 }
 
-/** Semantic search. Optional `types` pre-filter uses the (type, embedding) index. */
-export async function search(query, { types, limit = 6 } = {}) {
+/**
+ * Hybrid search: the nearest documents by embedding (three times as many as asked
+ * for), reranked with BM25 so exact codes and names count (rerank.js). Optional
+ * `types` pre-filter uses the (type, embedding) index.
+ */
+export async function search(query, { types, limit = 6, filter = () => true } = {}) {
   const [vector] = await embed([query], "RETRIEVAL_QUERY");
+  const pool = Math.min(limit * 3, 30);
   const nearest = (q) =>
     q
-      .findNearest({ vectorField: "embedding", queryVector: vector, limit, distanceMeasure: "COSINE", distanceResultField: "distance" })
+      .findNearest({ vectorField: "embedding", queryVector: vector, limit: pool, distanceMeasure: "COSINE", distanceResultField: "distance" })
       .get();
   const wanted = (types || []).filter((t) => TYPES.includes(t));
   const snaps = wanted.length ? await Promise.all(wanted.map((t) => nearest(kb.where("type", "==", t)))) : [await nearest(kb)];
-  return snaps
+  const hits = snaps
     .flatMap((s) => s.docs)
     .map((d) => {
       const { embedding, textHash, ...data } = d.data();
       return { ...data, id: d.id, score: Math.round((1 - data.distance) * 1000) / 1000 };
     })
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit);
+    .filter(filter); // e.g. drop articles from another company's sources
+  return rerank(query, hits, limit);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const query = process.argv.slice(2).join(" ");
   if (query) {
-    for (const r of await search(query, { limit: 6 })) console.log(r.score, r.type.padEnd(7), r.title.slice(0, 90));
+    for (const r of await search(query, { limit: 6 })) console.log(r.score, r.lexical, r.type.padEnd(7), r.title.slice(0, 90));
   } else {
     console.log(await reindexAll());
   }

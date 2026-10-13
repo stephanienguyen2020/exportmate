@@ -21,7 +21,10 @@ class Settings(BaseSettings):
     auth_mode: Literal["firebase", "dev"] = "firebase"
     firebase_project_id: str = "exportmate-app"
     allowed_origins: str = "http://127.0.0.1:5173,http://localhost:5173"
-    max_upload_bytes: int = 5 * 1024 * 1024
+    # Vercel's proxy function accepts bodies up to about 4.5 MB, so uploads are capped at 4 MB.
+    max_upload_bytes: int = 4 * 1024 * 1024
+    # Per user per hour (core/rate_limit.py).
+    import_uploads_per_hour: int = 60
     max_import_rows: int = 10_000
     # "json" gives one JSON object per line, which Cloud Logging parses into fields.
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"

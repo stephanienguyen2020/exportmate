@@ -2,6 +2,7 @@ import React from "react";
 import {
   Bell,
   Brain,
+  Building2,
   Calculator,
   CircleAlert,
   CircleCheck,
@@ -10,6 +11,7 @@ import {
   FilePen,
   Radar,
   Search,
+  ShieldAlert,
   ShieldCheck,
 } from "lucide-react";
 import { downloadJson, type Audit, type AuditStep } from "./agent-client";
@@ -20,6 +22,17 @@ const TOOL_LABELS: Record<string, [React.ElementType, string]> = {
   get_alerts: [Bell, "Read news alerts"],
   calculate: [Calculator, "Calculated"],
   get_scan_status: [Radar, "Checked news scan status"],
+  get_company_profile: [Building2, "Read the company profile"],
+};
+
+// Why the tool gateway refused or failed a call.
+const ERROR_KINDS: Record<string, string> = {
+  invalid_args: "arguments rejected",
+  denied: "not allowed in this session",
+  budget: "tool budget used up",
+  unknown_tool: "unknown tool",
+  timeout: "timed out",
+  unavailable: "data store unavailable",
 };
 
 const seconds = (ms = 0) => `${(ms / 1000).toFixed(1)}s`;
@@ -36,7 +49,7 @@ export function describeStep(step: AuditStep): { icon: React.ElementType; label:
     };
   if (step.kind === "tool") {
     const [icon, label] = TOOL_LABELS[step.name || ""] || [Search, step.name || "Tool"];
-    if (step.error) return { icon, label, detail: `failed: ${step.error}` };
+    if (step.error) return { icon, label, detail: `${ERROR_KINDS[step.errorKind || ""] || "failed"}: ${step.error}` };
     if (step.name === "calculate") return { icon, label, detail: `${step.expression} = ${step.result}` };
     const query = typeof step.args?.query === "string" ? `“${step.args.query}” · ` : "";
     return { icon, label, detail: `${query}${step.count ?? 0} result${step.count === 1 ? "" : "s"}` };
@@ -67,12 +80,7 @@ function Step({ step }: { step: AuditStep }) {
             {step.latencyMs != null && ` · ${seconds(step.latencyMs)}`}
           </span>
         </div>
-        {step.thought && (
-          <details>
-            <summary>Reasoning summary</summary>
-            <p className="audit-thought">{step.thought}</p>
-          </details>
-        )}
+        {step.kind !== "tool" && !!step.attempts && <p className="audit-note">Model call retried ({step.attempts} attempts).</p>}
         {step.kind === "plan" && step.calls && (
           <ul className="audit-calls">
             {step.calls.map((c, i) => (
@@ -85,8 +93,18 @@ function Step({ step }: { step: AuditStep }) {
         {step.kind === "tool" && (
           <>
             <Args args={step.args} />
+            {!!step.attempts && <p className="audit-note">Retried after a temporary failure ({step.attempts} attempts).</p>}
+            {!!step.flags?.length && (
+              <p className="audit-error">
+                <ShieldAlert size={12} /> Withheld {step.flags.length} third-party passage{step.flags.length === 1 ? "" : "s"} addressed to
+                the assistant: {step.flags.map((f) => f.where).join(", ")}
+              </p>
+            )}
             {step.error ? (
-              <p className="audit-error">{step.error}</p>
+              <p className="audit-error">
+                {ERROR_KINDS[step.errorKind || ""] ? `${ERROR_KINDS[step.errorKind || ""]}: ` : ""}
+                {step.error}
+              </p>
             ) : step.name === "calculate" ? (
               <p className="audit-note">
                 {step.expression} = <b>{step.result}</b>
@@ -104,7 +122,12 @@ function Step({ step }: { step: AuditStep }) {
                     <span className="audit-ref">[{r.ref}]</span>
                     <span className="audit-type">{r.type}</span>
                     <span className="audit-title">{r.title}</span>
-                    {r.score != null && <span className="audit-score">{r.score.toFixed(3)}</span>}
+                    {r.score != null && (
+                      <span className="audit-score" title={r.lexical != null ? `Vector similarity; keyword match ${r.lexical.toFixed(2)}` : "Vector similarity"}>
+                        {r.score.toFixed(3)}
+                      </span>
+                    )}
+                    {r.ageDays != null && <span className="audit-score">{r.ageDays} d old</span>}
                     {r.excerpt && (
                       <details>
                         <summary>Retrieved text</summary>
@@ -185,7 +208,16 @@ export function AuditView({ audit }: { audit: Audit }) {
         <dt>Evidence</dt>
         <dd>
           {audit.retrieved.length} retrieved · {audit.citations.length} cited
+          {!!audit.flags?.length && ` · ${audit.flags.length} withheld`}
         </dd>
+        {audit.policyVersion && (
+          <>
+            <dt>Policy</dt>
+            <dd>
+              <code>{audit.policyVersion}</code>
+            </dd>
+          </>
+        )}
         <dt>Record</dt>
         <dd>
           <code>audits/{audit.id}</code> in Firestore

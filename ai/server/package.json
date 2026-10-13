@@ -12,7 +12,10 @@
     "dev": "node --watch index.js",
     "seed": "node seed.js",
     "scan": "node scan.js",
-    "index": "node rag.js"
+    "index": "node rag.js",
+    "test": "node --test test/*.test.js",
+    "eval": "node eval/run.js",
+    "ops": "node ops.js"
   },
   "dependencies": {
     "@google-cloud/firestore": "^8.7.1",

@@ -5,6 +5,7 @@ from typing import Annotated, Literal
 
 from pydantic import Field, StringConstraints, field_validator, model_validator
 
+from app.core.currencies import is_currency
 from app.database.models import Role, SiteKind
 from app.schemas.common import CamelCaseModel
 
@@ -72,6 +73,13 @@ class OnboardingIn(CamelCaseModel):
     description: str = Field(min_length=1, max_length=2000)
 
     _description_not_blank = field_validator("description")(_not_blank)
+
+    @field_validator("currency")
+    @classmethod
+    def _known_currency(cls, value: str) -> str:
+        if not is_currency(value):
+            raise ValueError("Use an ISO currency code like USD.")
+        return value
 
 
 class CompanyUpdate(CamelCaseModel):

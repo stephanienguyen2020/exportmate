@@ -8,6 +8,7 @@ import {
   RefreshCw,
   Trash2,
 } from "lucide-react";
+import { companyAuth } from "../chat/agent-client";
 import "./news.css";
 
 export type Impact = {
@@ -59,6 +60,9 @@ type Source = {
   url: string;
   kind: string;
   builtIn: boolean;
+  // Shared by every workspace (built-in, or added before sources had owners). Switching a
+  // shared source off only affects the caller's company; only a company's own sources can be removed.
+  shared?: boolean;
   enabled: boolean;
   lastFetchedAt?: string;
   lastOk?: boolean;
@@ -69,10 +73,12 @@ type Source = {
 const API = (import.meta.env.VITE_CHAT_API_URL || "/api/chat").replace(/\/chat$/, "");
 const SEVERITY = { high: 0, medium: 1, low: 2 };
 
-async function api<T>(path: string, init?: RequestInit): Promise<T> {
+// Every call carries the company token in a signed-in workspace (none in the demo), so the
+// AI service can tell who is asking.
+async function api<T>(path: string, init?: Omit<RequestInit, "headers">): Promise<T> {
   const res = await fetch(API + path, {
     ...init,
-    headers: init?.body ? { "Content-Type": "application/json" } : undefined,
+    headers: { ...(init?.body ? { "Content-Type": "application/json" } : {}), ...(await companyAuth()) },
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
@@ -118,7 +124,12 @@ function SeverityTag({ impact }: { impact: Impact }) {
   );
 }
 
+// Items listed on a full card before "Show all".
+const REASONS_SHOWN = 3;
+
 function ImpactCard({ impact, compact }: { impact: Impact; compact?: boolean }) {
+  const [expanded, setExpanded] = useState(false);
+  const reasons = expanded ? impact.affected : impact.affected.slice(0, REASONS_SHOWN);
   return (
     <article className={`news-card ${compact ? "compact" : ""}`}>
       <div className="news-card-top">
@@ -130,18 +141,18 @@ function ImpactCard({ impact, compact }: { impact: Impact; compact?: boolean }) 
       <h3>{impact.headline}</h3>
       <p>{impact.why}</p>
       <div className="news-skus">
-        {impact.affected.slice(0, compact ? 4 : 99).map((a) => (
+        {impact.affected.slice(0, 4).map((a) => (
           <span key={a.sku} title={`${a.name}: ${a.reason}`}>
             {a.sku}
           </span>
         ))}
-        {compact && impact.affected.length > 4 && <span>+{impact.affected.length - 4}</span>}
+        {impact.affected.length > 4 && <span>+{impact.affected.length - 4}</span>}
         <b>{usd(impact.stockValueUsd)} stock exposed</b>
       </div>
       {!compact && (
         <>
           <ul className="news-reasons">
-            {impact.affected.map((a) => (
+            {reasons.map((a) => (
               <li key={a.sku}>
                 <strong>
                   {a.sku} · {a.name}
@@ -150,6 +161,11 @@ function ImpactCard({ impact, compact }: { impact: Impact; compact?: boolean }) 
               </li>
             ))}
           </ul>
+          {impact.affected.length > REASONS_SHOWN && (
+            <button type="button" className="news-more" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
+              {expanded ? "Show fewer items" : `Show all ${impact.affected.length} items`}
+            </button>
+          )}
           {impact.action && (
             <p className="news-action">
               <strong>Next step:</strong> {impact.action}
@@ -164,8 +180,11 @@ function ImpactCard({ impact, compact }: { impact: Impact; compact?: boolean }) 
   );
 }
 
+// Alerts are matched against the synthetic demo inventory, not a signed-in company's own stock.
+const SAMPLE_STOCK_NOTE = "Matched against ExportMate's sample inventory, not your company's own stock.";
+
 /** Overview section: today's top news impacts. */
-export function NewsHighlights() {
+export function NewsHighlights({ live = false }: { live?: boolean }) {
   const { impacts, scan, error } = useImpacts();
   if (error || !impacts?.length) return null;
   const top = impacts.slice(0, 3);
@@ -174,7 +193,8 @@ export function NewsHighlights() {
       <div className="section-heading news-section">
         <div>
           <span className="eyebrow">FROM THE NEWS · SCANNED {when(scan?.finishedAt || scan?.startedAt).toUpperCase()}</span>
-          <h2>What the news means for your stock.</h2>
+          <h2>{live ? "What the news means for the sample stock." : "What the news means for your stock."}</h2>
+          {live && <p className="news-note">{SAMPLE_STOCK_NOTE}</p>}
         </div>
         <a className="text-link" href="#/workspace/news">
           All {impacts.length} alerts <ArrowUpRight size={16} />
@@ -189,7 +209,19 @@ export function NewsHighlights() {
   );
 }
 
-function ScanBar({ scan, onScan, scanning, message }: { scan: Scan | null; onScan: () => void; scanning: boolean; message: string }) {
+function ScanBar({
+  scan,
+  onScan,
+  scanning,
+  message,
+  locked,
+}: {
+  scan: Scan | null;
+  onScan: () => void;
+  scanning: boolean;
+  message: string;
+  locked?: string;
+}) {
   const okSources = scan?.sources?.filter((s) => s.ok).length ?? 0;
   return (
     <section className="news-scanbar">
@@ -216,10 +248,11 @@ function ScanBar({ scan, onScan, scanning, message }: { scan: Scan | null; onSca
         </>
       )}
       <div className="news-scanbar-action">
-        <button className="btn" onClick={onScan} disabled={scanning}>
+        <button className="btn" onClick={onScan} disabled={scanning || Boolean(locked)}>
           {scanning ? <Loader2 size={15} className="spin" /> : <RefreshCw size={15} />}
           {scanning ? "Scanning… about a minute" : "Scan now"}
         </button>
+        {locked && !message && <small>{locked}</small>}
         {message && <small role="status">{message}</small>}
       </div>
     </section>
@@ -302,7 +335,9 @@ function StockTable({ impacts }: { impacts: Impact[] }) {
   );
 }
 
-function Sources() {
+// Only signed-in owners and editors can change sources (the AI service checks the token).
+// `locked` explains why this session can't change them.
+function Sources({ locked }: { locked?: string }) {
   const [list, setList] = useState<Source[] | null>(null);
   const [error, setError] = useState("");
   const [name, setName] = useState("");
@@ -315,12 +350,14 @@ function Sources() {
   useEffect(() => {
     load();
   }, []);
+  const change = (path: string, method: string, body?: unknown) =>
+    api(path, { method, body: body === undefined ? undefined : JSON.stringify(body) });
   const add = async (e: React.FormEvent) => {
     e.preventDefault();
     setAdding(true);
     setError("");
     try {
-      await api("/sources", { method: "POST", body: JSON.stringify({ name, url }) });
+      await change("/sources", "POST", { name, url });
       setName("");
       setUrl("");
       await load();
@@ -332,26 +369,27 @@ function Sources() {
   };
   const toggle = async (s: Source) => {
     setList((l) => l && l.map((x) => (x.id === s.id ? { ...x, enabled: !s.enabled } : x)));
-    await api(`/sources/${s.id}`, { method: "PATCH", body: JSON.stringify({ enabled: !s.enabled }) }).catch((e) => {
+    await change(`/sources/${s.id}`, "PATCH", { enabled: !s.enabled }).catch((e) => {
       setError(e.message);
       load();
     });
   };
   const remove = async (s: Source) => {
-    await api(`/sources/${s.id}`, { method: "DELETE" }).catch((e) => setError(e.message));
+    await change(`/sources/${s.id}`, "DELETE").catch((e) => setError(e.message));
     load();
   };
   if (!list) return error ? <div className="news-error">{error}</div> : <Loading />;
   return (
     <>
       <p className="news-note">
-        Only these approved sources are read. Each daily scan checks enabled feeds for new articles.
+        Only these approved sources are read. Each daily scan checks enabled feeds for new articles. Switching off a
+        built-in source only affects your company; a source you add is only read for your company.
       </p>
       <ul className="news-sources">
         {list.map((s) => (
           <li key={s.id}>
             <label className="news-toggle">
-              <input type="checkbox" checked={s.enabled} onChange={() => toggle(s)} />
+              <input type="checkbox" checked={s.enabled} onChange={() => toggle(s)} disabled={Boolean(locked)} />
               <span />
               <span className="sr-only">Read {s.name}</span>
             </label>
@@ -363,7 +401,7 @@ function Sources() {
                   (s.lastOk ? ` · ${s.lastCount} items at last scan` : ` · last scan failed: ${s.lastError}`)}
               </small>
             </div>
-            {!s.builtIn && (
+            {!s.builtIn && !s.shared && !locked && (
               <button className="icon-btn" aria-label={`Remove ${s.name}`} onClick={() => remove(s)}>
                 <Trash2 size={16} />
               </button>
@@ -371,19 +409,23 @@ function Sources() {
           </li>
         ))}
       </ul>
-      <form className="news-add" onSubmit={add}>
-        <h3>Add a custom source</h3>
-        <p className="news-note">Any public RSS or Atom feed over HTTPS. We test it before saving.</p>
-        <div>
-          <input placeholder="Name, e.g. Vietnam Customs news" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} required />
-          <input placeholder="https://example.com/feed.xml" value={url} onChange={(e) => setUrl(e.target.value)} type="url" required />
-          <button className="btn" type="submit" disabled={adding}>
-            {adding ? <Loader2 size={15} className="spin" /> : <Plus size={15} />}
-            {adding ? "Checking feed…" : "Add source"}
-          </button>
-        </div>
-        {error && <div className="news-error">{error}</div>}
-      </form>
+      {locked ? (
+        <p className="news-note">{locked}</p>
+      ) : (
+        <form className="news-add" onSubmit={add}>
+          <h3>Add a custom source</h3>
+          <p className="news-note">Any public RSS or Atom feed over HTTPS. We test it before saving.</p>
+          <div>
+            <input placeholder="Name, e.g. Vietnam Customs news" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} required />
+            <input placeholder="https://example.com/feed.xml" value={url} onChange={(e) => setUrl(e.target.value)} type="url" required />
+            <button className="btn" type="submit" disabled={adding}>
+              {adding ? <Loader2 size={15} className="spin" /> : <Plus size={15} />}
+              {adding ? "Checking feed…" : "Add source"}
+            </button>
+          </div>
+          {error && <div className="news-error">{error}</div>}
+        </form>
+      )}
     </>
   );
 }
@@ -394,13 +436,23 @@ const Loading = () => (
   </div>
 );
 
-export default function NewsWatchPage() {
+// `sourcesLocked` / `scanLocked` explain why this session can't change sources or start a scan.
+export default function NewsWatchPage({
+  sourcesLocked,
+  scanLocked,
+  live = false,
+}: {
+  sourcesLocked?: string;
+  scanLocked?: string;
+  live?: boolean;
+}) {
   const { impacts, scan, error, load, setScan } = useImpacts();
   const [tab, setTab] = useState("Alerts");
   const [filter, setFilter] = useState("All");
   const [scanning, setScanning] = useState(false);
   const [message, setMessage] = useState("");
   const scanNow = async () => {
+    if (scanLocked) return;
     setScanning(true);
     setMessage("");
     try {
@@ -427,9 +479,10 @@ export default function NewsWatchPage() {
             Every morning ExportMate reads your approved sources and flags the stock items each story could affect. Alerts are
             AI assessments of headlines; open the source before acting.
           </p>
+          {live && <p className="news-note">{SAMPLE_STOCK_NOTE}</p>}
         </div>
       </section>
-      <ScanBar scan={scan} onScan={scanNow} scanning={scanning} message={message} />
+      <ScanBar scan={scan} onScan={scanNow} scanning={scanning} message={message} locked={scanLocked} />
       <div className="tabs news-tabs">
         {["Alerts", "Stock", "Sources"].map((t) => (
           <button key={t} className={tab === t ? "selected" : ""} onClick={() => setTab(t)}>
@@ -466,7 +519,7 @@ export default function NewsWatchPage() {
           </>
         ))}
       {tab === "Stock" && <StockTable impacts={impacts || []} />}
-      {tab === "Sources" && <Sources />}
+      {tab === "Sources" && <Sources locked={sourcesLocked} />}
     </>
   );
 }

@@ -1,16 +1,22 @@
-# Shared pieces: APIs, image registry, the backend's service account.
+# Shared pieces: APIs, image registry (backend and AI images), the backend's service account.
 
 locals {
   apis = [
+    "aiplatform.googleapis.com",
     "artifactregistry.googleapis.com",
+    "cloudbuild.googleapis.com",
     "cloudresourcemanager.googleapis.com",
+    "cloudscheduler.googleapis.com",
     "firebase.googleapis.com",
+    "firestore.googleapis.com",
     "iam.googleapis.com",
     "identitytoolkit.googleapis.com",
+    "logging.googleapis.com",
     "run.googleapis.com",
     "secretmanager.googleapis.com",
     "serviceusage.googleapis.com",
     "sqladmin.googleapis.com",
+    "storage.googleapis.com",
   ]
 
   # Cloud Run needs an image to create the service and job. deploy.sh replaces it.

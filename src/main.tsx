@@ -37,7 +37,6 @@ import {
   Newspaper,
   Map as MapIcon,
 } from "lucide-react";
-import Papa from "papaparse";
 import {
   initialOrders,
   initialRules,
@@ -72,6 +71,8 @@ import {
   type OrderDetail,
 } from "./api";
 import { errorMessage } from "./auth";
+import ErrorBoundary from "./ErrorBoundary";
+import { MAX_UPLOAD_MB, validateOrderCsv } from "./order-csv";
 const TradeMapPage = lazy(() => import("./TradeMap"));
 const nav = [
   ["", "Overview"],
@@ -83,6 +84,14 @@ const nav = [
   ["playbook", "Playbook"],
   ["account", "Account"],
 ];
+const initialsOf = (text: string) =>
+  text
+    .trim()
+    .split(/\s+/)
+    .map((part) => part[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
 const go = (path: string) => {
   window.location.hash = "/workspace/" + path;
   window.scrollTo({ top: 0, behavior: "instant" });
@@ -165,7 +174,7 @@ function App() {
     try {
       await action();
     } catch (error) {
-      setToast(errorMessage(error));
+      setToast(errorMessage(error), true);
     } finally {
       mutationRef.current = false;
       setBusy(false);
@@ -176,14 +185,14 @@ function App() {
     return () => workspaceLoad.current?.abort();
   }, [live]);
   const [profile, setProfile] = useState(getProfile);
-  const initials =
-    profile.name
-      .trim()
-      .split(/\s+/)
-      .map((part) => part[0])
-      .slice(0, 2)
-      .join("")
-      .toUpperCase() || "EM";
+  const initials = initialsOf(profile.name) || "EM";
+  const companyInitials = initialsOf(profile.company) || "EM";
+  const accessLabel = account?.role
+    ? account.role[0].toUpperCase() + account.role.slice(1)
+    : "";
+  const now = new Date();
+  const todayLabel =
+    `${now.toLocaleDateString("en-GB", { weekday: "long" })}, ${now.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}`.toUpperCase();
   const [route, setRoute] = useState(
     location.hash.replace(/^#\/?/, "").replace(/^workspace\/?/, ""),
   );
@@ -238,7 +247,12 @@ function App() {
   );
   const [buyer, setBuyer] = useState(false);
   const [mobile, setMobile] = useState(false);
-  const [toast, setToast] = useState("");
+  const [toast, setToastState] = useState<{
+    text: string;
+    error: boolean;
+  } | null>(null);
+  const setToast = (text: string, error = false) =>
+    setToastState(text ? { text, error } : null);
   const [modal, setModal] = useState<"demo" | "message" | "evidence" | null>(
     null,
   );
@@ -250,6 +264,13 @@ function App() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("All orders");
   const [ruleText, setRuleText] = useState("");
+  // First click on a rule's delete button asks for a second click to confirm.
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  useEffect(() => {
+    if (!confirmDelete) return;
+    const t = setTimeout(() => setConfirmDelete(null), 5000);
+    return () => clearTimeout(t);
+  }, [confirmDelete]);
   const [category, setCategory] = useState("Policy");
   const [preview, setPreview] = useState<Order[]>([]);
   const [importErrors, setImportErrors] = useState<string[]>([]);
@@ -273,21 +294,25 @@ function App() {
   useEffect(() => save("em-sent", sent), [sent]);
   useEffect(() => {
     if (toast) {
-      const t = setTimeout(() => setToast(""), 4500);
+      const t = setTimeout(() => setToastState(null), toast.error ? 9000 : 4500);
       return () => clearTimeout(t);
     }
   }, [toast]);
+  // The running demo can't be dismissed; a ref so focus handling doesn't re-run each step.
+  const demoRunning = useRef(false);
+  useEffect(() => {
+    demoRunning.current = modal === "demo" && demoStep < 6;
+  }, [modal, demoStep]);
   useEffect(() => {
     if (!modal) return;
     const previous = document.activeElement as HTMLElement;
     document.body.style.overflow = "hidden";
     dialogRef.current?.focus();
     const fn = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !(modal === "demo" && demoStep < 6))
-        setModal(null);
+      if (e.key === "Escape" && !demoRunning.current) setModal(null);
       if (e.key === "Tab") {
         const nodes = dialogRef.current?.querySelectorAll<HTMLElement>(
-          'button:not(:disabled),textarea,input,[tabindex="0"]',
+          'a[href],button:not(:disabled),textarea,input,select,[tabindex="0"]',
         );
         if (!nodes?.length) return;
         const first = nodes[0],
@@ -315,7 +340,7 @@ function App() {
       document.removeEventListener("keydown", fn);
       previous?.focus();
     };
-  }, [modal, demoStep]);
+  }, [modal]);
   useEffect(() => {
     if (modal === "demo" && demoStep >= 0 && demoStep < 6) {
       const t = setTimeout(() => {
@@ -379,7 +404,7 @@ function App() {
   const openMessage = (o: Order) => {
     setSelected(o);
     setMessage(
-      `Hello ${o.supplier},\n\nWe’re preparing ${o.id} (${o.product}) for shipment on ${date(o.shipDate)} to ${o.destination}.\n\nPlease share the plot-level geolocation data and supporting origin records for the acacia used in this order. We need these to review the documentation for our EU-bound shipment.\n\nCould you confirm availability and an expected delivery date?\n\nThank you,\nLan · Binh Duong Wood Co.`,
+      `Hello ${o.supplier},\n\nWe’re preparing ${o.id} (${o.product}) for shipment on ${date(o.shipDate)} to ${o.destination}.\n\nPlease share the plot-level geolocation data and supporting origin records for the acacia used in this order. We need these to review the documentation for our EU-bound shipment.\n\nCould you confirm availability and an expected delivery date?\n\nThank you,\n${profile.name} · ${profile.company || "Your company"}`,
     );
     setModal("message");
   };
@@ -392,7 +417,11 @@ function App() {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
   const parseFile = async (file?: File) => {
-    if (busy || !editable) return;
+    if (!editable) {
+      setToast("Only company owners and editors can import orders.", true);
+      return;
+    }
+    if (busy) return;
     const version = ++uploadVersion.current;
     setServerImport(null);
     if (!file) return;
@@ -405,8 +434,8 @@ function App() {
       ]);
       return;
     }
-    if (file.size > (live ? 4 : 5) * 1024 * 1024) {
-      setImportErrors([`File must be smaller than ${live ? 4 : 5} MB.`]);
+    if (file.size > MAX_UPLOAD_MB * 1024 * 1024) {
+      setImportErrors([`File must be smaller than ${MAX_UPLOAD_MB} MB.`]);
       return;
     }
     if (live) {
@@ -434,48 +463,24 @@ function App() {
       }
       return;
     }
-    Papa.parse<Record<string, string>>(file, {
+    const { default: Papa } = await import("papaparse");
+    if (version !== uploadVersion.current) return;
+    Papa.parse<Record<string, string | undefined>>(file, {
       header: true,
       skipEmptyLines: "greedy",
+      transformHeader: (h) => h.trim(),
       complete: (r) => {
-        const required = [
-          "id",
-          "product",
-          "supplier",
-          "destination",
-          "value",
-          "shipDate",
-          "hsCode",
+        const result = validateOrderCsv(
+          r.meta.fields,
+          r.data,
+          new Set(orders.map((o) => o.id)),
+        );
+        const errors = [
+          ...r.errors.map((e) => `CSV: ${e.message}`),
+          ...result.errors,
         ];
-        const missing = required.filter((k) => !r.meta.fields?.includes(k));
-        if (missing.length) {
-          setImportErrors([
-            `Missing columns: ${missing.join(", ")}. Download the template below.`,
-          ]);
-          return;
-        }
-        const errors: string[] = r.errors.map((e) => `CSV: ${e.message}`);
-        const ids = new Set<string>();
-        const parsed = r.data.map((row, i) => {
-          for (const key of required)
-            if (!row[key]?.trim())
-              errors.push(`Row ${i + 2}: ${key} is required.`);
-          if (ids.has(row.id) || orders.some((o) => o.id === row.id))
-            errors.push(`Row ${i + 2}: order ${row.id} already exists.`);
-          ids.add(row.id);
-          if (!Number.isFinite(Number(row.value)) || Number(row.value) <= 0)
-            errors.push(`Row ${i + 2}: value must be a positive number.`);
-          if (
-            !/^\d{4}-\d{2}-\d{2}$/.test(row.shipDate) ||
-            Number.isNaN(Date.parse(row.shipDate)) ||
-            new Date(row.shipDate).toISOString().slice(0, 10) !== row.shipDate
-          )
-            errors.push(`Row ${i + 2}: use a valid YYYY-MM-DD ship date.`);
-          return { ...row, value: Number(row.value), risk: false } as Order;
-        });
-        if (!parsed.length) errors.push("The file has no order rows.");
         setImportErrors(errors);
-        if (!errors.length) setPreview(parsed);
+        if (!errors.length) setPreview(result.orders);
       },
       error: (e) => setImportErrors([e.message]),
     });
@@ -519,7 +524,7 @@ function App() {
   );
   const orderTable = (items: Order[]) => (
     <div className="table-scroll">
-      <table>
+      <table className="orders-table">
         <thead>
           <tr>
             <th>Order / product</th>
@@ -545,12 +550,14 @@ function App() {
                 </button>
                 <small>{o.product}</small>
               </td>
-              <td>{o.supplier}</td>
-              <td>{o.destination}</td>
-              <td className="mono">{money(o.value, o.currency)}</td>
-              <td>{date(o.shipDate)}</td>
-              <td>{status(o)}</td>
-              <td>
+              <td data-label="Supplier">{o.supplier}</td>
+              <td data-label="Destination">{o.destination}</td>
+              <td data-label="Order value" className="mono">
+                {money(o.value, o.currency)}
+              </td>
+              <td data-label="Ships">{date(o.shipDate)}</td>
+              <td data-label="Status">{status(o)}</td>
+              <td className="order-open">
                 <button
                   className="icon-btn"
                   aria-label={`View ${o.id}`}
@@ -585,12 +592,11 @@ function App() {
           ExportMate<span className="brand-dot">®</span>
         </a>
         <div className="workspace">
-          <span className="company-mark">BW</span>
+          <span className="company-mark">{companyInitials}</span>
           <div>
             <strong>{profile.company || "Your company"}</strong>
             <small>{profile.role} workspace</small>
           </div>
-          <ChevronDown size={15} />
         </div>
         <div className="nav-label">YOUR WORKSPACE</div>
         <nav>
@@ -612,13 +618,16 @@ function App() {
                 }
                 href={"#/workspace/" + path}
                 key={path}
+                onClick={() => path === "orders" && setFilter("All orders")}
               >
                 <Icon size={18} />
                 {label}
                 {path === "orders" && (
                   <span className="nav-count">{orders.length}</span>
                 )}
-                {path === "rules" && <span className="nav-dot" />}
+                {path === "rules" && !live && exposed.length > 0 && (
+                  <span className="nav-dot" />
+                )}
               </a>
             );
           })}
@@ -642,9 +651,15 @@ function App() {
             <span className="avatar">{buyer ? "JT" : initials}</span>
             <span>
               <strong>{buyer ? "James Tan" : profile.name}</strong>
-              <small>{buyer ? "Buyer perspective" : "Factory owner"}</small>
+              <small>
+                {buyer
+                  ? "Buyer perspective"
+                  : live
+                    ? accessLabel || "Member"
+                    : `${profile.role} · sample`}
+              </small>
             </span>
-            <ChevronDown size={16} />
+            <ArrowUpRight size={15} />
           </button>
           <a className="workspace-signout" href="#/logout">
             <LogOut size={14} />
@@ -657,6 +672,8 @@ function App() {
           <button
             className="mobile-menu icon-btn"
             aria-label="Toggle navigation"
+            aria-expanded={mobile}
+            aria-controls="mobile-nav"
             onClick={() => setMobile(!mobile)}
           >
             <Menu />
@@ -674,14 +691,12 @@ function App() {
             <span className="demo-badge">
               {live ? "CONNECTED WORKSPACE" : "DEMO WORKSPACE"}
             </span>
-            <button
-              className="perspective"
-              disabled={live}
-              onClick={() => setBuyer(!buyer)}
-            >
-              {buyer ? "Buyer view" : "Maker view"}
-              <ChevronDown size={13} />
-            </button>
+            {!live && (
+              <button className="perspective" onClick={() => setBuyer(!buyer)}>
+                {buyer ? "Buyer view" : "Maker view"}
+                <ChevronDown size={13} />
+              </button>
+            )}
             <button
               className="notification icon-btn"
               aria-label="View alerts"
@@ -703,16 +718,25 @@ function App() {
           </div>
         </header>
         {mobile && (
-          <nav className="mobile-nav">
+          <nav className="mobile-nav" id="mobile-nav" aria-label="Workspace">
             {nav.map(([p, l]) => (
               <a
                 key={p}
                 href={"#/workspace/" + p}
-                onClick={() => setMobile(false)}
+                className={route.split("/")[0] === p ? "active" : ""}
+                aria-current={route.split("/")[0] === p ? "page" : undefined}
+                onClick={() => {
+                  setMobile(false);
+                  if (p === "orders") setFilter("All orders");
+                }}
               >
                 {l}
               </a>
             ))}
+            <a className="mobile-signout" href="#/logout">
+              <LogOut size={13} />
+              Sign out
+            </a>
           </nav>
         )}
         <main>
@@ -730,15 +754,19 @@ function App() {
               </a>
             </section>
           ) : (
-            <>
+            <ErrorBoundary resetKey={route}>
               {route === "" && (
                 <>
                   <div className="eyebrow greeting">
                     <span>YOUR TRADE, IN THE CLEAR.</span>
-                    <span>
-                      THURSDAY, 08 OCT 2026{" "}
-                      <span className="muted">· SAMPLE DAY</span>
-                    </span>
+                    {live ? (
+                      <span>{todayLabel}</span>
+                    ) : (
+                      <span>
+                        THURSDAY, 08 OCT 2026{" "}
+                        <span className="muted">· SAMPLE DAY</span>
+                      </span>
+                    )}
                   </div>
                   <section className="hero-heading">
                     <div>
@@ -750,11 +778,7 @@ function App() {
                     </div>
                     <div className="hero-copy">
                       <p>Order risks. Clear next steps.</p>
-                      <button
-                        className="text-link"
-                        disabled={live}
-                        onClick={startDemo}
-                      >
+                      <button className="text-link" onClick={startDemo}>
                         Run demo <ArrowUpRight size={18} />
                       </button>
                     </div>
@@ -784,7 +808,7 @@ function App() {
                         <p>Your first trade corridor.</p>
                       </div>
                       <button
-                        onClick={() => go("rules")}
+                        onClick={() => go("map")}
                         className="port-button"
                       >
                         Explore your corridor <ArrowUpRight size={18} />
@@ -894,11 +918,17 @@ function App() {
                   <div className="overview-grid">
                     <section className="action-card">
                       <div className="action-top">
-                        <span className="status red">
+                        <span
+                          className={`status ${exposed.length ? "red" : "green"}`}
+                        >
                           <i />
                           {exposed.length ? "ACTION NEEDED" : "ALL CLEAR"}
                         </span>
-                        <span className="mono muted">EU · WOOD PRODUCTS</span>
+                        <span className="mono muted">
+                          {live
+                            ? routeStops(profile).map(placeCode).join(" · ")
+                            : "EU · WOOD PRODUCTS"}
+                        </span>
                       </div>
                       <h3>
                         {live
@@ -977,7 +1007,7 @@ function App() {
                       </p>
                       <div className="coverage">
                         <span>
-                          <i className="pulse" />3 source collections
+                          <i className="pulse" />3 sample source collections
                         </span>
                         <button
                           className="text-link"
@@ -988,7 +1018,9 @@ function App() {
                       </div>
                     </section>
                   </div>
-                  <NewsHighlights />
+                  <ErrorBoundary fallback={null}>
+                    <NewsHighlights live={live} />
+                  </ErrorBoundary>
                   <div className="section-heading order-section">
                     <h2>Orders on the move.</h2>
                     <button className="text-link" onClick={() => go("orders")}>
@@ -1019,7 +1051,8 @@ function App() {
                       <b className="danger">{exposed.length}</b> need attention
                     </span>
                     <span>
-                      <b>{riskDisplay}</b> estimated at risk
+                      <b>{riskDisplay}</b>{" "}
+                      {live ? "exposed order value" : "estimated at risk"}
                     </span>
                   </div>
                   <div className="toolbar">
@@ -1034,6 +1067,7 @@ function App() {
                         <button
                           key={f}
                           className={filter === f ? "selected" : ""}
+                          aria-pressed={filter === f}
                           onClick={() => setFilter(f)}
                         >
                           {f}
@@ -1043,6 +1077,7 @@ function App() {
                     <label className="search">
                       <Search size={17} />
                       <input
+                        aria-label="Search orders"
                         placeholder="Search orders, suppliers…"
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
@@ -1077,7 +1112,11 @@ function App() {
                     All orders
                   </button>
                   <PageHeading
-                    label="ORDER IMPACT / SAMPLE ANALYSIS"
+                    label={
+                      live
+                        ? "ORDER DETAIL / YOUR COMPANY DATA"
+                        : "ORDER IMPACT / SAMPLE ANALYSIS"
+                    }
                     title={detail.id + "."}
                     description={detail.product + " · " + detail.destination}
                     action={status(detail)}
@@ -1116,7 +1155,7 @@ function App() {
                   )}
                   {live ? (
                     <section className="panel">
-                      <h2>{status(detail)}</h2>
+                      <h2>Source and analysis</h2>
                       {detailError ? (
                         <p role="alert">{detailError}</p>
                       ) : !serverDetail ? (
@@ -1235,7 +1274,7 @@ function App() {
                           <Send size={24} />
                         </div>
                         <h2>
-                          Start with
+                          Start with{" "}
                           <br />
                           your supplier.
                         </h2>
@@ -1245,7 +1284,7 @@ function App() {
                         </p>
                         <div className="recommendation-meta">
                           <span>Suggested owner</span>
-                          <b>Ms. Lan</b>
+                          <b>{profile.name}</b>
                           <span>Priority</span>
                           <b>Before shipment</b>
                           <span>Channel</span>
@@ -1311,7 +1350,25 @@ function App() {
                   />
                 </Suspense>
               )}
-              {route === "news" && <NewsWatchPage />}
+              {route === "news" && (
+                <NewsWatchPage
+                  live={live}
+                  sourcesLocked={
+                    !live
+                      ? "Sign in to a company workspace to add or switch off sources."
+                      : editable
+                        ? undefined
+                        : "Only company owners and editors can change sources."
+                  }
+                  scanLocked={
+                    !live
+                      ? "Sign in to a company workspace to run a scan."
+                      : editable
+                        ? undefined
+                        : "Only company owners and editors can run a scan."
+                  }
+                />
+              )}
               {route === "rules" && (
                 <>
                   <PageHeading
@@ -1319,7 +1376,7 @@ function App() {
                     title="Rule watch."
                     description="Changes affecting your products and markets."
                     action={
-                      <Button disabled={live} onClick={startDemo}>
+                      <Button onClick={startDemo}>
                         <Play size={16} />
                         Run rule-change demo
                       </Button>
@@ -1374,7 +1431,9 @@ function App() {
                   <section className="panel">
                     <div className="rule-change-title">
                       <h3>Geolocation documentation for EU-bound wood</h3>
-                      <span className="status red">
+                      <span
+                        className={`status ${exposed.length ? "red" : "green"}`}
+                      >
                         <i />
                         {exposed.length} orders affected
                       </span>
@@ -1424,7 +1483,7 @@ function App() {
                       onDragOver={(e) => e.preventDefault()}
                       onDrop={(e) => {
                         e.preventDefault();
-                        parseFile(e.dataTransfer.files[0]);
+                        void parseFile(e.dataTransfer.files[0]);
                       }}
                     >
                       <div className="upload-icon">
@@ -1435,9 +1494,15 @@ function App() {
                         Drop your orders CSV here, or choose a file.
                         <br />
                         {live
-                          ? "Up to 4 MB. Files are saved to your company workspace."
-                          : "Up to 5 MB. Your file stays in this browser."}
+                          ? `Up to ${MAX_UPLOAD_MB} MB. Files are saved to your company workspace.`
+                          : `Up to ${MAX_UPLOAD_MB} MB. Your file stays in this browser.`}
                       </p>
+                      {!editable && (
+                        <p className="notice" role="note">
+                          Only company owners and editors can import orders.
+                          Ask your company owner for editor access.
+                        </p>
+                      )}
                       <Button
                         disabled={busy || !editable}
                         onClick={() => fileRef.current?.click()}
@@ -1453,7 +1518,7 @@ function App() {
                         aria-label="Upload orders CSV"
                         hidden
                         onChange={(e) => {
-                          parseFile(e.target.files?.[0]);
+                          void parseFile(e.target.files?.[0]);
                           e.target.value = "";
                         }}
                       />
@@ -1462,7 +1527,7 @@ function App() {
                         onClick={() =>
                           download(
                             "exportmate-orders-template.csv",
-                            'id,product,supplier,destination,value,shipDate,hsCode\nPO-2400,Acacia plywood,Binh Phu Wood,"Rotterdam NL",24000,2026-11-15,4412.33\n',
+                            'id,product,supplier,destination,value,shipDate,hsCode,currency\nPO-2400,Acacia plywood,Binh Phu Wood,"Rotterdam, NL",24000,2026-11-15,4412.33,USD\n',
                           )
                         }
                       >
@@ -1481,7 +1546,7 @@ function App() {
                     <section className="data-help">
                       <span className="eyebrow">A GOOD FIRST STEP</span>
                       <h3>
-                        Less setup.
+                        Less setup.{" "}
                         <br />
                         More clarity.
                       </h3>
@@ -1489,7 +1554,14 @@ function App() {
                       <ul>
                         <li>Order ID and product</li>
                         <li>Supplier and destination</li>
-                        <li>Order value in USD</li>
+                        <li>
+                          Order value (optional currency column, e.g. USD;
+                          otherwise{" "}
+                          {live
+                            ? `your company currency, ${account?.company?.currency || "USD"}`
+                            : "USD"}
+                          )
+                        </li>
                         <li>Ship date and HS code</li>
                       </ul>
                       <p className="fine-print">
@@ -1516,11 +1588,23 @@ function App() {
                                 : `${live ? (serverImport?.rowCount ?? preview.length) : preview.length} valid rows`}
                         </span>
                       </div>
+                      {serverImport?.duplicateOfImportId && (
+                        <p className="notice" role="note">
+                          This file matches an import you already committed.
+                          Its orders are already in your workspace.
+                        </p>
+                      )}
                       {importErrors.length ? (
                         <ul className="error-list" role="alert">
                           {importErrors.slice(0, 10).map((e, i) => (
                             <li key={i}>{e}</li>
                           ))}
+                          {importErrors.length > 10 && (
+                            <li>
+                              …and {importErrors.length - 10} more. Fix these
+                              first, then upload the file again.
+                            </li>
+                          )}
                         </ul>
                       ) : (
                         <>
@@ -1551,6 +1635,17 @@ function App() {
                               </tbody>
                             </table>
                           </div>
+                          {(live
+                            ? (serverImport?.rowCount ?? preview.length)
+                            : preview.length) > 10 && (
+                            <p className="fine-print">
+                              Showing the first 10 of{" "}
+                              {live
+                                ? (serverImport?.rowCount ?? preview.length)
+                                : preview.length}{" "}
+                              rows.
+                            </p>
+                          )}
                           <Button
                             disabled={
                               busy ||
@@ -1583,12 +1678,12 @@ function App() {
                       <b>Open orders</b>
                       <p>
                         {orders.length} rows ·{" "}
-                        {!live && orders.length - 12 > 0
-                          ? `${orders.length - 12} imported + `
+                        {!live && orders.length - initialOrders.length > 0
+                          ? `${orders.length - initialOrders.length} imported + `
                           : ""}
                         {live
                           ? "saved in your company workspace"
-                          : "12 sample records"}
+                          : `${initialOrders.length} sample records`}
                       </p>
                     </div>
                     <span className="status green">
@@ -1663,23 +1758,44 @@ function App() {
                             <span />
                           </button>
                           <button
-                            className="icon-btn"
-                            aria-label={`Delete rule: ${r.text}`}
-                            disabled={busy || !editable}
-                            onClick={() =>
-                              live
-                                ? void mutate(async () => {
-                                    await api.deleteRule(r.id);
-                                    setRules((v) =>
-                                      v.filter((x) => x.id !== r.id),
-                                    );
-                                  })
-                                : setRules((v) =>
-                                    v.filter((x) => x.id !== r.id),
-                                  )
+                            className={
+                              "icon-btn" +
+                              (confirmDelete === r.id ? " confirm-delete" : "")
                             }
+                            aria-label={
+                              confirmDelete === r.id
+                                ? `Confirm delete rule: ${r.text}`
+                                : `Delete rule: ${r.text}`
+                            }
+                            disabled={busy || !editable}
+                            onClick={() => {
+                              if (confirmDelete !== r.id) {
+                                setConfirmDelete(r.id);
+                                return;
+                              }
+                              setConfirmDelete(null);
+                              if (live)
+                                void mutate(async () => {
+                                  await api.deleteRule(r.id);
+                                  setRules((v) =>
+                                    v.filter((x) => x.id !== r.id),
+                                  );
+                                  setToast("Rule deleted.");
+                                });
+                              else {
+                                setRules((v) => v.filter((x) => x.id !== r.id));
+                                setToast("Rule deleted.");
+                              }
+                            }}
                           >
-                            <Trash2 size={16} />
+                            {confirmDelete === r.id ? (
+                              <>
+                                <Check size={15} />
+                                <span>Delete?</span>
+                              </>
+                            ) : (
+                              <Trash2 size={16} />
+                            )}
                           </button>
                         </div>
                       ))}
@@ -1778,7 +1894,7 @@ function App() {
                     <Button onClick={() => go("")}>Back to overview</Button>
                   </section>
                 )}
-            </>
+            </ErrorBoundary>
           )}
           <footer>
             <span className="footer-brand">
@@ -1794,13 +1910,16 @@ function App() {
         </main>
       </div>
       {toast && (
-        <div className="toast" role="status">
-          <CheckCheck size={18} />
-          {toast}
+        <div
+          className={"toast" + (toast.error ? " error" : "")}
+          role={toast.error ? "alert" : "status"}
+        >
+          {toast.error ? <CircleAlert size={18} /> : <CheckCheck size={18} />}
+          {toast.text}
           <button
             className="icon-btn"
             aria-label="Dismiss notification"
-            onClick={() => setToast("")}
+            onClick={() => setToastState(null)}
           >
             <X size={16} />
           </button>
@@ -1844,8 +1963,8 @@ function App() {
                     : "Now you know your next move."}
                 </h2>
                 <p>
-                  A simulated EU wood-documentation change, matched against 12
-                  sample orders. This resets the sample scenario and demo
+                  A simulated EU wood-documentation change, matched against{" "}
+                  {initialOrders.length} sample orders. This resets the sample scenario and demo
                   confirmations. Imported orders are preserved.
                 </p>
                 <div className="demo-trace">
@@ -2070,19 +2189,31 @@ function Root() {
       location.hash = "/login";
     }
   }, [path, workspace]);
-  if (path === "chat") return <ChatPage />;
+  if (path === "chat")
+    return (
+      <ErrorBoundary>
+        <ChatPage />
+      </ErrorBoundary>
+    );
   return (
     <>
-      {path === "" ? (
-        <Landing section={section} />
-      ) : workspace ? (
-        hasSession() ? (
-          <App />
-        ) : null
-      ) : (
-        <AccountPage route={path} />
+      <ErrorBoundary resetKey={path}>
+        {path === "" ? (
+          <Landing section={section} />
+        ) : workspace ? (
+          hasSession() ? (
+            <App />
+          ) : null
+        ) : (
+          <AccountPage route={path} />
+        )}
+      </ErrorBoundary>
+      {/* Not on sign-in and account pages, where it covered the forms. */}
+      {(path === "" || workspace) && (
+        <ErrorBoundary fallback={null}>
+          <ChatWidget />
+        </ErrorBoundary>
       )}
-      <ChatWidget />
     </>
   );
 }

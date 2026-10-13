@@ -9,6 +9,7 @@ test("real FastAPI/Postgres round trip: onboarding, import, persistence and play
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page).toHaveURL(/onboarding/);
   await page.getByLabel("Company name").fill("Frontend integration test");
+  await page.getByLabel("What does your company do?").fill("Makes test panels for the integration check.");
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page.getByRole("button", { name: "Open workspace" }).click();
@@ -32,6 +33,7 @@ test("real FastAPI/Postgres round trip: onboarding, import, persistence and play
   await page.reload();
   await expect(page.getByRole("switch")).not.toBeChecked();
   await page.getByRole("button", { name: "Delete rule: Frontend integration test rule" }).click();
+  await page.getByRole("button", { name: "Confirm delete rule: Frontend integration test rule" }).click();
   await expect(page.getByRole("switch")).toHaveCount(0);
   await page.goto("/#/workspace/account");
   await page.getByLabel("Name", { exact: true }).fill("Integration Verified");

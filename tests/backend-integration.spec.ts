@@ -14,6 +14,7 @@ const account = {
     businessRole: "Manufacturer",
     origin: "Vietnam",
     destination: "European Union",
+    description: "Plywood and furniture for export.",
     currency: "USD",
   },
   role: "owner",
@@ -229,6 +230,15 @@ test("persists playbook mutations, commits imports once, and saves account setti
   await page
     .getByRole("button", { name: "Delete rule: Review shipment certificates" })
     .click();
+  // The first click only asks for confirmation.
+  await expect(
+    page.getByText("Review shipment certificates", { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", {
+      name: "Confirm delete rule: Review shipment certificates",
+    })
+    .click();
   await expect(
     page.getByText("Review shipment certificates", { exact: true }),
   ).toHaveCount(0);
@@ -258,9 +268,10 @@ test("persists playbook mutations, commits imports once, and saves account setti
   expect(
     requests.find((r) => r.path === "/me" && r.method === "PATCH")?.body.name,
   ).toBe("Updated Owner");
+  // Only the name changed, so the company is left alone.
   expect(
     requests.find((r) => r.path === "/company" && r.method === "PATCH"),
-  ).toBeTruthy();
+  ).toBeFalsy();
 });
 
 test("API errors never fall back to sample orders; viewer mutations are disabled", async ({
@@ -289,6 +300,9 @@ test("new accounts onboard through the API and the sample demo stays local", asy
   await login(page);
   await expect(page).toHaveURL(/onboarding/);
   await page.getByLabel("Company name").fill("New Company");
+  await page
+    .getByLabel("What does your company do?")
+    .fill("Plywood and furniture for export.");
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page.getByRole("button", { name: "Open workspace" }).click();
@@ -309,4 +323,132 @@ test("new accounts onboard through the API and the sample demo stays local", asy
     page.getByRole("button", { name: "PO-2291", exact: true }),
   ).toBeVisible();
   expect(requests.length).toBe(count);
+});
+
+// News sources live on the AI service and are shared by every workspace, so
+// only signed-in owners and editors may change them (with their own token).
+async function sourcesFixture(page: Page) {
+  const changes: { method: string; auth: string | undefined }[] = [];
+  let sources = [
+    {
+      id: "source-1",
+      name: "Timber news",
+      url: "https://news.example/feed.xml",
+      kind: "News",
+      builtIn: true,
+      enabled: true,
+    },
+  ];
+  await page.route("**/api/sources**", async (route) => {
+    const request = route.request();
+    const method = request.method();
+    if (method === "GET") {
+      await route.fulfill({ json: { sources } });
+      return;
+    }
+    changes.push({ method, auth: request.headers().authorization });
+    if (method === "POST") {
+      const source = {
+        ...request.postDataJSON(),
+        id: "source-2",
+        kind: "Custom",
+        builtIn: false,
+        enabled: true,
+      };
+      sources = [...sources, source];
+      await route.fulfill({ status: 201, json: { source, sample: [] } });
+      return;
+    }
+    const id = new URL(request.url()).pathname.split("/").pop();
+    sources = sources.map((s) =>
+      s.id === id ? { ...s, ...request.postDataJSON() } : s,
+    );
+    await route.fulfill({ json: { ok: true } });
+  });
+  return changes;
+}
+async function openSources(page: Page) {
+  await page.goto("/#/workspace/news");
+  await page.getByRole("button", { name: "Sources", exact: true }).click();
+}
+
+test("owners add and switch off news sources with their token", async ({
+  page,
+}) => {
+  await fixture(page);
+  const changes = await sourcesFixture(page);
+  await login(page);
+  await expect(page.getByText("CONNECTED WORKSPACE")).toBeVisible();
+  await openSources(page);
+  await page
+    .getByPlaceholder("Name, e.g. Vietnam Customs news")
+    .fill("Customs feed");
+  await page
+    .getByPlaceholder("https://example.com/feed.xml")
+    .fill("https://customs.example/rss");
+  await page.getByRole("button", { name: "Add source" }).click();
+  await expect(page.getByText("Customs feed", { exact: true })).toBeVisible();
+  const timber = page.getByRole("checkbox", { name: "Read Timber news" });
+  // The visible switch covers the checkbox; click it as a user would.
+  await page.locator("label").filter({ has: timber }).click();
+  await expect(timber).not.toBeChecked();
+  expect(changes.map((c) => c.method)).toEqual(["POST", "PATCH"]);
+  expect(
+    changes.every((c) => c.auth === "Bearer dev:owner@example.com"),
+  ).toBeTruthy();
+});
+
+test("viewers and the sample demo can't change news sources", async ({
+  page,
+}) => {
+  await fixture(page, { viewer: true });
+  const changes = await sourcesFixture(page);
+  await login(page);
+  await expect(page.getByText("CONNECTED WORKSPACE")).toBeVisible();
+  await openSources(page);
+  await expect(
+    page.getByText("Only company owners and editors can change sources."),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("checkbox", { name: "Read Timber news" }),
+  ).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Add source" })).toHaveCount(0);
+  await page.goto("/#/logout");
+  await expect(page.getByText("Your workspace is saved.")).toBeVisible();
+  await page.goto("/#/login");
+  await page.getByRole("button", { name: /demo/i }).click();
+  await expect(page.getByText("DEMO WORKSPACE")).toBeVisible();
+  await openSources(page);
+  await expect(
+    page.getByText(
+      "Sign in to a company workspace to add or switch off sources.",
+    ),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("checkbox", { name: "Read Timber news" }),
+  ).toBeDisabled();
+  expect(changes).toHaveLength(0);
+});
+
+test("a failed change shows an error toast, not a success one", async ({
+  page,
+}) => {
+  await fixture(page);
+  await login(page);
+  await expect(page.getByText("CONNECTED WORKSPACE")).toBeVisible();
+  // Registered last, so it answers before the fixture's handler.
+  await page.route("**/api/v1/playbook/rules", (route) =>
+    route.request().method() === "POST"
+      ? route.fulfill({
+          status: 422,
+          json: { error: { code: "invalid", message: "Rule text is too long." } },
+        })
+      : route.fallback(),
+  );
+  await page.goto("/#/workspace/playbook");
+  await page.getByLabel("In your own words").fill("A rule the server rejects");
+  await page.getByRole("button", { name: "Add to my playbook" }).click();
+  const toast = page.getByRole("alert").filter({ hasText: "Rule text is too long." });
+  await expect(toast).toBeVisible();
+  await expect(toast).toHaveClass(/error/);
 });

@@ -25,6 +25,20 @@ import { AuditView, describeStep, passed } from "./Audit";
 import "./chat.css";
 
 const KEY = "em-chat";
+const RESET_EVENT = "em-chat-reset";
+// Longest wait for an answer before the UI gives up (the agent makes several model calls).
+const ANSWER_TIMEOUT_MS = 120_000;
+
+/** Forgets the conversation and starts a new audit session, e.g. on sign-out. */
+export function clearChat() {
+  try {
+    sessionStorage.removeItem(KEY);
+  } catch {
+    /* Storage may be unavailable. */
+  }
+  sessionId(true);
+  window.dispatchEvent(new Event(RESET_EVENT));
+}
 const suggestions = [
   "Which EU-bound items are missing geolocation data?",
   "What did the latest news scan flag?",
@@ -186,6 +200,9 @@ function useConversation(onAudit?: () => void) {
   const [busy, setBusy] = useState(false);
   const [steps, setSteps] = useState<AuditStep[]>([]);
   const [error, setError] = useState("");
+  // Bumped by a reset, so an answer still arriving for the old conversation is dropped.
+  const generation = useRef(0);
+  const inFlight = useRef<AbortController | null>(null);
   useEffect(() => {
     try {
       sessionStorage.setItem(KEY, JSON.stringify(messages));
@@ -193,28 +210,56 @@ function useConversation(onAudit?: () => void) {
       /* Storage may be unavailable or full. */
     }
   }, [messages]);
+  useEffect(() => {
+    const clear = () => {
+      generation.current++;
+      inFlight.current?.abort();
+      setMessages([]);
+      setSteps([]);
+      setError("");
+      setBusy(false);
+    };
+    window.addEventListener(RESET_EVENT, clear);
+    return () => {
+      window.removeEventListener(RESET_EVENT, clear);
+      generation.current++;
+      inFlight.current?.abort();
+    };
+  }, []);
   const ask = async (text: string) => {
     const q = text.trim();
     if (!q || busy) return;
+    const turn = ++generation.current;
     const next: Message[] = [...messages, { role: "user", text: q }];
     setMessages(next);
     setBusy(true);
     setSteps([]);
     setError("");
+    const controller = new AbortController();
+    inFlight.current = controller;
+    const timer = setTimeout(
+      () => controller.abort(new Error("The assistant took too long to answer. Please try again.")),
+      ANSWER_TIMEOUT_MS,
+    );
     try {
-      const { reply, citations, audit } = await askAgent(next, (s) => setSteps((prev) => [...prev, s]));
+      const { reply, citations, audit } = await askAgent(
+        next,
+        (s) => turn === generation.current && setSteps((prev) => [...prev, s]),
+        controller.signal,
+      );
+      if (turn !== generation.current) return;
       setMessages([...next, { role: "model", text: reply, citations, audit }]);
       onAudit?.();
     } catch (e) {
+      if (turn !== generation.current) return;
       setError(e instanceof Error ? e.message : "Something went wrong.");
     } finally {
-      setBusy(false);
+      clearTimeout(timer);
+      if (turn === generation.current) setBusy(false);
     }
   };
   const reset = () => {
-    setMessages([]);
-    setError("");
-    sessionId(true);
+    clearChat();
     onAudit?.();
   };
   return { messages, busy, steps, error, ask, reset };
@@ -277,7 +322,8 @@ function Conversation({ autoFocus, onAudit }: { autoFocus?: boolean; onAudit?: (
           maxLength={4000}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) submit(e);
+            // Not while an input method (e.g. Vietnamese or Japanese) is still composing.
+            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) submit(e);
           }}
         />
         <button type="submit" disabled={busy || !draft.trim()} aria-label="Send">

@@ -12,7 +12,7 @@ class OrderOut(CamelCaseModel):
     product: str
     supplier: str
     destination: str
-    value_minor: int  # cents: 2400000 = 24,000.00
+    value_minor: int  # hundredths of the currency unit for every currency: 2400000 = 24,000.00
     currency: str
     ship_date: date
     hs_code: str
