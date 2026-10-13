@@ -1,10 +1,11 @@
-"""Regulations and their source documents.
+"""Regulations and their documents (one uploaded file per version).
 
 Every upload (an official text or an article) is a version of a regulation: either version 1
 of a new regulation, or the next version of one the uploader picks.
 """
 
 import hashlib
+import logging
 import uuid
 from pathlib import PurePath
 from urllib.parse import urlparse
@@ -16,11 +17,12 @@ from app.core.config import get_settings
 from app.core.context import CompanyContext
 from app.core.errors import AppError, not_found_error
 from app.core.file_storage import get_file_storage
-from app.database.models import Regulation, SourceDocument
+from app.database.models import Regulation, RegulationDocument
 from app.database.queries import audit as audit_queries
 from app.database.queries import regulations as regulation_queries
-from app.schemas.regulations import DocumentOut, RegulationDetailOut, RegulationOut
+from app.schemas.regulations import RegulationDetailOut, RegulationDocumentOut, RegulationOut
 
+log = logging.getLogger(__name__)
 CONTENT_TYPES = {
     ".pdf": "application/pdf",
     ".html": "text/html",
@@ -129,7 +131,7 @@ def _resolve_regulation(
     return regulation, regulation_queries.get_latest_version_number(db, regulation.id) + 1
 
 
-def upload_source_document(
+def upload_regulation_document(
     db: Session,
     ctx: CompanyContext,
     *,
@@ -139,7 +141,7 @@ def upload_source_document(
     source_url: str | None = None,
     regulation_id: uuid.UUID | None = None,
     official_id: str | None = None,
-) -> SourceDocument:
+) -> RegulationDocument:
     suffix, content_type = _check_file(filename, content)
     clean_title = _clean_text(title)
     if not clean_title or len(clean_title) > 300:
@@ -158,7 +160,9 @@ def upload_source_document(
         )
 
     checksum = hashlib.sha256(content).hexdigest()
-    duplicate = regulation_queries.find_source_document_by_checksum(db, ctx.company_id, checksum)
+    duplicate = regulation_queries.find_regulation_document_by_checksum(
+        db, ctx.company_id, checksum
+    )
     if duplicate:
         raise AppError(
             409, "already_uploaded", f"This file was already uploaded as '{duplicate.title}'."
@@ -169,9 +173,9 @@ def upload_source_document(
             db, ctx, clean_title, regulation_id, official_id
         )
         document_id = uuid.uuid4()
-        document = regulation_queries.add_source_document(
+        document = regulation_queries.add_regulation_document(
             db,
-            SourceDocument(
+            RegulationDocument(
                 id=document_id,
                 company_id=ctx.company_id,
                 title=clean_title,
@@ -195,8 +199,8 @@ def upload_source_document(
         db,
         company_id=ctx.company_id,
         user_id=ctx.user.id,
-        action="document.uploaded",
-        object_type="source_document",
+        action="regulation_document.uploaded",
+        object_type="regulation_document",
         object_id=str(document.id),
         data={
             "title": clean_title,
@@ -208,20 +212,33 @@ def upload_source_document(
     # leaves an unreferenced file.
     get_file_storage().save_file(document.storage_path, content, content_type)
     db.commit()
+    log.info(
+        "regulation_document.uploaded",
+        extra={
+            "company_id": str(ctx.company_id),
+            "regulation_id": str(regulation.id),
+            "regulation_document_id": str(document.id),
+            "version_number": version_number,
+            "content_type": content_type,
+            "size_bytes": len(content),
+        },
+    )
     return document
 
 
-def get_source_document(db: Session, ctx: CompanyContext, document_id: uuid.UUID) -> SourceDocument:
-    document = regulation_queries.get_source_document(db, ctx.company_id, document_id)
-    if not document:
-        raise not_found_error("Document")
-    return document
-
-
-def load_source_document_file(
+def get_regulation_document(
     db: Session, ctx: CompanyContext, document_id: uuid.UUID
-) -> tuple[SourceDocument, bytes]:
-    document = get_source_document(db, ctx, document_id)
+) -> RegulationDocument:
+    document = regulation_queries.get_regulation_document(db, ctx.company_id, document_id)
+    if not document:
+        raise not_found_error("Regulation document")
+    return document
+
+
+def load_regulation_document_file(
+    db: Session, ctx: CompanyContext, document_id: uuid.UUID
+) -> tuple[RegulationDocument, bytes]:
+    document = get_regulation_document(db, ctx, document_id)
     return document, get_file_storage().load_file(document.storage_path)
 
 
@@ -241,7 +258,7 @@ def list_regulations(
                 title=regulation.title,
                 official_id=regulation.official_id,
                 version_count=version_count,
-                latest_version=DocumentOut.model_validate(latest) if latest else None,
+                latest_version=RegulationDocumentOut.model_validate(latest) if latest else None,
                 created_at=regulation.created_at,
             )
         )
@@ -255,7 +272,7 @@ def get_regulation_detail(
     if not regulation:
         raise not_found_error("Regulation")
     versions = [
-        DocumentOut.model_validate(v)
+        RegulationDocumentOut.model_validate(v)
         for v in regulation_queries.list_regulation_versions(db, regulation.id)
     ]
     return RegulationDetailOut(

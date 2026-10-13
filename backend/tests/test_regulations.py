@@ -7,12 +7,12 @@ EUDR_V1 = b"%PDF-1.7\nRegulation (EU) 2023/1115 ... applies from 30 December 202
 EUDR_V2 = b"%PDF-1.7\nRegulation (EU) 2023/1115 consolidated ... applies from 30 December 2025\n"
 
 
-def upload_document(
+def upload_regulation_document(
     client, headers, content=EUDR_V1, filename="eudr.pdf", content_type="application/pdf", **form
 ):
     data = {"title": "EU deforestation regulation", **form}
     return client.post(
-        "/api/v1/documents",
+        "/api/v1/regulation-documents",
         headers=headers,
         data=data,
         files={"file": (filename, content, content_type)},
@@ -21,7 +21,7 @@ def upload_document(
 
 def test_first_upload_creates_regulation_version_1(client):
     headers = onboard(client, "lan@example.com")
-    response = upload_document(
+    response = upload_regulation_document(
         client,
         headers,
         officialId="32023R1115",
@@ -43,8 +43,8 @@ def test_first_upload_creates_regulation_version_1(client):
 
 def test_new_version_of_picked_regulation(client):
     headers = onboard(client, "lan@example.com")
-    v1 = upload_document(client, headers, officialId="32023R1115").json()["data"]
-    v2 = upload_document(
+    v1 = upload_regulation_document(client, headers, officialId="32023R1115").json()["data"]
+    v2 = upload_regulation_document(
         client,
         headers,
         content=EUDR_V2,
@@ -64,16 +64,16 @@ def test_new_version_of_picked_regulation(client):
 
 def test_same_file_twice_is_409(client):
     headers = onboard(client, "lan@example.com")
-    assert upload_document(client, headers).status_code == 201
-    again = upload_document(client, headers, title="Another title")
+    assert upload_regulation_document(client, headers).status_code == 201
+    again = upload_regulation_document(client, headers, title="Another title")
     assert again.status_code == 409
     assert again.json()["error"]["code"] == "already_uploaded"
 
 
 def test_official_id_already_used_is_409(client):
     headers = onboard(client, "lan@example.com")
-    upload_document(client, headers, officialId="32023R1115")
-    again = upload_document(client, headers, content=EUDR_V2, officialId="32023R1115")
+    upload_regulation_document(client, headers, officialId="32023R1115")
+    again = upload_regulation_document(client, headers, content=EUDR_V2, officialId="32023R1115")
     assert again.status_code == 409
     assert again.json()["error"]["code"] == "regulation_exists"
 
@@ -83,8 +83,8 @@ def test_official_id_already_used_is_409(client):
 
 def test_official_id_not_allowed_on_new_version(client):
     headers = onboard(client, "lan@example.com")
-    v1 = upload_document(client, headers).json()["data"]
-    response = upload_document(
+    v1 = upload_regulation_document(client, headers).json()["data"]
+    response = upload_regulation_document(
         client, headers, content=EUDR_V2, regulationId=v1["regulationId"], officialId="X"
     )
     assert response.status_code == 422
@@ -93,7 +93,7 @@ def test_official_id_not_allowed_on_new_version(client):
 
 def test_article_is_a_regulation_with_one_version(client):
     headers = onboard(client, "lan@example.com")
-    article = upload_document(
+    article = upload_regulation_document(
         client,
         headers,
         content=b"<html><body>EU delays deforestation rules</body></html>",
@@ -110,8 +110,8 @@ def test_article_is_a_regulation_with_one_version(client):
 
 def test_download_returns_the_stored_file(client):
     headers = onboard(client, "lan@example.com")
-    document = upload_document(client, headers).json()["data"]
-    response = client.get(f"/api/v1/documents/{document['id']}/file", headers=headers)
+    document = upload_regulation_document(client, headers).json()["data"]
+    response = client.get(f"/api/v1/regulation-documents/{document['id']}/file", headers=headers)
     assert response.status_code == 200
     assert response.content == EUDR_V1
     assert response.headers["content-type"] == "application/pdf"
@@ -121,42 +121,68 @@ def test_download_returns_the_stored_file(client):
 
 def test_rejects_bad_files(client):
     headers = onboard(client, "lan@example.com")
-    wrong_type = upload_document(client, headers, filename="eudr.docx")
+    wrong_type = upload_regulation_document(client, headers, filename="eudr.docx")
     assert wrong_type.json()["error"]["code"] == "invalid_file_type"
-    fake_pdf = upload_document(client, headers, content=b"not a pdf")
+    fake_pdf = upload_regulation_document(client, headers, content=b"not a pdf")
     assert fake_pdf.json()["error"]["code"] == "invalid_pdf"
-    empty = upload_document(client, headers, content=b"", filename="empty.txt")
+    empty = upload_regulation_document(client, headers, content=b"", filename="empty.txt")
     assert empty.json()["error"]["code"] == "empty_file"
     too_big = b"%PDF-" + b"x" * get_settings().max_upload_bytes
-    assert upload_document(client, headers, content=too_big).json()["error"]["code"] == (
+    assert upload_regulation_document(client, headers, content=too_big).json()["error"]["code"] == (
         "file_too_large"
     )
-    bad_url = upload_document(client, headers, sourceUrl="javascript:alert(1)")
+    bad_url = upload_regulation_document(client, headers, sourceUrl="javascript:alert(1)")
     assert "sourceUrl" in bad_url.json()["error"]["fieldErrors"]
-    blank_title = upload_document(client, headers, title="   ")
+    blank_title = upload_regulation_document(client, headers, title="   ")
     assert "title" in blank_title.json()["error"]["fieldErrors"]
     assert client.get("/api/v1/regulations", headers=headers).json()["data"] == []
 
 
+def test_uploads_are_rate_limited_per_user(client, monkeypatch):
+    headers = onboard(client, "lan@example.com")
+    monkeypatch.setenv("REGULATION_DOCUMENT_UPLOADS_PER_HOUR", "2")
+    get_settings.cache_clear()
+    try:
+        assert upload_regulation_document(client, headers).status_code == 201
+        assert upload_regulation_document(client, headers, content=EUDR_V2).status_code == 201
+        third = upload_regulation_document(client, headers, content=b"third", filename="a.txt")
+        # Another user is counted separately.
+        other = upload_regulation_document(client, onboard(client, "minh@other.com", "Other Co"))
+    finally:
+        monkeypatch.delenv("REGULATION_DOCUMENT_UPLOADS_PER_HOUR")
+        get_settings.cache_clear()
+    assert third.status_code == 429
+    assert third.json()["error"]["code"] == "rate_limited"
+    assert other.status_code == 201
+
+
 def test_viewer_can_read_but_not_upload(client):
     owner = onboard(client, "lan@example.com")
-    document = upload_document(client, owner).json()["data"]
+    document = upload_regulation_document(client, owner).json()["data"]
     viewer = add_member(client, "lan@example.com", "viewer@example.com", Role.viewer)
-    assert upload_document(client, viewer, content=EUDR_V2).status_code == 403
-    assert client.get(f"/api/v1/documents/{document['id']}", headers=viewer).status_code == 200
+    assert upload_regulation_document(client, viewer, content=EUDR_V2).status_code == 403
+    assert (
+        client.get(f"/api/v1/regulation-documents/{document['id']}", headers=viewer).status_code
+        == 200
+    )
 
 
 def test_other_company_cannot_see_or_extend(client):
     lan = onboard(client, "lan@example.com")
-    document = upload_document(client, lan).json()["data"]
+    document = upload_regulation_document(client, lan).json()["data"]
     other = onboard(client, "minh@other.com", company="Other Co")
 
-    assert client.get(f"/api/v1/documents/{document['id']}", headers=other).status_code == 404
-    file_url = f"/api/v1/documents/{document['id']}/file"
+    assert (
+        client.get(f"/api/v1/regulation-documents/{document['id']}", headers=other).status_code
+        == 404
+    )
+    file_url = f"/api/v1/regulation-documents/{document['id']}/file"
     assert client.get(file_url, headers=other).status_code == 404
     regulation_url = f"/api/v1/regulations/{document['regulationId']}"
     assert client.get(regulation_url, headers=other).status_code == 404
-    version = upload_document(client, other, content=EUDR_V2, regulationId=document["regulationId"])
+    version = upload_regulation_document(
+        client, other, content=EUDR_V2, regulationId=document["regulationId"]
+    )
     assert version.status_code == 404
     # The same file is fine in another company.
-    assert upload_document(client, other).status_code == 201
+    assert upload_regulation_document(client, other).status_code == 201
