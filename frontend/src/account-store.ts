@@ -155,7 +155,7 @@ export function intendedRoute() {
     const p = sessionStorage.getItem("em-next");
     sessionStorage.removeItem("em-next");
     return p &&
-      /^workspace(?:\/(?:(?:orders|map)(?:\/[^?#]+)?|news|rules|data|playbook|account))?$/.test(
+      /^workspace(?:\/(?:(?:orders|map|regulations)(?:\/[^?#]+)?|news|rules|data|playbook|account))?$/.test(
         p,
       )
       ? p

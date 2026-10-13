@@ -28,7 +28,7 @@ const shared = {
   shared: true,
   latestVersion: { ...version, id: "shared-doc", regulationId: "shared-rule" },
 };
-async function fixture(page: Page, role = "owner") {
+async function fixture(page: Page, role = "owner", signedIn = true) {
   const requests: {
     path: string;
     method: string;
@@ -37,7 +37,7 @@ async function fixture(page: Page, role = "owner") {
   }[] = [];
   let documents = [version];
   let records = [company, shared];
-  await page.addInitScript(() => {
+  if (signedIn) await page.addInitScript(() => {
     sessionStorage.setItem("em-session", "api");
     sessionStorage.setItem("em-dev-email", "owner@example.com");
   });
@@ -352,4 +352,14 @@ test("browser demo shows a sign-in gate without requesting company documents", a
     page.getByRole("heading", { name: "Sign in to your company workspace" }),
   ).toBeVisible();
   expect(calls).toBe(0);
+});
+
+test("a regulation document deep link survives Firebase-style account entry", async ({ page }) => {
+  await fixture(page, "owner", false);
+  await page.goto("/#/workspace/regulations/documents/doc-1");
+  await page.getByLabel("Email", { exact: true }).fill("owner@example.com");
+  await page.getByLabel("Password", { exact: true }).fill("test-password");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page).toHaveURL(/regulations\/documents\/doc-1$/);
+  await expect(page.getByText("SHA-256 checksum")).toBeVisible();
 });
