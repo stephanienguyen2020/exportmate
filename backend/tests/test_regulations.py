@@ -1,7 +1,12 @@
+import conftest
 from conftest import add_member, onboard
 
+from app import seed_reference_data as reference_seed
 from app.core.config import get_settings
-from app.database.models import Role
+from app.database.models import MarketRequirement, Role
+from app.database.queries import trade_map as map_queries
+from app.database.session import open_session
+from app.seed_data import load_seed_file
 
 EUDR_V1 = b"%PDF-1.7\nRegulation (EU) 2023/1115 ... applies from 30 December 2024 ...\n"
 EUDR_V2 = b"%PDF-1.7\nRegulation (EU) 2023/1115 consolidated ... applies from 30 December 2025\n"
@@ -188,3 +193,69 @@ def test_other_company_cannot_see_or_extend(client):
     assert version.status_code == 404
     # The same file is fine in another company.
     assert upload_regulation_document(client, other).status_code == 201
+
+
+def seed_official_texts() -> dict[str, int]:
+    with open_session() as db:
+        return reference_seed.seed_reference_data(db)
+
+
+def test_shared_regulations_are_listed_and_read_only(client):
+    seed_official_texts()
+    headers = onboard(client, "lan@example.com")
+    own = upload_regulation_document(client, headers).json()["data"]
+
+    regulations = client.get("/api/v1/regulations", headers=headers).json()["data"]
+    shared = [r for r in regulations if r["shared"]]
+    sources = load_seed_file("regulation_sources.json")["regulations"]
+    assert len(shared) == len(sources)
+    assert [r["id"] for r in regulations if not r["shared"]] == [own["regulationId"]]
+    section_232 = next(r for r in shared if r["officialId"] == "Proclamation 10976")
+    assert section_232["versionCount"] == 2
+
+    detail = client.get(f"/api/v1/regulations/{section_232['id']}", headers=headers).json()
+    assert [v["versionNumber"] for v in detail["data"]["versions"]] == [2, 1]
+    # A company can't add a version to a shared regulation.
+    version = upload_regulation_document(
+        client, headers, content=EUDR_V2, regulationId=section_232["id"]
+    )
+    assert version.status_code == 404
+
+
+def test_seed_downloads_each_official_text_once(monkeypatch):
+    calls: list[str] = []
+
+    def fetch(url, accept):
+        calls.append(url)
+        return conftest.fake_official_text(url, accept)
+
+    monkeypatch.setattr(reference_seed, "fetch_official_text", fetch)
+    counts = seed_official_texts()
+    documents = sum(
+        len(r["documents"]) for r in load_seed_file("regulation_sources.json")["regulations"]
+    )
+    assert len(calls) == documents == counts["official_texts"]
+    seed_official_texts()
+    assert len(calls) == documents  # already stored: nothing downloaded again
+
+
+def test_seed_leaves_out_market_requirements_whose_text_cannot_be_downloaded(monkeypatch):
+    def fetch(url, accept):
+        if "fao.org" in url:  # ISPM 15
+            raise OSError("connection reset")
+        return conftest.fake_official_text(url, accept)
+
+    monkeypatch.setattr(reference_seed, "fetch_official_text", fetch)
+    seed_official_texts()
+    with open_session() as db:
+        keys = [r.requirement_key for r in map_queries.list_market_requirements(db)]
+    assert "ispm15" not in keys
+    assert "legality" in keys
+
+    # The next run (site back up) adds them.
+    monkeypatch.setattr(reference_seed, "fetch_official_text", conftest.fake_official_text)
+    seed_official_texts()
+    with open_session() as db:
+        requirements = map_queries.list_market_requirements(db)
+    assert sum(r.requirement_key == "ispm15" for r in requirements) == 8
+    assert all(isinstance(r, MarketRequirement) and r.source_quote for r in requirements)

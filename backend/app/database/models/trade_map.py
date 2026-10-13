@@ -81,7 +81,11 @@ class DocumentKind(Base):
 
 class MarketRequirement(Base):
     """One line of a market's checklist. The same key in two markets is the same kind of
-    requirement, which is how a comparison knows what carries over."""
+    requirement, which is how a comparison knows what carries over.
+
+    Each market requirement cites the regulation document (one version of an official text)
+    that sets it, and the sentence in that document that says so (`source_quote`).
+    """
 
     __tablename__ = "market_requirements"
     id: Mapped[uuid.UUID] = id_column()
@@ -102,6 +106,10 @@ class MarketRequirement(Base):
     # HS code prefixes it applies to, digits only. Empty: every product.
     hs_prefixes: Mapped[list[str]] = mapped_column(ARRAY(String(12)), nullable=False, default=list)
     why: Mapped[str] = mapped_column(Text, nullable=False)
+    regulation_document_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("regulation_documents.id"), index=True, nullable=False
+    )
+    source_quote: Mapped[str] = mapped_column(Text, nullable=False)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     __table_args__ = (UniqueConstraint("market_code", "requirement_key"),)
 

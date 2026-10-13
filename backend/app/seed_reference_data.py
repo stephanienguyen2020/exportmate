@@ -1,7 +1,10 @@
 """Load the shared trade-map reference data into Postgres.
 
 Markets, countries, ports, document kinds, per-market requirement checklists and sample
-satellite observations, from the JSON files in app/seed_data/.
+satellite observations, from the JSON files in app/seed_data/. Each market requirement cites
+an official text (regulation_sources.json): the seed downloads each text once into a shared
+regulation document. A market requirement whose text can't be downloaded is left out until
+the next run.
 
 Usage:  uv run python -m app.seed_reference_data
 On Cloud Run it runs after migrations (backend/deploy.sh). Running it again updates rows in
@@ -12,15 +15,20 @@ import argparse
 import logging
 import math
 import re
+import urllib.request
+import uuid
 from datetime import date
 
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.errors import AppError
 from app.core.logging import configure_logging
+from app.database.queries import regulations as regulation_queries
 from app.database.queries import trade_map as map_queries
 from app.database.session import open_session
 from app.seed_data import load_seed_file
+from app.services import regulations as regulation_service
 
 log = logging.getLogger(__name__)
 
@@ -46,8 +54,54 @@ def _digits(text: str) -> str:
     return re.sub(r"\D", "", text)
 
 
+def fetch_official_text(url: str, accept: str | None) -> bytes:
+    headers = {"User-Agent": "ExportMate-seed/1.0"}
+    if accept:
+        headers["Accept"] = accept
+        headers["Accept-Language"] = "eng"  # the EU Publications Office picks the language
+    with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=180) as r:
+        return r.read()
+
+
+def seed_shared_regulations(db: Session) -> dict[str, uuid.UUID]:
+    """Store each official text once. Returns {document key: regulation document id}."""
+    document_ids: dict[str, uuid.UUID] = {}
+    for source in load_seed_file("regulation_sources.json")["regulations"]:
+        regulation = regulation_queries.get_shared_regulation_by_official_id(
+            db, source["officialId"]
+        )
+        for doc in source["documents"]:
+            stored = regulation and regulation_queries.get_regulation_document_by_source_url(
+                db, regulation.id, doc["sourceUrl"]
+            )
+            if not stored:
+                try:
+                    content = fetch_official_text(doc["download"], doc.get("accept"))
+                    stored = regulation_service.add_shared_regulation_document(
+                        db,
+                        official_id=source["officialId"],
+                        regulation_title=source["title"],
+                        title=doc["title"],
+                        filename=doc["filename"],
+                        content=content,
+                        source_url=doc["sourceUrl"],
+                    )
+                except (OSError, AppError) as error:  # network errors are OSErrors
+                    log.warning(
+                        "seed.official_text_failed",
+                        extra={"document_key": doc["key"], "error": str(error)},
+                    )
+                    continue
+                regulation = regulation_queries.get_shared_regulation_by_official_id(
+                    db, source["officialId"]
+                )
+            document_ids[doc["key"]] = stored.id
+    return document_ids
+
+
 def seed_reference_data(db: Session) -> dict[str, int]:
     reference = load_seed_file("reference.json")
+    document_ids = seed_shared_regulations(db)
     map_queries.upsert_document_kinds(
         db,
         [
@@ -99,6 +153,11 @@ def seed_reference_data(db: Session) -> dict[str, int]:
     )
     requirement_count = 0
     for market_code, items in reference["requirements"].items():
+        unsourced = [r["key"] for r in items if r["source"] not in document_ids]
+        if unsourced:
+            log.warning(
+                "seed.requirements_skipped", extra={"market": market_code, "keys": unsourced}
+            )
         rows = [
             {
                 "market_code": market_code,
@@ -110,9 +169,12 @@ def seed_reference_data(db: Session) -> dict[str, int]:
                 "form": r.get("form"),
                 "hs_prefixes": [_digits(p) for p in r.get("hsPrefixes", [])],
                 "why": r["why"],
+                "regulation_document_id": document_ids[r["source"]],
+                "source_quote": r["quote"],
                 "sort_order": i,
             }
             for i, r in enumerate(items)
+            if r["source"] in document_ids
         ]
         map_queries.replace_market_requirements(db, market_code, rows)
         requirement_count += len(rows)
@@ -144,6 +206,7 @@ def seed_reference_data(db: Session) -> dict[str, int]:
     )
     db.commit()
     counts = {
+        "official_texts": len(document_ids),
         "document_kinds": len(reference["documentKinds"]),
         "markets": len(reference["markets"]),
         "countries": len(reference["countries"]),

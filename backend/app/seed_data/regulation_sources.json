@@ -1,0 +1,237 @@
+{
+  "_about": "Official texts behind the market checklists (reference.json `requirements`). Each regulation is shared (no company). Its documents are its versions, oldest first. `download` is fetched once by seed_reference_data (skipped when a document with the same `sourceUrl` exists); `sourceUrl` is the page a person opens. Some sites block scripts (EUR-Lex, legislation.gov.uk HTML), so `download` may differ from `sourceUrl`. Verified 2026-10-13.",
+  "regulations": [
+    {
+      "officialId": "32023R1115",
+      "title": "EU Deforestation Regulation (EU) 2023/1115",
+      "documents": [
+        {
+          "key": "eudr-consolidated-2026-09-18",
+          "title": "Consolidated text, 18 September 2026 (with 2024/3234, 2025/2650, 2026/2102)",
+          "download": "http://publications.europa.eu/resource/celex/02023R1115-20260918",
+          "accept": "application/xhtml+xml",
+          "filename": "eudr-consolidated-2026-09-18.html",
+          "sourceUrl": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:02023R1115-20260918"
+        }
+      ]
+    },
+    {
+      "officialId": "32023R1464",
+      "title": "REACH formaldehyde restriction, Regulation (EU) 2023/1464",
+      "documents": [
+        {
+          "key": "reach-formaldehyde-2023-1464",
+          "title": "Official Journal L 180, 17 July 2023",
+          "download": "http://publications.europa.eu/resource/celex/32023R1464",
+          "accept": "application/pdf",
+          "filename": "reach-formaldehyde-2023-1464.pdf",
+          "sourceUrl": "https://eur-lex.europa.eu/eli/reg/2023/1464/oj"
+        }
+      ]
+    },
+    {
+      "officialId": "22020A0612(01)",
+      "title": "EU–Vietnam Free Trade Agreement (EVFTA)",
+      "documents": [
+        {
+          "key": "evfta-2020",
+          "title": "Official Journal L 186, 12 June 2020 (origin rules: Protocol 1)",
+          "download": "http://publications.europa.eu/resource/celex/22020A0612%2801%29",
+          "accept": "application/pdf",
+          "filename": "evfta-2020.pdf",
+          "sourceUrl": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:22020A0612(01)"
+        }
+      ]
+    },
+    {
+      "officialId": "uksi/2013/233",
+      "title": "UK Timber and Timber Products (Placing on the Market) Regulations 2013",
+      "documents": [
+        {
+          "key": "uk-timber-regulations-latest",
+          "title": "Latest revised version (legislation.gov.uk)",
+          "download": "https://www.legislation.gov.uk/uksi/2013/233/data.xht?view=snippet&wrap=true",
+          "accept": "application/xhtml+xml",
+          "filename": "uk-timber-regulations.html",
+          "sourceUrl": "https://www.legislation.gov.uk/uksi/2013/233"
+        }
+      ]
+    },
+    {
+      "officialId": "CS Viet Nam No.1/2021",
+      "title": "UK–Vietnam Free Trade Agreement (UKVFTA)",
+      "documents": [
+        {
+          "key": "ukvfta-2021",
+          "title": "Treaty text, CS Viet Nam No.1/2021",
+          "download": "https://assets.publishing.service.gov.uk/government/uploads/system/uploads/attachment_data/file/950585/CS_Viet_Nam_1.2021_Free_Trade_Agreement_UK_Vietnam.pdf",
+          "filename": "ukvfta-2021.pdf",
+          "sourceUrl": "https://www.gov.uk/government/collections/uk-vietnam-free-trade-agreement"
+        }
+      ]
+    },
+    {
+      "officialId": "16 U.S.C. 3371-3378",
+      "title": "Lacey Act (plants), 16 U.S.C. chapter 53",
+      "documents": [
+        {
+          "key": "lacey-act-uscode-2024",
+          "title": "United States Code, 2024 edition",
+          "download": "https://www.govinfo.gov/content/pkg/USCODE-2024-title16/html/USCODE-2024-title16-chap53.htm",
+          "filename": "lacey-act-uscode-2024.html",
+          "sourceUrl": "https://www.govinfo.gov/content/pkg/USCODE-2024-title16/html/USCODE-2024-title16-chap53.htm"
+        }
+      ]
+    },
+    {
+      "officialId": "40 CFR 770",
+      "title": "TSCA Title VI formaldehyde standards for composite wood products, 40 CFR part 770",
+      "documents": [
+        {
+          "key": "tsca-title-vi-ecfr",
+          "title": "eCFR, current",
+          "download": "https://www.ecfr.gov/api/renderer/v1/content/enhanced/current/title-40?part=770",
+          "filename": "40-cfr-770.html",
+          "sourceUrl": "https://www.ecfr.gov/current/title-40/chapter-I/subchapter-R/part-770"
+        }
+      ]
+    },
+    {
+      "officialId": "A-570-051 / C-570-052 Vietnam circumvention",
+      "title": "US circumvention ruling: hardwood plywood completed in Vietnam",
+      "documents": [
+        {
+          "key": "plywood-circumvention-88fr46740",
+          "title": "Final determination, 88 FR 46740 (20 July 2023)",
+          "download": "https://www.govinfo.gov/content/pkg/FR-2023-07-20/pdf/2023-15431.pdf",
+          "filename": "88-fr-46740.pdf",
+          "sourceUrl": "https://www.federalregister.gov/documents/2023/07/20/2023-15431"
+        }
+      ]
+    },
+    {
+      "officialId": "USITC hardwood and decorative plywood (China, Indonesia, Vietnam) 2026",
+      "title": "US anti-dumping and countervailing duty investigations: hardwood and decorative plywood from Vietnam",
+      "documents": [
+        {
+          "key": "plywood-adcvd-itc-91fr57383",
+          "title": "ITC final injury determinations, 91 FR 57383 (9 September 2026)",
+          "download": "https://www.govinfo.gov/content/pkg/FR-2026-09-09/pdf/2026-18367.pdf",
+          "filename": "91-fr-57383.pdf",
+          "sourceUrl": "https://www.federalregister.gov/documents/2026/09/09/2026-18367"
+        }
+      ]
+    },
+    {
+      "officialId": "Proclamation 10976",
+      "title": "US Section 232 duties on timber, lumber and derivative products",
+      "documents": [
+        {
+          "key": "section-232-proclamation-90fr48127",
+          "title": "Proclamation 10976, 90 FR 48127 (6 October 2025)",
+          "download": "https://www.govinfo.gov/content/pkg/FR-2025-10-06/pdf/2025-19482.pdf",
+          "filename": "90-fr-48127.pdf",
+          "sourceUrl": "https://www.federalregister.gov/documents/2025/10/06/2025-19482"
+        },
+        {
+          "key": "section-232-amendment-91fr1039",
+          "title": "Amendment, 91 FR 1039 (9 January 2026): rate increases moved to 1 January 2027",
+          "download": "https://www.govinfo.gov/content/pkg/FR-2026-01-09/pdf/2026-00327.pdf",
+          "filename": "91-fr-1039.pdf",
+          "sourceUrl": "https://www.federalregister.gov/documents/2026/01/09/2026-00327"
+        }
+      ]
+    },
+    {
+      "officialId": "SOR/2021-148",
+      "title": "Canada Formaldehyde Emissions from Composite Wood Products Regulations",
+      "documents": [
+        {
+          "key": "canada-sor-2021-148",
+          "title": "Current to 21 September 2026",
+          "download": "https://laws-lois.justice.gc.ca/PDF/SOR-2021-148.pdf",
+          "filename": "sor-2021-148.pdf",
+          "sourceUrl": "https://laws-lois.justice.gc.ca/eng/regulations/SOR-2021-148/"
+        }
+      ]
+    },
+    {
+      "officialId": "CPTPP Chapter 3",
+      "title": "CPTPP Chapter 3: Rules of Origin and Origin Procedures",
+      "documents": [
+        {
+          "key": "cptpp-chapter-3",
+          "title": "Treaty text (New Zealand MFAT, depositary)",
+          "download": "https://www.mfat.govt.nz/assets/Trade-agreements/TPP/Text-ENGLISH/3.-Rules-of-Origin-and-Origin-Procedures-Chapter.pdf",
+          "filename": "cptpp-chapter-3.pdf",
+          "sourceUrl": "https://www.mfat.govt.nz/en/trade/free-trade-agreements/free-trade-agreements-in-force/cptpp/comprehensive-and-progressive-agreement-for-trans-pacific-partnership-text-and-resources"
+        }
+      ]
+    },
+    {
+      "officialId": "JP Act No. 48 of 2016",
+      "title": "Japan Clean Wood Act (Act on Promoting the Distribution and Use of Legally Harvested Wood and Wood Products)",
+      "documents": [
+        {
+          "key": "japan-clean-wood-act-2023",
+          "title": "Tentative English translation, as amended by Act No. 22 of 2023",
+          "download": "https://www.japaneselawtranslation.go.jp/ja/laws/download/4543/09/h28Aa000480203en16.0_r5A22.pdf",
+          "filename": "japan-clean-wood-act.pdf",
+          "sourceUrl": "https://www.japaneselawtranslation.go.jp/ja/laws/view/4543/en"
+        }
+      ]
+    },
+    {
+      "officialId": "KR Act on the Sustainable Use of Timbers",
+      "title": "Korea Act on the Sustainable Use of Timbers",
+      "documents": [
+        {
+          "key": "korea-timber-act-14657",
+          "title": "English translation, Act No. 14657 (Korea Forest Service)",
+          "download": "https://www.forest.go.kr/images/data/down/ACT%20ON%20THE%20SUSTAINABLE%20USE%20OF%20TIMBERS(14657_ENG).pdf",
+          "filename": "korea-timber-act.pdf",
+          "sourceUrl": "https://www.forest.go.kr/images/data/down/ACT%20ON%20THE%20SUSTAINABLE%20USE%20OF%20TIMBERS(14657_ENG).pdf"
+        }
+      ]
+    },
+    {
+      "officialId": "C2012A00166",
+      "title": "Australia Illegal Logging Prohibition Act 2012",
+      "documents": [
+        {
+          "key": "australia-ilpa-compilation-6",
+          "title": "Compilation No. 6, 3 March 2025",
+          "download": "https://api.prod.legislation.gov.au/v1/documents/find(titleid='C2012A00166',asatspecification='Latest',type='Primary',format='Pdf',uniqueTypeNumber=0,volumeNumber=0,rectificationVersionNumber=0)",
+          "filename": "australia-illegal-logging-prohibition-act.pdf",
+          "sourceUrl": "https://www.legislation.gov.au/C2012A00166/latest/text"
+        }
+      ]
+    },
+    {
+      "officialId": "ATIGA Annex 7",
+      "title": "ATIGA Certificate of Origin Form D and Overleaf Notes",
+      "documents": [
+        {
+          "key": "atiga-form-d-aftac35",
+          "title": "Amended Annex 7, endorsed by the 35th AFTA Council, effective 1 May 2022",
+          "download": "https://fta.miti.gov.my/miti-fta/resources/ASEAN%20Free%20Trade%20Area%20(AFTA)/12._ATIGA-07-Annex-7-Amended-CO-Form-D-and-Overleaf-Notes-Endorsed-AFTAC35_.pdf",
+          "filename": "atiga-annex-7-form-d.pdf",
+          "sourceUrl": "https://asean.org/asean-trade-in-goods-agreement-atiga/"
+        }
+      ]
+    },
+    {
+      "officialId": "ISPM 15",
+      "title": "ISPM 15: Regulation of wood packaging material in international trade",
+      "documents": [
+        {
+          "key": "ispm-15-2018",
+          "title": "2018 edition (IPPC, published by FAO)",
+          "download": "https://www.fao.org/3/mb160e/mb160e.pdf",
+          "filename": "ispm-15.pdf",
+          "sourceUrl": "https://www.ippc.int/en/publications/640/"
+        }
+      ]
+    }
+  ]
+}

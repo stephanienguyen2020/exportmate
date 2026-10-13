@@ -31,12 +31,27 @@ class OrderPlacementOut(CamelCaseModel):
     approximate: bool  # placed at the country centre, not a known port
 
 
+class RequirementSourceOut(CamelCaseModel):
+    """The regulation document (one version of a shared official text) that sets a market
+    requirement, and the sentence in it that says so."""
+
+    regulation_id: uuid.UUID
+    regulation_title: str
+    official_id: str | None
+    document_id: uuid.UUID  # GET /regulation-documents/{id}/file downloads it
+    document_title: str
+    version_number: int
+    source_url: str | None
+    quote: str
+
+
 class RequirementCheckOut(CamelCaseModel):
     requirement_key: str
     title: str
     level: RequirementLevel
     status: CheckStatus
     note: str
+    source: RequirementSourceOut
 
 
 class MapOrderOut(CamelCaseModel):

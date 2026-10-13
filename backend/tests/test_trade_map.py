@@ -178,10 +178,14 @@ def test_compare_markets(client, reference):
         ("Lacey Act declaration", "New"),
         ("Formaldehyde emission test", "Changes"),
         ("Core-veneer origin certification", "New"),
-        ("Proof of origin", "Changes"),
+        ("Anti-dumping and countervailing duties on plywood", "New"),
     ]
     assert [i["title"] for i in result["unknown"]] == ["Buyer and contract terms", "Import duty"]
-    assert result["dropped"] == ["Plot-level geolocation", "Due diligence data for the EU importer"]
+    assert result["dropped"] == [
+        "Plot-level geolocation",
+        "Due diligence data for the EU importer",
+        "Proof of origin",
+    ]
 
     def error_code(query: str) -> tuple[int, str]:
         r = client.get(f"/api/v1/trade-map/compare?{query}", headers=headers)
@@ -191,6 +195,25 @@ def test_compare_markets(client, reference):
     assert error_code("orderId=PO-1&market=XX") == (422, "unknown_market")
     assert error_code("orderId=PO-404&market=US") == (404, "not_found")
     assert error_code("orderId=PO-1") == (422, "invalid_input")
+
+
+def test_market_requirements_cite_their_official_text(client, reference):
+    headers = onboard(client, "lan@example.com")
+    seed_company("lan@example.com")
+    import_orders(client, headers, MAP_CSV)
+    po1 = {c["requirementKey"]: c for c in orders_by_id(get_map(client, headers))["PO-1"]["checks"]}
+
+    source = po1["geolocation"]["source"]
+    assert source["regulationTitle"] == "EU Deforestation Regulation (EU) 2023/1115"
+    assert source["officialId"] == "32023R1115"
+    assert source["versionNumber"] == 1
+    assert source["quote"].startswith("Article 9(1)(d): the geolocation of all plots of land")
+    assert source["sourceUrl"].startswith("https://eur-lex.europa.eu/")
+    # Every market requirement has a source, and a company can download the text it cites.
+    assert all(c["source"]["quote"] for c in po1.values())
+    file = client.get(f"/api/v1/regulation-documents/{source['documentId']}/file", headers=headers)
+    assert file.status_code == 200
+    assert file.headers["content-type"].startswith("text/html")
 
 
 def test_reference_seed_is_idempotent(reference):

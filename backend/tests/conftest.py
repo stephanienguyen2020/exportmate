@@ -13,6 +13,7 @@ from alembic.config import Config
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 
+from app import seed_reference_data
 from app.core.config import get_settings
 from app.database.models import Base, Role
 from app.database.queries import users as user_queries
@@ -74,6 +75,17 @@ def file_storage(monkeypatch: pytest.MonkeyPatch) -> InMemoryFileStorage:
     storage = InMemoryFileStorage()
     monkeypatch.setattr(regulation_service, "get_file_storage", lambda: storage)
     return storage
+
+
+def fake_official_text(url: str, accept: str | None) -> bytes:
+    """A small, distinct file per URL, so the seed never downloads real law texts in tests.
+    Only .pdf files are checked for content, so a PDF header suits every source."""
+    return f"%PDF-1.7 official text from {url}".encode()
+
+
+@pytest.fixture(autouse=True)
+def official_texts(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(seed_reference_data, "fetch_official_text", fake_official_text)
 
 
 @pytest.fixture

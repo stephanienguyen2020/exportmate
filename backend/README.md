@@ -36,7 +36,9 @@ uv run python -m app.cleanup_imports --older-than-days 30   # delete uploads nev
 ```
 
 The demo seed adds the demo company's suppliers, their documents and its sites
-(`app/seed_data/demo_company.json`, which also holds its About company profile). Checklists are illustrative; observations are samples.
+(`app/seed_data/demo_company.json`, which also holds its About company profile). Observations are samples.
+
+Each market requirement (one item of a market's checklist) cites an official text listed in `app/seed_data/regulation_sources.json` (EUDR, Lacey Act, ISPM 15, …). The reference seed downloads each text once (about 30 MB the first time) and stores it as a shared regulation in the bucket, so it needs internet and `REGULATION_DOCUMENT_BUCKET` (see above). A text that can't be downloaded is skipped with its market requirements, and added on the next run. Tests use a fake download.
 
 ## Logging
 

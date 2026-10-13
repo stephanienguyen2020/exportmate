@@ -2,6 +2,9 @@
 
 Every upload (an official text or an article) is a version of a regulation: either version 1
 of a new regulation, or the next version of one the uploader picks.
+
+Shared regulations (official texts every company reads) are added by the seed, never by a
+company: companies can read them but not add versions.
 """
 
 import hashlib
@@ -36,17 +39,16 @@ def _clean_text(value: str | None) -> str | None:
     return value or None
 
 
-def _check_file(filename: str, content: bytes) -> tuple[str, str]:
+def _check_file(filename: str, content: bytes, max_bytes: int) -> tuple[str, str]:
     """Return (suffix, content type) or raise a 422."""
-    settings = get_settings()
     suffix = PurePath(filename).suffix.lower()
     if suffix not in CONTENT_TYPES:
         allowed = ", ".join(CONTENT_TYPES)
         raise AppError(
             422, "invalid_file_type", f"Upload one of: {allowed}.", {"file": f"Must be {allowed}"}
         )
-    if len(content) > settings.max_upload_bytes:
-        limit_mb = settings.max_upload_bytes // (1024 * 1024)
+    if len(content) > max_bytes:
+        limit_mb = max_bytes // (1024 * 1024)
         raise AppError(422, "file_too_large", f"The file is larger than {limit_mb} MB.")
     if not content:
         raise AppError(422, "empty_file", "The file is empty.")
@@ -72,7 +74,7 @@ def _create_regulation(
     db: Session, ctx: CompanyContext, title: str, official_id: str | None
 ) -> Regulation:
     if official_id:
-        existing = regulation_queries.find_regulation_by_official_id(
+        existing = regulation_queries.get_company_regulation_by_official_id(
             db, ctx.company_id, official_id
         )
         if existing:
@@ -123,7 +125,7 @@ def _resolve_regulation(
             {"officialId": "Leave empty when uploading a new version"},
         )
     # Lock the regulation so two uploads at once cannot both become version N.
-    regulation = regulation_queries.get_regulation(
+    regulation = regulation_queries.get_company_regulation(
         db, ctx.company_id, regulation_id, for_update=True
     )
     if not regulation:
@@ -142,7 +144,7 @@ def upload_regulation_document(
     regulation_id: uuid.UUID | None = None,
     official_id: str | None = None,
 ) -> RegulationDocument:
-    suffix, content_type = _check_file(filename, content)
+    suffix, content_type = _check_file(filename, content, get_settings().max_upload_bytes)
     clean_title = _clean_text(title)
     if not clean_title or len(clean_title) > 300:
         raise AppError(
@@ -164,7 +166,7 @@ def upload_regulation_document(
         regulation, version_number = _resolve_regulation(
             db, ctx, clean_title, regulation_id, official_id
         )
-        duplicate = regulation_queries.find_regulation_document_by_checksum(
+        duplicate = regulation_queries.get_regulation_document_by_checksum(
             db, regulation.id, checksum
         )
         if duplicate:
@@ -226,10 +228,81 @@ def upload_regulation_document(
     return document
 
 
+def add_shared_regulation_document(
+    db: Session,
+    *,
+    official_id: str,
+    regulation_title: str,
+    title: str,
+    filename: str,
+    content: bytes,
+    source_url: str,
+) -> RegulationDocument:
+    """Add an official text to the shared regulation `official_id`, creating it if needed.
+
+    The next version, unless this exact file is already stored. Flushes; the caller commits.
+    """
+    suffix, content_type = _check_file(filename, content, get_settings().max_shared_document_bytes)
+    regulation = regulation_queries.get_shared_regulation_by_official_id(db, official_id)
+    if regulation is None:
+        regulation = regulation_queries.add_regulation(
+            db, Regulation(company_id=None, title=regulation_title, official_id=official_id)
+        )
+    checksum = hashlib.sha256(content).hexdigest()
+    existing = regulation_queries.get_regulation_document_by_checksum(db, regulation.id, checksum)
+    if existing:
+        return existing
+    document_id = uuid.uuid4()
+    document = regulation_queries.add_regulation_document(
+        db,
+        RegulationDocument(
+            id=document_id,
+            regulation_id=regulation.id,
+            version_number=regulation_queries.get_latest_version_number(db, regulation.id) + 1,
+            title=title,
+            filename=filename,
+            content_type=content_type,
+            size_bytes=len(content),
+            checksum=checksum,
+            storage_path=f"shared/regulation-documents/{document_id}{suffix}",
+            source_url=source_url,
+        ),
+    )
+    audit_queries.record_audit_event(
+        db,
+        company_id=None,
+        user_id=None,
+        action="regulation_document.uploaded",
+        object_type="regulation_document",
+        object_id=str(document.id),
+        data={
+            "title": title,
+            "regulationId": str(regulation.id),
+            "versionNumber": document.version_number,
+            "shared": True,
+        },
+    )
+    get_file_storage().save_file(document.storage_path, content, content_type)
+    log.info(
+        "regulation_document.uploaded",
+        extra={
+            "regulation_id": str(regulation.id),
+            "regulation_document_id": str(document.id),
+            "version_number": document.version_number,
+            "content_type": content_type,
+            "size_bytes": len(content),
+            "shared": True,
+        },
+    )
+    return document
+
+
 def get_regulation_document(
     db: Session, ctx: CompanyContext, document_id: uuid.UUID
 ) -> RegulationDocument:
-    document = regulation_queries.get_regulation_document(db, ctx.company_id, document_id)
+    document = regulation_queries.get_shared_or_company_regulation_document(
+        db, ctx.company_id, document_id
+    )
     if not document:
         raise not_found_error("Regulation document")
     return document
@@ -245,7 +318,7 @@ def load_regulation_document_file(
 def list_regulations(
     db: Session, ctx: CompanyContext, official_id: str | None
 ) -> list[RegulationOut]:
-    regulations = regulation_queries.list_regulations(
+    regulations = regulation_queries.list_shared_and_company_regulations(
         db, ctx.company_id, official_id=_clean_text(official_id)
     )
     summaries = regulation_queries.summarize_versions_by_regulation(db, [r.id for r in regulations])
@@ -257,6 +330,7 @@ def list_regulations(
                 id=regulation.id,
                 title=regulation.title,
                 official_id=regulation.official_id,
+                shared=regulation.company_id is None,
                 version_count=version_count,
                 latest_version=RegulationDocumentOut.model_validate(latest) if latest else None,
                 created_at=regulation.created_at,
@@ -268,7 +342,9 @@ def list_regulations(
 def get_regulation_detail(
     db: Session, ctx: CompanyContext, regulation_id: uuid.UUID
 ) -> RegulationDetailOut:
-    regulation = regulation_queries.get_regulation(db, ctx.company_id, regulation_id)
+    regulation = regulation_queries.get_shared_or_company_regulation(
+        db, ctx.company_id, regulation_id
+    )
     if not regulation:
         raise not_found_error("Regulation")
     versions = [
@@ -279,6 +355,7 @@ def get_regulation_detail(
         id=regulation.id,
         title=regulation.title,
         official_id=regulation.official_id,
+        shared=regulation.company_id is None,
         version_count=len(versions),
         latest_version=versions[0] if versions else None,
         created_at=regulation.created_at,

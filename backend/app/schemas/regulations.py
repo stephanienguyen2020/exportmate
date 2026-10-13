@@ -21,6 +21,7 @@ class RegulationOut(CamelCaseModel):
     id: uuid.UUID
     title: str
     official_id: str | None
+    shared: bool  # an official text every company reads; companies can't add versions
     version_count: int
     latest_version: RegulationDocumentOut | None
     created_at: datetime
