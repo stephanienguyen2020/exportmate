@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     # Per user per hour (core/rate_limit.py).
     import_uploads_per_hour: int = 60
     regulation_document_uploads_per_hour: int = 60
+    # Official texts added by the seed don't pass through Vercel; a whole treaty can be 20+ MB.
+    max_shared_document_bytes: int = 50 * 1024 * 1024
     max_import_rows: int = 10_000
     # Cloud Storage bucket for uploaded regulation texts and articles.
     regulation_document_bucket: str = ""

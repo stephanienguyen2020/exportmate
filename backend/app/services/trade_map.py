@@ -32,6 +32,7 @@ from app.database.models import (
     SupplierDocument,
 )
 from app.database.queries import orders as order_queries
+from app.database.queries import regulations as regulation_queries
 from app.database.queries import trade_map as map_queries
 from app.schemas.orders import OrderOut
 from app.schemas.trade_map import (
@@ -46,6 +47,7 @@ from app.schemas.trade_map import (
     NearbyPlaceOut,
     OrderPlacementOut,
     RequirementCheckOut,
+    RequirementSourceOut,
     SatelliteObservationOut,
     SiteOut,
     SupplierDocumentOut,
@@ -169,9 +171,15 @@ def _evaluate(
 
 
 def check_order(
-    order: Order, requirements: list[MarketRequirement], documents: SupplierDocs | None
+    order: Order,
+    requirements: list[MarketRequirement],
+    documents: SupplierDocs | None,
+    sources: dict[uuid.UUID, RequirementSourceOut],
 ) -> list[RequirementCheckOut]:
-    """`documents` None means no supplier record: supplier evidence is "unknown", not missing."""
+    """`documents` None means no supplier record: supplier evidence is "unknown", not missing.
+
+    `sources` maps a regulation document id to its citation; each check adds its market
+    requirement's quote."""
     return [
         RequirementCheckOut(
             requirement_key=req.requirement_key,
@@ -179,6 +187,9 @@ def check_order(
             level=req.level,
             status=status,
             note=note,
+            source=sources[req.regulation_document_id].model_copy(
+                update={"quote": req.source_quote}
+            ),
         )
         for req, status, note in _evaluate(order, requirements, documents)
     ]
@@ -331,6 +342,27 @@ def _requirements_by_market(db: Session) -> dict[str, list[MarketRequirement]]:
     return grouped
 
 
+def _requirement_sources(
+    db: Session, requirements: dict[str, list[MarketRequirement]]
+) -> dict[uuid.UUID, RequirementSourceOut]:
+    document_ids = list({r.regulation_document_id for reqs in requirements.values() for r in reqs})
+    return {
+        document.id: RequirementSourceOut(
+            regulation_id=regulation.id,
+            regulation_title=regulation.title,
+            official_id=regulation.official_id,
+            document_id=document.id,
+            document_title=document.title,
+            version_number=document.version_number,
+            source_url=document.source_url,
+            quote="",
+        )
+        for document, regulation in regulation_queries.list_documents_with_regulations(
+            db, document_ids
+        )
+    }
+
+
 def _documents_by_supplier(db: Session, suppliers: list[Supplier]) -> dict[uuid.UUID, SupplierDocs]:
     grouped: dict[uuid.UUID, SupplierDocs] = {s.id: {} for s in suppliers}
     for doc in map_queries.list_supplier_documents(db, grouped):
@@ -349,6 +381,7 @@ def build_trade_map(db: Session, ctx: CompanyContext) -> TradeMapOut:
     radius = get_settings().flood_check_radius_km
     gazetteer = _load_gazetteer(db)
     requirements = _requirements_by_market(db)
+    sources = _requirement_sources(db, requirements)
     kinds = {k.kind: k.label for k in map_queries.list_document_kinds(db)}
     orders = order_queries.list_company_orders(db, ctx.company_id)
     suppliers = map_queries.list_company_suppliers(db, ctx.company_id)
@@ -370,6 +403,7 @@ def build_trade_map(db: Session, ctx: CompanyContext) -> TradeMapOut:
                 order,
                 requirements.get(placement.market, []),
                 documents[supplier.id] if supplier else None,
+                sources,
             )
             if placement.market
             else []

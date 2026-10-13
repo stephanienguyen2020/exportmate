@@ -132,6 +132,7 @@ Rules:
 - **New version = the uploader says so.** On upload they pick "new regulation" or "new version of [regulation ▾]". The frontend can pre-select the regulation when the typed official ID matches (`GET /regulations?officialId=`). Same file again in the same regulation (same hash) → `409 already_uploaded`; another regulation or another company may upload the same file. Official ID already used → `409 regulation_exists`.
 - Files: `.pdf`, `.html`, `.txt`, up to 4 MB (the Vercel proxy accepts about 4.5 MB), 60 uploads per user per hour. Not the same as supplier documents (§4.9: proof a supplier holds). Downloads are always attachments (uploaded HTML is never rendered on our domain).
 - v1: manual upload only. No crawler, no fetching URLs (the source URL is stored as a reference).
+- **Shared regulations** (`company_id` null): official texts every company reads, e.g. EUDR, the Lacey Act, ISPM 15. Added only by the seed (`app/seed_data/regulation_sources.json`, downloaded once into `shared/` in the bucket), later by the crawler. `GET /regulations` lists the company's own plus all shared ones (`shared: true`); companies can read and download them but not add versions (`404`). Following specific ones (`company_regulations`) is later.
 - An **obligation** is one requirement extracted from a document version:
   - Example: "Plywood HS 4412.33 entering the EU needs a due-diligence statement from 30 Dec 2026", with the exact clause text and clause number.
 - Comparing v1 and v2 of a document shows which obligations were added/changed/removed.
@@ -171,7 +172,7 @@ A map of the company's own export activity: where its suppliers, sites and marke
 - Selecting a market shows its orders, changes to check (orders needing action, tariff checks, News watch items naming the market) and missing supplier documents.
 - "What if this order went to another market?": documents that can be reused, requirements to re-evaluate (new or changed), and what the data can't conclude. Paperwork only; the customer, contract and sales case still decide.
 - Satellite observations (e.g. flood extents) are extra evidence: suppliers and sites within `FLOOD_CHECK_RADIUS_KM` get a check-in prompt. Order impact is never inferred; statuses don't change.
-- Data: shared reference tables (markets, countries, ports, document kinds, per-market checklists, observations) and company tables (suppliers, supplier documents, sites). Orders match suppliers by name. Checklists are illustrative until obligations come from reviewed documents (§4.5); observations are samples until a real source is connected.
+- Data: shared reference tables (markets, countries, ports, document kinds, per-market checklists, observations) and company tables (suppliers, supplier documents, sites). Orders match suppliers by name. Every market requirement cites a shared regulation document and the sentence that requires it (`regulation_document_id`, `source_quote`); requirements with no verified official text are left out. Each check in `GET /trade-map` returns that `source`. Quotes are copied by hand for now; extracting them (obligations, §4.5) is later. Observations are samples until a real source is connected.
 
 ### 4.10 Contact form
 - Validates name, email, message; rate limited; sends to a team inbox.
@@ -311,10 +312,10 @@ Each phase ends with: pytest green, deployed, frontend working against it.
 | 15 | ~~Who confirms AI-suggested HS codes?~~ | **Decided:** company `editor`; the CSV value is never overwritten. See §11.5. |
 | 23 | Where does crawling live? | **Leaning `ai/server`.** It now has per-company sources in Firestore: shared built-in sources (a company can switch one off for itself) plus private sources a company adds (`ai/server/access.js`). Still open: does the backend `watch_sources` table (§11.3) replace this, or does the backend read sources from `ai/server`? |
 | 24 | Operator role | Platform staff (us) who review the shared rule library. A flag on `users`, or a separate admin app? Until we have one, the company owner reviews their own uploads. |
-| 25 | Shared vs private rules | **Direction decided, later phase.** v1: everything is per company; the company uploads both official texts and articles. Later: official law lives in a shared library (`company_id` null), written only by the operator and the crawler (J1). Companies **follow** regulations (many-to-many `company_regulations`), can request a missing one, and upload only their own files (articles, evidence). Matching checks only followed regulations. Still open: can a company keep a private rule (e.g. a buyer's own requirement)? |
+| 25 | Shared vs private rules | **Direction decided; shared library started.** Built: shared regulations (`company_id` null) from the seed, read-only for companies, cited by the trade-map checklists. Later: official law lives in a shared library (`company_id` null), written only by the operator and the crawler (J1). Companies **follow** regulations (many-to-many `company_regulations`), can request a missing one, and upload only their own files (articles, evidence). Matching checks only followed regulations. Still open: can a company keep a private rule (e.g. a buyer's own requirement)? |
 | 16 | Conditions that aren't HS codes | Origin country, company size, order value thresholds, wood species. How do we store them next to HS codes? Some need data we don't have (see 3). |
 | 17 | ~~Markets vs countries~~ | **Partly decided (trade map):** `countries` + `markets` tables, a market groups countries (EU = 27). The destination text is parsed (`Rotterdam, NL` → NL, or a known port name → its country); no CSV column. |
-| 18 | Which documents does a rule require? | **For now, hand-made per market:** the trade map's `market_requirements` (each with a `document_kind`) are illustrative checklists. Still open: once `obligations` are extracted and reviewed, do they fill these checklists or replace them? |
+| 18 | ~~Which documents does a rule require?~~ | **Decided:** a market requirement (`market_requirements`, with a `document_kind`) is the obligation. It cites the regulation document it comes from and a quote. Written by hand in the seed for now; later extraction writes the same lines (draft → reviewed). |
 | 19 | Document storage | Uploaded certificates: file in Cloud Storage + row in Postgres + embedding for search. Which vector store: Firestore (like `ai/server`) or `pgvector`? |
 | 20 | When do checks re-run? | On import, rule change, document upload, daily expiry check, "ready to ship" click. All in v1? |
 | 21 | Language | Vietnamese UI, Vietnamese documents for OCR, English rules. Translate in reports? |
@@ -388,11 +389,11 @@ A wrong automatic link would diff unrelated texts and raise wrong alerts, so eve
 | Table | Holds |
 | --- | --- |
 | `watch_sources` | `company_id` (null = shared), `url`, `kind` (`rss`, `federal_register`, `eurlex`, `page`), `enabled`, `last_checked_at` |
-| `regulations` | **Built.** A regulation (e.g. "EU deforestation regulation"), optional official ID, `company_id` |
+| `regulations` | **Built.** A regulation (e.g. "EU deforestation regulation"), optional official ID, `company_id` (null = shared official text, added by the seed) |
 | `regulation_documents` | **Built.** One uploaded file = one version: `regulation_id` + `version_number`, title, source URL, Cloud Storage path, content hash (a file can be in a regulation only once). The company comes from the regulation. Later: `kind` (`official_rule`, `article`), fetched date for crawled files |
 | `company_regulations` | Later. Which company follows which shared regulation (many-to-many) |
 | `obligations` | Conditions extracted from a version: `hs_include`, `hs_exclude`, `markets`, `applies_from`, `required_documents`, a source quote per field, `status` (`draft` → `reviewed`) |
-| `market_requirements` | **Built (trade map), placeholder.** Hand-made checklist per market, each line with a `document_kind`. Stands in for `obligations.required_documents` until those exist (see open question 18) |
+| `market_requirements` | **Built (trade map).** One requirement in a market's checklist, with a `document_kind`, the `regulation_document_id` it comes from and a `source_quote`. This is the obligation (open question 18) |
 | `hs_code_suggestions` | `order_id`, suggested code, confidence, reason, `status` (`pending` / `accepted` / `rejected`), who decided |
 
 Files live in Cloud Storage; Postgres keeps the row and the hash.
