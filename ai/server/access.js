@@ -59,6 +59,6 @@ export const visibleItems = (items, sources, access) => {
 export const auditVisible = (audit, access) => !audit.companyId || audit.companyId === access.companyId;
 
 // The model's raw reasoning stays in the stored audit for reviewers; the app shows step
-// summaries only (backend/REQUIREMENTS.md 4.6).
+// summaries only (backend/docs/REQUIREMENTS.md 4.6).
 export const publicStep = ({ thought, ...step }) => step;
 export const publicAudit = (audit) => ({ ...audit, steps: (audit.steps || []).map(publicStep) });

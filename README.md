@@ -95,7 +95,7 @@ Browser storage keys: `em-orders`, `em-rules`, `em-sent`, `em-profile`, `em-inqu
 - [Page plan](docs/FRONTEND_PLAN.md)
 - [Complete site and account flow](docs/ACCOUNT_AND_SITE_PLAN.md)
 - [Landing design and artwork prompt](docs/LANDING_DESIGN.md)
-- [Backend architecture and implementation checklist](docs/BACKEND_PLAN.md)
+- Backend: [requirements](backend/docs/REQUIREMENTS.md), [technical decisions](backend/docs/DECISIONS.md), [API](backend/docs/API.md), [original implementation plan](backend/docs/BACKEND_PLAN.md)
 
 ## Assets
 

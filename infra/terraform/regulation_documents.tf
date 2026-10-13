@@ -1,4 +1,4 @@
-# Private, versioned bucket for uploaded regulation texts and articles (REQUIREMENTS §4.5).
+# Private, versioned bucket for uploaded regulation texts and articles 
 # Read and written by the backend (app/core/file_storage.py).
 resource "google_storage_bucket" "regulation_documents" {
   name                        = "exportmate-regulation-documents-dev"

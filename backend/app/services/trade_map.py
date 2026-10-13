@@ -1,9 +1,9 @@
 """Trade map: where a company's orders, suppliers and sites are, which documents each order
 still needs in its market, and what changes if an order went to another market.
 
-Geography and market checklists are shared reference tables; suppliers, their documents and
-sites belong to one company. Checklists are illustrative until obligations come from reviewed
-regulation documents (REQUIREMENTS.md §4.5). Observations marked sample are not a live feed.
+Geography and market requirements are shared reference tables; suppliers, their documents and
+sites belong to one company. Each market requirement cites the shared regulation document that
+sets it (docs/REQUIREMENTS.md §4.5). Observations marked sample are not a live feed.
 """
 
 import logging
