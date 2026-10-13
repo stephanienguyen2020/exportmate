@@ -44,3 +44,30 @@ test("general-knowledge answers without tools are not figure-checked", () => {
   const r = review({ answer: "A certificate of origin dates back to the 1920s.", retrieved: [], evidence: "", usedTools: false });
   assert.ok(r.checks.every((c) => c.ok));
 });
+
+test("cited news must carry its publication date", () => {
+  const news = [
+    { ref: 1, type: "query", title: "Alert exposure" },
+    { ref: 2, type: "alert", title: "EUDR checks tighten", publishedAt: "2026-10-05T08:00:00.000Z" },
+    { ref: 3, type: "article", title: "Plywood duties", publishedAt: "2026-09-12T00:00:00.000Z" },
+  ];
+  const evidence = toEvidence('{"sku":"PLY-103","stockValueUsd":211380,"publishedAt":"2026-10-05","date":"2026-09-12"}');
+  const undated = review({ answer: "USD 211,380 is exposed [1], mainly PLY-103 [2]; duties may follow [3].", retrieved: news, evidence, usedTools: true });
+  const failed = undated.checks.find((c) => c.name === "News cited with its date");
+  assert.equal(failed.ok, false);
+  assert.match(undated.problems.join(" "), /\[2\] 2026-10-05, \[3\] 2026-09-12/);
+  const dated = review({
+    answer: "USD 211,380 is exposed [1], mainly PLY-103 (EUDR news of 5 October 2026 [2]); duties may follow (2026-09-12 [3]).",
+    retrieved: news,
+    evidence,
+    usedTools: true,
+  });
+  assert.deepEqual(dated.problems, []);
+});
+
+test("mentionsDate accepts common forms and rejects other days", async () => {
+  const { mentionsDate } = await import("../review.js");
+  const iso = "2026-10-05T08:00:00Z";
+  for (const t of ["2026-10-05", "5 October", "Oct. 5", "October 5th", "5th of October", "ngày 5/10", "5 tháng 10"]) assert.ok(mentionsDate(t, iso), t);
+  for (const t of ["15 October", "October 15", "5 November", "2026-10-15", "105/10"]) assert.equal(mentionsDate(t, iso), false, t);
+});

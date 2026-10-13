@@ -33,7 +33,30 @@ export function strayLinks(answer, retrieved) {
   return [...new Set((answer.match(URL_RE) || []).map(trimUrl))].filter((u) => !known.some((k) => u === k || u.startsWith(`${k}/`)));
 }
 
-/** Auditor checks on an answer: citations resolve, figures come from evidence, tool use is cited, links are sources. */
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+/** Whether the answer gives this date in a common form: 2026-10-05, 5 Oct, October 5th, 5/10, 10/5 or "5 tháng 10". */
+export function mentionsDate(answer, iso) {
+  const d = new Date(iso);
+  if (isNaN(d)) return true;
+  const [y, m, day] = [d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate()];
+  const month = `(?:${MONTHS[m - 1]}|${MONTHS[m - 1].slice(0, 3)})\\.?`;
+  const dd = `0?${day}(?:st|nd|rd|th)?`;
+  return [
+    `${y}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
+    `(^|[^\\d])${dd}\\s+(?:of\\s+)?${month}`,
+    `${month}\\s+${dd}(?![\\d])`,
+    `(^|[^\\d])0?${day}/0?${m}(?![\\d])`,
+    `(^|[^\\d])0?${m}/0?${day}(?![\\d])`,
+    `(^|[^\\d])${day}\\s+tháng\\s+${m}(?![\\d])`,
+  ].some((p) => new RegExp(p, "i").test(answer));
+}
+
+/** Cited news (articles and alerts) whose publication date the answer doesn't give. */
+export const undatedNews = (answer, citations) =>
+  citations.filter((c) => ["article", "alert"].includes(c.type) && c.publishedAt && !mentionsDate(answer, c.publishedAt));
+
+/** Auditor checks on an answer: citations resolve, figures come from evidence, tool use is cited, news is dated, links are sources. */
 export function review({ answer, retrieved, evidence, usedTools }) {
   const cited = citedRefs(answer);
   const citations = cited.map((n) => retrieved.find((r) => r.ref === n)).filter(Boolean);
@@ -41,6 +64,9 @@ export function review({ answer, retrieved, evidence, usedTools }) {
   const checked = figures(answer);
   const untraced = usedTools ? checked.filter((n) => !traced(n, evidence)) : [];
   const links = strayLinks(answer, retrieved);
+  // Like a reviewer that rejects a rule cited without its version and date: news is only
+  // evidence together with when it was published.
+  const undated = undatedNews(answer, citations);
   const checks = [
     {
       name: "Citations point to retrieved evidence",
@@ -58,6 +84,11 @@ export function review({ answer, retrieved, evidence, usedTools }) {
       detail: usedTools ? (citations.length ? "Cites tool results" : "Tools were used but nothing is cited") : "No tools needed (general knowledge)",
     },
     {
+      name: "News cited with its date",
+      ok: undated.length === 0,
+      detail: undated.length ? `No date given for ${undated.map((c) => `[${c.ref}]`).join(", ")}` : "Every cited article and alert is dated",
+    },
+    {
       name: "Links come from retrieved sources",
       ok: links.length === 0,
       detail: links.length ? `Not a retrieved source: ${links.join(", ")}` : "No outside links",
@@ -67,6 +98,8 @@ export function review({ answer, retrieved, evidence, usedTools }) {
   if (invalid.length) problems.push(`Citations [${invalid.join("], [")}] do not match any tool result.`);
   if (untraced.length) problems.push(`These figures do not appear in any tool result: ${untraced.join(", ")}.`);
   if (usedTools && !citations.length) problems.push("The draft cites nothing; cite the tool results you used.");
+  if (undated.length)
+    problems.push(`Say when the news you cite was published: ${undated.map((c) => `[${c.ref}] ${c.publishedAt.slice(0, 10)}`).join(", ")}.`);
   if (links.length) problems.push(`These links are not the url of any retrieved source: ${links.join(", ")}. Remove them.`);
   return { checks, citations, problems };
 }

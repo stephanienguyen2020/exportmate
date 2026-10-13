@@ -26,4 +26,4 @@ echo "==> Deploying service"
 gcloud run services update exportmate-ai --project "$PROJECT_ID" --region "$REGION" --image "$IMAGE"
 
 URL="$(gcloud run services describe exportmate-ai --project "$PROJECT_ID" --region "$REGION" --format='value(status.url)')"
-echo "==> Done: $URL/healthz"
+echo "==> Done: $URL/ (health check; Cloud Run reserves /healthz)"

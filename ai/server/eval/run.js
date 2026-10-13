@@ -25,7 +25,7 @@ const VERDICT = {
   type: Type.OBJECT,
   properties: {
     faithfulness: { type: Type.INTEGER, description: "1-5: every claim is supported by the evidence (or is general knowledge); no invented figures" },
-    relevance: { type: Type.INTEGER, description: "1-5: answers what was asked, completely" },
+    relevance: { type: Type.INTEGER, description: "1-5: gives the response the rubric calls for (a clear decline is fully relevant when the rubric says to decline), otherwise answers what was asked, completely" },
     rubric: { type: Type.INTEGER, nullable: true, description: "1-5: meets the rubric; null when there is no rubric" },
     reason: { type: Type.STRING, description: "One sentence" },
   },
@@ -34,7 +34,7 @@ const VERDICT = {
 
 // LLM-as-judge: grades the answer against the evidence the agent actually saw.
 async function judge(testCase, result) {
-  const prompt = `You grade answers from a trade-compliance assistant. Be strict.
+  const prompt = `You grade answers from a trade-compliance assistant. Be strict. When there is a rubric, it defines the correct behaviour (for example declining an off-topic or unsafe request): grade every score against it, not against what the user literally asked for.
 
 CONVERSATION:
 ${testCase.messages.map((m) => `${m.role}: ${m.text}`).join("\n")}
