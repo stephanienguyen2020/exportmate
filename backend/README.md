@@ -1,6 +1,6 @@
 # ExportMate backend
 
-FastAPI + Postgres. Requirements and decisions: [REQUIREMENTS.md](REQUIREMENTS.md).
+FastAPI + Postgres. Requirements and decisions: [REQUIREMENTS.md](REQUIREMENTS.md). Endpoints: [API.md](API.md).
 
 ## Run locally
 
@@ -89,9 +89,4 @@ PROJECT_ID=<project> backend/deploy.sh   # build image, run migrations, roll out
 
 Every company-scoped route takes a `ViewerContext` / `EditorContext` / `OwnerContext`. The company always comes from the caller's membership, never from the request. Another company's records return `404`.
 
-Responses: `{"data": ..., "meta": {...}}`. Errors: `{"error": {"code", "message", "fieldErrors", "requestId"}}`.
-
-| Area | Endpoints |
-| --- | --- |
-| Company knowledge | `GET /company/knowledge`: the About company profile and sites, read by the AI service with the user's token |
-| Trade map | `GET /trade-map` (markets, placed orders with document checks, suppliers, sites, observations), `GET /trade-map/compare?orderId=&market=` |
+Endpoints, response shapes, error codes and where the frontend uses each one: [API.md](API.md).

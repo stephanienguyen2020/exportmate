@@ -59,13 +59,19 @@ def fetch_official_text(url: str, accept: str | None) -> bytes:
     if accept:
         headers["Accept"] = accept
         headers["Accept-Language"] = "eng"  # the EU Publications Office picks the language
-    with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=180) as r:
+    with urllib.request.urlopen(
+        urllib.request.Request(url, headers=headers), timeout=60
+    ) as r:  # per network read, not per file
         return r.read()
 
 
-def seed_shared_regulations(db: Session) -> dict[str, uuid.UUID]:
-    """Store each official text once. Returns {document key: regulation document id}."""
+def seed_shared_regulations(db: Session) -> tuple[dict[str, uuid.UUID], list[str]]:
+    """Store each official text once.
+
+    Returns {document key: regulation document id} and the storage paths of files saved in
+    this run (deleted again if the seed's commit fails)."""
     document_ids: dict[str, uuid.UUID] = {}
+    saved_paths: list[str] = []
     for source in load_seed_file("regulation_sources.json")["regulations"]:
         regulation = regulation_queries.get_shared_regulation_by_official_id(
             db, source["officialId"]
@@ -77,7 +83,7 @@ def seed_shared_regulations(db: Session) -> dict[str, uuid.UUID]:
             if not stored:
                 try:
                     content = fetch_official_text(doc["download"], doc.get("accept"))
-                    stored = regulation_service.add_shared_regulation_document(
+                    stored, saved = regulation_service.add_shared_regulation_document(
                         db,
                         official_id=source["officialId"],
                         regulation_title=source["title"],
@@ -92,16 +98,18 @@ def seed_shared_regulations(db: Session) -> dict[str, uuid.UUID]:
                         extra={"document_key": doc["key"], "error": str(error)},
                     )
                     continue
+                if saved:
+                    saved_paths.append(stored.storage_path)
                 regulation = regulation_queries.get_shared_regulation_by_official_id(
                     db, source["officialId"]
                 )
             document_ids[doc["key"]] = stored.id
-    return document_ids
+    return document_ids, saved_paths
 
 
 def seed_reference_data(db: Session) -> dict[str, int]:
     reference = load_seed_file("reference.json")
-    document_ids = seed_shared_regulations(db)
+    document_ids, saved_paths = seed_shared_regulations(db)
     map_queries.upsert_document_kinds(
         db,
         [
@@ -204,7 +212,7 @@ def seed_reference_data(db: Session) -> dict[str, int]:
             for o in observations
         ],
     )
-    db.commit()
+    regulation_service.commit_or_delete_saved_files(db, saved_paths)
     counts = {
         "official_texts": len(document_ids),
         "document_kinds": len(reference["documentKinds"]),

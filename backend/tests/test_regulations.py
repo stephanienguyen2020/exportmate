@@ -1,5 +1,7 @@
 import conftest
+import pytest
 from conftest import add_member, onboard
+from sqlalchemy.orm import Session
 
 from app import seed_reference_data as reference_seed
 from app.core.config import get_settings
@@ -259,3 +261,31 @@ def test_seed_leaves_out_market_requirements_whose_text_cannot_be_downloaded(mon
         requirements = map_queries.list_market_requirements(db)
     assert sum(r.requirement_key == "ispm15" for r in requirements) == 8
     assert all(isinstance(r, MarketRequirement) and r.source_quote for r in requirements)
+
+
+def fail_commit(self):
+    raise RuntimeError("database connection lost")
+
+
+def test_failed_commit_deletes_the_saved_file(client, file_storage, monkeypatch):
+    headers = onboard(client, "lan@example.com")
+    with monkeypatch.context() as patch:
+        patch.setattr(Session, "commit", fail_commit)
+        with pytest.raises(RuntimeError):
+            upload_regulation_document(client, headers)
+    assert file_storage.files == {}
+    assert client.get("/api/v1/regulations", headers=headers).json()["data"] == []
+
+
+def test_failed_seed_commit_deletes_the_official_texts_it_saved(file_storage, monkeypatch):
+    with monkeypatch.context() as patch:
+        patch.setattr(Session, "commit", fail_commit)
+        with pytest.raises(RuntimeError):
+            seed_official_texts()
+    assert file_storage.files == {}
+
+    # The next run stores them again; an identical file already stored is never deleted.
+    seed_official_texts()
+    stored = dict(file_storage.files)
+    seed_official_texts()
+    assert file_storage.files == stored

@@ -114,7 +114,8 @@ resource "google_cloud_run_v2_job" "backend_task" {
       containers {
         image   = local.placeholder_image
         command = ["sh", "-c"]
-        args    = ["alembic upgrade head"]
+        # Same as backend/deploy.sh: migrate, then load the reference data and official texts.
+        args = ["alembic upgrade head && python -m app.seed_reference_data"]
 
         dynamic "env" {
           for_each = local.backend_env
