@@ -3,11 +3,10 @@
 
 locals {
   backend_env = {
-    ENV                 = "production"
-    AUTH_MODE           = "firebase"
-    FIREBASE_PROJECT_ID = var.project_id
-    ALLOWED_ORIGINS     = var.allowed_origins
-    # Already deployed (see regulation_documents.tf).
+    ENV                        = "production"
+    AUTH_MODE                  = "firebase"
+    FIREBASE_PROJECT_ID        = var.project_id
+    ALLOWED_ORIGINS            = var.allowed_origins
     REGULATION_DOCUMENT_BUCKET = google_storage_bucket.regulation_documents.name
   }
 }

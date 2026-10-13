@@ -37,6 +37,38 @@ Example end-to-end:
 - Buyer (Singapore) view with its own data.
 - ERP connectors.
 
+### 2.1 Assumptions
+
+**Every official rule we match on names HS codes.**
+- News articles rarely have HS codes. They are only the **trigger**. The conditions come from the **official text** (regulation, customs notice), which usually lists HS codes, often in an annex.
+- If the official text has no codes (e.g. only "wooden furniture"), the AI suggests codes (`9403.x`), marked **AI-suggested**. Matching orders go to review, not `exposed`, until a person confirms.
+
+**Products are matched by HS code, not by name.**
+- "Acacia plywood 18 mm", "Ván ép keo" and "Plywood AC-18" all have HS `4412.33`, so they count as the same product.
+- An order without an HS code is `needs_data`. The AI may suggest a code from the product name; the user confirms it.
+
+**HS codes are a tree. A rule on a parent code covers every child under it.**
+
+```text
+44          Wood and articles of wood          (chapter)
+└─ 4412     Plywood, veneered panels            (heading)
+   ├─ 4412.10  of bamboo
+   ├─ 4412.33  other, with outer ply of certain hardwoods   ← PO-2291
+   └─ 4412.39  other
+      └─ 4412.39.10  (national level: EU, US and Vietnam add 2–4 more digits)
+```
+
+Matching is a prefix check plus exceptions:
+
+```text
+rule:  include HS 4412, except 4412.10
+4412.33  → starts with 4412, not 4412.10 → MATCH
+4412.10  → excluded                      → no match
+4418.99  → different heading             → no match
+```
+
+The first 6 digits are the same in every country; digits after that differ by country. Match on 6 digits unless the rule names a longer code.
+
 ## 3. Users and companies
 
 - A **user** belongs to one or more **companies** (tenants) with a role: `owner`, `editor`, `viewer`.
@@ -95,8 +127,11 @@ Rules:
 - v1 stores and shows rules. Whether they affect analysis is an open question (§8).
 
 ### 4.5 Regulations (rule watch)
-- A **source document** is one version of an official rule (URL, fetched date, content hash, file).
-- v1: operator uploads versions manually. No crawler.
+- A **regulation** is one official rule (e.g. "EU deforestation regulation", official ID `32023R1115`).
+- A **source document** is one uploaded file (title, source URL, content hash, file in Cloud Storage). **v1: every upload is a version of a regulation**, whether it is an official text or a news article (an article is a regulation with one version). Official rule vs article only matters once there is a shared library (§11.2).
+- **New version = the uploader says so.** On upload they pick "new regulation" or "new version of [regulation ▾]". The frontend can pre-select the regulation when the typed official ID matches (`GET /regulations?officialId=`). Same file again (same hash) → `409 already_uploaded`. Official ID already used → `409 regulation_exists`.
+- Files: `.pdf`, `.html`, `.txt`, up to 5 MB. Downloads are always attachments (uploaded HTML is never rendered on our domain).
+- v1: manual upload only. No crawler, no fetching URLs (the source URL is stored as a reference).
 - An **obligation** is one requirement extracted from a document version:
   - Example: "Plywood HS 4412.33 entering the EU needs a due-diligence statement from 30 Dec 2026", with the exact clause text and clause number.
 - Comparing v1 and v2 of a document shows which obligations were added/changed/removed.
@@ -156,7 +191,7 @@ Codes: `401` not signed in, `403` wrong role, `404` not found or other company's
 | Orders | `GET /orders`, `GET /orders/{id}` |
 | Imports | `POST /imports` (upload), `GET /imports/{id}` (errors + preview), `POST /imports/{id}/commit` |
 | Playbook | `GET /playbook/rules`, `POST /playbook/rules`, `PATCH /playbook/rules/{id}`, `DELETE /playbook/rules/{id}` |
-| Regulations | `GET /sources`, `POST /documents` (operator), `GET /obligations/{id}` (incl. diff) |
+| Regulations | `POST /documents` (editor), `GET /documents/{id}`, `GET /documents/{id}/file`, `GET /regulations?officialId=`, `GET /regulations/{id}` (versions, newest first) — **built**. Later: `GET /sources`, `GET /obligations/{id}` (incl. diff) |
 | Runs | `POST /runs`, `GET /runs/{id}` |
 | Reports | `GET /reports/{id}`, `POST /reports/{id}/feedback` |
 | Actions | `POST /actions/drafts`, `POST /actions/{id}/approve`, `POST /actions/{id}/send`, `GET /actions/{id}` |
@@ -270,3 +305,131 @@ Each phase ends with: pytest green, deployed, frontend working against it.
 | 9 | Buyer (Singapore) tenant | In v1 or later? The UI's maker/buyer switch is a fake today. |
 | 10 | Who reviews extracted obligations? | Is there an operator/admin role, or does the owner approve them? |
 | 11 | Keep a "demo mode" with fixtures? | Useful for the pitch; must be clearly separated from live data. |
+| 12 | ~~How do we get from a news article to the official text?~~ | **Decided:** v1 manual upload; later official APIs; stretch: agent search + human confirm. See §11. |
+| 13 | ~~How much of the code do we match on?~~ | **Decided:** 6 digits, prefix check in code, no AI. See §11. |
+| 14 | ~~Rule amendments~~ | **Decided:** v1 operator uploads the consolidated text; stretch: agent drafts merged conditions, human reviews. See §11. |
+| 15 | ~~Who confirms AI-suggested HS codes?~~ | **Decided:** company `editor`; the CSV value is never overwritten. See §11.5. |
+| 23 | Where does crawling live? | **Leaning `ai/server`.** It now has per-company sources in Firestore: shared built-in sources (a company can switch one off for itself) plus private sources a company adds (`ai/server/access.js`). Still open: does the backend `watch_sources` table (§11.3) replace this, or does the backend read sources from `ai/server`? |
+| 24 | Operator role | Platform staff (us) who review the shared rule library. A flag on `users`, or a separate admin app? Until we have one, the company owner reviews their own uploads. |
+| 25 | Shared vs private rules | **Direction decided, later phase.** v1: everything is per company; the company uploads both official texts and articles. Later: official law lives in a shared library (`company_id` null), written only by the operator and the crawler (J1). Companies **follow** regulations (many-to-many `company_regulations`), can request a missing one, and upload only their own files (articles, evidence). Matching checks only followed regulations. Still open: can a company keep a private rule (e.g. a buyer's own requirement)? |
+| 16 | Conditions that aren't HS codes | Origin country, company size, order value thresholds, wood species. How do we store them next to HS codes? Some need data we don't have (see 3). |
+| 17 | ~~Markets vs countries~~ | **Partly decided (trade map):** `countries` + `markets` tables, a market groups countries (EU = 27). The destination text is parsed (`Rotterdam, NL` → NL, or a known port name → its country); no CSV column. |
+| 18 | Which documents does a rule require? | **For now, hand-made per market:** the trade map's `market_requirements` (each with a `document_kind`) are illustrative checklists. Still open: once `obligations` are extracted and reviewed, do they fill these checklists or replace them? |
+| 19 | Document storage | Uploaded certificates: file in Cloud Storage + row in Postgres + embedding for search. Which vector store: Firestore (like `ai/server`) or `pgvector`? |
+| 20 | When do checks re-run? | On import, rule change, document upload, daily expiry check, "ready to ship" click. All in v1? |
+| 21 | Language | Vietnamese UI, Vietnamese documents for OCR, English rules. Translate in reports? |
+| 22 | How do we test AI quality? | A fixed set of rules, orders and documents with expected results, run on every prompt or model change. |
+
+## 10. AI/agent ideas to discuss
+
+On top of §4.5–4.7. Not decided; listed so we can pick. Some ideas come from a past winning project (`docs/GLOBOT_ARCHITECTURE.md`).
+
+Design rule for all of them: **AI reads and writes. Code decides and calculates. A person approves.**
+
+| # | Idea | What it does | AI vs code | Example |
+| --- | --- | --- | --- | --- |
+| A | Official-text finder | From a news article, find the official rule it talks about | AI finds and quotes; operator confirms | News "EU tightens timber rules" → link to the regulation and its annex |
+| B | HS code suggester | Suggest a code for orders without one | AI suggests; user confirms | "Ván ép keo 18 mm" → `4412.33` (confidence 0.8) |
+| C | Rule-to-conditions extractor | Turn rule text into `hs_include`, `hs_exclude`, `markets`, `applies_from`, required documents | AI extracts with a quote per field; reviewed before use | "Annex I: 4412, except 4412.10" → `{include:["4412"], exclude:["4412.10"]}` |
+| D | Document reader | Read uploaded certificates into fixed fields (type, number, issuer, expiry, products) | AI extracts (Gemini with a fixed output schema); code checks dates | FSC certificate PDF → `{type:"FSC", expiry:"2026-12-15"}` |
+| E | Missing-document check | Decide `clear` vs `exposed` from required vs uploaded documents | Code decides; AI only finds documents with different names | Required "due-diligence statement", uploaded "DDS_PO2304.pdf" → found |
+| F | Expiry watcher | Daily: flag documents that expire before an order's ship date | Code only | FSC expires 15 Dec, ship date 5 Jan → `exposed` |
+| G | Amendment differ | When a rule changes, show which orders change status | AI spots "amends X"; code compares old and new conditions | Start date moved → PO-2304 `exposed` → `clear` |
+| H | Assumption challenger | A second AI pass questions the cost and plan before the auditor | AI questions; code re-computes | "USD 200/day delay: where from? Not in company settings" → `needs_data` |
+| I | Supplier email drafter | Draft the request, following the playbook | AI drafts; person approves and sends | "Please send the DDS by 15 Dec (3 weeks, per agreement)" |
+| J | Reply reader | Read the supplier's reply and attachments, then re-run the check | AI reads; code re-checks | Reply with DDS attached → PO-2304 `clear` |
+| K | "Ready to ship" gate | Final check when the user marks an order ready | Code checks; person confirms, logged | "1 document missing, ship anyway?" |
+| L | Weekly digest | Summary email: new rules, status changes, expiring documents | AI writes; numbers from code | "2 orders newly exposed, 1 certificate expires in 14 days" |
+| M | Live progress stream | Show each agent step and its sources as it runs | Same NDJSON step format as `ai/server` chat | "Matching 12 orders… 2 exposed" |
+| N | AI test set | Fixed rules, orders and documents with expected answers, run on every prompt or model change | Code | 20 cases, must stay ≥ 95% correct |
+
+Design points open for discussion:
+- **One agent with tools vs several agents in sequence.** One agent is faster and cheaper; several are easier to explain in a demo. Globot used 3–5 in sequence.
+- **Low confidence goes to a review queue** (e.g. under 0.8), not to `exposed` or `clear`.
+- **Store every AI output with its source quote, model name and prompt version**, so a report can be re-checked later.
+- **Vertex AI with the service account** (no API keys), with fixed output schemas for every extraction.
+
+## 11. Rule sources and matching: roadmap
+
+Everything not marked **built** is a goal. We can pitch the whole path, labelled by level, while we build it.
+
+### 11.1 Levels
+
+| Level | Sources | Rule text | Matching | Status |
+| --- | --- | --- | --- | --- |
+| 0 | 7 fixed news feeds (Timber Trades Journal, VnExpress, EU press releases, Google News searches). Users can add RSS feeds, but the list is shared by all companies. | — | `ai/server` maps articles to its 31 SKUs (AI) | **Built** (`ai/server`) |
+| 1 | + Manual upload of an official rule (PDF/URL) or a single article | Operator uploads the consolidated (merged) version | 6-digit HS prefix + exceptions (code). AI suggests HS codes for orders without one. | Phase 2 |
+| 2 | + Per-company watch list (`watch_sources`) + official APIs: US Federal Register, EUR-Lex | Same | Same | Phase 4 |
+| 3 (stretch) | + Agent goes from a news article to the official text (Gemini grounding with Google Search, EUR-Lex search); a person confirms | Agent spots amendments and drafts merged conditions; a person reviews. Version detection without the uploader picking (see below) | + AI flags CSV codes that don't fit the product; 8–10 digit national codes when a rule names them | Goal |
+| 4 (stretch) | + Vietnamese official sources, more markets (US, Japan, Korea) | Same | Same | Goal |
+
+Pitch line: "The agent finds the likely official text and shows it to you. You confirm it before it's used."
+
+**Knowing a file is a new version of a regulation.** Built: the uploader picks it. Goals, in order:
+
+| Way | How | Level |
+| --- | --- | --- |
+| Same URL, new content | The crawler fetches a known URL again and the hash changed → next version of the same regulation | 2 |
+| Official ID | Read the ID from the file (EUR-Lex CELEX: `32023R1115` original, `02023R1115-20241226` consolidated; US: `7 CFR 357`). Same base ID → same regulation; the date orders versions | 2 (suggest), 3 (automatic) |
+| AI match | AI compares title and summary with existing regulations: "looks like a new version of X"; a person confirms | 3 |
+
+A wrong automatic link would diff unrelated texts and raise wrong alerts, so every automatic way starts as a suggestion.
+
+### 11.2 Roles
+
+| Who | Does |
+| --- | --- |
+| **Operator** (our staff) | Maintains the shared rule library: uploads official texts, reviews extracted conditions. Until this role exists, the company owner reviews their own uploads. |
+| Company **editor** | Uploads articles and company documents, confirms AI-suggested HS codes, manages watch sources. |
+| Company **owner** | Everything an editor does + approves outgoing messages. |
+
+### 11.3 Storage (high level)
+
+| Table | Holds |
+| --- | --- |
+| `watch_sources` | `company_id` (null = shared), `url`, `kind` (`rss`, `federal_register`, `eurlex`, `page`), `enabled`, `last_checked_at` |
+| `regulations` | **Built.** A regulation (e.g. "EU deforestation regulation"), optional official ID, `company_id` |
+| `source_documents` | **Built.** One uploaded file = one version: `regulation_id` + `version_number`, title, source URL, Cloud Storage path, content hash, `company_id`. Later: `kind` (`official_rule`, `article`), `company_id` null = shared library, fetched date for crawled files |
+| `company_regulations` | Later. Which company follows which shared regulation (many-to-many) |
+| `obligations` | Conditions extracted from a version: `hs_include`, `hs_exclude`, `markets`, `applies_from`, `required_documents`, a source quote per field, `status` (`draft` → `reviewed`) |
+| `market_requirements` | **Built (trade map), placeholder.** Hand-made checklist per market, each line with a `document_kind`. Stands in for `obligations.required_documents` until those exist (see open question 18) |
+| `hs_code_suggestions` | `order_id`, suggested code, confidence, reason, `status` (`pending` / `accepted` / `rejected`), who decided |
+
+Files live in Cloud Storage; Postgres keeps the row and the hash.
+
+### 11.4 AI jobs (high level)
+
+Each job runs as a Cloud Task (§7.3), saves its steps, and stores every AI output with its source quote, model and prompt version.
+
+**J1 Crawl** (daily, Cloud Scheduler)
+For each enabled `watch_source`: fetch new items → skip ones already seen (by hash) → save to `source_documents` → queue J2 or J3.
+
+**J2 Analyse article**
+1. AI: is this a rule change, a disruption or noise?
+2. AI: which markets and products does it mention? Compare with the company's markets and order HS codes.
+3. (Level 3) AI: search for the official text (Google Search grounding, EUR-Lex). Show the top candidates with links.
+4. Output: an alert, "EU timber rule update may affect 2 of your orders; suggested official text: [link], confirm?"
+
+**J3 Extract from official text**
+1. AI (fixed output schema): conditions + required documents, with the exact clause quoted for each field.
+2. Saved as `draft`. The operator reviews and edits → `reviewed`.
+3. If it's a new version of an existing rule: compare its conditions with the previous version → list what changed → queue J4.
+
+**J4 Match orders** (code only, no AI)
+For each reviewed obligation × each company order: 6-digit prefix + exceptions + market + date → `clear` / `exposed` / `needs_data`. Only orders whose status changed raise an alert.
+
+**J5 Suggest HS code** (when an order has no code)
+1. AI: top 3 codes from the product name and description, each with a reason and confidence.
+2. Saved as `pending`. The order stays `needs_data`.
+3. The editor accepts one → the order gets the code → J4 runs for that order.
+
+### 11.5 HS code cases
+
+| Case | What happens |
+| --- | --- |
+| CSV has a code | Use it. No AI. |
+| CSV code is empty | J5 suggests; the editor confirms; then matching runs. |
+| CSV code looks wrong for the product (e.g. "Milk powder" + 4412.33) | Level 3: AI flags "code doesn't look like the product". The CSV value stays; the editor decides. |
+| Excel/PDF import (later) | Same as an empty code. |
+
+Matching itself is always code (prefix check), never AI, so the same input always gives the same answer.

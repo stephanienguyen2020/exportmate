@@ -18,6 +18,7 @@ from app.database.models import Base, Role
 from app.database.queries import users as user_queries
 from app.database.session import get_engine, open_session
 from app.main import create_app
+from app.services import regulations as regulation_service
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 
@@ -53,6 +54,26 @@ def empty_tables() -> Iterator[None]:
     tables = ", ".join(t.name for t in Base.metadata.sorted_tables)
     with get_engine().begin() as conn:
         conn.execute(text(f"TRUNCATE {tables} CASCADE"))
+
+
+class InMemoryFileStorage:
+    """Stands in for Cloud Storage so tests never touch the real bucket."""
+
+    def __init__(self):
+        self.files: dict[str, bytes] = {}
+
+    def save_file(self, path: str, content: bytes, content_type: str) -> None:
+        self.files[path] = content
+
+    def load_file(self, path: str) -> bytes:
+        return self.files[path]
+
+
+@pytest.fixture(autouse=True)
+def file_storage(monkeypatch: pytest.MonkeyPatch) -> InMemoryFileStorage:
+    storage = InMemoryFileStorage()
+    monkeypatch.setattr(regulation_service, "get_file_storage", lambda: storage)
+    return storage
 
 
 @pytest.fixture
