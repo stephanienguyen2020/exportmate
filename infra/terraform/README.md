@@ -109,7 +109,7 @@ The AI service, its Firestore data and the daily scan used to live in project `e
    cd ai/server && node copy-firestore.js --from=exportmate-app --to=skilful-scarab-511320-q9
    ```
 4. Check the new service before switching traffic: `curl "$(terraform output -raw ai_url)/"` (Cloud Run reserves `/healthz`, so check `/`), then run the eval job above.
-5. Switch traffic: set the `/api/:path*` destination in `vercel.json` to `$(terraform output -raw ai_url)/api/:path*`, set the default project in `ai/server/db.js` and the comment in `dev.sh` to `skilful-scarab-511320-q9`, then deploy the frontend. Re-run step 3 just before this if `exportmate-app` has had new scans or chats meanwhile.
+5. Switch traffic: set the `/api/:path*` destination in `frontend/vercel.json` to `$(terraform output -raw ai_url)/api/:path*`, set the default project in `ai/server/db.js` and the comment in `dev.sh` to `skilful-scarab-511320-q9`, then deploy the frontend. Re-run step 3 just before this if `exportmate-app` has had new scans or chats meanwhile.
 6. Retire the old project's AI resources:
    ```sh
    gcloud scheduler jobs pause exportmate-daily-news-scan --project exportmate-app --location asia-southeast1

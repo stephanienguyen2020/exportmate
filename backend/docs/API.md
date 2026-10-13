@@ -4,7 +4,7 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
 
 ## Basics
 
-- Prefix: `/api/v1`. The frontend calls it via `src/api.ts` (`VITE_BACKEND_API_URL`, default `/api/v1`; Vercel and Vite route it to this service).
+- Prefix: `/api/v1`. The frontend calls it via `frontend/src/api.ts` (`VITE_BACKEND_API_URL`, default `/api/v1`; Vercel and Vite route it to this service).
 - Auth: `Authorization: Bearer <Firebase ID token>` on every route except `/health`. Locally with `AUTH_MODE=dev`: `Bearer dev:lan@example.com` (`dev-unverified:<email>` simulates an unverified email).
 - JSON is camelCase. Money is `valueMinor` (hundredths of the unit, for every currency: `2400000` = 24,000.00) + `currency`.
 - Success: `{"data": ..., "meta": {...}}`. Error:
@@ -51,14 +51,14 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
 | `DELETE /playbook/rules/{id}` | editor | Playbook: delete |
 | `GET /trade-map` | viewer | Trade map |
 | `GET /trade-map/compare` | viewer | Trade map: "What if" panel |
-| `POST /regulation-documents` | editor | No screen yet (Swagger/curl) |
-| `GET /regulation-documents/{id}` | viewer | No screen yet |
-| `GET /regulation-documents/{id}/file` | viewer | No screen yet |
-| `GET /regulations` | viewer | No screen yet |
-| `GET /regulations/{id}` | viewer | No screen yet |
+| `POST /regulation-documents` | editor | Regulation library: add regulation / version |
+| `GET /regulation-documents/{id}` | viewer | Regulation library |
+| `GET /regulation-documents/{id}/file` | viewer | Regulation library |
+| `GET /regulations` | viewer | Regulation library |
+| `GET /regulations/{id}` | viewer | Regulation library |
 | [Planned](#planned) | | Phases 2–4 |
 
-"Every workspace load" means `refreshWorkspace()` in `src/main.tsx`. It runs on entering the workspace, after a commit, and on "Retry". It calls `GET /me`, then `GET /orders`, `GET /playbook/rules` and `GET /overview` in parallel. The browser-only demo session calls none of these: it uses localStorage.
+"Every workspace load" means `refreshWorkspace()` in `frontend/src/main.tsx`. It runs on entering the workspace, after a commit, and on "Retry". It calls `GET /me`, then `GET /orders`, `GET /playbook/rules` and `GET /overview` in parallel. The browser-only demo session calls none of these: it uses localStorage.
 
 ---
 
@@ -85,7 +85,7 @@ Who is calling and their company. On the first call it creates the user row from
 ```
 `company` and `role` are `null` until onboarding.
 
-- **Sign-in** (`enterWorkspace`, `src/Account.tsx`): `onboarded` decides whether to go to `#/onboarding` or the page the user came from.
+- **Sign-in** (`enterWorkspace`, `frontend/src/Account.tsx`): `onboarded` decides whether to go to `#/onboarding` or the page the user came from.
 - **Workspace load**: the result is cached in `em-profile` (`cacheAccount`), which fills Account settings and the header.
 - **`ai/server`**: calls it with the user's token to read the company ID and role before changing news sources or starting a scan (owner/editor only). It caches the result for 1 minute per token.
 
@@ -108,7 +108,7 @@ Creates the company and makes the caller its `owner`. Returns `201` with the `GE
 - `businessRole`: `Manufacturer` | `Buyer / trader`. `transit`: 0–3 stops in order (`[]` = direct). `currency`: an ISO code, default `USD`. The frontend always sends `USD`. `description` is required and must not be blank.
 - `409 already_onboarded` if the user already has a company. Double submits are safe: the user row is locked.
 
-Last step of the onboarding wizard (`src/Account.tsx`).
+Last step of the onboarding wizard (`frontend/src/Account.tsx`).
 
 ### `PATCH /company` (owner)
 Changes only the fields sent. Optional fields (`website`, `foundedYear`, `teamSize`, and `products`/`materials`/`certifications` with `""`) are cleared with `null`. Required fields (`name`, `businessRole`, `origin`, `transit`, `destination`, `description`) can't be set to `null`. `transit` replaces all stops.
@@ -161,7 +161,7 @@ Opening `#/workspace/orders/<id>` in a live session.
 
 ## CSV import
 
-Upload screen, live session: choose file → `POST /imports` → `GET /imports/{id}` → show errors and preview → "Import" → `POST /imports/{id}/commit` → toast "N orders imported. Awaiting analysis." → workspace reload. The demo session parses the file in the browser instead (PapaParse, `src/order-csv.ts`, with the same checks).
+Upload screen, live session: choose file → `POST /imports` → `GET /imports/{id}` → show errors and preview → "Import" → `POST /imports/{id}/commit` → toast "N orders imported. Awaiting analysis." → workspace reload. The demo session parses the file in the browser instead (PapaParse, `frontend/src/order-csv.ts`, with the same checks).
 
 ### `POST /imports` (editor, rate limited)
 `multipart/form-data` with `file`. `.csv` only, ≤4 MB, ≤10,000 rows. Columns: `id,product,supplier,destination,value,shipDate,hsCode` (+ optional `currency`, which defaults to the company's).
@@ -207,7 +207,7 @@ Returns `{"deleted": true}`. Delete button on a rule.
 
 ## Trade map
 
-`#/workspace/map` (`src/TradeMap.tsx`, lazy-loaded). Live sessions only; the demo shows "Sign in to your company workspace".
+`#/workspace/map` (`frontend/src/TradeMap.tsx`, lazy-loaded). Live sessions only; the demo shows "Sign in to your company workspace".
 
 ### `GET /trade-map` (viewer)
 Everything the map draws, in one call when the page opens:
@@ -238,7 +238,9 @@ Everything the map draws, in one call when the page opens:
 
 Called from the order's "What if" panel each time the target market changes. A new call cancels the previous one.
 
-## Regulations (built, no screen yet)
+## Regulations
+
+`#/workspace/regulations` (`frontend/src/Regulations.tsx`) lists regulations, uploads company texts, shows version history and downloads files with bearer authentication. Document deep links use `#/workspace/regulations/documents/{id}`; trade-map citations link there. Viewers can read/download; only owners/editors can upload.
 
 A regulation has versions. Each version is one uploaded file. The list includes the company's own regulations plus shared official texts (`shared: true`, loaded by `seed_reference_data`: EUDR, Lacey Act, ISPM 15, …). Shared ones can be read and downloaded but not given new versions. Files live in Cloud Storage (`REGULATION_DOCUMENT_BUCKET`). Without storage access, uploads and downloads return `503 storage_not_configured`.
 

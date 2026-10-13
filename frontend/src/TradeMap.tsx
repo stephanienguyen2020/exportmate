@@ -44,6 +44,7 @@ import {
 } from "./api";
 import { errorMessage } from "./auth";
 import { useImpacts, type Impact } from "../ai/news/NewsWatch";
+import { RegulationCitation } from "./Regulations";
 import "./trade-map.css";
 
 // Map geometry is presentation: the data (places, documents, checklists,
@@ -1782,6 +1783,16 @@ function MarketPanel({
             .
           </p>
         )}
+        <h3>Requirement sources</h3>
+        {[
+          ...new Map(
+            sorted.flatMap((row) => row.checks)
+              .filter((check) => check.source)
+              .map((check) => [check.requirementKey, check]),
+          ).values(),
+        ].map((check) => (
+          <RegulationCitation key={check.requirementKey} source={check.source} />
+        ))}
         <p className="fine-print">
           Checklist for {market.name} is illustrative, not legal guidance; confirm with official
           sources and your buyer.

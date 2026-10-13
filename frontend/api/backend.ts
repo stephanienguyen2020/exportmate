@@ -83,7 +83,7 @@ export default async function handler(
       redirect: "error",
     });
     res.statusCode = response.status;
-    for (const name of ["content-type", "x-request-id"]) {
+    for (const name of ["content-type", "x-request-id", "content-disposition", "x-content-type-options"]) {
       const value = response.headers.get(name);
       if (value) res.setHeader(name, value);
     }
