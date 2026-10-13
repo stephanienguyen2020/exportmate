@@ -15,6 +15,9 @@ permissions:
 jobs:
   frontend:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
     steps:
       - uses: actions/checkout@v7
       # The Vercel proxy test imports api/backend.ts directly, which needs Node's type stripping.
@@ -22,6 +25,7 @@ jobs:
         with:
           node-version: 24
           cache: npm
+          cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run build
       - run: npx playwright install --with-deps chromium

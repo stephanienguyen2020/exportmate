@@ -73,6 +73,7 @@ import {
 import { errorMessage } from "./auth";
 import ErrorBoundary from "./ErrorBoundary";
 import { MAX_UPLOAD_MB, validateOrderCsv } from "./order-csv";
+const RegulationsPage = lazy(() => import("./Regulations"));
 const TradeMapPage = lazy(() => import("./TradeMap"));
 const nav = [
   ["", "Overview"],
@@ -80,6 +81,7 @@ const nav = [
   ["map", "Trade map"],
   ["news", "News watch"],
   ["rules", "Rule watch"],
+  ["regulations", "Regulations"],
   ["data", "Data room"],
   ["playbook", "Playbook"],
   ["account", "Account"],
@@ -607,6 +609,7 @@ function App() {
               MapIcon,
               Newspaper,
               ShieldCheck,
+              FileText,
               Upload,
               Settings2,
               UserRound,
@@ -1350,6 +1353,11 @@ function App() {
                   />
                 </Suspense>
               )}
+              {route.split("/")[0] === "regulations" && (
+                <Suspense fallback={<section className="panel" role="status">Loading regulations…</section>}>
+                  <RegulationsPage key={route} live={live} editable={editable} path={route.slice("regulations".length)} />
+                </Suspense>
+              )}
               {route === "news" && (
                 <NewsWatchPage
                   live={live}
@@ -1384,9 +1392,14 @@ function App() {
                   />
                   <div className="notice">
                     <ShieldCheck size={18} />
-                    Sample source coverage and illustrative rule text. Live
-                    monitoring and verified legal citations will be connected in
-                    the backend.
+                    Sample rule-change scenario. For stored official texts and
+                    versioned references, open the regulation library.
+                  </div>
+                  <a className="text-link" href="#/workspace/regulations">
+                    Open regulation library <ArrowUpRight size={16} />
+                  </a>
+                  <div className="fine-print">
+                    Automated regulation analysis is not available yet.
                   </div>
                   <div className="source-grid">
                     {[
@@ -1476,6 +1489,7 @@ function App() {
                     label="YOUR DATA. THE START OF SOMETHING CLEARER."
                     title="Import your data."
                     description="Start with an orders CSV."
+                    action={<a className="btn secondary" href="#/workspace/regulations">Regulation documents <FileText size={16} /></a>}
                   />
                   <div className="data-grid">
                     <section
@@ -1888,6 +1902,7 @@ function App() {
                 route !== "" &&
                 !nav.some(([p]) => p === route) &&
                 route.split("/")[0] !== "map" &&
+                route.split("/")[0] !== "regulations" &&
                 !detail && (
                   <section className="empty">
                     <h2>We couldn’t find that page.</h2>
