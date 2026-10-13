@@ -2183,7 +2183,7 @@ function Root() {
   const workspace =
     path === "workspace" ||
     path.startsWith("workspace/") ||
-    /^(orders|map|news|rules|data|playbook)(\/|$)/.test(path);
+    /^(orders|map|news|rules|regulations|data|playbook)(\/|$)/.test(path);
   useEffect(() => {
     const update = () => {
       const value = location.hash.replace(/^#\/?/, "");
