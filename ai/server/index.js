@@ -27,7 +27,7 @@ const SCHEDULER_SA = process.env.SCHEDULER_SA || "";
 const SCAN_AUDIENCE = process.env.SCAN_AUDIENCE || "";
 const authClient = new OAuth2Client();
 // Company backend (FastAPI) origin, for the signed-in company's profile and role. This service
-// never reads its database; it calls the API with the user's own token (backend/REQUIREMENTS.md 7.2).
+// never reads its database; it calls the API with the user's own token (backend/docs/DECISIONS.md §2).
 const BACKEND_URL = (process.env.BACKEND_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
 // Each chat makes several Gemini calls and the API is public, so chats are capped per client and
 // per instance (Cloud Run runs at most 3). Counts live in memory and restart with the instance.

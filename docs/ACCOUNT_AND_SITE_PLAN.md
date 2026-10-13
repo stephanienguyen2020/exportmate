@@ -34,7 +34,7 @@ Overview, orders/detail, rule watch, data room and playbook stay functional. Add
 This is an **account-flow prototype**, not an authentication server. Valid forms advance a clearly labeled demo session. Never store passwords or log them. Store only non-sensitive demo profile/preferences in local storage and session state in session storage. Verification and password recovery are explicit previews; no emails are sent and no tokens are verified. Contact submission saves a local inquiry draft, not a delivered message. Drafts can be cleared. Do not use real credentials or sensitive information.
 
 ## Backend work needed
-Use the authentication and tenant membership design in BACKEND_PLAN.md. Replace the demo adapter with verified login/signup, rate limiting, expiring one-time verification/reset tokens, session revocation, tenant authorization, account updates and validated contact delivery. Implement email verification before tenant creation. Do not treat the client route gate as security. Draft legal pages must be replaced with reviewed policies before launch.
+Use the authentication and tenant membership design in `backend/docs/BACKEND_PLAN.md`. Replace the demo adapter with verified login/signup, rate limiting, expiring one-time verification/reset tokens, session revocation, tenant authorization, account updates and validated contact delivery. Implement email verification before tenant creation. Do not treat the client route gate as security. Draft legal pages must be replaced with reviewed policies before launch.
 
 ## Acceptance
 - All three public links navigate to real sections; no landing dialogs.

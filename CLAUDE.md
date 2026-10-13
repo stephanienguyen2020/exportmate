@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ExportMate: a trade-compliance prototype for small manufacturers (demo persona: a Vietnamese wood-products/furniture exporter). Three independently built parts:
 
 - **Frontend** (repo root): React 19 + TypeScript + Vite SPA, deployed to Vercel (exportmate.vercel.app).
-- **Backend** (`backend/`): Python FastAPI + Postgres (Cloud SQL), Firebase Auth tokens, routes under `/api/v1`. Being built in phases; see `backend/REQUIREMENTS.md` (scope, decisions, phases, open questions) and `backend/README.md` (commands, layout).
+- **Backend** (`backend/`): Python FastAPI + Postgres (Cloud SQL), Firebase Auth tokens, routes under `/api/v1`. Being built in phases; docs are in `backend/docs/`: `REQUIREMENTS.md` (scope, business rules, phases, open questions), `DECISIONS.md` (database, hosting, routing, auth, storage and why), `API.md` (every built and planned endpoint, where the frontend calls it; update it when changing a route), `AI_IDEAS.md` (AI ideas still to decide). Commands and layout: `backend/README.md`.
 - **AI service** (`ai/server/`): a plain-JS Node ≥20 HTTP service (no framework, no build step) on Google Cloud Run that serves every `/api/*` route, backed by Firestore and Gemini on Vertex AI.
 
 ## Commands
@@ -95,4 +95,4 @@ Locally `AUTH_MODE=dev` accepts `Authorization: Bearer dev:<email>` instead of a
 
 ## Docs
 
-`docs/AGENT_HARNESS.md` maps the AI service's harness (policy, tools, guard, auditor, eval, ops, governance) to code and lists what is not done. Planning docs in `docs/` (`FRONTEND_PLAN.md`, `ACCOUNT_AND_SITE_PLAN.md`, `LANDING_DESIGN.md`, `BACKEND_PLAN.md`) describe intended designs; much of `BACKEND_PLAN.md` (real auth, durable server storage, notification delivery, document extraction) is not implemented. All legal/regulatory content is illustrative; inventory is synthetic, news is real.
+`docs/AGENT_HARNESS.md` maps the AI service's harness (policy, tools, guard, auditor, eval, ops, governance) to code and lists what is not done. Frontend and site planning docs are in `docs/` (`FRONTEND_PLAN.md`, `ACCOUNT_AND_SITE_PLAN.md`, `LANDING_DESIGN.md`, `VALIDATION.md`, `FIXES.md`); backend docs are in `backend/docs/`. Plans describe intended designs; much of `backend/docs/BACKEND_PLAN.md` (real auth, durable server storage, notification delivery, document extraction) is not implemented. All legal/regulatory content is illustrative; inventory is synthetic, news is real.

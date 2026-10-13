@@ -32,4 +32,4 @@ Added a public framed editorial landing at `#/` and a matching demo entry screen
 
 ## Full site revision
 
-Landing navigation now leads to full parallax sections, not dialogs. Added dedicated photography, spatial document/postcard/label treatments, concise copy, and an inline local inquiry draft. Complete account lifecycle screens and route behavior are specified in `ACCOUNT_AND_SITE_PLAN.md` and implemented in the frontend. Account service integration remains part of `BACKEND_PLAN.md`.
+Landing navigation now leads to full parallax sections, not dialogs. Added dedicated photography, spatial document/postcard/label treatments, concise copy, and an inline local inquiry draft. Complete account lifecycle screens and route behavior are specified in `ACCOUNT_AND_SITE_PLAN.md` and implemented in the frontend. Account service integration remains part of `backend/docs/BACKEND_PLAN.md`.

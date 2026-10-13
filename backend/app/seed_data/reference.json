@@ -1,5 +1,5 @@
 {
-  "_note": "Shared reference data for the trade map, loaded into Postgres by `python -m app.seed_reference_data`. Coordinates are [longitude, latitude]. Requirement checklists are illustrative, not legal guidance, until obligations come from reviewed regulation documents (REQUIREMENTS.md 4.5).",
+  "_note": "Shared reference data for the trade map, loaded into Postgres by `python -m app.seed_reference_data`. Coordinates are [longitude, latitude]. Each market requirement cites an official text (`source`: a document key in regulation_sources.json) and the sentence that sets it (`quote`). Not legal advice (docs/REQUIREMENTS.md 4.5).",
   "documentKinds": [
     { "kind": "legality", "label": "Timber legality evidence" },
     { "kind": "geolocation", "label": "Plot-level geolocation" },
