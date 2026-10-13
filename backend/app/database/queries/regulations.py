@@ -86,17 +86,18 @@ def get_regulation_document(
     db: Session, company_id: uuid.UUID, document_id: uuid.UUID
 ) -> RegulationDocument | None:
     return db.scalar(
-        select(RegulationDocument).where(
-            RegulationDocument.id == document_id, RegulationDocument.company_id == company_id
-        )
+        select(RegulationDocument)
+        .join(Regulation, RegulationDocument.regulation_id == Regulation.id)
+        .where(RegulationDocument.id == document_id, Regulation.company_id == company_id)
     )
 
 
 def find_regulation_document_by_checksum(
-    db: Session, company_id: uuid.UUID, checksum: str
+    db: Session, regulation_id: uuid.UUID, checksum: str
 ) -> RegulationDocument | None:
     return db.scalar(
         select(RegulationDocument).where(
-            RegulationDocument.company_id == company_id, RegulationDocument.checksum == checksum
+            RegulationDocument.regulation_id == regulation_id,
+            RegulationDocument.checksum == checksum,
         )
     )
