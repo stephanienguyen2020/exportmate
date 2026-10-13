@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     # Per user per hour (core/rate_limit.py).
     import_uploads_per_hour: int = 60
     max_import_rows: int = 10_000
+    # Cloud Storage bucket for uploaded regulation texts and articles.
+    regulation_document_bucket: str = ""
     # "json" gives one JSON object per line, which Cloud Logging parses into fields.
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     log_format: Literal["text", "json"] | None = None  # default: json in production

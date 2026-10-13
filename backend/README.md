@@ -15,6 +15,8 @@ uv run uvicorn app.main:app --reload --port 8000
 
 All settings come from `backend/.env` (app, Alembic, seed and tests), whichever folder you run from. Variables set in the shell override it.
 
+Uploaded documents always go to the Cloud Storage bucket `REGULATION_DOCUMENT_BUCKET`, also when running locally: run `gcloud auth application-default login` once. Without it, uploads and downloads return `503 storage_not_configured`. Tests use an in-memory fake.
+
 API docs: http://127.0.0.1:8000/api/v1/docs
 
 With `AUTH_MODE=dev`, any `Bearer dev:<email>` token signs you in as a verified user:

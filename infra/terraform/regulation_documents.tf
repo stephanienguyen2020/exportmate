@@ -1,7 +1,5 @@
-# Private, versioned bucket for regulation documents the backend stores (REQUIREMENTS §4.5).
-# This mirrors what is already deployed in the shared Terraform state, where it was applied
-# from a config that isn't in the repo yet; keeping it here stops `terraform apply` from
-# deleting it. Reconcile with the original when that config is committed.
+# Private, versioned bucket for uploaded regulation texts and articles (REQUIREMENTS §4.5).
+# Read and written by the backend (app/core/file_storage.py).
 resource "google_storage_bucket" "regulation_documents" {
   name                        = "exportmate-regulation-documents-dev"
   location                    = var.region
