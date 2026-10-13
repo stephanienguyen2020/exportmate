@@ -14,14 +14,10 @@ resource "google_storage_bucket" "regulation_documents" {
   depends_on = [google_project_service.apis]
 }
 
-resource "google_storage_bucket_iam_member" "backend_reads_regulation_documents" {
+# Create, read and delete objects (no bucket settings). The backend deletes a file it just
+# saved when the database commit fails; versioning keeps the bytes as a noncurrent version.
+resource "google_storage_bucket_iam_member" "backend_uses_regulation_documents" {
   bucket = google_storage_bucket.regulation_documents.name
-  role   = "roles/storage.objectViewer"
-  member = "serviceAccount:${google_service_account.backend.email}"
-}
-
-resource "google_storage_bucket_iam_member" "backend_writes_regulation_documents" {
-  bucket = google_storage_bucket.regulation_documents.name
-  role   = "roles/storage.objectCreator"
+  role   = "roles/storage.objectUser"
   member = "serviceAccount:${google_service_account.backend.email}"
 }

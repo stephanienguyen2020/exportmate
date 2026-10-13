@@ -7,12 +7,12 @@ Creates everything ExportMate runs on Google Cloud (backend and AI service) in o
 | APIs | Cloud Run, Cloud SQL Admin, Secret Manager, Artifact Registry, Firebase, Identity Toolkit, Firestore, Vertex AI, Cloud Scheduler, Cloud Build, … |
 | Postgres 16 (Cloud SQL, `db-f1-micro`, ~USD 10/month) | `exportmate-db`, database + user `exportmate` |
 | Secret | `backend-database-url` |
-| Service account | `exportmate-backend` (Cloud SQL client, Firebase Auth admin, reads the secret, creates + reads documents) |
+| Service account | `exportmate-backend` (Cloud SQL client, Firebase Auth admin, reads the secret, creates, reads and deletes regulation documents) |
 | Image registry | `<region>-docker.pkg.dev/<project>/exportmate` |
 | Cloud Run service (public) | `exportmate-backend` |
 | Cloud Run job (same image, one command) | `exportmate-backend-task` |
 | Firebase Auth (email + password) + web app | config printed as `firebase_web_config` |
-| Bucket (private, versioned) | `exportmate-regulation-documents-dev`, backend can read and create objects (`regulation_documents.tf`) |
+| Bucket (private, versioned) | `exportmate-regulation-documents-dev`: company uploads under `companies/`, shared official texts under `shared/`; the backend can create, read and delete objects (`objectUser`, `regulation_documents.tf`) |
 | **AI service** (`ai_service.tf`) | |
 | Firestore | `(default)`, native, asia-southeast1, with the two `kb` vector indexes (768-d) |
 | Service accounts | `exportmate-ai` (Firestore user, Vertex AI user), `exportmate-scheduler` (signs the scan's OIDC token, no roles) |

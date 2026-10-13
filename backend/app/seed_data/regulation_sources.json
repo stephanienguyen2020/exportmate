@@ -44,20 +44,6 @@
       ]
     },
     {
-      "officialId": "uksi/2013/233",
-      "title": "UK Timber and Timber Products (Placing on the Market) Regulations 2013",
-      "documents": [
-        {
-          "key": "uk-timber-regulations-latest",
-          "title": "Latest revised version (legislation.gov.uk)",
-          "download": "https://www.legislation.gov.uk/uksi/2013/233/data.xht?view=snippet&wrap=true",
-          "accept": "application/xhtml+xml",
-          "filename": "uk-timber-regulations.html",
-          "sourceUrl": "https://www.legislation.gov.uk/uksi/2013/233"
-        }
-      ]
-    },
-    {
       "officialId": "CS Viet Nam No.1/2021",
       "title": "UK–Vietnam Free Trade Agreement (UKVFTA)",
       "documents": [
@@ -169,32 +155,6 @@
       ]
     },
     {
-      "officialId": "JP Act No. 48 of 2016",
-      "title": "Japan Clean Wood Act (Act on Promoting the Distribution and Use of Legally Harvested Wood and Wood Products)",
-      "documents": [
-        {
-          "key": "japan-clean-wood-act-2023",
-          "title": "Tentative English translation, as amended by Act No. 22 of 2023",
-          "download": "https://www.japaneselawtranslation.go.jp/ja/laws/download/4543/09/h28Aa000480203en16.0_r5A22.pdf",
-          "filename": "japan-clean-wood-act.pdf",
-          "sourceUrl": "https://www.japaneselawtranslation.go.jp/ja/laws/view/4543/en"
-        }
-      ]
-    },
-    {
-      "officialId": "KR Act on the Sustainable Use of Timbers",
-      "title": "Korea Act on the Sustainable Use of Timbers",
-      "documents": [
-        {
-          "key": "korea-timber-act-14657",
-          "title": "English translation, Act No. 14657 (Korea Forest Service)",
-          "download": "https://www.forest.go.kr/images/data/down/ACT%20ON%20THE%20SUSTAINABLE%20USE%20OF%20TIMBERS(14657_ENG).pdf",
-          "filename": "korea-timber-act.pdf",
-          "sourceUrl": "https://www.forest.go.kr/images/data/down/ACT%20ON%20THE%20SUSTAINABLE%20USE%20OF%20TIMBERS(14657_ENG).pdf"
-        }
-      ]
-    },
-    {
       "officialId": "C2012A00166",
       "title": "Australia Illegal Logging Prohibition Act 2012",
       "documents": [
@@ -230,6 +190,46 @@
           "download": "https://www.fao.org/3/mb160e/mb160e.pdf",
           "filename": "ispm-15.pdf",
           "sourceUrl": "https://www.ippc.int/en/publications/640/"
+        }
+      ]
+    },
+    {
+      "officialId": "32010R0995",
+      "title": "EU Timber Regulation (EU) No 995/2010, as retained in UK law (UK Timber Regulation)",
+      "documents": [
+        {
+          "key": "eu-timber-regulation-995-2010",
+          "title": "Official Journal L 295, 12 November 2010 (the text the UK kept after Brexit; UK amendments: SI 2013/233, SI 2018/1025)",
+          "download": "http://publications.europa.eu/resource/celex/32010R0995",
+          "accept": "application/xhtml+xml",
+          "filename": "eu-timber-regulation-995-2010.html",
+          "sourceUrl": "https://www.legislation.gov.uk/eur/2010/995"
+        }
+      ]
+    },
+    {
+      "officialId": "JP Act No. 48 of 2016",
+      "title": "Japan Clean Wood Act (Act on Promoting the Distribution and Use of Legally Harvested Wood and Wood Products)",
+      "documents": [
+        {
+          "key": "japan-clean-wood-act-2023-outline",
+          "title": "Forestry Agency outline of the 2023 amendment (Act No. 22 of 2023)",
+          "download": "https://www.rinya.maff.go.jp/j/riyou/goho/english/pdf/english-index-r7-02.pdf",
+          "filename": "japan-clean-wood-act-2023-outline.pdf",
+          "sourceUrl": "https://www.rinya.maff.go.jp/j/riyou/goho/english/pdf/english-index-r7-02.pdf"
+        }
+      ]
+    },
+    {
+      "officialId": "KR Act on the Sustainable Use of Timbers",
+      "title": "Korea Act on the Sustainable Use of Timbers",
+      "documents": [
+        {
+          "key": "korea-timber-act-14657-wto",
+          "title": "Act No. 14657 (21 March 2017), English text notified by Korea to the WTO",
+          "download": "https://importlicensing.wto.org/sites/default/files/members/78/Sustainable%20Use%20Timbers_21.03.2017.pdf",
+          "filename": "korea-timber-act-14657.pdf",
+          "sourceUrl": "https://importlicensing.wto.org/sites/default/files/members/78/Sustainable%20Use%20Timbers_21.03.2017.pdf"
         }
       ]
     }

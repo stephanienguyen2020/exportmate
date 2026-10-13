@@ -210,10 +210,10 @@ def upload_regulation_document(
             "versionNumber": version_number,
         },
     )
-    # Save the file before committing: a failed save rolls back the row; a failed commit only
-    # leaves an unreferenced file.
+    # Save the file before committing: a failed save rolls back the row, and a failed commit
+    # deletes the file again.
     get_file_storage().save_file(document.storage_path, content, content_type)
-    db.commit()
+    commit_or_delete_saved_files(db, [document.storage_path])
     log.info(
         "regulation_document.uploaded",
         extra={
@@ -228,6 +228,21 @@ def upload_regulation_document(
     return document
 
 
+def commit_or_delete_saved_files(db: Session, storage_paths: list[str]) -> None:
+    """Commit the rows for files already saved. If the commit fails, delete those files so no
+    file is left in the bucket without a row, then re-raise."""
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        for path in storage_paths:
+            try:
+                get_file_storage().delete_file(path)
+            except Exception:
+                log.exception("regulation_document.cleanup_failed", extra={"storage_path": path})
+        raise
+
+
 def add_shared_regulation_document(
     db: Session,
     *,
@@ -237,10 +252,12 @@ def add_shared_regulation_document(
     filename: str,
     content: bytes,
     source_url: str,
-) -> RegulationDocument:
+) -> tuple[RegulationDocument, bool]:
     """Add an official text to the shared regulation `official_id`, creating it if needed.
 
-    The next version, unless this exact file is already stored. Flushes; the caller commits.
+    Returns (document, saved): the next version and True, or the stored document and False when
+    this exact file is already there. Saves the file and flushes; the caller commits with
+    commit_or_delete_saved_files.
     """
     suffix, content_type = _check_file(filename, content, get_settings().max_shared_document_bytes)
     regulation = regulation_queries.get_shared_regulation_by_official_id(db, official_id)
@@ -251,7 +268,7 @@ def add_shared_regulation_document(
     checksum = hashlib.sha256(content).hexdigest()
     existing = regulation_queries.get_regulation_document_by_checksum(db, regulation.id, checksum)
     if existing:
-        return existing
+        return existing, False
     document_id = uuid.uuid4()
     document = regulation_queries.add_regulation_document(
         db,
@@ -294,7 +311,7 @@ def add_shared_regulation_document(
             "shared": True,
         },
     )
-    return document
+    return document, True
 
 
 def get_regulation_document(

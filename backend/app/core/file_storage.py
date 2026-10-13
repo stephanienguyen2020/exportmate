@@ -21,6 +21,10 @@ class CloudFileStorage:
     def load_file(self, path: str) -> bytes:
         return self.bucket.blob(path).download_as_bytes()
 
+    def delete_file(self, path: str) -> None:
+        # The bucket is versioned: the bytes stay as a noncurrent version.
+        self.bucket.blob(path).delete()
+
 
 @lru_cache
 def get_file_storage() -> CloudFileStorage:

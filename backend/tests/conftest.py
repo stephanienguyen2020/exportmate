@@ -69,6 +69,9 @@ class InMemoryFileStorage:
     def load_file(self, path: str) -> bytes:
         return self.files[path]
 
+    def delete_file(self, path: str) -> None:
+        del self.files[path]
+
 
 @pytest.fixture(autouse=True)
 def file_storage(monkeypatch: pytest.MonkeyPatch) -> InMemoryFileStorage:
