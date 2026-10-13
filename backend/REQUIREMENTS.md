@@ -106,7 +106,7 @@ Fields (matches today's frontend): `id`, `product`, `supplier`, `destination`, `
 Same columns as today's template: `id,product,supplier,destination,value,shipDate,hsCode`.
 
 Steps:
-1. Upload file (max e.g. 5 MB, `.csv` only).
+1. Upload file (max 4 MB, `.csv` only; 60 uploads per user per hour).
 2. Validate. Return per-row errors:
    - `Row 4: value must be a positive number.`
    - `Row 7: order PO-2291 already exists.`
@@ -128,9 +128,9 @@ Rules:
 
 ### 4.5 Regulations (rule watch)
 - A **regulation** is one official rule (e.g. "EU deforestation regulation", official ID `32023R1115`).
-- A **source document** is one uploaded file (title, source URL, content hash, file in Cloud Storage). **v1: every upload is a version of a regulation**, whether it is an official text or a news article (an article is a regulation with one version). Official rule vs article only matters once there is a shared library (§11.2).
+- A **regulation document** is one uploaded file (title, source URL, content hash, file in Cloud Storage). **v1: every upload is a version of a regulation**, whether it is an official text or a news article (an article is a regulation with one version). Official rule vs article only matters once there is a shared library (§11.2).
 - **New version = the uploader says so.** On upload they pick "new regulation" or "new version of [regulation ▾]". The frontend can pre-select the regulation when the typed official ID matches (`GET /regulations?officialId=`). Same file again (same hash) → `409 already_uploaded`. Official ID already used → `409 regulation_exists`.
-- Files: `.pdf`, `.html`, `.txt`, up to 5 MB. Downloads are always attachments (uploaded HTML is never rendered on our domain).
+- Files: `.pdf`, `.html`, `.txt`, up to 4 MB (the Vercel proxy accepts about 4.5 MB), 60 uploads per user per hour. Not the same as supplier documents (§4.9: proof a supplier holds). Downloads are always attachments (uploaded HTML is never rendered on our domain).
 - v1: manual upload only. No crawler, no fetching URLs (the source URL is stored as a reference).
 - An **obligation** is one requirement extracted from a document version:
   - Example: "Plywood HS 4412.33 entering the EU needs a due-diligence statement from 30 Dec 2026", with the exact clause text and clause number.
@@ -191,7 +191,7 @@ Codes: `401` not signed in, `403` wrong role, `404` not found or other company's
 | Orders | `GET /orders`, `GET /orders/{id}` |
 | Imports | `POST /imports` (upload), `GET /imports/{id}` (errors + preview), `POST /imports/{id}/commit` |
 | Playbook | `GET /playbook/rules`, `POST /playbook/rules`, `PATCH /playbook/rules/{id}`, `DELETE /playbook/rules/{id}` |
-| Regulations | `POST /documents` (editor), `GET /documents/{id}`, `GET /documents/{id}/file`, `GET /regulations?officialId=`, `GET /regulations/{id}` (versions, newest first) — **built**. Later: `GET /sources`, `GET /obligations/{id}` (incl. diff) |
+| Regulations | `POST /regulation-documents` (editor), `GET /regulation-documents/{id}`, `GET /regulation-documents/{id}/file`, `GET /regulations?officialId=`, `GET /regulations/{id}` (versions, newest first) — **built**. Later: `GET /sources`, `GET /obligations/{id}` (incl. diff) |
 | Runs | `POST /runs`, `GET /runs/{id}` |
 | Reports | `GET /reports/{id}`, `POST /reports/{id}/feedback` |
 | Actions | `POST /actions/drafts`, `POST /actions/{id}/approve`, `POST /actions/{id}/send`, `GET /actions/{id}` |
@@ -389,7 +389,7 @@ A wrong automatic link would diff unrelated texts and raise wrong alerts, so eve
 | --- | --- |
 | `watch_sources` | `company_id` (null = shared), `url`, `kind` (`rss`, `federal_register`, `eurlex`, `page`), `enabled`, `last_checked_at` |
 | `regulations` | **Built.** A regulation (e.g. "EU deforestation regulation"), optional official ID, `company_id` |
-| `source_documents` | **Built.** One uploaded file = one version: `regulation_id` + `version_number`, title, source URL, Cloud Storage path, content hash, `company_id`. Later: `kind` (`official_rule`, `article`), `company_id` null = shared library, fetched date for crawled files |
+| `regulation_documents` | **Built.** One uploaded file = one version: `regulation_id` + `version_number`, title, source URL, Cloud Storage path, content hash, `company_id`. Later: `kind` (`official_rule`, `article`), `company_id` null = shared library, fetched date for crawled files |
 | `company_regulations` | Later. Which company follows which shared regulation (many-to-many) |
 | `obligations` | Conditions extracted from a version: `hs_include`, `hs_exclude`, `markets`, `applies_from`, `required_documents`, a source quote per field, `status` (`draft` → `reviewed`) |
 | `market_requirements` | **Built (trade map), placeholder.** Hand-made checklist per market, each line with a `document_kind`. Stands in for `obligations.required_documents` until those exist (see open question 18) |
@@ -402,7 +402,7 @@ Files live in Cloud Storage; Postgres keeps the row and the hash.
 Each job runs as a Cloud Task (§7.3), saves its steps, and stores every AI output with its source quote, model and prompt version.
 
 **J1 Crawl** (daily, Cloud Scheduler)
-For each enabled `watch_source`: fetch new items → skip ones already seen (by hash) → save to `source_documents` → queue J2 or J3.
+For each enabled `watch_source`: fetch new items → skip ones already seen (by hash) → save to `regulation_documents` → queue J2 or J3.
 
 **J2 Analyse article**
 1. AI: is this a rule change, a disruption or noise?

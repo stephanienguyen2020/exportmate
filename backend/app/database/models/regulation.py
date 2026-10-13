@@ -23,13 +23,13 @@ class Regulation(Base):
     __table_args__ = (UniqueConstraint("company_id", "official_id"),)
 
 
-class SourceDocument(Base):
+class RegulationDocument(Base):
     """One uploaded file = one version of a regulation (an official text or an article).
 
     The bytes live in Cloud Storage; this row keeps the hash and path.
     """
 
-    __tablename__ = "source_documents"
+    __tablename__ = "regulation_documents"
     id: Mapped[uuid.UUID] = id_column()
     company_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("companies.id", ondelete="CASCADE"), index=True, nullable=False

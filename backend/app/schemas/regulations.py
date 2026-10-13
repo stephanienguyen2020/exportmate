@@ -4,7 +4,7 @@ from datetime import datetime
 from app.schemas.common import CamelCaseModel
 
 
-class DocumentOut(CamelCaseModel):
+class RegulationDocumentOut(CamelCaseModel):
     id: uuid.UUID
     title: str
     filename: str
@@ -22,9 +22,9 @@ class RegulationOut(CamelCaseModel):
     title: str
     official_id: str | None
     version_count: int
-    latest_version: DocumentOut | None
+    latest_version: RegulationDocumentOut | None
     created_at: datetime
 
 
 class RegulationDetailOut(RegulationOut):
-    versions: list[DocumentOut]  # newest first
+    versions: list[RegulationDocumentOut]  # newest first

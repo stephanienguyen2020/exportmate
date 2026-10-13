@@ -5,7 +5,7 @@ from app.database.models.audit import AuditEvent
 from app.database.models.base import Base
 from app.database.models.order import Import, ImportRow, ImportStatus, Order, OrderStatus
 from app.database.models.playbook import PlaybookRevision, PlaybookRule
-from app.database.models.regulation import Regulation, SourceDocument
+from app.database.models.regulation import Regulation, RegulationDocument
 from app.database.models.trade_map import (
     CompanySite,
     Country,
@@ -43,11 +43,11 @@ __all__ = [
     "PlaybookRule",
     "Port",
     "Regulation",
+    "RegulationDocument",
     "RequirementLevel",
     "Role",
     "SatelliteObservation",
     "SiteKind",
-    "SourceDocument",
     "Supplier",
     "SupplierDocument",
     "User",

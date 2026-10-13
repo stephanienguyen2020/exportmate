@@ -4,7 +4,7 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.orm import Session
 
-from app.database.models import Regulation, SourceDocument
+from app.database.models import Regulation, RegulationDocument
 
 
 def add_regulation(db: Session, regulation: Regulation) -> Regulation:
@@ -45,58 +45,58 @@ def list_regulations(
 
 def summarize_versions_by_regulation(
     db: Session, regulation_ids: list[uuid.UUID]
-) -> dict[uuid.UUID, tuple[int, SourceDocument]]:
+) -> dict[uuid.UUID, tuple[int, RegulationDocument]]:
     """{regulation_id: (version_count, latest_version)} for each regulation with versions."""
     if not regulation_ids:
         return {}
     rows = db.execute(
-        select(SourceDocument, func.count().over(partition_by=SourceDocument.regulation_id))
-        .where(SourceDocument.regulation_id.in_(regulation_ids))
-        .order_by(SourceDocument.regulation_id, SourceDocument.version_number.desc())
-        .ext(distinct_on(SourceDocument.regulation_id))
+        select(RegulationDocument, func.count().over(partition_by=RegulationDocument.regulation_id))
+        .where(RegulationDocument.regulation_id.in_(regulation_ids))
+        .order_by(RegulationDocument.regulation_id, RegulationDocument.version_number.desc())
+        .ext(distinct_on(RegulationDocument.regulation_id))
     ).all()
     return {document.regulation_id: (count, document) for document, count in rows}
 
 
 def get_latest_version_number(db: Session, regulation_id: uuid.UUID) -> int:
     return db.scalar(
-        select(func.coalesce(func.max(SourceDocument.version_number), 0)).where(
-            SourceDocument.regulation_id == regulation_id
+        select(func.coalesce(func.max(RegulationDocument.version_number), 0)).where(
+            RegulationDocument.regulation_id == regulation_id
         )
     )
 
 
-def list_regulation_versions(db: Session, regulation_id: uuid.UUID) -> list[SourceDocument]:
+def list_regulation_versions(db: Session, regulation_id: uuid.UUID) -> list[RegulationDocument]:
     return list(
         db.scalars(
-            select(SourceDocument)
-            .where(SourceDocument.regulation_id == regulation_id)
-            .order_by(SourceDocument.version_number.desc())
+            select(RegulationDocument)
+            .where(RegulationDocument.regulation_id == regulation_id)
+            .order_by(RegulationDocument.version_number.desc())
         )
     )
 
 
-def add_source_document(db: Session, document: SourceDocument) -> SourceDocument:
+def add_regulation_document(db: Session, document: RegulationDocument) -> RegulationDocument:
     db.add(document)
     db.flush()
     return document
 
 
-def get_source_document(
+def get_regulation_document(
     db: Session, company_id: uuid.UUID, document_id: uuid.UUID
-) -> SourceDocument | None:
+) -> RegulationDocument | None:
     return db.scalar(
-        select(SourceDocument).where(
-            SourceDocument.id == document_id, SourceDocument.company_id == company_id
+        select(RegulationDocument).where(
+            RegulationDocument.id == document_id, RegulationDocument.company_id == company_id
         )
     )
 
 
-def find_source_document_by_checksum(
+def find_regulation_document_by_checksum(
     db: Session, company_id: uuid.UUID, checksum: str
-) -> SourceDocument | None:
+) -> RegulationDocument | None:
     return db.scalar(
-        select(SourceDocument).where(
-            SourceDocument.company_id == company_id, SourceDocument.checksum == checksum
+        select(RegulationDocument).where(
+            RegulationDocument.company_id == company_id, RegulationDocument.checksum == checksum
         )
     )

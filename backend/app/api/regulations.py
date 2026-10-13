@@ -7,17 +7,21 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import EditorContext, ViewerContext
 from app.core.config import get_settings
+from app.core.rate_limit import RateLimiter
 from app.database.session import get_db
 from app.schemas.common import SuccessResponse, success_response
-from app.schemas.regulations import DocumentOut, RegulationDetailOut, RegulationOut
+from app.schemas.regulations import RegulationDetailOut, RegulationDocumentOut, RegulationOut
 from app.services import regulations as regulation_service
 
 router = APIRouter(tags=["regulations"])
 Db = Annotated[Session, Depends(get_db)]
+upload_limiter = RateLimiter("regulation document uploads")
 
 
-@router.post("/documents", response_model=SuccessResponse[DocumentOut], status_code=201)
-async def upload_document(
+@router.post(
+    "/regulation-documents", response_model=SuccessResponse[RegulationDocumentOut], status_code=201
+)
+async def upload_regulation_document(
     file: UploadFile,
     ctx: EditorContext,
     db: Db,
@@ -27,9 +31,10 @@ async def upload_document(
     official_id: Annotated[str | None, Form(alias="officialId")] = None,
 ):
     """Upload a rule text or article: a new regulation, or its next version via `regulationId`."""
+    upload_limiter.check(str(ctx.user.id), get_settings().regulation_document_uploads_per_hour)
     # Read one byte past the limit so oversize files are rejected without loading them all.
     content = await file.read(get_settings().max_upload_bytes + 1)
-    document = regulation_service.upload_source_document(
+    document = regulation_service.upload_regulation_document(
         db,
         ctx,
         filename=file.filename or "upload",
@@ -39,18 +44,20 @@ async def upload_document(
         regulation_id=regulation_id,
         official_id=official_id,
     )
-    return success_response(DocumentOut.model_validate(document))
+    return success_response(RegulationDocumentOut.model_validate(document))
 
 
-@router.get("/documents/{document_id}", response_model=SuccessResponse[DocumentOut])
-def get_document(document_id: uuid.UUID, ctx: ViewerContext, db: Db):
-    document = regulation_service.get_source_document(db, ctx, document_id)
-    return success_response(DocumentOut.model_validate(document))
+@router.get(
+    "/regulation-documents/{document_id}", response_model=SuccessResponse[RegulationDocumentOut]
+)
+def get_regulation_document(document_id: uuid.UUID, ctx: ViewerContext, db: Db):
+    document = regulation_service.get_regulation_document(db, ctx, document_id)
+    return success_response(RegulationDocumentOut.model_validate(document))
 
 
-@router.get("/documents/{document_id}/file", response_class=Response)
-def download_document_file(document_id: uuid.UUID, ctx: ViewerContext, db: Db):
-    document, content = regulation_service.load_source_document_file(db, ctx, document_id)
+@router.get("/regulation-documents/{document_id}/file", response_class=Response)
+def download_regulation_document_file(document_id: uuid.UUID, ctx: ViewerContext, db: Db):
+    document, content = regulation_service.load_regulation_document_file(db, ctx, document_id)
     return Response(
         content,
         media_type=document.content_type,
