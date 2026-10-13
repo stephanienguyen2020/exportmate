@@ -31,9 +31,7 @@ class RegulationDocument(Base):
 
     __tablename__ = "regulation_documents"
     id: Mapped[uuid.UUID] = id_column()
-    company_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("companies.id", ondelete="CASCADE"), index=True, nullable=False
-    )
+    # The company comes from the regulation.
     regulation_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("regulations.id", ondelete="CASCADE"), index=True, nullable=False
     )
@@ -48,6 +46,8 @@ class RegulationDocument(Base):
     created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = created_column()
     __table_args__ = (
-        UniqueConstraint("company_id", "checksum"),
+        # Blocks the same file twice in one regulation. Two companies never share a regulation,
+        # so each company can upload the same file.
+        UniqueConstraint("regulation_id", "checksum"),
         UniqueConstraint("regulation_id", "version_number"),
     )

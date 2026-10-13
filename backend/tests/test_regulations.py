@@ -62,12 +62,14 @@ def test_new_version_of_picked_regulation(client):
     assert detail["data"]["title"] == "EU deforestation regulation"
 
 
-def test_same_file_twice_is_409(client):
+def test_same_file_twice_in_one_regulation_is_409(client):
     headers = onboard(client, "lan@example.com")
-    assert upload_regulation_document(client, headers).status_code == 201
-    again = upload_regulation_document(client, headers, title="Another title")
+    v1 = upload_regulation_document(client, headers).json()["data"]
+    again = upload_regulation_document(client, headers, regulationId=v1["regulationId"])
     assert again.status_code == 409
     assert again.json()["error"]["code"] == "already_uploaded"
+    # The same file as a different regulation is allowed.
+    assert upload_regulation_document(client, headers, title="EU timber law").status_code == 201
 
 
 def test_official_id_already_used_is_409(client):

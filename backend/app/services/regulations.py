@@ -160,24 +160,24 @@ def upload_regulation_document(
         )
 
     checksum = hashlib.sha256(content).hexdigest()
-    duplicate = regulation_queries.find_regulation_document_by_checksum(
-        db, ctx.company_id, checksum
-    )
-    if duplicate:
-        raise AppError(
-            409, "already_uploaded", f"This file was already uploaded as '{duplicate.title}'."
-        )
-
     try:
         regulation, version_number = _resolve_regulation(
             db, ctx, clean_title, regulation_id, official_id
         )
+        duplicate = regulation_queries.find_regulation_document_by_checksum(
+            db, regulation.id, checksum
+        )
+        if duplicate:
+            raise AppError(
+                409,
+                "already_uploaded",
+                f"This file is already version {duplicate.version_number} of this regulation.",
+            )
         document_id = uuid.uuid4()
         document = regulation_queries.add_regulation_document(
             db,
             RegulationDocument(
                 id=document_id,
-                company_id=ctx.company_id,
                 title=clean_title,
                 filename=PurePath(filename).name[:255],
                 content_type=content_type,

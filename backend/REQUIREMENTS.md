@@ -129,7 +129,7 @@ Rules:
 ### 4.5 Regulations (rule watch)
 - A **regulation** is one official rule (e.g. "EU deforestation regulation", official ID `32023R1115`).
 - A **regulation document** is one uploaded file (title, source URL, content hash, file in Cloud Storage). **v1: every upload is a version of a regulation**, whether it is an official text or a news article (an article is a regulation with one version). Official rule vs article only matters once there is a shared library (§11.2).
-- **New version = the uploader says so.** On upload they pick "new regulation" or "new version of [regulation ▾]". The frontend can pre-select the regulation when the typed official ID matches (`GET /regulations?officialId=`). Same file again (same hash) → `409 already_uploaded`. Official ID already used → `409 regulation_exists`.
+- **New version = the uploader says so.** On upload they pick "new regulation" or "new version of [regulation ▾]". The frontend can pre-select the regulation when the typed official ID matches (`GET /regulations?officialId=`). Same file again in the same regulation (same hash) → `409 already_uploaded`; another regulation or another company may upload the same file. Official ID already used → `409 regulation_exists`.
 - Files: `.pdf`, `.html`, `.txt`, up to 4 MB (the Vercel proxy accepts about 4.5 MB), 60 uploads per user per hour. Not the same as supplier documents (§4.9: proof a supplier holds). Downloads are always attachments (uploaded HTML is never rendered on our domain).
 - v1: manual upload only. No crawler, no fetching URLs (the source URL is stored as a reference).
 - An **obligation** is one requirement extracted from a document version:
@@ -389,7 +389,7 @@ A wrong automatic link would diff unrelated texts and raise wrong alerts, so eve
 | --- | --- |
 | `watch_sources` | `company_id` (null = shared), `url`, `kind` (`rss`, `federal_register`, `eurlex`, `page`), `enabled`, `last_checked_at` |
 | `regulations` | **Built.** A regulation (e.g. "EU deforestation regulation"), optional official ID, `company_id` |
-| `regulation_documents` | **Built.** One uploaded file = one version: `regulation_id` + `version_number`, title, source URL, Cloud Storage path, content hash, `company_id`. Later: `kind` (`official_rule`, `article`), `company_id` null = shared library, fetched date for crawled files |
+| `regulation_documents` | **Built.** One uploaded file = one version: `regulation_id` + `version_number`, title, source URL, Cloud Storage path, content hash (a file can be in a regulation only once). The company comes from the regulation. Later: `kind` (`official_rule`, `article`), fetched date for crawled files |
 | `company_regulations` | Later. Which company follows which shared regulation (many-to-many) |
 | `obligations` | Conditions extracted from a version: `hs_include`, `hs_exclude`, `markets`, `applies_from`, `required_documents`, a source quote per field, `status` (`draft` → `reviewed`) |
 | `market_requirements` | **Built (trade map), placeholder.** Hand-made checklist per market, each line with a `document_kind`. Stands in for `obligations.required_documents` until those exist (see open question 18) |
