@@ -106,6 +106,15 @@ class MarketRequirement(Base):
     # HS code prefixes it applies to, digits only. Empty: every product.
     hs_prefixes: Mapped[list[str]] = mapped_column(ARRAY(String(12)), nullable=False, default=list)
     why: Mapped[str] = mapped_column(Text, nullable=False)
+    # The ship date must be on or after this day for the line to apply. Empty: already in force.
+    effective_on: Mapped[date | None] = mapped_column(Date)
+    # A stated change (a rate or a threshold), not the day the line starts.
+    changes_on: Mapped[date | None] = mapped_column(Date)
+    change_note: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    # Origin proofs and other lines whose answer can change if the goods transship.
+    route_sensitive: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
     regulation_document_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("regulation_documents.id"), index=True, nullable=False
     )

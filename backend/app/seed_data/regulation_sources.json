@@ -232,6 +232,74 @@
           "sourceUrl": "https://importlicensing.wto.org/sites/default/files/members/78/Sustainable%20Use%20Timbers_21.03.2017.pdf"
         }
       ]
+    },
+    {
+      "officialId": "32002R0178",
+      "title": "General Food Law, Regulation (EC) No 178/2002",
+      "documents": [
+        {
+          "key": "general-food-law-178-2002",
+          "title": "Regulation (EC) No 178/2002",
+          "download": "http://publications.europa.eu/resource/celex/32002R0178",
+          "accept": "application/pdf",
+          "filename": "general-food-law-178-2002.pdf",
+          "sourceUrl": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32002R0178"
+        }
+      ]
+    },
+    {
+      "officialId": "32011R1007",
+      "title": "Textile fibre names and labelling, Regulation (EU) No 1007/2011",
+      "documents": [
+        {
+          "key": "textile-labelling-1007-2011",
+          "title": "Regulation (EU) No 1007/2011",
+          "download": "http://publications.europa.eu/resource/celex/32011R1007",
+          "accept": "application/pdf",
+          "filename": "textile-labelling-1007-2011.pdf",
+          "sourceUrl": "https://eur-lex.europa.eu/eli/reg/2011/1007/oj"
+        }
+      ]
+    },
+    {
+      "officialId": "32011L0065",
+      "title": "RoHS Directive 2011/65/EU",
+      "documents": [
+        {
+          "key": "rohs-2011-65",
+          "title": "Directive 2011/65/EU",
+          "download": "http://publications.europa.eu/resource/celex/32011L0065",
+          "accept": "application/pdf",
+          "filename": "rohs-2011-65.pdf",
+          "sourceUrl": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32011L0065"
+        }
+      ]
+    },
+    {
+      "officialId": "21 CFR 1.279",
+      "title": "FDA prior notice of imported food, 21 CFR 1.279",
+      "documents": [
+        {
+          "key": "fda-prior-notice-21cfr-1-279",
+          "title": "eCFR, 21 CFR 1.279",
+          "download": "https://www.ecfr.gov/api/renderer/v1/content/enhanced/current/title-21?section=1.279",
+          "filename": "21-cfr-1-279.html",
+          "sourceUrl": "https://www.ecfr.gov/current/title-21/section-1.279"
+        }
+      ]
+    },
+    {
+      "officialId": "15 U.S.C. 70-70k",
+      "title": "Textile Fiber Products Identification Act, 15 U.S.C. chapter 2",
+      "documents": [
+        {
+          "key": "textile-fiber-products-identification-act",
+          "title": "United States Code, 2024 edition",
+          "download": "https://www.govinfo.gov/content/pkg/USCODE-2024-title15/html/USCODE-2024-title15-chap2-subchapV.htm",
+          "filename": "textile-fiber-products-identification-act.html",
+          "sourceUrl": "https://www.govinfo.gov/content/pkg/USCODE-2024-title15/html/USCODE-2024-title15-chap2-subchapV.htm"
+        }
+      ]
     }
   ]
 }
