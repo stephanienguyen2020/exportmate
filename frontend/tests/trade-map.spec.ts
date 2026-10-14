@@ -186,6 +186,57 @@ async function openMap(
       data = { ...mapData, sites: options.noOrigin ? [] : mapData.sites };
     } else if (path === "/trade-map/compare") {
       comparisons.push(url);
+      if (url.searchParams.get("shipDate")) {
+        data = {
+          orderId: order.id,
+          kind: "ship_date",
+          fromMarket: "EU",
+          toMarket: "EU",
+          fromShipDate: order.shipDate,
+          toShipDate: url.searchParams.get("shipDate"),
+          reuse: [],
+          reevaluate: [
+            {
+              title: "Formaldehyde emission test",
+              note: "Listed from 2026-08-06. It applies on the new date.",
+              tag: "New",
+            },
+          ],
+          unknown: [
+            {
+              title: "Arrival date",
+              note: "Transit time is not in this dataset.",
+            },
+          ],
+          dropped: [],
+          assumptions: ["Only the checklist's effective dates are compared."],
+        };
+      } else if (url.searchParams.get("via")) {
+        data = {
+          orderId: order.id,
+          kind: "route",
+          fromMarket: "EU",
+          toMarket: "EU",
+          via: url.searchParams.get("via"),
+          viaName: "Singapore",
+          distanceKm: 10800,
+          reuse: [],
+          reevaluate: [
+            {
+              title: "Proof of origin",
+              note: "A stop in Singapore can change the consignment rule.",
+              tag: "Changes",
+            },
+          ],
+          unknown: [
+            { title: "Freight cost", note: "No rate card is stored." },
+          ],
+          dropped: [],
+          assumptions: [
+            "About 10800 km is the great-circle length via Singapore. It is not a voyage and not a freight quote.",
+          ],
+        };
+      } else
       data = {
         orderId: order.id,
         fromMarket: "EU",
@@ -280,6 +331,17 @@ test("comparison preserves IDs containing delimiters and route visibility in bot
   await expect(
     page.getByText(/Not listed in the current United States checklist/),
   ).toBeVisible();
+  await page.getByRole("button", { name: "Ship date", exact: true }).click();
+  await page.getByLabel("Proposed ship date").fill("2027-02-01");
+  await expect(page.getByText("Formaldehyde emission test")).toBeVisible();
+  await expect(
+    page.getByText("Only the checklist's effective dates are compared."),
+  ).toBeVisible();
+  expect(comparisons.at(-1)?.searchParams.get("shipDate")).toBe("2027-02-01");
+  await page.getByRole("button", { name: "Route", exact: true }).click();
+  await page.getByRole("button", { name: "Singapore", exact: true }).click();
+  await expect(page.getByText(/not a freight quote/)).toBeVisible();
+  expect(comparisons.at(-1)?.searchParams.get("via")).toBe("SG");
 });
 
 test("sample flood drafts remain explicitly fictional when copied out of the map", async ({

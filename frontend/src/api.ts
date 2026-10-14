@@ -164,12 +164,19 @@ export type ComparisonItem = {
 };
 export type MarketComparison = {
   orderId: string;
+  kind: "market" | "ship_date" | "route";
   fromMarket: string | null;
   toMarket: string;
+  fromShipDate?: string | null;
+  toShipDate?: string | null;
+  via?: string | null;
+  viaName?: string | null;
+  distanceKm?: number | null;
   reuse: ComparisonItem[];
   reevaluate: ComparisonItem[];
   unknown: ComparisonItem[];
   dropped: string[];
+  assumptions?: string[];
 };
 export type RegulationDocument = {
   id: string;
@@ -406,6 +413,16 @@ export const api = {
   compareMarkets: (orderId: string, market: string, signal?: AbortSignal) =>
     request<MarketComparison>(
       `/trade-map/compare?${new URLSearchParams({ orderId, market })}`,
+      { signal },
+    ).then((r) => r.data),
+  compareShipDate: (orderId: string, shipDate: string, signal?: AbortSignal) =>
+    request<MarketComparison>(
+      `/trade-map/compare?${new URLSearchParams({ orderId, shipDate })}`,
+      { signal },
+    ).then((r) => r.data),
+  compareRoute: (orderId: string, via: string, signal?: AbortSignal) =>
+    request<MarketComparison>(
+      `/trade-map/compare?${new URLSearchParams({ orderId, via })}`,
       { signal },
     ).then((r) => r.data),
 };

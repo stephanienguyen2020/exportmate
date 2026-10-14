@@ -177,6 +177,12 @@ def seed_reference_data(db: Session) -> dict[str, int]:
                 "form": r.get("form"),
                 "hs_prefixes": [_digits(p) for p in r.get("hsPrefixes", [])],
                 "why": r["why"],
+                "effective_on": date.fromisoformat(r["effectiveOn"])
+                if r.get("effectiveOn")
+                else None,
+                "changes_on": date.fromisoformat(r["changesOn"]) if r.get("changesOn") else None,
+                "change_note": r.get("changeNote", ""),
+                "route_sensitive": r.get("routeSensitive", False),
                 "regulation_document_id": document_ids[r["source"]],
                 "source_quote": r["quote"],
                 "sort_order": i,

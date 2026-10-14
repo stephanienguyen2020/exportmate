@@ -107,7 +107,8 @@ type Selection =
   | { kind: "supplier"; name: string }
   | { kind: "site"; id: string }
   | { kind: "flood"; id: string };
-type Scenario = { orderId: string; target: string | null };
+type ScenarioMode = "market" | "date" | "route";
+type Scenario = { orderId: string; mode: ScenarioMode; target: string | null };
 type Row = {
   order: Order;
   placement: MapOrder["placement"];
@@ -533,7 +534,9 @@ function TradeMapView({
       return {};
     }
     if (kind === "order" && rows.some((r) => r.order.id === value))
-      return { scenario: { orderId: value, target: null } as Scenario };
+      return {
+        scenario: { orderId: value, mode: "market", target: null } as Scenario,
+      };
     if (kind === "market" && marketByCode.has(value))
       return { selection: { kind: "market", code: value } as Selection };
     if (kind === "supplier" && value)
@@ -573,13 +576,13 @@ function TradeMapView({
     select({ kind: "flood", id: flood.id }, floodView(flood, check));
   const startScenario = (orderId: string) => {
     setSelection(null);
-    setScenario({ orderId, target: null });
+    setScenario({ orderId, mode: "market", target: null });
     setView(WORLD_VIEW);
     reveal();
   };
   const chooseMarket = (code: string) => {
     if (scenario) {
-      if (scenarioRow?.placement.market !== code)
+      if (scenario.mode === "market" && scenarioRow?.placement.market !== code)
         setScenario({ ...scenario, target: code });
       return;
     }
@@ -599,7 +602,8 @@ function TradeMapView({
       if (!scenarioRow) return null;
       if (scenarioRow.placement.market)
         set.markets.add(scenarioRow.placement.market);
-      if (scenario.target) set.markets.add(scenario.target);
+      if (scenario.mode === "market" && scenario.target)
+        set.markets.add(scenario.target);
       set.suppliers.add(supplierKey(scenarioRow.order.supplier));
       return set;
     }
@@ -649,6 +653,7 @@ function TradeMapView({
     (selection?.kind === "site" && m.siteId === selection.id) ||
     (selection?.kind === "flood" && m.floodId === selection.id) ||
     (!!scenario &&
+      scenario.mode === "market" &&
       !!m.market &&
       (m.market === scenario.target ||
         m.market === scenarioRow?.placement.market));
@@ -995,7 +1000,8 @@ function MapCanvas({
     ...countriesOf(selectionMarket),
     ...countriesOf(scenarioRow?.placement.market),
   ]);
-  const target = new Set(countriesOf(scenario?.target));
+  const marketTarget = scenario?.mode === "market" ? scenario.target : null;
+  const target = new Set(countriesOf(marketTarget));
 
   const originSite = data.sites.find((s) => s.isRouteOrigin);
   const start = routeStart(data.sites, companyOrigin);
@@ -1219,7 +1225,7 @@ function MapCanvas({
         m.market === scenarioRow.placement.market,
     );
     const next =
-      scenario.target && markers.find((m) => m.market === scenario.target);
+      marketTarget && markers.find((m) => m.market === marketTarget);
     scenarioArcs = [
       current && {
         key: "current",
@@ -1294,7 +1300,7 @@ function MapCanvas({
             : lonLat(marketByCode.get(m.market!)!.hub),
       label: m.label,
       aria: m.aria,
-      tone: scenario?.target === m.market ? "target" : m.tone,
+      tone: marketTarget === m.market ? "target" : m.tone,
       count: m.count,
       selected: isSelected(m),
       related: isRelated(m),
@@ -1472,7 +1478,7 @@ function MapCanvas({
         return (
           <button
             key={m.key}
-            className={`tm-marker ${m.kind} tone-${m.tone} side-${side ?? "right"} ${side ? "" : "label-off"} ${selected ? "selected" : ""} ${isRelated(m) ? "" : "dim"} ${scenario?.target && m.market === scenario.target ? "alt" : ""}`}
+            className={`tm-marker ${m.kind} tone-${m.tone} side-${side ?? "right"} ${side ? "" : "label-off"} ${selected ? "selected" : ""} ${isRelated(m) ? "" : "dim"} ${marketTarget && m.market === marketTarget ? "alt" : ""}`}
             style={
               {
                 left: pct(m.x, W),
@@ -2486,6 +2492,15 @@ function FloodPanel({
   );
 }
 
+const ROUTE_OPTIONS = [
+  { code: "direct", label: "Direct" },
+  { code: "SG", label: "Singapore" },
+  { code: "MY", label: "Port Klang" },
+  { code: "HK", label: "Hong Kong" },
+  { code: "AE", label: "Jebel Ali" },
+  { code: "LK", label: "Colombo" },
+];
+
 function ScenarioPanel({
   rows,
   markets,
@@ -2511,14 +2526,23 @@ function ScenarioPanel({
   } | null>(null);
   const requestKey =
     row && scenario.target
-      ? JSON.stringify([row.order.id, scenario.target])
+      ? JSON.stringify([row.order.id, scenario.mode, scenario.target])
       : "";
   useEffect(() => {
     if (!requestKey) return;
-    const [orderId, market] = JSON.parse(requestKey) as [string, string];
+    const [orderId, mode, target] = JSON.parse(requestKey) as [
+      string,
+      ScenarioMode,
+      string,
+    ];
     const controller = new AbortController();
-    api
-      .compareMarkets(orderId, market, controller.signal)
+    const call =
+      mode === "date"
+        ? api.compareShipDate(orderId, target, controller.signal)
+        : mode === "route"
+          ? api.compareRoute(orderId, target, controller.signal)
+          : api.compareMarkets(orderId, target, controller.signal);
+    call
       .then((comparison) => {
         if (!controller.signal.aborted)
           setResult({ key: requestKey, comparison });
@@ -2538,11 +2562,41 @@ function ScenarioPanel({
   return (
     <>
       <PanelHead
-        eyebrow="WHAT IF THIS ORDER CHANGED MARKET?"
-        title="Compare markets."
-        sub="See which documents carry over, what needs another look, and what the data can't answer yet."
+        eyebrow="WHAT IF"
+        title={
+          scenario.mode === "date"
+            ? "Move the ship date."
+            : scenario.mode === "route"
+              ? "Change the route."
+              : "Compare markets."
+        }
+        sub={
+          scenario.mode === "date"
+            ? "See which checklist dates start, stop, or change. This does not estimate an arrival."
+            : scenario.mode === "route"
+              ? "See what to recheck if the goods stop somewhere else. Cost and sailing time are not in this data."
+              : "See which documents carry over, what needs another look, and what the data can't answer yet."
+        }
         onBack={onClose}
       />
+      <div className="tm-chips" role="group" aria-label="What to compare">
+        {(
+          [
+            ["market", "Market"],
+            ["date", "Ship date"],
+            ["route", "Route"],
+          ] as const
+        ).map(([mode, label]) => (
+          <button
+            key={mode}
+            aria-pressed={scenario.mode === mode}
+            className={scenario.mode === mode ? "selected" : ""}
+            onClick={() => onChange({ ...scenario, mode, target: null })}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
       <label className="tm-field" htmlFor="tm-order">
         Order
       </label>
@@ -2550,7 +2604,13 @@ function ScenarioPanel({
         id="tm-order"
         className="tm-select"
         value={row.order.id}
-        onChange={(e) => onChange({ orderId: e.target.value, target: null })}
+        onChange={(e) =>
+          onChange({
+            orderId: e.target.value,
+            mode: scenario.mode,
+            target: null,
+          })
+        }
       >
         {rows.map((r) => (
           <option key={r.order.id} value={r.order.id}>
@@ -2563,38 +2623,88 @@ function ScenarioPanel({
           <small>NOW</small>
           <b>{nameOf(from)}</b>
           <small>
-            {row.order.supplier} → {row.order.destination} · HS{" "}
-            {row.order.hsCode}
+            {row.order.supplier} → {row.order.destination} · ships{" "}
+            {date(row.order.shipDate)} · HS {row.order.hsCode}
           </small>
         </span>
         {renderStatus(row.order)}
       </div>
-      <span className="tm-field">Compare with</span>
-      <div
-        className="tm-chips"
-        role="group"
-        aria-label="Market to compare with"
-      >
-        {markets
-          .filter((m) => m.code !== from)
-          .map((m) => (
-            <button
-              key={m.code}
-              aria-pressed={scenario.target === m.code}
-              className={scenario.target === m.code ? "selected" : ""}
-              onClick={() => onChange({ ...scenario, target: m.code })}
-            >
-              {m.name}
-            </button>
-          ))}
-      </div>
-      {!scenario.target && (
-        <p className="tm-muted">Pick a market here or on the map.</p>
+      {scenario.mode === "market" && (
+        <>
+          <span className="tm-field">Compare with</span>
+          <div
+            className="tm-chips"
+            role="group"
+            aria-label="Market to compare with"
+          >
+            {markets
+              .filter((m) => m.code !== from)
+              .map((m) => (
+                <button
+                  key={m.code}
+                  aria-pressed={scenario.target === m.code}
+                  className={scenario.target === m.code ? "selected" : ""}
+                  onClick={() => onChange({ ...scenario, target: m.code })}
+                >
+                  {m.name}
+                </button>
+              ))}
+          </div>
+          {!scenario.target && (
+            <p className="tm-muted">Pick a market here or on the map.</p>
+          )}
+        </>
+      )}
+      {scenario.mode === "date" && (
+        <>
+          <label className="tm-field" htmlFor="tm-ship-date">
+            Proposed ship date
+          </label>
+          <input
+            id="tm-ship-date"
+            className="tm-select"
+            type="date"
+            value={scenario.target ?? ""}
+            onChange={(e) =>
+              onChange({ ...scenario, target: e.target.value || null })
+            }
+          />
+          {!scenario.target && (
+            <p className="tm-muted">
+              Planned date is {date(row.order.shipDate)}. Pick another day.
+            </p>
+          )}
+        </>
+      )}
+      {scenario.mode === "route" && (
+        <>
+          <span className="tm-field">Route via</span>
+          <div className="tm-chips" role="group" aria-label="Route to compare">
+            {ROUTE_OPTIONS.map((stop) => (
+              <button
+                key={stop.code}
+                aria-pressed={scenario.target === stop.code}
+                className={scenario.target === stop.code ? "selected" : ""}
+                onClick={() => onChange({ ...scenario, target: stop.code })}
+              >
+                {stop.label}
+              </button>
+            ))}
+          </div>
+          {!scenario.target && (
+            <p className="tm-muted">
+              Pick a direct routing or an intermediate stop.
+            </p>
+          )}
+        </>
       )}
       <div className="notice tm-caveat">
         <CircleHelp size={18} />
-        Changing market still depends on your customer, the contract and whether
-        you can actually sell there. This compares paperwork only.
+        {scenario.mode === "date"
+          ? "Moving the ship date does not change the destination or the documents on file."
+          : scenario.mode === "route"
+            ? "A different stop does not price the freight or promise a transit time."
+            : "Changing market still depends on your customer, the contract and whether you can actually sell there. This compares paperwork only."}
       </div>
       {scenario.target && !current && (
         <p className="tm-muted" role="status">
@@ -2664,6 +2774,13 @@ function ScenarioPanel({
               ))}
             </ul>
           </section>
+          {!!comparison.assumptions?.length && (
+            <ul className="fine-print">
+              {comparison.assumptions.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          )}
           <p className="fine-print">
             Based on the market checklists and the documents on file for{" "}
             {row.order.supplier}. Illustrative, not legal guidance.
