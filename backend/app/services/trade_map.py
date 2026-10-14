@@ -243,7 +243,9 @@ def compare_requirements(
                     + (
                         f"Also listed in the {current} checklist; validity and shipment scope still need review."
                         if prior
-                        else f"On file, though {current or 'the current market'} doesn't ask for it."
+                        else f"{to_market.name} asks for it; "
+                        + (f"the {current} checklist" if current else "the current market")
+                        + " doesn't. Check it covers this shipment."
                     ),
                 )
             )

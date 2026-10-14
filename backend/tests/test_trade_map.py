@@ -173,6 +173,9 @@ def test_compare_markets(client, reference):
         "Timber legality evidence",
         "Species & harvest-country declaration",
     ]
+    assert result["reuse"][1]["note"].endswith(
+        "United States asks for it; the EU checklist doesn't. Check it covers this shipment."
+    )
     assert [(i["title"], i["tag"]) for i in result["reevaluate"]] == [
         ("Lacey Act declaration", "New"),
         ("Formaldehyde emission test", "Changes"),
