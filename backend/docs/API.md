@@ -42,8 +42,6 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
 | `GET /overview` | viewer | Dashboard |
 | `GET /orders` | viewer | Every workspace load |
 | `GET /orders/{id}` | viewer | Order detail page |
-| `GET /orders/{id}/report.pdf` | viewer | Order detail: "Download PDF" |
-| `POST /orders/{id}/report/email` | editor | Order detail: "Email report" |
 | `POST /imports` | editor | Upload screen |
 | `GET /imports/{id}` | viewer | Upload screen (preview) |
 | `POST /imports/{id}/commit` | editor | Upload screen ("Import") |
@@ -59,6 +57,12 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
 | `POST /sites` | editor | Trade map: "Add site" |
 | `PATCH /sites/{id}` | editor | Trade map: "Edit site" |
 | `DELETE /sites/{id}` | editor | Trade map: "Delete site" |
+| `POST /report-drafts` | viewer | Order detail: "Prepare report"; Reports: "Generate company report" |
+| `GET /report-drafts` | viewer | Reports: your reports |
+| `GET /report-drafts/{id}` | viewer (author) | Report editor |
+| `PATCH /report-drafts/{id}` | viewer (author) | Report editor: save (also before preview, download, email) |
+| `GET /report-drafts/{id}/pdf` | viewer (author) | Report editor: "Preview PDF", "Download PDF" |
+| `POST /report-drafts/{id}/email` | editor (author) | Report editor: "Email report" |
 | `POST /regulation-documents` | editor | Regulation library: add regulation / version |
 | `GET /regulation-documents/{id}` | viewer | Regulation library |
 | `GET /regulation-documents/{id}/file` | viewer | Regulation library |
@@ -166,23 +170,6 @@ On every workspace load, `api.orders()` reads every page (`limit=200`) until `ne
 ```
 `source` is the CSV row the order came from, or `null` for seeded orders. `exposures` stays empty until analysis exists (phase 2).
 Opening `#/workspace/orders/<id>` in a live session.
-
-### `GET /orders/{id}/report.pdf` (viewer)
-The order compliance report as a PDF attachment (`exportmate-<id>-report.pdf`): the order, the document checklist for its market exactly as `GET /trade-map` checks it, each cited official text (title, version, URL, quote), and the CSV row it came from. A destination outside the map's markets gives a report with no checklist. This is not the phase 2 exposure report (`GET /reports/{id}` below).
-`api.downloadOrderReport()`, "Download PDF" on the order detail page.
-
-### `POST /orders/{id}/report/email` (editor, rate limited)
-Emails the same PDF. Optional `Idempotency-Key` header (the frontend sends a new one per dialog): Resend sends once per key for 24 hours.
-```json
-{"to": ["buyer@example.com"], "message": "Optional note, ≤1000 chars"}
-```
-```json
-{"data": {"recipients": ["buyer@example.com"], "sandbox": false, "sentAt": "2026-10-14T09:12:00Z"}}
-```
-- `to`: 1–5 plain addresses (no display names), trimmed and de-duplicated. Replies go to the sender's own email (`reply_to`).
-- `sandbox: true` means `RESEND_API_KEY` isn't set: the email was built and audited but not delivered.
-- Each send writes an `order_report.emailed` audit event with the recipients and note (logs only carry the count).
-- `422 invalid_input` (bad addresses), `422 email_rejected` (Resend refused it), `429 rate_limited` (`REPORT_EMAILS_PER_HOUR`, default 20 per user), `502 email_failed`, `503 email_unavailable`.
 
 ## CSV import
 
@@ -344,6 +331,49 @@ Every regulation, oldest first, with `versionCount` and `latestVersion`. With `o
 The regulation plus `versions[]`, newest first.
 
 ---
+
+## Reports
+
+A report is generated into a draft that only its author sees (`report_drafts`). The draft keeps the generated report (`original`) and an editable copy (`content`). Everything in `content` can be edited, but the PDF shades every line that differs from `original`, notes per section what was changed, added or left out and by whom, and says "contains edits by <name>" in the footer. Sending locks the draft. These are not the phase 2 analysis reports (`GET /reports/{id}`, planned below).
+
+Content shape (camelCase): `{title, subtitle, summary, sections: [{id, layout: "facts"|"table"|"sources", heading, note, empty, columns, widths, toneColumn, included, rows: [{id, cells: [..one per column..], tone: "gap"|"warn"|null, included}]}]}`. A cell whose last line is only a URL renders as a link (`Publisher\nhttps://…`).
+
+### `POST /report-drafts` (viewer)
+`{"kind": "order", "orderId": "PO-2291"}` or `{"kind": "company", "days": 30}` (7–180). `201` with the draft:
+```json
+{"data": {"id": "…", "kind": "company", "title": "What's happening and what it affects", "scope": {"days": 30},
+  "createdAt": "…", "updatedAt": "…", "sentAt": null, "sentTo": null,
+  "companyName": "Binh Duong Wood Co.", "preparedBy": "Lan",
+  "content": {…}, "original": {…},
+  "edits": {"header": false, "sections": 0, "rowsEdited": 0, "rowsAdded": 0, "rowsRemoved": 0}}}
+```
+- Order: order facts, the document checklist exactly as `GET /trade-map` checks it, cited sources with quotes, the CSV row. `404` for another company's order.
+- Company: at a glance; checklist lines in the markets the company ships to that take effect or change in the next `days`, with the open orders shipping on or after that date; News watch alerts (high and medium, last `days`), read from the AI service's `GET /api/impacts` with the caller's token (`AI_SERVICE_URL`; if it can't be reached the section says so); floods within the check radius of suppliers and sites (last `days`); regulation versions added in the last `days` and the open orders whose checklists cite that regulation; open orders with document gaps; suppliers to follow up; sources.
+
+### `GET /report-drafts` (viewer)
+The caller's 30 most recently updated reports (summary fields only).
+
+### `GET /report-drafts/{id}` (viewer, author only)
+Another member's draft is `404`.
+
+### `PATCH /report-drafts/{id}` (viewer, author only)
+`{"content": {…}}` replaces the content. Sections can't be added, removed or reordered, and their `layout`, `widths`, `toneColumn` and column count can't change (`422 invalid_report`); generated lines are left out with `included: false`, not deleted. New lines need a new `id`. `409 report_already_sent` once sent.
+
+### `GET /report-drafts/{id}/pdf` (viewer, author only)
+The PDF of the saved content, `inline` for the preview; `?download=true` makes it an attachment.
+
+### `POST /report-drafts/{id}/email` (editor, author only, rate limited)
+```json
+{"to": ["buyer@example.com"], "message": "Optional note, ≤1000 chars"}
+```
+```json
+{"data": {"recipients": ["buyer@example.com"], "sandbox": false, "sentAt": "2026-10-15T09:12:00Z"}}
+```
+- `to`: 1–5 plain addresses (no display names), trimmed and de-duplicated. Replies go to the sender's own email. Subject: `<company>: <title>`.
+- Optional `Idempotency-Key` header (the frontend sends a new one per dialog): Resend sends once per key for 24 hours. The draft is locked (`SELECT … FOR UPDATE`) while sending; a second send is `409 report_already_sent`.
+- `sandbox: true` means `RESEND_API_KEY` isn't set: built and audited, not delivered.
+- Writes a `report.emailed` audit event with the recipients, note and edit counts (logs only carry counts).
+- `422 invalid_input` (bad addresses), `422 email_rejected`, `429 rate_limited` (`REPORT_EMAILS_PER_HOUR`, default 20 per user), `502 email_failed`, `503 email_unavailable`.
 
 ## Planned
 

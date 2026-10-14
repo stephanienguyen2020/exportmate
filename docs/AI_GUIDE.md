@@ -134,7 +134,7 @@ Filter by severity or show only opportunities. Read the source before acting: al
 | Switch sources off or on, add or remove custom sources | No | No | Yes |
 | Scan now | No | No | Yes |
 
-News watch alerts also appear in the **News alerts** section of a company report (Reports page), which lists high and medium alerts from the report's period.
+News watch alerts also appear in the **News alerts** section of a company report (Reports page), which lists high and medium alerts from the report's period; in the PDF, each alert's publisher links to the article.
 
 ## How it works
 

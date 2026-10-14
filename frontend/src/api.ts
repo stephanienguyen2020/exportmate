@@ -435,32 +435,32 @@ export const api = {
       (r) => r.data,
     ),
   reports: (signal?: AbortSignal) =>
-    request<ReportSummary[]>("/reports", { signal }).then((r) => r.data),
+    request<ReportSummary[]>("/report-drafts", { signal }).then((r) => r.data),
   report: (id: string, signal?: AbortSignal) =>
-    request<ReportDraft>(`/reports/${encodeURIComponent(id)}`, { signal }).then(
+    request<ReportDraft>(`/report-drafts/${encodeURIComponent(id)}`, { signal }).then(
       (r) => r.data,
     ),
   createReport: (
     body: { kind: "order"; orderId: string } | { kind: "company"; days: number },
   ) =>
-    request<ReportDraft>("/reports", {
+    request<ReportDraft>("/report-drafts", {
       method: "POST",
       body: JSON.stringify(body),
     }).then((r) => r.data),
   updateReport: (id: string, content: ReportContent) =>
-    request<ReportDraft>(`/reports/${encodeURIComponent(id)}`, {
+    request<ReportDraft>(`/report-drafts/${encodeURIComponent(id)}`, {
       method: "PATCH",
       body: JSON.stringify({ content }),
     }).then((r) => r.data),
   async reportPdf(id: string): Promise<Blob> {
     const response = await authenticatedResponse(
-      `/reports/${encodeURIComponent(id)}/pdf`,
+      `/report-drafts/${encodeURIComponent(id)}/pdf`,
     );
     return response.blob();
   },
   async downloadReport(id: string) {
     const response = await authenticatedResponse(
-      `/reports/${encodeURIComponent(id)}/pdf?download=true`,
+      `/report-drafts/${encodeURIComponent(id)}/pdf?download=true`,
     );
     const filename =
       /filename="([^"]+)"/.exec(
@@ -481,7 +481,7 @@ export const api = {
     body: { to: string[]; message: string },
     idempotencyKey: string,
   ) =>
-    request<ReportEmail>(`/reports/${encodeURIComponent(id)}/email`, {
+    request<ReportEmail>(`/report-drafts/${encodeURIComponent(id)}/email`, {
       method: "POST",
       headers: { "Idempotency-Key": idempotencyKey },
       body: JSON.stringify(body),

@@ -28,7 +28,7 @@ Example end-to-end:
 | CSV import: upload → validate → preview → commit | Built |
 | Playbook rules: list, add, toggle, delete | Built (stored only) |
 | Trade map: orders, suppliers and sites on a map; document checks per market; "what if another market" | Built |
-| Order compliance report: PDF of an order's document checklist with cited official texts; editors email it to up to five addresses (Resend, sandbox without a key) | Built |
+| Reports: an order's checklist report, or a company report (what is happening: checklist changes, news alerts, floods near suppliers, new regulation versions; what it affects: orders with gaps, suppliers). Edit anything, preview the PDF (edits marked), email it to up to five addresses (Resend, sandbox without a key); sent reports are locked | Built |
 | Rule library: shared official texts and the company's own uploads, with versions | Built (no screen yet) |
 | Rule extraction and analysis: match rules to orders, compute cost, report with citations, block reports that fail checks | Phase 2 |
 | Actions: draft message → approve → send once (sandbox email) | Phase 3 |

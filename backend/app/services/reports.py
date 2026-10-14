@@ -108,6 +108,18 @@ def plural(count: int, word: str, many: str | None = None) -> str:
     return f"{count} {word if count == 1 else many or word + 's'}"
 
 
+_TRAILING_URL = re.compile(r"^(.*)\n(https?://\S+)\s*$", re.DOTALL)
+
+
+def cell_link(text: str) -> tuple[str, str | None]:
+    """'Publisher\nhttps://…' renders as 'Publisher ›' linking to the URL, so long feed URLs
+    don't swell a table row. Any other text is shown as written."""
+    match = _TRAILING_URL.match(text)
+    if not match or not match.group(1).strip():
+        return text, None
+    return f"{match.group(1).strip()} ›", match.group(2)
+
+
 def report_filename(title: str) -> str:
     safe = re.sub(r"[^A-Za-z0-9._-]+", "-", title).strip("-.")[:80] or "report"
     return f"exportmate-{safe}.pdf"
@@ -361,7 +373,10 @@ def _news_section(alerts: list[dict] | None, since: date, facts: _CompanyFacts) 
             stock_text = join_limited(names, 3) or "No stock item named"
             if isinstance(stock, int | float) and stock:
                 stock_text += f" · USD {stock:,.0f} in stock"
-            source = " ".join(str(p) for p in (alert.get("publisher"), alert.get("url")) if p)
+            # A last line holding only a URL becomes a link in the PDF (see cell_link).
+            source = "\n".join(
+                str(p) for p in (alert.get("publisher") or "Source", alert.get("url")) if p
+            )
             rows.append(
                 ReportRow(
                     id=f"news-{str(alert.get('articleId') or alert.get('id') or len(rows))[:60]}",
@@ -371,7 +386,7 @@ def _news_section(alerts: list[dict] | None, since: date, facts: _CompanyFacts) 
                         str(alert.get("severity")).capitalize(),
                         str(alert.get("why") or alert.get("action") or "")[:1500],
                         stock_text,
-                        source[:600],
+                        source[:2000],
                     ],
                     tone="gap" if alert.get("severity") == "high" else "warn",
                 )
@@ -830,7 +845,8 @@ class _ReportPdf(FPDF):
                         else (110 if facts and i == 0 else None),
                         fill_color=EDITED_FILL if shaded else None,
                     )
-                    out.cell(text, style=style)
+                    shown, link = cell_link(text)
+                    out.cell(shown, style=style, link=link)
 
     def edit_note(self, section: ReportSection, edits: SectionEdits):
         parts = []

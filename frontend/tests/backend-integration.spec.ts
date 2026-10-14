@@ -223,7 +223,7 @@ async function fixture(
         },
         exposures: [],
       };
-    else if (path === "/reports" && method === "POST") {
+    else if (path === "/report-drafts" && method === "POST") {
       const id = `r-${reports.size + 1}`;
       const title =
         body.kind === "company"
@@ -247,8 +247,8 @@ async function fixture(
       reports.set(id, draft);
       await route.fulfill({ status: 201, json: { data: draft, meta } });
       return;
-    } else if (path === "/reports") data = [...reports.values()];
-    else if (/^\/reports\/r-\d+\/pdf$/.test(path)) {
+    } else if (path === "/report-drafts") data = [...reports.values()];
+    else if (/^\/report-drafts\/r-\d+\/pdf$/.test(path)) {
       await route.fulfill({
         contentType: "application/pdf",
         headers: {
@@ -257,12 +257,12 @@ async function fixture(
         body: "%PDF-1.4 test report",
       });
       return;
-    } else if (/^\/reports\/r-\d+\/email$/.test(path)) {
+    } else if (/^\/report-drafts\/r-\d+\/email$/.test(path)) {
       const draft = reports.get(path.split("/")[2]);
       draft.sentAt = "2026-10-15T09:00:00Z";
       draft.sentTo = body.to;
       data = { recipients: body.to, sandbox: true, sentAt: draft.sentAt };
-    } else if (/^\/reports\/r-\d+$/.test(path)) {
+    } else if (/^\/report-drafts\/r-\d+$/.test(path)) {
       const draft = reports.get(path.split("/")[2]);
       if (method === "PATCH") {
         draft.content = body.content;
@@ -376,7 +376,7 @@ test("prepares an order report, edits it, previews the PDF and emails it once", 
   await expect(
     page.getByRole("heading", { name: "SERVER-1 · API plywood" }),
   ).toBeVisible();
-  expect(requests.find((r) => r.path === "/reports")?.body).toEqual({
+  expect(requests.find((r) => r.path === "/report-drafts")?.body).toEqual({
     kind: "order",
     orderId: "SERVER-1",
   });
@@ -397,13 +397,13 @@ test("prepares an order report, edits it, previews the PDF and emails it once", 
 
   await page.getByRole("button", { name: "Preview PDF" }).click();
   await expect(page.locator('iframe[title="Report PDF preview"]')).toBeVisible();
-  const saved = requests.find((r) => r.method === "PATCH" && r.path === "/reports/r-1");
+  const saved = requests.find((r) => r.method === "PATCH" && r.path === "/report-drafts/r-1");
   expect(saved?.body.content.title).toBe("SERVER-1 for our buyer");
   const rows = saved?.body.content.sections[1].rows;
   expect(rows[0].cells[2]).toBe("Requested from supplier on 14 Oct.");
   expect(rows[1].included).toBe(false);
   expect(rows[2]).toMatchObject({ cells: ["Buyer audit", "", "", ""], included: true });
-  expect(requests.some((r) => r.path === "/reports/r-1/pdf")).toBeTruthy();
+  expect(requests.some((r) => r.path === "/report-drafts/r-1/pdf")).toBeTruthy();
 
   await page.getByRole("button", { name: "Email report" }).click();
   const dialog = page.getByRole("dialog");
@@ -421,7 +421,7 @@ test("prepares an order report, edits it, previews the PDF and emails it once", 
       "Sandbox: the report email to buyer@example.com, qa@example.org was recorded but not delivered.",
     ),
   ).toBeVisible();
-  const [sent] = requests.filter((r) => r.path === "/reports/r-1/email");
+  const [sent] = requests.filter((r) => r.path === "/report-drafts/r-1/email");
   expect(sent.body).toEqual({
     to: ["buyer@example.com", "qa@example.org"],
     message: "Checklist attached.",
@@ -446,7 +446,7 @@ test("generates a company report for the chosen window", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "What's happening and what it affects" }),
   ).toBeVisible();
-  expect(requests.find((r) => r.path === "/reports" && r.method === "POST")?.body).toEqual({
+  expect(requests.find((r) => r.path === "/report-drafts" && r.method === "POST")?.body).toEqual({
     kind: "company",
     days: 90,
   });

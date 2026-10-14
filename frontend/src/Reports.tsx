@@ -448,6 +448,10 @@ function ReportEditor({
             </button>
           </div>
           <iframe title="Report PDF preview" src={preview} />
+          <p className="fine-print">
+            Preview blank? Some phone browsers can’t show a PDF inside a page;
+            open it in a new tab instead.
+          </p>
         </section>
       )}
       <fieldset className="report-form-body" disabled={sent}>
@@ -511,6 +515,11 @@ function SectionEditor({
   onRow: (rowId: string, change: Partial<ReportRow> | null) => void;
 }) {
   const originals = new Map(original.rows.map((r) => [r.id, r]));
+  // A column is wide when the generated report has long text in it. Decided once, so a field
+  // never turns from an input into a textarea (and loses focus) while someone types.
+  const wide = section.columns.map((_, i) =>
+    original.rows.some((r) => r.cells[i]?.length > 28 || r.cells[i]?.includes("\n")),
+  );
   const fieldId = (suffix: string) => `report-${section.id}-${suffix}`;
   return (
     <section
@@ -616,7 +625,7 @@ function SectionEditor({
                     <div className={"report-cells " + section.layout}>
                       {row.cells.map((cell, i) => {
                         const cellId = `${fieldId(row.id)}-${i}`;
-                        const long = cell.length > 70 || cell.includes("\n");
+                        const long = wide[i];
                         const change = (value: string) =>
                           onRow(row.id, {
                             cells: row.cells.map((c, j) => (j === i ? value : c)),
@@ -628,6 +637,7 @@ function SectionEditor({
                               <textarea
                                 id={cellId}
                                 maxLength={4000}
+                                rows={Math.min(8, Math.max(2, Math.ceil(cell.length / 90) + cell.split("\n").length - 1))}
                                 value={cell}
                                 onChange={(e) => change(e.target.value)}
                               />
