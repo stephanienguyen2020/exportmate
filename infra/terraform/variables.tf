@@ -69,3 +69,9 @@ variable "gemini_model_complex" {
   type        = string
   default     = "gemini-4-argon"
 }
+
+variable "agent_runtime" {
+  description = "The agents' Agent Runtime instance (projects/…/locations/…/reasoningEngines/…), printed by ai/server/platform/runtime.py deploy. Empty: the Cloud Run service runs the agents itself."
+  type        = string
+  default     = ""
+}
