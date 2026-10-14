@@ -56,6 +56,7 @@ npm run eval                           # golden set against Gemini + Firestore; 
 npm run eval -- --only=latest-scan     # selected cases
 npm run eval -- --judge                # add the LLM judge (JUDGE_MODEL, default GEMINI_MODEL)
 npm run eval -- --tier=simple          # every case on one tier, e.g. to see what the small model can handle
+npm run eval:vertex                    # also create an evaluation run on Agent Platform › Evaluation (managed judges)
 npm run ops                            # last 7 days of chats; --days=1, --eval, --json
 npm run eval:scan                      # news scan relevance on labeled articles; saves to scan_eval_runs
 npm run eval:scan -- --repeat=3        # each case 3 times; passes only if it passes every time
@@ -70,6 +71,8 @@ When the assistant gets something wrong:
 4. Run `npm test` and `npm run eval`; no regressions before deploying.
 
 When the scan raises a false alarm or misses an article: add the article (rewritten so it isolates the link or the trap) to `eval/scan-golden.js`, then fix the scan's `RULES` in `scan.js` or the checks in `relevance.js` until `npm run eval:scan` passes.
+
+**Agent Platform evaluation** (`eval/vertex/vertex_eval.py`, Python via `uv`, runs locally, not in the Cloud Run job): `npm run eval:vertex` runs the golden set as usual, then exports each case as Agent Platform agent data (`eval/results/<session>.vertex.json`, git-ignored): the instruction and tool declarations the model was given, earlier turns, every function call with its full response, the auditor's send-back and the final answer. It creates an **evaluation run** with the Gen AI evaluation client (`agentplatform.Client().evals.create_evaluation_run`) scored by managed, Gemini-judged adaptive-rubric metrics: final response quality, tool use quality, hallucination (claims the tool results don't support) and safety. Runs belong to the evaluation experiment **ExportMate assistant** on **Agent Platform › Evaluation**, where each case's rubric verdicts and runs can be compared; results are written to the project's Agent Platform staging bucket (or `EVAL_GCS_DEST`). The service runs in us-central1 (`EVAL_LOCATION`; it isn't offered in asia-southeast1). The runner's own checks (expected tools and arguments, figures, declines) stay in Firestore `eval_runs`; the managed metrics don't replace them.
 
 Eval runs call Gemini and write audits with `channel: "eval"` to the same Firestore project; `npm run ops` leaves them out by default.
 
