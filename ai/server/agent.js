@@ -9,7 +9,7 @@
 // - answer-cache.js: a question already answered against the same data isn't answered again.
 // Every step is streamed and stored in an audit document (`audits` collection).
 import { FieldValue } from "@google-cloud/firestore";
-import { InMemorySessionService, Runner, createEvent, LogLevel, setLogger } from "@google/adk";
+import { Runner, createEvent, LogLevel, setLogger } from "@google/adk";
 import { FunctionCallingConfigMode } from "@google/genai";
 import { db, inventory, sources, answerCache, list } from "./db.js";
 import { EMBED_MODEL } from "./rag.js";
@@ -24,13 +24,13 @@ import { answerKey, cacheable, cachedAudit, fingerprint, CACHE_TTL_MS } from "./
 import { GUIDES } from "./seed/guides.js";
 import { LIVE_TOOLS, REGISTRY, UnknownToolPlugin, cached, clearCaches, lastDoneScan, makeRefs, workspaceReaders } from "./agents/tools.js";
 import { ANSWERING, buildAssistant } from "./agents/assistant.js";
+import { APP, chatSession, memoryService, remembers, userKeyFor } from "./agents/platform.js";
 
 export { clearCaches };
 export const audits = db.collection("audits");
 const MAX_STEPS = 6; // model calls per answering agent per message
 const SPECIALIST_STEPS = 3; // per specialist request
 const TOOL_BUDGET = 16;
-const APP = "exportmate";
 
 // ADK's own log lines go through log.js (JSON on Cloud Run); its per-request info lines are dropped.
 const adkLog = (severity) => (...args) => log(severity, `adk.${severity.toLowerCase()}`, { detail: args.join(" ").slice(0, 500) });
@@ -97,6 +97,8 @@ export async function runAgent({
   useCache = channel === "chat",
   // GETs a company backend path with the caller's own token ({ status, body }); company chats only.
   backend = null,
+  // The signed-in user ({ id }, from GET /api/v1/me): their session and memories are their own.
+  user = null,
   // The browser demo's own orders and playbook ({ orders, playbook }, from orders.js); demo chats only.
   demo = null,
   onStep = () => {},
@@ -105,7 +107,9 @@ export async function runAgent({
   const companyId = company?.company.id;
   const readers = workspaceReaders(backend, company ? null : demo);
   // What this turn's tools and rules may use (gateway.js scopes, policy.js `when`).
-  const session = { company, orders: readers.orders, playbook: readers.playbook };
+  const session = { company, orders: readers.orders, playbook: readers.playbook, memories: [] };
+  // Who this chat runs as (agents/platform.js): Agent Platform session and Memory Bank scope.
+  const userKey = userKeyFor({ company, user, sessionId });
 
   // Asked and answered before, against the same data today: reuse that answer.
   let key = null;
@@ -114,6 +118,8 @@ export async function runAgent({
       key = answerKey({
         messages,
         companyId,
+        // Remembered preferences can change an answer, so a remembered user's answers are their own.
+        userKey: remembers(userKey) ? userKey : null,
         disabled: access.disabled,
         dataVersion: await dataVersion(company, access, session),
         policyVersion: POLICY_VERSION,
@@ -269,27 +275,39 @@ export async function runAgent({
 
   const plugins = [new UnknownToolPlugin(runTool)];
   const { root, agents } = buildAssistant({ session, declarations: gateway.declarations(), runTool, plugins, hooks, onReport, routeTo: () => current });
-  const sessions = new InMemorySessionService();
-  const runner = new Runner({ appName: APP, agent: root, sessionService: sessions, plugins });
-  const userId = company?.company.id || "demo";
 
   try {
-    // The conversation so far comes from the client. Earlier answers lose their [n] markers
-    // (refs restart each turn) but keep the titles they cited; they're attributed to the agent
-    // answering now, so it reads them as its own turns.
-    const session = await sessions.createSession({ appName: APP, userId });
-    for (const m of messages.slice(0, -1)) {
-      const text = m.role === "model" ? stripRefs(m.text) + (m.sources?.length ? `\n(Sources cited: ${m.sources.join("; ")})` : "") : m.text;
-      await sessions.appendEvent({
-        session,
-        event: createEvent({ author: m.role === "model" ? ANSWERING[current] : "user", content: { role: m.role, parts: [{ text }] } }),
+    // What Memory Bank remembers about this user that bears on the question: preferences and
+    // working context for the prompt (agents/instructions.js), never a source of figures.
+    if (remembers(userKey)) {
+      const searched = Date.now();
+      const found = await memoryService.searchMemory({ appName: APP, userId: userKey, query: messages.at(-1).text }).catch((e) => {
+        log("WARNING", "memory.search_failed", { requestId, error: String(e?.message || e) });
+        return { memories: [] };
       });
+      session.memories = found.memories.map((m) => m.content?.parts?.[0]?.text).filter(Boolean).slice(0, 8);
+      push({ kind: "memory", count: session.memories.length, facts: session.memories, latencyMs: Date.now() - searched });
     }
+
+    // Chats continue their Agent Platform session; evals and local runs use an in-memory one.
+    const { service, session: chat, fresh } = await chatSession({ sessionId, userKey, persistent: channel === "chat" });
+    const runner = new Runner({ appName: APP, agent: root, sessionService: service, plugins });
+    // A new session starts from the conversation the client sent. Earlier answers lose their [n]
+    // markers (refs restart each turn) but keep the titles they cited; they're attributed to the
+    // agent answering now, so it reads them as its own turns.
+    if (fresh)
+      for (const m of messages.slice(0, -1)) {
+        const text = m.role === "model" ? stripRefs(m.text) + (m.sources?.length ? `\n(Sources cited: ${m.sources.join("; ")})` : "") : m.text;
+        await service.appendEvent({
+          session: chat,
+          event: createEvent({ author: m.role === "model" ? ANSWERING[current] : "user", content: { role: m.role, parts: [{ text }] } }),
+        });
+      }
     // The question, then the auditor's findings if the draft is sent back.
     let message = messages.at(-1).text;
     while (message) {
       const newMessage = { role: "user", parts: [{ text: message }] };
-      for await (const event of runner.runAsync({ userId, sessionId: session.id, newMessage })) {
+      for await (const event of runner.runAsync({ userId: userKey, sessionId: chat.id, newMessage })) {
         // ADK turns a model error (after our retries) into an event; it ends the turn.
         if (event.errorCode) throw Object.assign(new Error(event.errorMessage || event.errorCode), { status: Number(event.errorCode) || undefined });
       }
@@ -324,6 +342,18 @@ export async function runAgent({
       .doc(key)
       .set({ auditId: ref.id, companyId: companyId ?? null, createdAt: audit.createdAt, expireAt: new Date(started + CACHE_TTL_MS), hits: 0 })
       .catch((e) => log("WARNING", "answer_cache.write_failed", { requestId, error: String(e?.message || e) }));
+  // Memory Bank learns from the question and the answer only (no tool results), for company users.
+  if (remembers(userKey) && audit.status === "ok" && channel === "chat")
+    memoryService
+      .addEventsToMemory({
+        appName: APP,
+        userId: userKey,
+        events: [
+          createEvent({ author: "user", content: { role: "user", parts: [{ text: audit.question }] } }),
+          createEvent({ author: audit.route.answeredBy || ANSWERING[route.tier], content: { role: "model", parts: [{ text: stripRefs(audit.answer) }] } }),
+        ],
+      })
+      .catch((e) => log("WARNING", "memory.write_failed", { requestId, error: String(e?.message || e) }));
   // The eval also gets the instruction and tool declarations the model was given.
   const trace = withEvidence ? { agents, toolResults, reports } : {};
   return { id: ref.id, ...audit, ...(withEvidence ? { evidence, trace } : {}) };

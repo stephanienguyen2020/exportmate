@@ -4,7 +4,7 @@
 //        npm run eval -- --judge            also grade answers with an LLM judge
 //        npm run eval -- --tier=complex     every case on one model tier instead of the router's choice
 //        npm run eval -- --vertex           also create an evaluation run on Agent Platform (Gen AI evaluation:
-//                                           tool use, hallucination, response quality, safety; eval/vertex, needs uv)
+//                                           tool use, hallucination, response quality, safety; platform/evaluate.py, needs uv)
 // On GCP: gcloud run jobs execute exportmate-ai-task --args="node eval/run.js --judge" --wait
 // Each run is stored in the Firestore `eval_runs` collection and compared with the
 // previous run; it exits 1 if a case that passed now fails (a regression). Run it
@@ -161,7 +161,7 @@ if (previous) {
 }
 console.log(`Saved eval_runs/${saved.id} in Firestore (${PROJECT})`);
 
-// Hands the run to eval/vertex/vertex_eval.py, which creates an evaluation run on Agent Platform:
+// Hands the run to platform/evaluate.py, which creates an evaluation run on Agent Platform:
 // every case as agent data (the instruction and tools the model had, earlier turns, each function
 // call and response, the auditor's send-back and the answer) plus this runner's own scores.
 if (toVertex) {
@@ -170,7 +170,8 @@ if (toVertex) {
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, JSON.stringify({ run: { sessionId, firestoreRun: saved.id, policyVersion: POLICY_VERSION, tier: tier || "routed" }, cases: cases.map((c, n) => vertexCase(c, results[n], scored[n])) }));
   console.log(`\nCreating an Agent Platform evaluation run (${file})`);
-  const py = spawnSync("uv", ["run", "--project", join(here, "vertex"), "python", join(here, "vertex", "vertex_eval.py"), file], { stdio: "inherit" });
+  const platform = join(here, "..", "platform");
+  const py = spawnSync("uv", ["run", "--project", platform, "python", join(platform, "evaluate.py"), file], { stdio: "inherit" });
   if (py.error || py.status !== 0) console.error(`Agent Platform evaluation failed${py.error ? `: ${py.error.message}` : ""}; the export is in ${file}`);
 }
 process.exit(diff.regressions.length ? 1 : 0);

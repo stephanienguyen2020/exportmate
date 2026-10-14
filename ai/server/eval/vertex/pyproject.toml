@@ -1,9 +1,0 @@
-[project]
-name = "exportmate-vertex-eval"
-version = "0.1.0"
-description = "Scores the assistant's golden-set answers with the Vertex AI Gen AI evaluation service and logs each run to Vertex AI Experiments."
-requires-python = ">=3.12,<3.14"
-dependencies = ["google-cloud-aiplatform[evaluation]>=1.120", "pandas>=2.2"]
-
-[tool.uv]
-package = false
