@@ -768,9 +768,12 @@ export async function runAgent({
   let evidence = toEvidence(messages.filter((m) => m.role === "user").map((m) => m.text).join(" "));
 
   // Every tool call, offered or not, runs through the gateway and is recorded.
+  // With `withEvidence`, what each tool returned, in call order (for the Agent Platform eval).
+  const toolResults = [];
   async function runTool(name, args = {}) {
     const r = await gateway.call(name, args);
     if (r.ok) evidence += " " + toEvidence(JSON.stringify(r.output));
+    if (withEvidence) toolResults.push(r.ok ? r.output : { error: r.error });
     push({
       kind: "tool",
       name,
@@ -913,5 +916,7 @@ export async function runAgent({
       .doc(key)
       .set({ auditId: ref.id, companyId: companyId ?? null, createdAt: audit.createdAt, expireAt: new Date(started + CACHE_TTL_MS), hits: 0 })
       .catch((e) => log("WARNING", "answer_cache.write_failed", { requestId, error: String(e?.message || e) }));
-  return { id: ref.id, ...audit, ...(withEvidence ? { evidence } : {}) };
+  // The eval also gets the instruction and tool declarations the model was given.
+  const trace = withEvidence ? { instruction: system(company, session), tools: gateway.declarations(), toolResults } : {};
+  return { id: ref.id, ...audit, ...(withEvidence ? { evidence, trace } : {}) };
 }

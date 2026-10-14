@@ -69,6 +69,7 @@ Everything runs in one project, `skilful-scarab-511320-q9`, defined in [`infra/t
 | Firestore | `(default)` database, native mode, asia-southeast1; vector indexes on `kb.embedding` and `(kb.type, kb.embedding)` |
 | Cloud Scheduler | `exportmate-daily-news-scan`, OIDC-signed as `exportmate-scheduler@…` |
 | Cloud Build | images built as `exportmate-builder@…` into the `exportmate` Artifact Registry repo |
+| Agent Platform Evaluation | experiment "ExportMate assistant" (us-central1): golden-set runs scored by managed judges (`npm run eval:vertex`) |
 | Cloud Logging / Monitoring | JSON logs; log-based metrics `exportmate_ai/chat_answers`, `chat_latency`, `guard_withheld`, `scan_failures` |
 | Models | Assistant: `gemini-3.5-flash-lite` for simple questions and `gemini-4-argon` for complex ones (`GEMINI_MODEL_SIMPLE`, `GEMINI_MODEL_COMPLEX`); scans and the eval judge: `gemini-3.5-flash` (`GEMINI_MODEL`); embeddings: `gemini-embedding-001` (`EMBED_MODEL`); all via Vertex AI. These are the code defaults (`ai/server/models.js`); `GET /healthz` reports what the service runs |
 

@@ -196,7 +196,7 @@ These are the defaults in `models.js`. The deployed service takes its values fro
 
 ### Where data is kept
 
-Everything is in Firestore (asia-southeast1):
+The service's data is in Firestore (asia-southeast1):
 
 | Collection | Holds |
 | --- | --- |
@@ -207,6 +207,8 @@ Everything is in Firestore (asia-southeast1):
 | `audits` | One record per answer: question, steps, evidence, checks, citations, raw reasoning |
 | `answer_cache` | Which audits can be reused; entries expire after two days |
 | `eval_runs`, `scan_eval_runs` | Results of the assistant and scan evals |
+
+Agent Platform evaluation runs (`npm run eval:vertex`) are kept on Agent Platform › Evaluation in us-central1, in the evaluation experiment "ExportMate assistant", with their results in the project's Agent Platform staging bucket in Cloud Storage. They hold the golden cases' questions, tool results and answers, all synthetic or public data.
 
 **Privacy.** Questions and answers are stored as asked, without masking, so don't paste personal data or secrets into the chat. Logs carry no question text and no tokens. Your sign-in token is only ever sent to the company backend. An audit made in a company workspace can only be read with a token from that company.
 
@@ -228,6 +230,7 @@ cd ai/server
 npm run dev        # the service on :8080 (needs gcloud auth application-default login)
 npm test           # unit tests, no GCP needed
 npm run eval       # golden set against live Gemini + Firestore; saved to eval_runs
+npm run eval:vertex  # the same, then scored by Agent Platform's managed judges (needs uv; see AGENT_HARNESS.md)
 npm run eval:scan  # news scan relevance on labeled articles
 npm run ops        # health of recent chats
 gcloud run jobs execute exportmate-ai-task --region asia-southeast1 --wait --args="node eval/run.js"   # any of these, on GCP
