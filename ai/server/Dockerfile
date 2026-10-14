@@ -14,5 +14,5 @@ COPY . .
 
 USER node
 
-# Cloud Run sets PORT (8080 by default).
-CMD ["node", "index.js"]
+# Cloud Run sets PORT (8080 by default). Agent Runtime sets SERVE=runtime (main.js).
+CMD ["node", "main.js"]
