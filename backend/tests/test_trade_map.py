@@ -359,15 +359,15 @@ def test_reference_seed_is_idempotent(reference):
 
 def test_checklist_lines_removed_from_the_seed_are_deleted(reference):
     with open_session() as db:
-        origin = next(r for r in map_queries.list_market_requirements(db) if r.market_code == "SG")
+        origin = next(r for r in db.scalars(select(MarketRequirement)) if r.market_code == "SG")
         row = {c.name: getattr(origin, c.name) for c in MarketRequirement.__table__.columns}
         map_queries.replace_market_requirements(db, "SG", [row])
         db.commit()
-        keys = [r.requirement_key for r in map_queries.list_market_requirements(db)]
+        keys = [r.requirement_key for r in db.scalars(select(MarketRequirement))]
         assert keys.count("ispm15") == 7  # removed from SG only
         sg = [
             r.requirement_key
-            for r in map_queries.list_market_requirements(db)
+            for r in db.scalars(select(MarketRequirement))
             if r.market_code == "SG"
         ]
         assert sg == [origin.requirement_key]

@@ -84,6 +84,9 @@ class SupplierDocumentOut(CamelCaseModel):
     label: str
     detail: str
     standards: list[str]
+    document_number: str | None = None
+    issuer: str | None = None
+    expires_on: date | None = None  # after an order's ship date counts as a mismatch
 
 
 class MapSupplierOut(CamelCaseModel):

@@ -1,12 +1,12 @@
 import conftest
 import pytest
 from conftest import add_member, onboard
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import seed_reference_data as reference_seed
 from app.core.config import get_settings
 from app.database.models import MarketRequirement, Role
-from app.database.queries import trade_map as map_queries
 from app.database.session import open_session
 from app.seed_data import load_seed_file
 
@@ -250,7 +250,7 @@ def test_seed_leaves_out_market_requirements_whose_text_cannot_be_downloaded(mon
     monkeypatch.setattr(reference_seed, "fetch_official_text", fetch)
     seed_official_texts()
     with open_session() as db:
-        keys = [r.requirement_key for r in map_queries.list_market_requirements(db)]
+        keys = [r.requirement_key for r in db.scalars(select(MarketRequirement))]
     assert "ispm15" not in keys
     assert "legality" in keys
 
@@ -258,7 +258,7 @@ def test_seed_leaves_out_market_requirements_whose_text_cannot_be_downloaded(mon
     monkeypatch.setattr(reference_seed, "fetch_official_text", conftest.fake_official_text)
     seed_official_texts()
     with open_session() as db:
-        requirements = map_queries.list_market_requirements(db)
+        requirements = list(db.scalars(select(MarketRequirement)))
     assert sum(r.requirement_key == "ispm15" for r in requirements) == 8
     assert all(isinstance(r, MarketRequirement) and r.source_quote for r in requirements)
 

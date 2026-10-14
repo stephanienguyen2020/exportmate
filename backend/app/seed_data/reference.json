@@ -1,5 +1,11 @@
 {
-  "_note": "Shared reference data for the trade map, loaded into Postgres by `python -m app.seed_reference_data`. Coordinates are [longitude, latitude]. Each market requirement cites an official text (`source`: a document key in regulation_sources.json) and the sentence that sets it (`quote`). Not legal advice (docs/REQUIREMENTS.md 4.5).",
+  "_note": "Shared reference data for the trade map, loaded into Postgres by `python -m app.seed_reference_data`. Coordinates are [longitude, latitude]. Each market requirement cites an official text (`source`: a document key in regulation_sources.json) and the sentence that sets it (`quote`); `dutyRatePercent` is a duty the quote sets as a share of the order value. `costDefaults` are the shared cost assumptions (money in hundredths of `unit`); a company can change them. Not legal advice (docs/REQUIREMENTS.md 4.5).",
+  "costDefaults": [
+    { "key": "delay_per_day", "label": "Delay: cost of each day an order waits (storage, late fees)", "unit": "USD", "value": 20000 },
+    { "key": "missing_document", "label": "Getting a missing supplier document (certificate, declaration)", "unit": "USD", "value": 40000 },
+    { "key": "new_test", "label": "A new lab test, when the test on file isn't one the market accepts", "unit": "USD", "value": 40000 },
+    { "key": "supplier_lead_days", "label": "Days a supplier needs to send a new document", "unit": "days", "value": 14 }
+  ],
   "documentKinds": [
     {
       "kind": "legality",
@@ -1126,6 +1132,7 @@
           "940340"
         ],
         "why": "Upholstered seating and kitchen cabinets & vanities carry a 25% US tariff, rising to 30% and 50% on 1 January 2027 (91 FR 1039). Recheck landed cost.",
+        "dutyRatePercent": 25,
         "source": "section-232-proclamation-90fr48127",
         "quote": "(2) Except as otherwise provided in this proclamation, imports of certain upholstered wooden products, as listed in Annex I to this proclamation, will be subject to a 25 percent ad valorem duty rate. (3) Except as otherwise provided in this proclamation, imports of kitchen cabinets and vanities, as listed in Annex I to this proclamation, will be subject to a 25 percent ad valorem duty rate.",
         "changesOn": "2027-01-01",

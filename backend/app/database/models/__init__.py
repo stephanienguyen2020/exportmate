@@ -1,6 +1,12 @@
 """All ORM tables. Import from here so Alembic sees every model."""
 
 from app.database.models.account import Company, Membership, Role, User
+from app.database.models.analysis import (
+    AnalysisReport,
+    AnalysisRun,
+    ReportState,
+    RunStatus,
+)
 from app.database.models.audit import AuditEvent
 from app.database.models.base import Base
 from app.database.models.order import Import, ImportRow, ImportStatus, Order, OrderStatus
@@ -8,7 +14,9 @@ from app.database.models.playbook import PlaybookRevision, PlaybookRule
 from app.database.models.regulation import Regulation, RegulationDocument
 from app.database.models.report import ReportDraft, ReportKind
 from app.database.models.trade_map import (
+    CompanyCostSetting,
     CompanySite,
+    CostDefault,
     Country,
     DocumentKind,
     Market,
@@ -21,13 +29,19 @@ from app.database.models.trade_map import (
     SiteKind,
     Supplier,
     SupplierDocument,
+    SupplierDocumentUpload,
+    SupplierDocumentUploadStatus,
 )
 
 __all__ = [
+    "AnalysisReport",
+    "AnalysisRun",
     "AuditEvent",
     "Base",
     "Company",
+    "CompanyCostSetting",
     "CompanySite",
+    "CostDefault",
     "Country",
     "DocumentKind",
     "Import",
@@ -47,11 +61,15 @@ __all__ = [
     "RegulationDocument",
     "ReportDraft",
     "ReportKind",
+    "ReportState",
     "RequirementLevel",
     "Role",
+    "RunStatus",
     "SatelliteObservation",
     "SiteKind",
     "Supplier",
     "SupplierDocument",
+    "SupplierDocumentUpload",
+    "SupplierDocumentUploadStatus",
     "User",
 ]
