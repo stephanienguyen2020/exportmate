@@ -41,7 +41,11 @@ export type GuardFlag = { where: string; match: string };
 export type AuditStep = {
   at: number;
   // cache: the answer was reused from an earlier audit (auditId, answeredAt); its steps follow.
-  kind: "plan" | "tool" | "draft" | "review" | "answer" | "cache";
+  // delegate: a specialist's report to the analyst (agent, request, excerpt).
+  kind: "plan" | "tool" | "draft" | "review" | "answer" | "cache" | "delegate";
+  // The agent that made the step: quick_answer, analyst or a specialist (stock_specialist, …).
+  agent?: string;
+  request?: string;
   latencyMs?: number;
   note?: string;
   calls?: { name: string; args: Record<string, unknown> }[];
@@ -90,7 +94,9 @@ export type Audit = {
   flags?: GuardFlag[];
   // The router's choice: simple (small fast model) or complex, the signals behind it, and
   // whether a simple-tier draft the auditor sent back was revised on the complex tier.
-  route?: { tier: "simple" | "complex"; reasons: string[]; escalated?: boolean };
+  // agent: who the router chose; answeredBy: who wrote the answer (the analyst after an escalation).
+  route?: { tier: "simple" | "complex"; reasons: string[]; escalated?: boolean; agent?: string; answeredBy?: string };
+  usageByAgent?: Record<string, { promptTokens: number; outputTokens: number; thinkingTokens: number; modelCalls: number }>;
   // Present when the answer was reused from an earlier audit against the same data.
   cache?: { auditId: string; answeredAt: string };
 };
