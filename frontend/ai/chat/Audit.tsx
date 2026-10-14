@@ -1,6 +1,7 @@
 import React from "react";
 import {
   Bell,
+  Bookmark,
   BookOpen,
   Brain,
   Building2,
@@ -65,6 +66,8 @@ export function describeStep(step: AuditStep): { icon: React.ElementType; label:
   }
   if (step.kind === "draft") return { icon: FilePen, label: "Drafted an answer" };
   if (step.kind === "review") return { icon: ShieldCheck, label: "Auditor sent the draft back", detail: step.problems?.join(" ") };
+  if (step.kind === "memory")
+    return { icon: Bookmark, label: step.count ? `Recalled ${step.count} memor${step.count === 1 ? "y" : "ies"}` : "No memories recalled" };
   if (step.kind === "delegate")
     return { icon: Users, label: `${agentName(step.agent)} reported`, detail: step.error ? `failed: ${step.error}` : step.request };
   if (step.kind === "cache") return { icon: History, label: "Reused an earlier answer", detail: step.answeredAt && `answered ${dateTime(step.answeredAt)}` };
@@ -94,6 +97,13 @@ function Step({ step }: { step: AuditStep }) {
           </span>
         </div>
         {step.kind !== "tool" && !!step.attempts && <p className="audit-note">Model call retried ({step.attempts} attempts).</p>}
+        {step.kind === "memory" && !!step.facts?.length && (
+          <ul className="audit-problems">
+            {step.facts.map((f, i) => (
+              <li key={i}>{f}</li>
+            ))}
+          </ul>
+        )}
         {step.kind === "delegate" && (
           <>
             {step.request && <p className="audit-note">Asked: {step.request}</p>}

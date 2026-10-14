@@ -42,10 +42,12 @@ export type AuditStep = {
   at: number;
   // cache: the answer was reused from an earlier audit (auditId, answeredAt); its steps follow.
   // delegate: a specialist's report to the analyst (agent, request, excerpt).
-  kind: "plan" | "tool" | "draft" | "review" | "answer" | "cache" | "delegate";
+  // memory: what Memory Bank recalled about the signed-in user before the turn (facts).
+  kind: "plan" | "tool" | "draft" | "review" | "answer" | "cache" | "delegate" | "memory";
   // The agent that made the step: quick_answer, analyst or a specialist (stock_specialist, …).
   agent?: string;
   request?: string;
+  facts?: string[];
   latencyMs?: number;
   note?: string;
   calls?: { name: string; args: Record<string, unknown> }[];
@@ -226,4 +228,19 @@ export function downloadJson(filename: string, value: unknown) {
   const a = Object.assign(document.createElement("a"), { href: url, download: filename });
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// What Memory Bank remembers about the signed-in company user (Account page).
+export type Memory = { id: string; fact: string; updatedAt?: string };
+
+export async function listMemories(): Promise<{ memories: Memory[]; enabled: boolean }> {
+  const res = await fetch(`${API}/memories`, { headers: await companyAuth() });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || "Couldn't load what the assistant remembers.");
+  return data;
+}
+
+export async function deleteMemory(id: string): Promise<void> {
+  const res = await fetch(`${API}/memories/${encodeURIComponent(id)}`, { method: "DELETE", headers: await companyAuth() });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Couldn't forget that.");
 }
