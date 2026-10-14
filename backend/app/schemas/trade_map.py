@@ -133,7 +133,7 @@ class TradeMapOut(CamelCaseModel):
 class ComparisonItemOut(CamelCaseModel):
     title: str
     note: str
-    tag: Literal["New", "Changes"] | None = None
+    tag: Literal["New", "Changes", "Prepare"] | None = None
 
 
 class MarketComparisonOut(CamelCaseModel):

@@ -45,6 +45,10 @@ import {
 import { errorMessage } from "./auth";
 import { useImpacts, type Impact } from "../ai/news/NewsWatch";
 import { RegulationCitation } from "./Regulations";
+import TradeMapGlobe, {
+  type GlobePoint,
+  type GlobeRoute,
+} from "./TradeMapGlobe";
 import "./trade-map.css";
 
 // Map geometry is presentation: the data (places, documents, checklists,
@@ -155,6 +159,7 @@ export type TradeMapProps = {
   renderStatus: (order: Order) => React.ReactNode;
   onNavigate: (path: string) => void;
   signature: string;
+  companyOrigin: string;
 };
 
 type Atlas = Feature<Geometry, { name: string }>[];
@@ -162,11 +167,14 @@ const atlasCache: Partial<Record<"110m" | "50m", Promise<Atlas>>> = {};
 function loadAtlas(detail: "110m" | "50m") {
   atlasCache[detail] ??= fetch(detail === "110m" ? world110Url : world50Url)
     .then((response) => {
-      if (!response.ok) throw new Error(`Map outlines failed (${response.status})`);
+      if (!response.ok)
+        throw new Error(`Map outlines failed (${response.status})`);
       return response.json();
     })
     .then(
-      (topology: Topology<{ countries: GeometryCollection<{ name: string }> }>) =>
+      (
+        topology: Topology<{ countries: GeometryCollection<{ name: string }> }>,
+      ) =>
         (
           feature(topology, topology.objects.countries) as FeatureCollection<
             Geometry,
@@ -214,25 +222,33 @@ const TONE_RANK: Record<Tone, number> = { red: 0, amber: 1, green: 2 };
 const worst = (tones: Tone[]): Tone =>
   tones.reduce<Tone>((a, b) => (TONE_RANK[b] < TONE_RANK[a] ? b : a), "green");
 // Same rule as the backend's supplier_name_key.
-const supplierKey = (name: string) => name.trim().split(/\s+/).join(" ").toLowerCase();
+const supplierKey = (name: string) =>
+  name.trim().split(/\s+/).join(" ").toLowerCase();
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 const pct = (value: number, total: number) => `${(value / total) * 100}%`;
-const byShipDate = (a: Row, b: Row) => a.order.shipDate.localeCompare(b.order.shipDate);
+const byShipDate = (a: Row, b: Row) =>
+  a.order.shipDate.localeCompare(b.order.shipDate);
 const productKey = (s: string) =>
   s.toLowerCase().replace(/[·,]/g, " ").replace(/\s+/g, " ").trim();
 const lonLat = (p: GeoPoint): LonLat => [p.longitude, p.latitude];
-const isGap = (c: RequirementCheck) => c.status === "missing" || c.status === "mismatch";
+const isGap = (c: RequirementCheck) =>
+  c.status === "missing" || c.status === "mismatch";
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const marketTerms = (market: MapMarket) =>
   market.searchTerms.length
-    ? new RegExp(`(?<!\\w)(${market.searchTerms.map(escapeRegExp).join("|")})(?!\\w)`)
+    ? new RegExp(
+        `(?<!\\w)(${market.searchTerms.map(escapeRegExp).join("|")})(?!\\w)`,
+      )
     : null;
 
 // GeoJSON (RFC 7946) winds outer rings counter-clockwise; d3-geo expects the
 // opposite and would otherwise fill the whole globe except the shape.
 function forD3(polygon: Polygon): Polygon {
   return geoArea(polygon) > 2 * Math.PI
-    ? { ...polygon, coordinates: polygon.coordinates.map((ring) => [...ring].reverse()) }
+    ? {
+        ...polygon,
+        coordinates: polygon.coordinates.map((ring) => [...ring].reverse()),
+      }
     : polygon;
 }
 
@@ -241,7 +257,8 @@ function productionView(points: LonLat[]): View | null {
   if (!points.length) return null;
   const lons = points.map((p) => p[0]),
     lats = points.map((p) => p[1]);
-  const pad = (lo: number, hi: number) => Math.max(1.2, (hi - lo) * 0.15, (4 - (hi - lo)) / 2);
+  const pad = (lo: number, hi: number) =>
+    Math.max(1.2, (hi - lo) * 0.15, (4 - (hi - lo)) / 2);
   const [lon0, lon1] = [Math.min(...lons), Math.max(...lons)];
   const [lat0, lat1] = [Math.min(...lats), Math.max(...lats)];
   const padLon = pad(lon0, lon1),
@@ -254,6 +271,31 @@ function productionView(points: LonLat[]): View | null {
       [lon1 + padLon, lat1 + padLat],
     ],
   };
+}
+
+// Country anchors for a company that named an origin but has not recorded a site.
+// Placement only: the marker says the point comes from the company profile.
+const PROFILE_ORIGIN_AT: Record<string, LonLat> = {
+  Vietnam: [107.6, 16.1],
+  Singapore: [103.85, 1.29],
+  Indonesia: [106.83, -6.18],
+  Thailand: [100.5, 13.76],
+};
+const PROFILE_HOME_ID: Record<string, string> = {
+  Vietnam: "704",
+  Singapore: "702",
+  Indonesia: "360",
+  Thailand: "764",
+};
+type RouteStart = { at: LonLat; approximate: boolean };
+function routeStart(
+  sites: MapSite[],
+  companyOrigin: string,
+): RouteStart | null {
+  const site = sites.find((s) => s.isRouteOrigin);
+  if (site) return { at: lonLat(site.location), approximate: false };
+  const at = PROFILE_ORIGIN_AT[companyOrigin];
+  return at ? { at, approximate: true } : null;
 }
 
 // Bends a route toward the top of the map so arcs read as journeys, not borders.
@@ -292,7 +334,8 @@ function checkInDraft(
   km: number,
   signature: string,
 ) {
-  const where = km === 0 ? "where your site is" : `about ${km} km from your site`;
+  const where =
+    km === 0 ? "where your site is" : `about ${km} km from your site`;
   const upcoming = [...group.rows]
     .sort(byShipDate)
     .slice(0, 4)
@@ -302,7 +345,7 @@ function checkInDraft(
     );
   return `Hello ${group.name},
 
-Satellite flood mapping from ${date(flood.observedOn)} shows ${flood.confidence === "high" ? "standing water" : "possible flooding"} around ${flood.place}, ${where}. We can't tell from the image whether you are affected, so we wanted to check in.
+${flood.isSample ? "A sample flood scenario dated" : "Satellite flood mapping from"} ${date(flood.observedOn)} shows ${flood.confidence === "high" ? "standing water" : "possible flooding"} around ${flood.place}, ${where}. ${flood.isSample ? "This is a fictional exercise, not evidence of an actual flood at your site." : "We cannot confirm from this observation whether you are affected, so we wanted to check in."}
 
 Could you let us know:
 - whether your site, stock or road access has been affected;
@@ -323,7 +366,9 @@ export default function TradeMapPage(props: TradeMapProps) {
     setError("");
     api
       .tradeMap(controller.signal)
-      .then(setData)
+      .then((result) => {
+        if (!controller.signal.aborted) setData(result);
+      })
       .catch((e) => {
         if (!controller.signal.aborted) setError(errorMessage(e));
       });
@@ -347,9 +392,10 @@ export default function TradeMapPage(props: TradeMapProps) {
           <ShieldCheck size={28} />
           <h2>Your map lives in your company workspace.</h2>
           <p>
-            The trade map reads your orders, suppliers, sites, supplier documents and market
-            checklists from your company's database. The sample demo keeps its data in this
-            browser only, so there is nothing to map yet.
+            The trade map reads your orders, suppliers, sites, supplier
+            documents and market checklists from your company's database. The
+            sample demo keeps its data in this browser only, so there is nothing
+            to map yet.
           </p>
           <a className="btn" href="#/login">
             Sign in to your company workspace
@@ -390,6 +436,7 @@ function TradeMapView({
   renderStatus,
   onNavigate,
   signature,
+  companyOrigin,
 }: TradeMapProps & { data: TradeMap }) {
   const markets = data.markets;
   const marketByCode = useMemo(
@@ -429,7 +476,11 @@ function TradeMapView({
       markets
         .map((market) => {
           const items = rows.filter((r) => r.placement.market === market.code);
-          return { market, rows: items, tone: worst(items.map((r) => toneOf(r.order))) };
+          return {
+            market,
+            rows: items,
+            tone: worst(items.map((r) => toneOf(r.order))),
+          };
         })
         .filter((m) => m.rows.length),
     [markets, rows, toneOf],
@@ -440,11 +491,17 @@ function TradeMapView({
         flood,
         suppliers: flood.nearby
           .filter((n) => n.type === "supplier")
-          .map((n) => ({ group: supplierByKey.get(supplierKey(n.ref))!, km: n.distanceKm }))
+          .map((n) => ({
+            group: supplierByKey.get(supplierKey(n.ref))!,
+            km: n.distanceKm,
+          }))
           .filter((n) => n.group),
         sites: flood.nearby
           .filter((n) => n.type === "site")
-          .map((n) => ({ site: data.sites.find((s) => s.key === n.ref)!, km: n.distanceKm }))
+          .map((n) => ({
+            site: data.sites.find((s) => s.key === n.ref)!,
+            km: n.distanceKm,
+          }))
           .filter((n) => n.site),
       })),
     [data.observations, data.sites, supplierByKey],
@@ -457,7 +514,11 @@ function TradeMapView({
       ]),
     [data.sites, suppliers],
   );
-  const views = [WORLD_VIEW, ...(production ? [production] : []), ...MARKET_VIEWS];
+  const views = [
+    WORLD_VIEW,
+    ...(production ? [production] : []),
+    ...MARKET_VIEWS,
+  ];
   const viewById = (id: ViewId) => views.find((v) => v.id === id) ?? WORLD_VIEW;
   const unplaced = rows.filter((r) => !r.placement.location);
   const unlocated = suppliers.filter((s) => !s.at);
@@ -465,7 +526,12 @@ function TradeMapView({
 
   const initial = useMemo(() => {
     const [kind, ...rest] = focus.split("/");
-    const value = decodeURIComponent(rest.join("/"));
+    let value = rest.join("/");
+    try {
+      value = decodeURIComponent(value);
+    } catch {
+      return {};
+    }
     if (kind === "order" && rows.some((r) => r.order.id === value))
       return { scenario: { orderId: value, target: null } as Scenario };
     if (kind === "market" && marketByCode.has(value))
@@ -519,7 +585,7 @@ function TradeMapView({
     }
     select({ kind: "market", code });
   };
-  const originKey = (data.sites.find((s) => s.isRouteOrigin) ?? data.sites[0])?.key;
+  const originKey = data.sites.find((s) => s.isRouteOrigin)?.key;
 
   // What the current selection touches; everything else is dimmed.
   const focusSet = useMemo<Focus | null>(() => {
@@ -531,7 +597,8 @@ function TradeMapView({
     };
     if (scenario) {
       if (!scenarioRow) return null;
-      if (scenarioRow.placement.market) set.markets.add(scenarioRow.placement.market);
+      if (scenarioRow.placement.market)
+        set.markets.add(scenarioRow.placement.market);
       if (scenario.target) set.markets.add(scenario.target);
       set.suppliers.add(supplierKey(scenarioRow.order.supplier));
       return set;
@@ -547,7 +614,9 @@ function TradeMapView({
       set.suppliers.add(key);
       supplierByKey
         .get(key)
-        ?.rows.forEach((r) => r.placement.market && set.markets.add(r.placement.market));
+        ?.rows.forEach(
+          (r) => r.placement.market && set.markets.add(r.placement.market),
+        );
       floods
         .filter((f) => f.suppliers.some((s) => s.group.key === key))
         .forEach((f) => set.floods.add(f.flood.id));
@@ -563,16 +632,26 @@ function TradeMapView({
       near?.sites.forEach((s) => set.sites.add(s.site.key));
     }
     return set;
-  }, [selection, scenario, scenarioRow, rows, supplierByKey, floods, originKey]);
+  }, [
+    selection,
+    scenario,
+    scenarioRow,
+    rows,
+    supplierByKey,
+    floods,
+    originKey,
+  ]);
 
   const isSelected = (m: Marker) =>
     (selection?.kind === "market" && m.market === selection.code) ||
-    (selection?.kind === "supplier" && m.supplier === supplierKey(selection.name)) ||
+    (selection?.kind === "supplier" &&
+      m.supplier === supplierKey(selection.name)) ||
     (selection?.kind === "site" && m.siteId === selection.id) ||
     (selection?.kind === "flood" && m.floodId === selection.id) ||
     (!!scenario &&
       !!m.market &&
-      (m.market === scenario.target || m.market === scenarioRow?.placement.market));
+      (m.market === scenario.target ||
+        m.market === scenarioRow?.placement.market));
   const isRelated = (m: Marker) =>
     !focusSet ||
     m.kind === "origin" ||
@@ -593,7 +672,8 @@ function TradeMapView({
       if (flood) selectFlood(flood);
     }
   };
-  const openOrder = (id: string) => onNavigate("orders/" + encodeURIComponent(id));
+  const openOrder = (id: string) =>
+    onNavigate("orders/" + encodeURIComponent(id));
   const allSample = data.observations.every((o) => o.isSample);
 
   const panel = scenario ? (
@@ -642,7 +722,8 @@ function TradeMapView({
       onMarket={(code) => select({ kind: "market", code })}
       onFlood={selectFlood}
     />
-  ) : selection?.kind === "site" && data.sites.some((s) => s.key === selection.id) ? (
+  ) : selection?.kind === "site" &&
+    data.sites.some((s) => s.key === selection.id) ? (
     <SitePanel
       site={data.sites.find((s) => s.key === selection.id)!}
       suppliers={suppliers}
@@ -652,7 +733,8 @@ function TradeMapView({
       onSupplier={(name) => select({ kind: "supplier", name })}
       onFlood={selectFlood}
     />
-  ) : selection?.kind === "flood" && floods.some((f) => f.flood.id === selection.id) ? (
+  ) : selection?.kind === "flood" &&
+    floods.some((f) => f.flood.id === selection.id) ? (
     <FloodPanel
       entry={floods.find((f) => f.flood.id === selection.id)!}
       checkRadiusKm={check}
@@ -672,7 +754,9 @@ function TradeMapView({
       unplaced={unplaced}
       unlocated={unlocated}
       onMarket={(code) => select({ kind: "market", code })}
-      onSupplier={(name) => select({ kind: "supplier", name }, production ?? undefined)}
+      onSupplier={(name) =>
+        select({ kind: "supplier", name }, production ?? undefined)
+      }
       onSite={(id) => select({ kind: "site", id }, production ?? undefined)}
       onFlood={selectFlood}
       onImport={() => onNavigate("data")}
@@ -704,8 +788,8 @@ function TradeMapView({
       </section>
       <div className="notice tm-notice">
         <ShieldCheck size={18} />
-        Orders, suppliers, sites and documents come from your company workspace. Market
-        checklists are illustrative, not legal guidance
+        Orders, suppliers, sites and documents come from your company workspace.
+        Market checklists are illustrative, not legal guidance
         {data.observations.length
           ? allSample
             ? "; satellite observations are samples, not a live feed."
@@ -762,9 +846,12 @@ function TradeMapView({
             marketByCode={marketByCode}
             scenario={scenario}
             scenarioRow={scenarioRow}
-            selectionMarket={selection?.kind === "market" ? selection.code : null}
+            selectionMarket={
+              selection?.kind === "market" ? selection.code : null
+            }
             showRoutes={showRoutes}
             showSatellite={showSatellite}
+            companyOrigin={companyOrigin}
             toneOf={toneOf}
             isSelected={isSelected}
             isRelated={isRelated}
@@ -788,8 +875,8 @@ function TradeMapView({
             </li>
             {showSatellite && data.observations.length > 0 && (
               <li>
-                <i className="tm-key flood" /> Flood extent{allSample ? " · sample" : ""},{" "}
-                {check} km check radius
+                <i className="tm-key flood" /> Flood observations
+                {allSample ? " · sample" : ""} · {check} km proximity check
               </li>
             )}
             {scenario && (
@@ -819,6 +906,7 @@ function MapCanvas({
   selectionMarket,
   showRoutes,
   showSatellite,
+  companyOrigin,
   toneOf,
   isSelected,
   isRelated,
@@ -835,6 +923,7 @@ function MapCanvas({
   selectionMarket: string | null;
   showRoutes: boolean;
   showSatellite: boolean;
+  companyOrigin: string;
   toneOf: (order: Order) => Tone;
   isSelected: (m: Marker) => boolean;
   isRelated: (m: Marker) => boolean;
@@ -842,6 +931,8 @@ function MapCanvas({
 }) {
   const host = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(W);
+  const [globe, setGlobe] = useState(true);
+  const [globeUnavailable, setGlobeUnavailable] = useState(false);
   const [atlas, setAtlas] = useState<{ "110m"?: Atlas; "50m"?: Atlas }>({});
   const [atlasError, setAtlasError] = useState(false);
   const detailed = view.id !== "world";
@@ -853,7 +944,7 @@ function MapCanvas({
     );
     observer.observe(element);
     return () => observer.disconnect();
-  }, []);
+  }, [view.id, globe, globeUnavailable]);
   useEffect(() => {
     let active = true;
     const detail = detailed ? "50m" : "110m";
@@ -861,7 +952,9 @@ function MapCanvas({
     // Show the light outlines while the detailed ones load.
     for (const d of detailed ? (["110m", "50m"] as const) : (["110m"] as const))
       loadAtlas(d)
-        .then((countries) => active && setAtlas((a) => ({ ...a, [d]: countries })))
+        .then(
+          (countries) => active && setAtlas((a) => ({ ...a, [d]: countries })),
+        )
         .catch(() => active && setAtlasError(true));
     return () => {
       active = false;
@@ -882,7 +975,11 @@ function MapCanvas({
 
   const project = (at: LonLat) => {
     const point = projection(at);
-    return point && point[0] > -6 && point[0] < W + 6 && point[1] > -6 && point[1] < H + 6
+    return point &&
+      point[0] > -6 &&
+      point[0] < W + 6 &&
+      point[1] > -6 &&
+      point[1] < H + 6
       ? (point as [number, number])
       : null;
   };
@@ -900,21 +997,27 @@ function MapCanvas({
   ]);
   const target = new Set(countriesOf(scenario?.target));
 
-  const originSite = data.sites.find((s) => s.isRouteOrigin) ?? data.sites[0];
+  const originSite = data.sites.find((s) => s.isRouteOrigin);
+  const start = routeStart(data.sites, companyOrigin);
+  if (start?.approximate && PROFILE_HOME_ID[companyOrigin])
+    home.add(PROFILE_HOME_ID[companyOrigin]);
   const markers: Marker[] = [];
-  const origin = originSite ? project(lonLat(originSite.location)) : null;
+  const origin = start ? project(start.at) : null;
   const showOrigin = view.id === "world" || view.id === "asia";
-  if (showOrigin && origin)
+  if (showOrigin && start && origin)
     markers.push({
       key: "origin",
       kind: "origin",
       x: origin[0],
       y: origin[1],
-      label: "Production",
-      aria: "Your production sites and suppliers. Zoom in.",
+      label: start.approximate ? companyOrigin : "Production",
+      aria: start.approximate
+        ? `Approximate start in ${companyOrigin}, from your company profile. No production site is recorded yet.`
+        : "Your production sites and suppliers. Zoom in.",
       tone: "neutral",
       count: rows.length,
       side: "left",
+      origin: true,
     });
   if (view.id === "world") {
     for (const { market, rows: items, tone } of summaries) {
@@ -933,7 +1036,11 @@ function MapCanvas({
           market: market.code,
         });
     }
-  } else if (view.id === "europe" || view.id === "americas" || view.id === "asia") {
+  } else if (
+    view.id === "europe" ||
+    view.id === "americas" ||
+    view.id === "asia"
+  ) {
     const ports = new Map<string, Marker>();
     for (const row of rows) {
       const { location, market, city, country, approximate } = row.placement;
@@ -963,7 +1070,9 @@ function MapCanvas({
     const clusters: Marker[] = [];
     for (const port of [...ports.values()].sort((a, b) => b.count - a.count)) {
       const near = clusters.find(
-        (c) => c.market === port.market && Math.hypot(c.x - port.x, c.y - port.y) < merge,
+        (c) =>
+          c.market === port.market &&
+          Math.hypot(c.x - port.x, c.y - port.y) < merge,
       );
       if (near) {
         near.label += " · " + port.label;
@@ -979,9 +1088,13 @@ function MapCanvas({
   // While comparing, every market is a possible destination.
   if (scenario && view.id !== "production" && view.id !== "focus")
     for (const market of marketByCode.values()) {
-      if (view.id === "world" && summaries.some((m) => m.market.code === market.code))
+      if (
+        view.id === "world" &&
+        summaries.some((m) => m.market.code === market.code)
+      )
         continue;
-      if (view.id !== "world" && markers.some((m) => m.market === market.code)) continue;
+      if (view.id !== "world" && markers.some((m) => m.market === market.code))
+        continue;
       const at = project(lonLat(market.hub));
       if (at)
         markers.push({
@@ -1079,8 +1192,9 @@ function MapCanvas({
           key: "arc-" + m.key,
           d: arcPath(origin, [m.x, m.y]),
           tone: m.tone as Tone,
-          width: 1 + Math.sqrt(m.count),
+          width: 2.2 + Math.sqrt(m.count),
           dim: !isRelated(m),
+          dashed: start?.approximate,
         });
   if (showRoutes && (view.id === "production" || view.id === "focus")) {
     const hub = markers.find((m) => m.origin);
@@ -1096,19 +1210,27 @@ function MapCanvas({
             dashed: true,
           });
   }
-  let scenarioArcs: { key: string; d: string; kind: "current" | "target" }[] = [];
-  if (scenario && scenarioRow && origin && showOrigin) {
+  let scenarioArcs: { key: string; d: string; kind: "current" | "target" }[] =
+    [];
+  if (showRoutes && scenario && scenarioRow && origin && showOrigin) {
     const current = markers.find(
-      (m) => !!scenarioRow.placement.market && m.market === scenarioRow.placement.market,
+      (m) =>
+        !!scenarioRow.placement.market &&
+        m.market === scenarioRow.placement.market,
     );
-    const next = scenario.target && markers.find((m) => m.market === scenario.target);
+    const next =
+      scenario.target && markers.find((m) => m.market === scenario.target);
     scenarioArcs = [
       current && {
         key: "current",
         d: arcPath(origin, [current.x, current.y]),
         kind: "current" as const,
       },
-      next && { key: "target", d: arcPath(origin, [next.x, next.y]), kind: "target" as const },
+      next && {
+        key: "target",
+        d: arcPath(origin, [next.x, next.y]),
+        kind: "target" as const,
+      },
     ].filter(Boolean) as typeof scenarioArcs;
   }
 
@@ -1129,9 +1251,161 @@ function MapCanvas({
     [showSatellite, data.observations, data.checkRadiusKm, path],
   );
 
+  if (view.id === "world" && globe && !globeUnavailable) {
+    const globeMarkers = markers.filter(
+      (m) => m.kind === "market" || m.kind === "origin",
+    );
+    if (start && !globeMarkers.some((m) => m.kind === "origin"))
+      globeMarkers.unshift({
+        key: "origin",
+        kind: "origin",
+        x: 0,
+        y: 0,
+        label: start.approximate ? companyOrigin : "Production",
+        aria: start.approximate
+          ? `Approximate start in ${companyOrigin}, from your company profile. No production site is recorded yet.`
+          : "Your production sites and suppliers. Zoom in.",
+        tone: "neutral",
+        count: rows.length,
+        side: "left",
+        origin: true,
+      });
+    if (showSatellite)
+      for (const observation of data.observations)
+        globeMarkers.push({
+          key: `flood-${observation.id}`,
+          kind: "flood",
+          x: 0,
+          y: 0,
+          label: `${observation.isSample ? "Sample flood" : "Flood"} · ${date(observation.observedOn)}`,
+          aria: `${observation.isSample ? "Sample satellite observation" : "Satellite observation"}: ${observation.title}, ${date(observation.observedOn)}`,
+          tone: "water",
+          count: 0,
+          side: "right",
+          floodId: observation.id,
+        });
+    const points: GlobePoint[] = globeMarkers.map((m) => ({
+      key: m.key,
+      at:
+        m.kind === "origin"
+          ? start!.at
+          : m.kind === "flood"
+            ? lonLat(data.observations.find((o) => o.id === m.floodId)!.center)
+            : lonLat(marketByCode.get(m.market!)!.hub),
+      label: m.label,
+      aria: m.aria,
+      tone: scenario?.target === m.market ? "target" : m.tone,
+      count: m.count,
+      selected: isSelected(m),
+      related: isRelated(m),
+      origin: m.kind === "origin",
+      approximate: m.kind === "origin" && !!start?.approximate,
+      observation: m.kind === "flood",
+    }));
+    const routes: GlobeRoute[] =
+      showRoutes && start
+        ? points
+            .filter(
+              (p) => !p.origin && !p.observation && (p.count > 0 || p.selected),
+            )
+            .map((p) => ({
+              key: p.key,
+              from: start.at,
+              to: p.at,
+              tone: p.tone,
+              dim: !p.related,
+              approximate: start.approximate,
+            }))
+        : [];
+    const countryColors = new Map(
+      countries.map((c) => {
+        const id = String(c.id);
+        return [
+          id,
+          target.has(id)
+            ? "#d7b774"
+            : active.has(id)
+              ? "#d7eda5"
+              : tinted.has(id)
+                ? "#a5be85"
+                : home.has(id)
+                  ? "#d0bf92"
+                  : "#769181",
+        ];
+      }),
+    );
+    return (
+      <div className="tm-globe-wrap">
+        <TradeMapGlobe
+          countries={countries}
+          points={points}
+          routes={routes}
+          countryColors={countryColors}
+          extents={showSatellite ? data.observations.map((o) => o.extent) : []}
+          originApproximate={!!start?.approximate}
+          onSelect={(key) => {
+            const marker = globeMarkers.find((m) => m.key === key);
+            if (marker) onMarker(marker);
+          }}
+          onFallback={() => {
+            setGlobeUnavailable(true);
+            setGlobe(false);
+          }}
+        />
+        <button className="tm-projection" onClick={() => setGlobe(false)}>
+          2D map ↗
+        </button>
+        {!start && (
+          <p className="tm-globe-empty">
+            Add a company site with coordinates to connect your markets. No
+            route origin is recorded yet.
+          </p>
+        )}
+        {start?.approximate && (
+          <p className="tm-globe-empty">
+            Lines run from {companyOrigin} on your company profile to markets
+            with orders. This is not a recorded production site.
+          </p>
+        )}
+        {!countries.length && (
+          <p className="tm-globe-loading" role="status">
+            {atlasError
+              ? "Country outlines unavailable. Trade connections are still shown."
+              : "Loading country outlines…"}
+          </p>
+        )}
+      </div>
+    );
+  }
+
   return (
-    <div className="tm-canvas" ref={host} role="group" aria-label={`Trade map, ${view.label}`}>
-      <svg viewBox={`0 0 ${W} ${H}`} aria-hidden="true" preserveAspectRatio="xMidYMid meet">
+    <div
+      className="tm-canvas"
+      ref={host}
+      role="group"
+      aria-label={`Trade map, ${view.label}`}
+    >
+      {view.id === "world" && !globeUnavailable && (
+        <button className="tm-projection flat" onClick={() => setGlobe(true)}>
+          3D globe ↗
+        </button>
+      )}
+      {globeUnavailable && (
+        <p className="tm-map-note" role="status">
+          3D is unavailable on this device. Showing the 2D map.
+        </p>
+      )}
+      {start?.approximate && showOrigin && (
+        <p className="tm-map-note tm-origin-note" role="status">
+          Lines run from {companyOrigin} on your company profile. This is not a
+          recorded production site.
+        </p>
+      )}
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        aria-hidden="true"
+        preserveAspectRatio="xMidYMid meet"
+      >
         <defs>
           <pattern
             id="tm-water"
@@ -1253,7 +1527,9 @@ function placeLabels(
     return [m.x * scale - r, m.y * scale - r, m.x * scale + r, m.y * scale + r];
   });
   const sides = new Map<string, LabelSide | null>();
-  const order = markers.map((_, i) => i).sort((a, b) => rank(markers[a]) - rank(markers[b]));
+  const order = markers
+    .map((_, i) => i)
+    .sort((a, b) => rank(markers[a]) - rank(markers[b]));
   for (const i of order) {
     const m = markers[i];
     const x = m.x * scale,
@@ -1261,7 +1537,9 @@ function placeLabels(
       r = markerSize(m) / 2,
       h = 17;
     const w =
-      m.label.length * 5.9 + 10 + (m.kind === "port" ? String(m.count).length * 6 + 5 : 0);
+      m.label.length * 5.9 +
+      10 +
+      (m.kind === "port" ? String(m.count).length * 6 + 5 : 0);
     const candidates: Record<LabelSide, Box> = {
       right: [x + r + 5, y - h / 2, x + r + 5 + w, y + h / 2],
       left: [x - r - 5 - w, y - h / 2, x - r - 5, y + h / 2],
@@ -1270,7 +1548,9 @@ function placeLabels(
     };
     const preferred = [
       m.side,
-      ...(["right", "left", "top", "bottom"] as const).filter((s) => s !== m.side),
+      ...(["right", "left", "top", "bottom"] as const).filter(
+        (s) => s !== m.side,
+      ),
     ];
     const side =
       preferred.find((s) => {
@@ -1280,7 +1560,10 @@ function placeLabels(
           y0 >= 0 &&
           x1 <= width &&
           y1 <= height &&
-          !boxes.some((b, j) => j !== i && x0 < b[2] && b[0] < x1 && y0 < b[3] && b[1] < y1)
+          !boxes.some(
+            (b, j) =>
+              j !== i && x0 < b[2] && b[0] < x1 && y0 < b[3] && b[1] < y1,
+          )
         );
       }) ?? null;
     if (side) boxes.push(candidates[side]);
@@ -1317,7 +1600,8 @@ function spread(markers: Marker[], scale: number) {
   }
 }
 function markerSize(m: Marker) {
-  if (m.kind === "market") return m.count ? Math.min(34, 18 + 2.4 * Math.sqrt(m.count)) : 14;
+  if (m.kind === "market")
+    return m.count ? Math.min(34, 18 + 2.4 * Math.sqrt(m.count)) : 14;
   if (m.kind === "origin") return 16;
   if (m.kind === "flood") return 20;
   if (m.kind === "port") return 12;
@@ -1385,7 +1669,9 @@ function OrderLine({
       {(row.gaps.length > 0 || onCompare) && (
         <div className="tm-order-foot">
           {row.gaps.length > 0 && (
-            <span className="tm-gap">{plural(row.gaps.length, "document gap")}</span>
+            <span className="tm-gap">
+              {plural(row.gaps.length, "document gap")}
+            </span>
           )}
           {onCompare && (
             <button className="text-link" onClick={() => onCompare(o.id)}>
@@ -1472,7 +1758,9 @@ function OverviewPanel({
           key={flood.id}
           flood={flood}
           detail={[
-            near.length ? `${plural(near.length, "supplier")} to check in with` : "",
+            near.length
+              ? `${plural(near.length, "supplier")} to check in with`
+              : "",
             nearSites.length ? `${nearSites.length} of your sites nearby` : "",
           ]
             .filter(Boolean)
@@ -1517,7 +1805,9 @@ function OverviewPanel({
                     <b>{s.name}</b>
                     <small>
                       {s.place ?? "Location not on file"} ·{" "}
-                      {s.rows.length ? plural(s.rows.length, "order") : "no open orders"}
+                      {s.rows.length
+                        ? plural(s.rows.length, "order")
+                        : "no open orders"}
                     </small>
                   </span>
                   <ArrowUpRight size={14} />
@@ -1554,7 +1844,8 @@ function OverviewPanel({
           <ul className="tm-plain">
             {unplaced.map((r) => (
               <li key={r.order.id}>
-                <b>{r.order.id}</b> · destination “{r.order.destination}” couldn't be placed.{" "}
+                <b>{r.order.id}</b> · destination “{r.order.destination}”
+                couldn't be placed.{" "}
                 {r.placement.country
                   ? `${r.placement.country} isn't one of the markets on this map yet.`
                   : "Write it as “City, CC”, for example “Rotterdam, NL”."}
@@ -1605,14 +1896,18 @@ function MarketPanel({
   }, {});
 
   const actionNeeded = sorted.filter((r) => toneOf(r.order) === "red");
-  const tariffChecks = sorted.filter((r) => r.checks.some((c) => c.status === "check"));
+  const tariffChecks = sorted.filter((r) =>
+    r.checks.some((c) => c.status === "check"),
+  );
   const products = new Set(rows.map((r) => productKey(r.order.product)));
   const terms = marketTerms(market);
   const news = terms
     ? impacts
         .map((impact) => ({
           impact,
-          touched: impact.affected.filter((a) => products.has(productKey(a.name))),
+          touched: impact.affected.filter((a) =>
+            products.has(productKey(a.name)),
+          ),
           named: terms.test(`${impact.title} ${impact.headline} ${impact.why}`),
         }))
         .filter((n) => n.named)
@@ -1627,7 +1922,11 @@ function MarketPanel({
   for (const row of sorted)
     for (const check of row.gaps) {
       const key = `${check.requirementKey}|${check.status}|${supplierKey(row.order.supplier)}`;
-      const entry = gaps.get(key) ?? { check, supplier: row.order.supplier, orders: [] };
+      const entry = gaps.get(key) ?? {
+        check,
+        supplier: row.order.supplier,
+        orders: [],
+      };
       entry.orders.push(row.order.id);
       gaps.set(key, entry);
     }
@@ -1670,7 +1969,9 @@ function MarketPanel({
       <section className="tm-section">
         <h3>Changes to check</h3>
         {!actionNeeded.length && !tariffChecks.length && !news.length && (
-          <p className="tm-muted">No tracked changes for this market right now.</p>
+          <p className="tm-muted">
+            No tracked changes for this market right now.
+          </p>
         )}
         {actionNeeded.length > 0 && (
           <div className="tm-change">
@@ -1679,12 +1980,15 @@ function MarketPanel({
               {plural(actionNeeded.length, "order")} need action
             </span>
             <p>
-              A tracked change already affects these orders. Open each one to see what
-              changed and the next step.
+              A tracked change already affects these orders. Open each one to
+              see what changed and the next step.
             </p>
             <div className="order-tags">
               {actionNeeded.map((r) => (
-                <button key={r.order.id} onClick={() => onOpenOrder(r.order.id)}>
+                <button
+                  key={r.order.id}
+                  onClick={() => onOpenOrder(r.order.id)}
+                >
                   {r.order.id}
                   <ArrowUpRight size={12} />
                 </button>
@@ -1698,10 +2002,15 @@ function MarketPanel({
               <i />
               Landed cost
             </span>
-            <p>{tariffChecks[0].checks.find((c) => c.status === "check")!.note}</p>
+            <p>
+              {tariffChecks[0].checks.find((c) => c.status === "check")!.note}
+            </p>
             <div className="order-tags">
               {tariffChecks.map((r) => (
-                <button key={r.order.id} onClick={() => onOpenOrder(r.order.id)}>
+                <button
+                  key={r.order.id}
+                  onClick={() => onOpenOrder(r.order.id)}
+                >
                   {r.order.id}
                   <ArrowUpRight size={12} />
                 </button>
@@ -1729,7 +2038,9 @@ function MarketPanel({
             </p>
             <small className="tm-muted">
               {impact.publisher} ·{" "}
-              {impact.publishedAt ? date(impact.publishedAt.slice(0, 10)) : "undated"}
+              {impact.publishedAt
+                ? date(impact.publishedAt.slice(0, 10))
+                : "undated"}
             </small>
           </div>
         ))}
@@ -1743,20 +2054,26 @@ function MarketPanel({
         <h3>Missing documents</h3>
         {gaps.size === 0 && !noRecord.length && (
           <p className="tm-ok">
-            <Check size={15} /> Every supplier document this market asks for is on file.
+            <Check size={15} /> Every supplier document this market asks for is
+            on file.
           </p>
         )}
         <ul className="tm-gaps">
           {[...gaps.values()].map(({ check, supplier, orders: ids }) => (
             <li key={check.requirementKey + supplier + check.status}>
-              <span className={`status ${check.status === "missing" ? "red" : "amber"}`}>
+              <span
+                className={`status ${check.status === "missing" ? "red" : "amber"}`}
+              >
                 <i />
                 {check.status === "missing" ? "Missing" : "Wrong standard"}
               </span>
               <b>{check.title}</b>
               <p>
                 {check.note}{" "}
-                <button className="tm-inline" onClick={() => onSupplier(supplier)}>
+                <button
+                  className="tm-inline"
+                  onClick={() => onSupplier(supplier)}
+                >
                   {supplier}
                 </button>{" "}
                 · {ids.join(", ")}
@@ -1770,7 +2087,10 @@ function MarketPanel({
                 Unknown
               </span>
               <b>{name}</b>
-              <p>No document record for this supplier, so its documents can't be checked.</p>
+              <p>
+                No document record for this supplier, so its documents can't be
+                checked.
+              </p>
             </li>
           ))}
         </ul>
@@ -1786,16 +2106,20 @@ function MarketPanel({
         <h3>Requirement sources</h3>
         {[
           ...new Map(
-            sorted.flatMap((row) => row.checks)
+            sorted
+              .flatMap((row) => row.checks)
               .filter((check) => check.source)
               .map((check) => [check.requirementKey, check]),
           ).values(),
         ].map((check) => (
-          <RegulationCitation key={check.requirementKey} source={check.source} />
+          <RegulationCitation
+            key={check.requirementKey}
+            source={check.source}
+          />
         ))}
         <p className="fine-print">
-          Checklist for {market.name} is illustrative, not legal guidance; confirm with official
-          sources and your buyer.
+          Checklist for {market.name} is illustrative, not legal guidance;
+          confirm with official sources and your buyer.
         </p>
       </section>
     </>
@@ -1880,7 +2204,9 @@ function SupplierPanel({
       <section className="tm-section">
         <h3>Documents on file</h3>
         {!group.documents ? (
-          <p className="tm-muted">No supplier record yet, so there are no documents to show.</p>
+          <p className="tm-muted">
+            No supplier record yet, so there are no documents to show.
+          </p>
         ) : (
           <ul className="tm-docs">
             {documentKinds.map(({ kind, label }) => {
@@ -1892,7 +2218,9 @@ function SupplierPanel({
                     <b>{label}</b>
                     <small>
                       {doc
-                        ? [doc.detail, doc.standards.join(", ")].filter(Boolean).join(" · ")
+                        ? [doc.detail, doc.standards.join(", ")]
+                            .filter(Boolean)
+                            .join(" · ")
                         : "Not on file"}
                     </small>
                   </span>
@@ -1924,7 +2252,9 @@ function SitePanel({
   onFlood: (flood: SatelliteObservation) => void;
 }) {
   const near = floods.flatMap((f) =>
-    f.sites.filter((s) => s.site.key === site.key).map((s) => ({ flood: f.flood, km: s.km })),
+    f.sites
+      .filter((s) => s.site.key === site.key)
+      .map((s) => ({ flood: f.flood, km: s.km })),
   );
   return (
     <>
@@ -1944,12 +2274,13 @@ function SitePanel({
       ))}
       {!near.length && (
         <p className="tm-ok">
-          <Check size={15} /> No observed flooding within {checkRadiusKm} km.
+          <Check size={15} /> No matching observations in this dataset within{" "}
+          {checkRadiusKm} km. This does not confirm that the site is unaffected.
         </p>
       )}
       {site.kind === "factory" && (
         <section className="tm-section">
-          <h3>Suppliers feeding this site</h3>
+          <h3>Company suppliers with open orders</h3>
           <ul className="tm-list">
             {suppliers
               .filter((s) => s.rows.length)
@@ -1960,7 +2291,8 @@ function SitePanel({
                     <span>
                       <b>{s.name}</b>
                       <small>
-                        {s.place ?? "Location not on file"} · {plural(s.rows.length, "order")}
+                        {s.place ?? "Location not on file"} ·{" "}
+                        {plural(s.rows.length, "order")}
                       </small>
                     </span>
                     <ArrowUpRight size={14} />
@@ -2036,7 +2368,11 @@ function FloodPanel({
         <dt>Water extent</dt>
         <dd>≈ {flood.areaKm2} km²</dd>
         <dt>Confidence</dt>
-        <dd className={"tm-confidence " + (flood.confidence === "low" ? "warn" : "")}>
+        <dd
+          className={
+            "tm-confidence " + (flood.confidence === "low" ? "warn" : "")
+          }
+        >
           {flood.confidence}
         </dd>
       </dl>
@@ -2045,7 +2381,8 @@ function FloodPanel({
         <h3>Who to check in with</h3>
         {!suppliers.length && !sites.length && (
           <p className="tm-muted">
-            No suppliers or sites within {checkRadiusKm} km of the observed edge.
+            No suppliers or sites within {checkRadiusKm} km of the observed
+            edge.
           </p>
         )}
         <ul className="tm-list">
@@ -2056,7 +2393,9 @@ function FloodPanel({
                 <span>
                   <b>{group.name}</b>
                   <small>
-                    {km === 0 ? "Inside the observed extent" : `${km} km from the observed edge`}{" "}
+                    {km === 0
+                      ? "Inside the observed extent"
+                      : `${km} km from the observed edge`}{" "}
                     ·{" "}
                     {group.rows.length
                       ? plural(group.rows.length, "open order")
@@ -2069,7 +2408,9 @@ function FloodPanel({
                 className="btn secondary"
                 aria-expanded={draftFor === group.key}
                 onClick={() =>
-                  draftFor === group.key ? setDraftFor(null) : openDraft(group, km)
+                  draftFor === group.key
+                    ? setDraftFor(null)
+                    : openDraft(group, km)
                 }
               >
                 {draftFor === group.key ? "Hide draft" : "Draft a check-in"}
@@ -2106,7 +2447,8 @@ function FloodPanel({
               <span>
                 <b>{site.name}</b>
                 <small>
-                  Your site · {km} km from the observed edge. Check stock and road access.
+                  Your site · {km} km from the observed edge. Check stock and
+                  road access.
                 </small>
               </span>
             </li>
@@ -2136,9 +2478,9 @@ function FloodPanel({
       )}
       <div className="notice tm-caveat">
         <CircleHelp size={18} />
-        Satellite shows water on the ground, not damage. It can't tell whether a supplier's site,
-        stock or schedule is affected. Confirm with the supplier before changing any plan. Order
-        statuses are unchanged.
+        Satellite shows water on the ground, not damage. It can't tell whether a
+        supplier's site, stock or schedule is affected. Confirm with the
+        supplier before changing any plan. Order statuses are unchanged.
       </div>
     </>
   );
@@ -2167,14 +2509,20 @@ function ScenarioPanel({
     comparison?: MarketComparison;
     error?: string;
   } | null>(null);
-  const requestKey = row && scenario.target ? `${row.order.id}|${scenario.target}` : "";
+  const requestKey =
+    row && scenario.target
+      ? JSON.stringify([row.order.id, scenario.target])
+      : "";
   useEffect(() => {
     if (!requestKey) return;
-    const [orderId, market] = requestKey.split("|");
+    const [orderId, market] = JSON.parse(requestKey) as [string, string];
     const controller = new AbortController();
     api
       .compareMarkets(orderId, market, controller.signal)
-      .then((comparison) => setResult({ key: requestKey, comparison }))
+      .then((comparison) => {
+        if (!controller.signal.aborted)
+          setResult({ key: requestKey, comparison });
+      })
       .catch((e) => {
         if (!controller.signal.aborted)
           setResult({ key: requestKey, error: errorMessage(e) });
@@ -2215,13 +2563,18 @@ function ScenarioPanel({
           <small>NOW</small>
           <b>{nameOf(from)}</b>
           <small>
-            {row.order.supplier} → {row.order.destination} · HS {row.order.hsCode}
+            {row.order.supplier} → {row.order.destination} · HS{" "}
+            {row.order.hsCode}
           </small>
         </span>
         {renderStatus(row.order)}
       </div>
       <span className="tm-field">Compare with</span>
-      <div className="tm-chips" role="group" aria-label="Market to compare with">
+      <div
+        className="tm-chips"
+        role="group"
+        aria-label="Market to compare with"
+      >
         {markets
           .filter((m) => m.code !== from)
           .map((m) => (
@@ -2235,11 +2588,13 @@ function ScenarioPanel({
             </button>
           ))}
       </div>
-      {!scenario.target && <p className="tm-muted">Pick a market here or on the map.</p>}
+      {!scenario.target && (
+        <p className="tm-muted">Pick a market here or on the map.</p>
+      )}
       <div className="notice tm-caveat">
         <CircleHelp size={18} />
-        Changing market still depends on your customer, the contract and whether you can actually
-        sell there. This compares paperwork only.
+        Changing market still depends on your customer, the contract and whether
+        you can actually sell there. This compares paperwork only.
       </div>
       {scenario.target && !current && (
         <p className="tm-muted" role="status">
@@ -2255,10 +2610,13 @@ function ScenarioPanel({
         <>
           <section className="tm-section tm-compare reuse">
             <h3>
-              <Check size={16} /> Can reuse <span>{comparison.reuse.length}</span>
+              <Check size={16} /> On file for review{" "}
+              <span>{comparison.reuse.length}</span>
             </h3>
             {!comparison.reuse.length && (
-              <p className="tm-muted">Nothing on file carries over as-is.</p>
+              <p className="tm-muted">
+                No matching supplier evidence is on file.
+              </p>
             )}
             <ul>
               {comparison.reuse.map((item) => (
@@ -2271,7 +2629,8 @@ function ScenarioPanel({
           </section>
           <section className="tm-section tm-compare review">
             <h3>
-              <ArrowLeftRight size={16} /> Re-evaluate <span>{comparison.reevaluate.length}</span>
+              <ArrowLeftRight size={16} /> Re-evaluate{" "}
+              <span>{comparison.reevaluate.length}</span>
             </h3>
             <ul>
               {comparison.reevaluate.map((item) => (
@@ -2286,7 +2645,8 @@ function ScenarioPanel({
             </ul>
             {comparison.dropped.length > 0 && (
               <p className="fine-print">
-                Not needed for {nameOf(comparison.toMarket)}: {comparison.dropped.join(", ")}.
+                Not listed in the current {nameOf(comparison.toMarket)}{" "}
+                checklist: {comparison.dropped.join(", ")}.
               </p>
             )}
           </section>
@@ -2305,8 +2665,8 @@ function ScenarioPanel({
             </ul>
           </section>
           <p className="fine-print">
-            Based on the market checklists and the documents on file for {row.order.supplier}.
-            Illustrative, not legal guidance.
+            Based on the market checklists and the documents on file for{" "}
+            {row.order.supplier}. Illustrative, not legal guidance.
           </p>
         </>
       )}

@@ -160,7 +160,7 @@ export type TradeMap = {
 export type ComparisonItem = {
   title: string;
   note: string;
-  tag: "New" | "Changes" | null;
+  tag: "New" | "Changes" | "Prepare" | null;
 };
 export type MarketComparison = {
   orderId: string;
