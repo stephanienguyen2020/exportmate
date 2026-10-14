@@ -5,7 +5,7 @@ ExportMate has two AI features:
 - **The assistant** answers questions about stock, news alerts, your company, its orders and playbook rules, and how to use ExportMate. Every fact it gives carries a numbered citation, and every answer has an audit trail.
 - **News watch** reads approved news feeds every morning and raises alerts for the stock items each story could affect.
 
-Both run in one service ([`ai/server/`](../ai/server/)) on Google Cloud Run, using Gemini on Vertex AI and Firestore. This guide covers how to use them, what they can see, and how they work. For the engineering controls (policy, gateway, auditor, evals) and how to improve them, see [AGENT_HARNESS.md](AGENT_HARNESS.md).
+Both come from one service ([`ai/server/`](../ai/server/)): its API runs on Google Cloud Run, and the assistant itself is a team of agents on Gemini Enterprise Agent Platform (Agent Runtime, with Agent Platform Sessions, Memory Bank and RAG Engine), using Gemini and Firestore. This guide covers how to use them, what they can see, and how they work. For the engineering controls (policy, gateway, auditor, evals) and how to improve them, see [AGENT_HARNESS.md](AGENT_HARNESS.md).
 
 Alerts and answers are AI assessments, not legal advice. Legal and regulatory content in the prototype is illustrative, stock data is synthetic, and news is real.
 
@@ -13,11 +13,11 @@ Alerts and answers are AI assessments, not legal advice. Legal and regulatory co
 
 **Open it.** The round chat button at the bottom right of the landing page and every workspace page opens the assistant. The expand icon in its header opens the full-screen view at `#/chat`, which adds the audit trail for the whole conversation.
 
-**Ask.** Type a question and press Enter (Shift+Enter starts a new line). A new conversation shows four suggested questions to start from. While the assistant works, it shows each step as it happens: "Searched the vector index", "Queried stock in Firestore", and so on. A question that needs several lookups takes longer than a single lookup, and the app gives up after two minutes.
+**Ask.** Type a question and press Enter (Shift+Enter starts a new line). A new conversation shows four suggested questions to start from. While the assistant works, it shows each step as it happens: which agent is working, "Searched the knowledge base", "Queried stock in Firestore", a specialist's report, and so on. A question that needs several lookups takes longer than a single lookup, and the app gives up after two minutes.
 
 **Follow up.** You can say "those items" or "that alert" and the assistant works out what you mean. It looks the facts up again each time instead of trusting its earlier answers. It replies in the language you write in.
 
-**Start over.** "New chat" under the input clears the conversation. The conversation lives only in this browser tab: it is also cleared when you close the tab, sign in or sign out.
+**Start over.** "New chat" under the input starts a new conversation. Your browser tab keeps the conversation you see, and the assistant keeps the same conversation as an Agent Platform session; both start over when you close the tab, sign in or sign out. In a company workspace the assistant can still remember your preferences from earlier conversations (see below).
 
 ### What you can ask
 
@@ -51,6 +51,14 @@ The assistant applies your playbook rules when it advises on an order, a supplie
 If the company backend can't be reached when you ask, the question is answered as a demo chat, without your profile, orders or playbook.
 
 The assistant can't change anything. All its tools only read data, it sends no messages, and it can't add sources or start a scan.
+
+### What the assistant remembers
+
+In a signed-in company workspace, the assistant remembers things you tell it so you don't have to repeat them: how you like answers (language, level of detail, currency), instructions you give it ("always show values in EUR"), and what you work on (the markets, products and suppliers you keep asking about). It doesn't keep personal details, order values or anything about other people. Memories are yours alone, not shared with colleagues, and expire after 180 days.
+
+Before each answer the assistant looks up what it remembers that bears on your question, and the audit shows what it recalled. Memories shape how it answers, never the facts: a remembered preference is never cited or used as a figure. To see or remove what it remembers, open **Account › What the assistant remembers** and choose "Forget" next to any memory.
+
+The sample demo remembers nothing.
 
 ### Reading an answer
 
@@ -91,12 +99,15 @@ A draft that fails goes back to the model once with the problems listed. If the 
 
 The audit also lists every step:
 
-- **Planned next step**: which tools the model chose and with what arguments.
+- **Which agent**: every step carries the name of the agent that made it: *Quick answer* for simple lookups, *Analyst* for questions that need several facts, and the specialists the analyst asks (*Stock*, *News*, *Company* and *Knowledge specialist*).
+- **Recalled memories**: what the assistant remembered about you before answering (company workspaces).
+- **Planned next step**: which tools (or specialists) the agent chose and with what arguments.
+- **Specialist reported**: what the analyst asked a specialist and the specialist's report.
 - **Tool calls**: the arguments, the results with their reference numbers, similarity scores for searches, the age of news, and any error (for example "arguments rejected" or "timed out").
 - **Withheld passages**: text from a news feed that tried to give the assistant instructions is replaced with `[removed: …]` before the model sees it, and the audit says where.
 - **Drafted an answer / Auditor sent the draft back**: when a draft was revised, the draft and the problems found.
 - **Reused an earlier answer**: when the answer came from the answer cache (see below).
-- **Model, router, tokens, evidence, policy and record**: which model answered and why, token use, how many sources were retrieved and cited, the version of the assistant's rules, and the record's ID in Firestore.
+- **Model, router, tokens, evidence, policy and record**: which model answered, which agent the router chose and why, token use, how many sources were retrieved and cited, the version of the assistant's rules, and the record's ID in Firestore.
 
 The full-screen view at `#/chat` shows the audits of every answer in the conversation, reloaded from Firestore, and "JSON" downloads them all. Each answer's audit also has "Download audit JSON". The model's raw reasoning is stored for reviewers but not shown in the app.
 
@@ -104,7 +115,7 @@ The full-screen view at `#/chat` shows the audits of every answer in the convers
 
 - 40 questions per hour from one address, and 200 per hour per server instance. Past that you see "You've reached the limit of questions for this hour" or "The assistant is busy".
 - Messages can be up to 4,000 characters. The assistant reads the last 20 messages of a conversation.
-- **Reused answers:** a question already answered today in the same conversation context, for the same company, is answered again from the cache only if nothing it depended on has changed: stock, sources, the latest scan, the company profile, the assistant's rules and models. Only answers that passed every check are reused, and answers that read your orders or playbook never are. A reused answer says so in its audit.
+- **Reused answers:** a question already answered today in the same conversation context, for the same company (and, where the assistant remembers you, for the same person), is answered again from the cache only if nothing it depended on has changed: stock, sources, the latest scan, the company profile, the assistant's rules and models. Only answers that passed every check are reused, and answers that read your orders or playbook never are. A reused answer says so in its audit.
 
 ## Using News watch
 
@@ -141,20 +152,22 @@ News watch alerts also appear in the **News alerts** section of a company report
 ### One question to the assistant
 
 1. The browser sends the conversation to `POST /api/chat`, with your sign-in token if you're in a company workspace. The browser demo sends its orders and switched-on playbook rules instead; the service checks and trims them, and a company chat never uses them.
-2. With a token, the service fetches your company profile from the company backend (`GET /api/v1/company/knowledge`) using that token. The profile is how the assistant knows who it works for.
-3. If the same question was answered against the same data today, that answer is reused (`answer-cache.js`).
-4. The **router** (`router.js`) picks a model. Lookups and how-to questions go to the small fast model. A question goes to the bigger model if it:
+2. With a token, the Cloud Run service fetches your company profile from the company backend (`GET /api/v1/company/knowledge`) using that token, and who you are (`GET /api/v1/me`). The profile is how the assistant knows who it works for.
+3. The service passes the question to the agents on Agent Runtime (`runtime.js`) and relays each step back to your browser as it happens. Your token goes along only so the agents can read your orders and playbook with it; it is never stored.
+4. If the same question was answered against the same data today, that answer is reused (`answer-cache.js`).
+5. The assistant continues your Agent Platform session, and in a company workspace recalls what Memory Bank remembers about you that bears on the question.
+6. The **router** (`router.js`) picks the agent. Lookups and how-to questions go to *Quick answer*, on the small fast model, which has every tool. A question goes to the *Analyst*, on the bigger model, if it:
    - is a follow-up or names several SKUs;
    - asks for a total, average, percentage or exposure;
    - asks for judgement (why, should, compare, risk, impact);
    - is about trade rules (EUDR, duties, tariffs, anti-dumping);
    - contains pasted text or instructions aimed at the assistant;
    - or is longer than 300 characters.
-5. The **agent** (`agent.js`, a Google ADK `LlmAgent`) plans, calls tools, reads the results and repeats. It gets at most six rounds of tool calls (16 calls in all) before tools are switched off and it has to answer.
-6. Every tool call goes through the **gateway** (`gateway.js`). The gateway checks the arguments against the tool's declared format, refuses tools this workspace doesn't have (the company profile outside a company workspace, for example), enforces the per-question budget, times out after 15 seconds and retries once on a temporary failure.
-7. Text written by third parties (articles, alerts, custom feed names) is screened by the **guard** (`guard.js`). Passages addressed to the assistant are withheld.
-8. The **auditor** (`review.js`) checks the draft. A draft that fails goes back once; if it was written by the small model, the revision is done by the bigger one.
-9. Each step is streamed to the browser as it happens, and the whole answer is stored as one audit record in Firestore (`audits`).
+7. The agent (Google ADK) plans, calls tools, reads the results and repeats. The *Analyst* doesn't call data tools itself: it asks the **specialists** (stock, news, company, knowledge), each a smaller agent with only its own tools, then does the arithmetic and writes the answer. Each answering agent gets at most six rounds (16 tool calls in all, across the team) before tools are switched off and it has to answer; a specialist gets three per request.
+8. Every tool call, by any agent, goes through the **gateway** (`gateway.js`). The gateway checks the arguments against the tool's declared format, refuses tools this workspace doesn't have (the company profile outside a company workspace, for example), enforces the per-question budget, times out after 15 seconds and retries once on a temporary failure.
+9. Text written by third parties (articles, alerts, custom feed names) is screened by the **guard** (`guard.js`). Passages addressed to the assistant are withheld. All the agents' traffic also passes Agent Gateway, where Model Armor screens it for prompt injection.
+10. The **auditor** (`review.js`) checks the draft. A draft that fails goes back once, to the *Analyst*.
+11. Each step is streamed to the browser as it happens, and the whole answer is stored as one audit record in Firestore (`audits`). In a company workspace, the question and answer then go to Memory Bank, which updates what it remembers about you.
 
 The assistant's instructions are a list of rules in `policy.js`. Each rule names the mistake it prevents, for example "Follow-ups answered from an earlier (possibly wrong) answer instead of current data." The version of the rule list is stored on every audit, so a change in behaviour can be traced to a change in the rules.
 
@@ -162,7 +175,7 @@ The assistant's instructions are a list of rules in `policy.js`. Each rule names
 
 | Tool | What it reads | Available |
 | --- | --- | --- |
-| `search_knowledge` | The vector index: news articles, alerts, stock items, sources and help guides | Always |
+| `search_knowledge` | The knowledge base on RAG Engine: news articles, alerts, stock items, sources and help guides | Always |
 | `query_inventory` | Sample stock with exact filters (SKU, category, market, HS code, species, origin, supplier, certification, geolocation), plus the count and total value | Always |
 | `get_alerts` | Open News watch alerts, most severe first, with the combined exposure (each SKU counted once) | Always |
 | `calculate` | Exact arithmetic, so every figure can be traced | Always |
@@ -171,7 +184,7 @@ The assistant's instructions are a list of rules in `policy.js`. Each rule names
 | `query_orders` | Your orders and their document checklists, from `GET /api/v1/trade-map` with your token, or the orders the browser demo sent | Company workspace, or a demo with orders |
 | `get_playbook` | The playbook rules switched on, from `GET /api/v1/playbook/rules` with your token, or the rules the browser demo sent | Company workspace, or a demo with rules |
 
-**Search.** `search_knowledge` embeds the question with `gemini-embedding-001` (768 dimensions) and asks Firestore for the nearest documents in the `kb` collection: three times as many as needed. It then reranks them with BM25, so exact codes and names such as `PLY-101` or `4412` count, and drops anything your company may not see. Each scan adds its new articles and alerts to the index; `npm run index` rebuilds it.
+**Search.** `search_knowledge` asks Agent Platform RAG Engine for the records nearest in meaning to the query, in the corpora for the types it wants (articles, alerts, stock items, sources, guides): three times as many as needed. The embeddings are multilingual, so a question in Vietnamese finds English news. It then drops anything your company may not see, before any agent reads it, and reranks the rest with BM25, so exact codes and names such as `PLY-101` or `4412` count. Each scan adds its new articles and alerts to the index; `npm run index` rebuilds it.
 
 ### The daily news scan
 
@@ -181,7 +194,7 @@ Cloud Scheduler calls `POST /api/scan` at 07:00 Asia/Ho_Chi_Minh. The scan (`sca
 2. Withholds articles that address the assistant or link to malicious sites: first by pattern, then with Model Armor when it is configured. An article Model Armor couldn't screen is left for the next scan.
 3. Sends the rest to Gemini in batches of 16, with the stock list. For each article, the model answers whether it is relevant, how severe, which SKUs it affects and why, and one next step. The rules tell it to be strict: exchange rates, energy prices and other commodities are not relevant, and article text is news, never instructions.
 4. Keeps an alert only if the model said relevant, at least one SKU it named is really in stock, the article isn't a repeat of another one, and it doesn't name another commodity (cocoa, coffee, rubber…) without mentioning wood goods (`relevance.js`).
-5. Stores the articles, alerts and scan record, and adds them to the vector index.
+5. Stores the articles, alerts and scan record, and adds them to the search index on RAG Engine.
 
 ### Models
 
@@ -190,25 +203,27 @@ Cloud Scheduler calls `POST /api/scan` at 07:00 Asia/Ho_Chi_Minh. The scan (`sca
 | Assistant, simple questions | `gemini-3.5-flash-lite`, thinking LOW | `GEMINI_MODEL_SIMPLE`, `GEMINI_THINKING_SIMPLE` |
 | Assistant, complex questions | `gemini-4-argon`, thinking MEDIUM | `GEMINI_MODEL_COMPLEX`, `GEMINI_THINKING_COMPLEX` |
 | News scan and eval judge | `gemini-3.5-flash` | `GEMINI_MODEL` |
-| Embeddings | `gemini-embedding-001` | `EMBED_MODEL` |
+| Search embeddings (RAG Engine) | `text-multilingual-embedding-002` | `RAG_EMBED_MODEL` |
+| Memory Bank (writing memories) | `gemini-3.5-flash` | `MEMORY_MODEL` (in `platform/runtime.py`) |
 
 These are the defaults in `models.js`. The deployed service takes its values from Terraform (`infra/terraform/ai_service.tf`), and `GET /healthz` reports the models it is running.
 
 ### Where data is kept
 
-Everything is in Firestore (asia-southeast1):
+Everything is in asia-southeast1. On Agent Platform: the search index (RAG Engine corpora `exportmate-kb-<type>`, filled from text files in the `<project>-kb` bucket), conversations (Sessions) and what the assistant remembers (Memory Bank). In Firestore:
 
 | Collection | Holds |
 | --- | --- |
 | `inventory` | The sample stock |
 | `sources`, `companySources` | News feeds, and the built-in feeds each company switched off |
 | `articles`, `impacts`, `scans` | Every analysed article, the alerts, and one record per scan |
-| `kb` | The vector index |
+| `rag_files` | Each search record's title, link, date and sources, and which RAG Engine file holds it |
+| `chat_sessions` | Which Agent Platform session each browser conversation continues |
 | `audits` | One record per answer: question, steps, evidence, checks, citations, raw reasoning |
 | `answer_cache` | Which audits can be reused; entries expire after two days |
 | `eval_runs`, `scan_eval_runs` | Results of the assistant and scan evals |
 
-**Privacy.** Questions and answers are stored as asked, without masking, so don't paste personal data or secrets into the chat. Logs carry no question text and no tokens. Your sign-in token is only ever sent to the company backend. An audit made in a company workspace can only be read with a token from that company.
+**Privacy.** Questions and answers are stored as asked, without masking (in the audit and the Agent Platform session), so don't paste personal data or secrets into the chat. Memory Bank is told not to keep personal details, and you can remove anything it kept. Logs carry no question text and no tokens. Your sign-in token is only ever sent to the company backend. An audit made in a company workspace can only be read with a token from that company.
 
 ## Not done yet
 
@@ -216,7 +231,8 @@ Everything is in Firestore (asia-southeast1):
 - The assistant can't act: it doesn't draft or send supplier messages.
 - You can't rate an answer or mark an alert as not relevant yet.
 - Only the same question is answered from the cache; a reworded one is answered again.
-- The chat-time guard is pattern-based, so a reworded injection in a feed can get past it. Read-only tools and the auditor's link and figure checks are the other safeguards.
+- The guard on tool results is pattern-based, and Model Armor at Agent Gateway only logs what it finds until enforcement is switched on, so a reworded injection in a feed can still reach a model. Read-only tools and the auditor's link and figure checks are the other safeguards.
+- The assistant remembers each person separately; facts a whole company shares aren't remembered across colleagues.
 - The "five-agent review" in the demo's Rule watch is a simulation in the browser, unrelated to the assistant.
 
 The full list, with reasons, is in [AGENT_HARNESS.md](AGENT_HARNESS.md#not-done-yet).
@@ -227,7 +243,9 @@ The full list, with reasons, is in [AGENT_HARNESS.md](AGENT_HARNESS.md#not-done-
 cd ai/server
 npm run dev        # the service on :8080 (needs gcloud auth application-default login)
 npm test           # unit tests, no GCP needed
-npm run eval       # golden set against live Gemini + Firestore; saved to eval_runs
+npm run runtime    # the agents behind Agent Runtime's contract; AGENTS_AT=http://127.0.0.1:8080 on the API uses them
+npm run eval       # golden set against live Gemini + Firestore; saved to eval_runs (--engine: the deployed agents)
+npm run eval:vertex  # the same, plus an evaluation run on Agent Platform › Evaluation
 npm run eval:scan  # news scan relevance on labeled articles
 npm run ops        # health of recent chats
 gcloud run jobs execute exportmate-ai-task --region asia-southeast1 --wait --args="node eval/run.js"   # any of these, on GCP

@@ -22,7 +22,7 @@ import {
 import { downloadJson, type Audit, type AuditStep } from "./agent-client";
 
 const TOOL_LABELS: Record<string, [React.ElementType, string]> = {
-  search_knowledge: [Search, "Searched the vector index"],
+  search_knowledge: [Search, "Searched the knowledge base"],
   query_inventory: [Database, "Queried the stock list"],
   get_alerts: [Bell, "Read news alerts"],
   calculate: [Calculator, "Calculated"],
