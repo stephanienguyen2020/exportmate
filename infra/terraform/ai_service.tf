@@ -60,6 +60,8 @@ resource "google_storage_bucket" "kb" {
 }
 
 resource "google_storage_bucket_iam_member" "kb_rag_reader" {
+  # RAG Engine's service agent only exists once RAG Engine has been used (the first index run).
+  count  = var.rag_service_agent_ready ? 1 : 0
   bucket = google_storage_bucket.kb.name
   role   = "roles/storage.objectViewer"
   # Created when RAG Engine is first used in the project (the first `npm run index`).

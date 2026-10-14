@@ -112,3 +112,8 @@ Supersedes the fixture-based trade map checks above where they differ. Map data 
 - Vercel proxy test on Node 25: 4 passed (Node 20 can't load the `.ts` module, as before).
 - AI service: `npm test` 86 passed; `node --check` on every module. New tests: demo orders become map orders (`demoMapOrders`; malformed rows dropped, text trimmed, at most 200), demo playbook rules (`demoPlaybook`), the gateway's `orders` scope (offered to a demo with orders, refused without), the `company-orders` and `playbook` rules applying wherever their tools can read. New golden case `demo-order-status` (complex tier).
 - Not exercised: the assistant against live Gemini (the golden set, including `demo-order-status`, needs a run on GCP after deploy), the signed-in chat reading `GET /playbook/rules` with a real token, and `npm run index` to re-index the updated help guides.
+
+### Assistant on Agent Platform (15 October 2026)
+- Audit trail: steps carry the agent that made them (Quick answer, Analyst, specialists); specialists' reports show as their own steps with the request and report; recalled memories show as a step; the router line names the answering agent. `npm run build` and the Playwright suite (39 tests) pass.
+- Account › What the assistant remembers (company workspaces): lists the user's Memory Bank memories and forgets one with its own token (`tests/backend-integration.spec.ts`); screenshots reviewed at 1280 px and 390 px, no overflow.
+- Live, against Agent Platform in `exportmate-app`: a preference stated in one browser session ("short bullet points", "plywood to the UK") is recalled in a new session and shapes the answer; a follow-up in the first session continues its Agent Platform session; another user's memory search finds nothing.

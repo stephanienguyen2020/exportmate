@@ -113,19 +113,38 @@ gcloud run jobs execute exportmate-ai-task --region asia-southeast1 --wait --arg
 gcloud run jobs execute exportmate-ai-task --region asia-southeast1 --wait --args="node ops.js --days=7"       # health report
 ```
 
-## Moving the AI service from exportmate-app
+## Moving the AI service from exportmate-app (and onto Agent Platform)
 
-The AI service, its Firestore data and the daily scan used to live in project `exportmate-app`. To move them here:
+The AI service, its Firestore data and the daily scan used to live in project `exportmate-app`, with the assistant inside the Cloud Run service. They move here in one go, with the assistant's agents on Gemini Enterprise Agent Platform (Agent Runtime, Sessions, Memory Bank, RAG Engine, Evaluation, Govern; see `docs/AGENT_HARNESS.md`). Steps marked **owner** need dylan.exportmate@gmail.com; the rest work as Editor. Every command runs from the repository root unless noted.
 
-1. **Owner:** `terraform apply` (creates Firestore, service accounts and grants, the service, job, scheduler, metrics and build resources). `terraform plan` should show 0 to destroy.
-2. Deploy the code: `PROJECT_ID=skilful-scarab-511320-q9 ai/server/deploy.sh`.
-3. Copy the data (stock, sources, articles, alerts, scans, vector index, audits), with an account that can read `exportmate-app` and write here:
+1. **Owner:** `terraform apply` (Firestore, service accounts and grants, the Cloud Run service, job and scheduler, the RAG bucket, the APIs Agent Gateway needs, metrics, build resources). `terraform plan` should show 0 to destroy apart from the two Firestore vector indexes on `kb`, which nothing uses any more.
+2. Copy the data (stock, sources, articles, alerts, scans, audits) with an account that can read `exportmate-app` and write here:
    ```sh
    cd ai/server && node copy-firestore.js --from=exportmate-app --to=skilful-scarab-511320-q9
    ```
-4. Check the new service before switching traffic: `curl "$(terraform output -raw ai_url)/"` (Cloud Run reserves `/healthz`, so check `/`), then run the eval job above.
-5. Switch traffic: set the `/api/:path*` destination in `frontend/vercel.json` to `$(terraform output -raw ai_url)/api/:path*`, set the default project in `ai/server/db.js` and the comment in `dev.sh` to `skilful-scarab-511320-q9`, then deploy the frontend. Re-run step 3 just before this if `exportmate-app` has had new scans or chats meanwhile.
-6. Retire the old project's AI resources:
+3. Deploy the image to Cloud Run and create the agents' Agent Runtime instance (`exportmate-agents`, with Memory Bank and its own Agent Identity); the last line printed is the instance's name:
+   ```sh
+   PROJECT_ID=skilful-scarab-511320-q9 ai/server/deploy.sh
+   ```
+4. Build the search index on RAG Engine (creates the five corpora), then let RAG Engine read the bucket and build it again:
+   ```sh
+   gcloud run jobs execute exportmate-ai-task --project skilful-scarab-511320-q9 --region asia-southeast1 --wait --args="node rag.js"
+   # owner: terraform apply -var rag_service_agent_ready=true, then run the job again
+   ```
+5. **Owner:** govern the agents: Agent Identity roles, Agent Registry, egress IAM policies, Agent Gateway with IAP and Model Armor (observe mode). Add `BACKEND_URL=<backend Cloud Run URL>` so the agents may reach it:
+   ```sh
+   PROJECT_ID=skilful-scarab-511320-q9 RUNTIME=<name from step 3> BACKEND_URL=<backend url> infra/agent-platform/govern.sh
+   ```
+   Then bind the agents to the gateway: `PROJECT_ID=skilful-scarab-511320-q9 GATEWAY=projects/skilful-scarab-511320-q9/locations/asia-southeast1/agentGateways/exportmate-egress ai/server/deploy.sh`.
+6. **Owner:** point Cloud Run at the agents: `terraform apply -var agent_runtime=<name from step 3> -var rag_service_agent_ready=true` (sets `AGENTS_AT=runtime` and `AGENT_RUNTIME`).
+7. Check the deployed agents: the console playground (Agent Platform › Agent Runtime › exportmate-agents) answers, and the golden set passes against them and shows on Agent Platform › Evaluation:
+   ```sh
+   cd ai/server && PROJECT_ID=skilful-scarab-511320-q9 AGENT_RUNTIME=<name> npm run eval:vertex -- --engine
+   ```
+   Check the service too: `curl "$(terraform output -raw ai_url)/"` (Cloud Run reserves `/healthz`, so check `/`).
+8. Switch traffic: set the `/api/:path*` destination in `frontend/vercel.json` to `$(terraform output -raw ai_url)/api/:path*`, set the default project in `ai/server/db.js` and the comment in `dev.sh` to `skilful-scarab-511320-q9`, then deploy the frontend. Re-run step 2 just before this if `exportmate-app` has had new scans or chats meanwhile.
+9. After a few days of clean Agent Gateway logs (no `DENIED` in `networkservices.googleapis.com/gateway_requests`, Model Armor `sanitize_operations` findings reviewed), **owner:** enforce with `ENFORCE=1 … infra/agent-platform/govern.sh`.
+10. Retire the old project's AI resources, and the development resources made while building this (Agent Runtime instances `exportmate-agents-ai` and `exportmate-agents-dev`, the RAG corpora `exportmate-kb-*`, the bucket `exportmate-app-kb`, the Agent Gateway `exportmate-egress` and its policies, extensions and Agent Registry entries, the Model Armor template `exportmate-agent-traffic`, the image `exportmate-agents` in `cloud-run-source-deploy`):
    ```sh
    gcloud scheduler jobs pause exportmate-daily-news-scan --project exportmate-app --location asia-southeast1
    gcloud run services delete exportmate-ai --project exportmate-app --region asia-southeast1

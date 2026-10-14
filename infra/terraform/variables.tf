@@ -75,3 +75,9 @@ variable "agent_runtime" {
   type        = string
   default     = ""
 }
+
+variable "rag_service_agent_ready" {
+  description = "Set to true after the first `node rag.js` run has created RAG Engine's service agent; it then gets read access to the RAG bucket."
+  type        = bool
+  default     = false
+}
