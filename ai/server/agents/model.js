@@ -3,7 +3,7 @@
 import { Gemini } from "@google/adk";
 import { PROJECT } from "../db.js";
 import { withRetry } from "../gateway.js";
-import { TIERS, timeoutFor } from "../models.js";
+import { GEMINI_LOCATION, TIERS, timeoutFor } from "../models.js";
 
 // ADK's Gemini model, with transient errors (429, 503, timeouts) retried with backoff, and each
 // call bounded by its tier's timeout (a stalled call counts as a timeout and is retried).
@@ -44,6 +44,6 @@ export const gemini = new RetryingGemini({
   model: TIERS.simple.model,
   vertexai: true,
   project: PROJECT,
-  location: process.env.GOOGLE_CLOUD_LOCATION || "global",
+  location: GEMINI_LOCATION,
 });
 

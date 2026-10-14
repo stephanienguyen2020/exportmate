@@ -17,5 +17,9 @@ export const timeoutFor = (model) => Object.values(TIERS).find((t) => t.model ==
 
 export const SCAN_MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash";
 
+// Where Gemini is called. The newest models are served from the global endpoint; Agent Runtime
+// sets GOOGLE_CLOUD_LOCATION to its own region, so Gemini has its own setting.
+export const GEMINI_LOCATION = process.env.GEMINI_LOCATION || process.env.GOOGLE_CLOUD_LOCATION || "global";
+
 /** The generation settings that go with a tier's model. */
 export const thinkingFor = (tier, includeThoughts = true) => ({ thinkingLevel: TIERS[tier].thinkingLevel, includeThoughts });
