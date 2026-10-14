@@ -78,7 +78,8 @@ function CiteLink({ n, citation }: { n: number; citation?: Citation }) {
 }
 
 function inline(text: string, citations: Citation[]) {
-  return text.split(/(\*\*[^*]+\*\*|\[\d+(?:\s*,\s*\d+)*\])/g).map((part, i) => {
+  return text.split(/(`[^`]+`|\*\*[^*]+\*\*|\[\d+(?:\s*,\s*\d+)*\])/g).map((part, i) => {
+    if (/^`[^`]+`$/.test(part)) return <code key={i}>{part.slice(1, -1)}</code>;
     if (/^\*\*[^*]+\*\*$/.test(part)) return <strong key={i}>{part.slice(2, -2)}</strong>;
     const refs = part.match(/^\[(\d+(?:\s*,\s*\d+)*)\]$/);
     if (refs)
@@ -93,7 +94,7 @@ function inline(text: string, citations: Citation[]) {
   });
 }
 
-/** Renders the markdown subset Gemini uses: paragraphs, bullets, bold, headings, [n] citations. */
+/** Renders the markdown subset Gemini uses: paragraphs, bullets, bold, `code`, headings, [n] citations. */
 function Rich({ text, citations = [] }: { text: string; citations?: Citation[] }) {
   const blocks: React.ReactNode[] = [];
   let list: string[] = [];

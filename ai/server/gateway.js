@@ -91,15 +91,23 @@ export function validateArgs(parameters, args) {
   return problems;
 }
 
+// Why a tool outside the session's scope is refused.
+const SCOPE_NEEDS = {
+  company: "a signed-in company workspace",
+  orders: "a workspace with orders",
+  playbook: "a workspace with a playbook",
+};
+
 /**
  * One gateway per agent turn (the budget is per turn).
- * registry: { [name]: { declaration, scope: "public" | "company", run(args, ctx), timeoutMs?, maxCalls? } }
- * ctx is passed to every handler and must say whether a company session is present (`ctx.company`).
+ * registry: { [name]: { declaration, scope: "public" | "company" | "orders" | "playbook", run(args, ctx), timeoutMs?, maxCalls? } }
+ * ctx is passed to every handler; a tool whose scope isn't "public" runs only when ctx[scope]
+ * is present (`ctx.company` for a signed-in company, `ctx.orders` / `ctx.playbook` readers).
  */
 export function toolGateway(registry, ctx, { maxCalls = 16, timeoutMs = 15_000, retries = 1, sleep } = {}) {
   const used = new Map();
   let total = 0;
-  const allowed = (tool) => tool.scope !== "company" || Boolean(ctx.company);
+  const allowed = (tool) => !tool.scope || tool.scope === "public" || Boolean(ctx[tool.scope]);
 
   return {
     /** Declarations the model is offered: only the tools this session may use. */
@@ -113,7 +121,7 @@ export function toolGateway(registry, ctx, { maxCalls = 16, timeoutMs = 15_000, 
       try {
         const tool = Object.hasOwn(registry, name) ? registry[name] : null;
         if (!tool) throw new ToolError("unknown_tool", `Unknown tool ${name}. Use one of: ${Object.keys(registry).filter((n) => allowed(registry[n])).join(", ")}`);
-        if (!allowed(tool)) throw new ToolError("denied", `${name} is only available in a signed-in company workspace.`);
+        if (!allowed(tool)) throw new ToolError("denied", `${name} is only available in ${SCOPE_NEEDS[tool.scope] || "another workspace"}.`);
         const problems = validateArgs(tool.declaration.parameters, args);
         if (problems.length) throw new ToolError("invalid_args", `Invalid arguments: ${problems.join("; ")}.`);
         const count = used.get(name) || 0;

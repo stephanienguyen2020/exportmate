@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { matchOrders, presentOrder, totalsByCurrency } from "../orders.js";
+import { MAX_DEMO_ORDERS, demoMapOrders, demoPlaybook, matchOrders, presentOrder, totalsByCurrency } from "../orders.js";
 
 const source = {
   regulationId: "r1",
@@ -62,4 +62,57 @@ test("presents an order with its status label, gaps and cited official texts", (
     ["order", "#/workspace/map/order/PO-2291"],
     ["regulation", "#/workspace/regulations/documents/d1"],
   ]);
+});
+
+const demoOrder = (o = {}) => ({
+  id: "PO-9001",
+  product: "Acacia plywood 18mm",
+  supplier: "Binh Phu Wood",
+  destination: "Rotterdam, NL",
+  market: "EU",
+  value: 30000,
+  currency: "USD",
+  shipDate: "2026-11-20",
+  hsCode: "4412.33",
+  status: "exposed",
+  check: { title: "Geolocation documentation for EU-bound wood (sample rule)", status: "missing", note: "Binh Phu Wood has no geolocation record for this lot." },
+  ...o,
+});
+
+test("the browser demo's orders become map orders the order tool can read", () => {
+  const [m] = demoMapOrders([demoOrder()]);
+  assert.equal(m.order.valueMinor, 3000000);
+  assert.equal(m.placement.market, "EU");
+  assert.equal(m.gapCount, 1);
+  assert.deepEqual(matchOrders([m], { ids: ["po 9001"] }), [m]);
+  const cited = [];
+  const o = presentOrder(m, (key, info) => cited.push({ key, ...info }));
+  assert.equal(o.statusLabel, "Action needed");
+  assert.deepEqual(o.checks.map((c) => [c.status, c.gap, c.source]), [["missing", true, undefined]]);
+  assert.equal(cited[0].url, "#/workspace/orders/PO-9001", "the demo has no map, so orders link to their page");
+});
+
+test("malformed demo orders are dropped, long text trimmed and the count capped", () => {
+  const bad = [null, "x", demoOrder({ id: "" }), demoOrder({ value: -5 }), demoOrder({ value: "abc" }), demoOrder({ shipDate: "soon" }), demoOrder({ status: "needs_data" })];
+  assert.equal(demoMapOrders(bad), null);
+  assert.equal(demoMapOrders("orders"), null);
+  const [m] = demoMapOrders([demoOrder({ product: "p".repeat(1000), currency: "dollars", market: "Europe", check: { status: "hacked", title: "x" } })]);
+  assert.equal(m.order.product.length, 300);
+  assert.equal(m.order.currency, "USD");
+  assert.equal(m.placement.market, null);
+  assert.deepEqual(m.checks, []);
+  const many = Array.from({ length: MAX_DEMO_ORDERS + 20 }, (_, i) => demoOrder({ id: `PO-${i}` }));
+  assert.equal(demoMapOrders(many).length, MAX_DEMO_ORDERS);
+});
+
+test("the demo's playbook keeps only rules that are switched on and have text", () => {
+  const rules = demoPlaybook([
+    { id: "1", category: "Supplier", text: "Allow Binh Phu Wood 3 weeks.", enabled: true },
+    { id: "2", category: "Policy", text: "Off", enabled: false },
+    { id: "3", category: "Threshold", text: "   " },
+    "rule",
+  ]);
+  assert.deepEqual(rules, [{ id: "1", category: "Supplier", text: "Allow Binh Phu Wood 3 weeks.", enabled: true }]);
+  assert.equal(demoPlaybook([]), null);
+  assert.equal(demoPlaybook({}), null);
 });

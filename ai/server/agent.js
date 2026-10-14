@@ -78,22 +78,46 @@ const MARKETS = ["EU", "UK", "US", "CA", "JP", "KR", "AU", "Raw material"];
 const UNTRUSTED_TYPES = new Set(["article", "alert", "source"]);
 
 // Who the assistant works for. A signed-in company's profile comes from the backend
-// (GET /api/v1/company/knowledge); without one, the demo company.
-function workspace(company) {
+// (GET /api/v1/company/knowledge); without one, the demo company, whose orders and
+// playbook the browser sends with the question (when it has them).
+function workspace(company, session) {
   if (!company)
-    return "The workspace belongs to Binh Duong Wood Co., a Vietnamese wood-products and furniture exporter. Its stock data is synthetic demo data; its news articles are real, from approved sources.";
+    return `The workspace belongs to Binh Duong Wood Co., a Vietnamese wood-products and furniture exporter, in ExportMate's browser demo. ${session.orders ? "Its sample orders (order ids such as PO-2291, values, ship dates, statuses and the demo's one sample rule check) come from query_orders; they include any the user imported. " : ""}${session.playbook ? "Its playbook rules come from get_playbook. " : ""}Its stock data is synthetic demo data, separate from its orders; its news articles are real, from approved sources.`;
   const c = company.company;
-  return `You are working for ${c.name} (${c.businessRole}, based in ${c.origin}, primary market ${c.destination}). Its own company profile (what it does and makes, materials, certifications, sites, size, website) comes from get_company_profile, and its own orders (order ids such as PO-2291, values, ship dates, statuses and each order's document checklist) from query_orders. The stock items and news alerts in the other tools are synthetic demo data for a sample wood exporter, not ${c.name}'s own records: say so when you use them. News articles are real, from approved sources.`;
+  return `You are working for ${c.name} (${c.businessRole}, based in ${c.origin}, primary market ${c.destination}). Its own company profile (what it does and makes, materials, certifications, sites, size, website) comes from get_company_profile, its own orders (order ids such as PO-2291, values, ship dates, statuses and each order's document checklist) from query_orders, and its playbook rules from get_playbook. The stock items and news alerts in the other tools are synthetic demo data for a sample wood exporter, not ${c.name}'s own records: say so when you use them. News articles are real, from approved sources.`;
 }
 
-function system(company) {
+function system(company, session) {
   return `You are the ExportMate assistant, an AI agent inside ExportMate, a trade-compliance workspace.
-${workspace(company)} Today is ${new Date().toISOString().slice(0, 10)}.
+${workspace(company, session)} Today is ${new Date().toISOString().slice(0, 10)}.
 
 How to work:
-${rulesFor(company)
+${rulesFor(session)
   .map((r) => `- ${r.text}`)
   .join("\n")}`;
+}
+
+// Where query_orders and get_playbook read from: the company backend with the caller's own
+// token, or the orders and playbook the browser demo sent (orders.js checked them).
+function workspaceReaders(backend, demo) {
+  if (backend) {
+    const read = async (path, what) => {
+      const { status, body } = await backend(path);
+      if (status !== 200)
+        throw status === 0 || status >= 500
+          ? Object.assign(new Error(`The company's ${what} can't be read right now.`), { status: 503 })
+          : new ToolError("denied", `This account can't read the company's ${what}.`);
+      return body.data;
+    };
+    return {
+      orders: async () => (await read("/api/v1/trade-map", "orders")).orders,
+      playbook: async () => (await read("/api/v1/playbook/rules", "playbook")).filter((r) => r.enabled),
+    };
+  }
+  return {
+    orders: demo?.orders ? async () => demo.orders : null,
+    playbook: demo?.playbook ? async () => demo.playbook : null,
+  };
 }
 
 function citeAlert(refs, a) {
@@ -496,13 +520,13 @@ const REGISTRY = {
   },
 
   query_orders: {
-    scope: "company",
-    // Read live from Postgres, outside the answer cache's data fingerprint.
+    scope: "orders",
+    // Read live (Postgres, or the browser demo's own orders), outside the answer cache's data fingerprint.
     live: true,
     declaration: {
       name: "query_orders",
       description:
-        "The signed-in company's own orders (the Orders page), read live from its account: order id (e.g. PO-2291), product, supplier, destination and market, value and currency, ship date, HS code, status (exposed is shown as \"Action needed\") and each order's market document checklist: every line's status (on_file, missing, mismatch, prepare, check, unknown), a note and the official text it comes from. Also returns the count and total value per currency of all matches. Filters combine with AND; with none, every order. Only available in a company workspace.",
+        "The company's own orders (the Orders page), read live: order id (e.g. PO-2291), product, supplier, destination and market, value and currency, ship date, HS code, status (exposed is shown as \"Action needed\") and each order's document checklist: every line's status (on_file, missing, mismatch, prepare, check, unknown), a note and the official text it comes from (the browser demo has one sample check per order it covers, with no official text). Also returns the count and total value per currency of all matches. Filters combine with AND; with none, every order.",
       parameters: {
         type: Type.OBJECT,
         properties: {
@@ -513,14 +537,8 @@ const REGISTRY = {
         },
       },
     },
-    async run(args, { refs, backend }) {
-      if (!backend) throw new ToolError("unavailable", "Orders can't be read in this session.");
-      const { status, body } = await backend("/api/v1/trade-map");
-      if (status !== 200)
-        throw status === 0 || status >= 500
-          ? Object.assign(new Error("The company's orders can't be read right now."), { status: 503 })
-          : new ToolError("denied", "This account can't read the company's orders.");
-      const matching = matchOrders(body.data.orders, args);
+    async run(args, { refs, orders: readOrders }) {
+      const matching = matchOrders(await readOrders(), args);
       const totals = totalsByCurrency(matching);
       const filters = describe(args, ["limit"]);
       const totalText = Object.entries(totals).map(([c, v]) => `${c} ${v.toLocaleString("en-US")}`).join(" + ") || "no value";
@@ -540,6 +558,33 @@ const REGISTRY = {
             ...orders.map((o) => ({ ref: o.ref, type: "order", title: `${o.id} · ${o.product} · ${o.statusLabel}` })),
           ],
         },
+      };
+    },
+  },
+
+  get_playbook: {
+    scope: "playbook",
+    // The company's own rules, read live (Postgres, or the browser demo's), so never fingerprinted.
+    live: true,
+    declaration: {
+      name: "get_playbook",
+      description:
+        "The company's playbook (the Playbook page): the trading rules it wrote itself and switched on, each with its category (Policy, Threshold, Supplier, Watchlist) and text. Its preferences for how to judge orders, suppliers and news, not regulations.",
+    },
+    async run(_args, { refs, playbook }) {
+      const rules = (await playbook()).map((r) => ({
+        ref: refs.cite(`playbook:${r.id}`, {
+          type: "playbook",
+          id: String(r.id),
+          title: `Playbook · ${r.category}: ${r.text.length > 80 ? `${r.text.slice(0, 80)}…` : r.text}`,
+          url: "#/workspace/playbook",
+        }),
+        category: r.category,
+        text: r.text,
+      }));
+      return {
+        output: { count: rules.length, rules },
+        audit: { count: rules.length, results: rules.map((r) => ({ ref: r.ref, type: "playbook", title: `${r.category}: ${r.text}` })) },
       };
     },
   },
@@ -607,7 +652,7 @@ let scanSeen;
 // Everything the tools read for this caller, as one hash: stock, the sources as this company
 // sees them (with their last fetch), the latest finished scan (its articles and alerts), the
 // company profile and the guides. A cached answer is only reused while this is unchanged.
-async function dataVersion(company, access) {
+async function dataVersion(company, access, session) {
   const scan = await lastDoneScan();
   // A scan on another instance: drop this instance's copies so tools and the key agree.
   if (scan?.id !== scanSeen) {
@@ -615,7 +660,9 @@ async function dataVersion(company, access) {
     scanSeen = scan?.id;
   }
   const [items, stored] = await Promise.all([cached("inventory", () => list(inventory)), cached("sources", () => list(sources))]);
-  return fingerprint({ items, sources: presentSources(stored, access), scan: scan?.id ?? null, company, guides: GUIDES_VERSION });
+  // Which order and playbook tools were offered: they change the prompt, though what they read is live.
+  const tools = { orders: Boolean(session.orders), playbook: Boolean(session.playbook) };
+  return fingerprint({ items, sources: presentSources(stored, access), scan: scan?.id ?? null, company, tools, guides: GUIDES_VERSION });
 }
 
 // The audit that answered this key before, if it is still there and still fit to reuse.
@@ -649,10 +696,15 @@ export async function runAgent({
   useCache = channel === "chat",
   // GETs a company backend path with the caller's own token ({ status, body }); company chats only.
   backend = null,
+  // The browser demo's own orders and playbook ({ orders, playbook }, from orders.js); demo chats only.
+  demo = null,
   onStep = () => {},
 }) {
   const started = Date.now();
   const companyId = company?.company.id;
+  const readers = workspaceReaders(backend, company ? null : demo);
+  // What this turn's tools and rules may use (gateway.js scopes, policy.js `when`).
+  const session = { company, orders: readers.orders, playbook: readers.playbook };
 
   // Asked and answered before, against the same data today: reuse that answer.
   let key = null;
@@ -662,7 +714,7 @@ export async function runAgent({
         messages,
         companyId,
         disabled: access.disabled,
-        dataVersion: await dataVersion(company, access),
+        dataVersion: await dataVersion(company, access, session),
         policyVersion: POLICY_VERSION,
         models: MODELS,
         day: new Date(started).toISOString().slice(0, 10),
@@ -685,7 +737,7 @@ export async function runAgent({
   let current = route.tier; // a simple-tier draft the auditor sends back is revised on the complex tier
   let callModel = TIERS[current].model;
   const refs = makeRefs();
-  const gateway = toolGateway(REGISTRY, { refs, company, access, backend }, { maxCalls: TOOL_BUDGET });
+  const gateway = toolGateway(REGISTRY, { refs, access, ...session }, { maxCalls: TOOL_BUDGET });
   const audit = {
     sessionId,
     requestId,
@@ -777,7 +829,7 @@ export async function runAgent({
     description: "Answers trade-compliance questions about the workspace's stock, news alerts, company profile and orders, with citations.",
     model: gemini,
     // A function, not a string, so ADK doesn't read {braces} in the policy as state placeholders.
-    instruction: () => system(company),
+    instruction: () => system(company, session),
     // A single agent: no transfers, which also keeps ADK's identity preamble out of the versioned prompt.
     disallowTransferToParent: true,
     disallowTransferToPeers: true,

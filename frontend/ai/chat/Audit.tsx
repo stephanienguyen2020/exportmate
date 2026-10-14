@@ -6,6 +6,7 @@ import {
   Calculator,
   CircleAlert,
   CircleCheck,
+  BookOpen,
   ClipboardList,
   Database,
   Download,
@@ -20,12 +21,13 @@ import { downloadJson, type Audit, type AuditStep } from "./agent-client";
 
 const TOOL_LABELS: Record<string, [React.ElementType, string]> = {
   search_knowledge: [Search, "Searched the vector index"],
-  query_inventory: [Database, "Queried stock in Firestore"],
+  query_inventory: [Database, "Queried the stock list"],
   get_alerts: [Bell, "Read news alerts"],
   calculate: [Calculator, "Calculated"],
   get_scan_status: [Radar, "Checked news scan status"],
   get_company_profile: [Building2, "Read the company profile"],
   query_orders: [ClipboardList, "Read the company's orders"],
+  get_playbook: [BookOpen, "Read the playbook"],
 };
 
 // Why the tool gateway refused or failed a call.

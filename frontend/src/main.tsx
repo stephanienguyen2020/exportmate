@@ -13,7 +13,6 @@ import {
   ArrowLeft,
   Plus,
   Bell,
-  ChevronDown,
   Check,
   CheckCheck,
   X,
@@ -43,8 +42,16 @@ import {
   initialRules,
   money,
   date,
+  daysUntil,
+  makerCost,
+  placeName,
   readSaved,
+  sampleCosts,
+  sampleGap,
+  sampleObligation,
+  sampleSources,
   save,
+  withSampleRisk,
   type Order,
   type Rule,
 } from "./data";
@@ -74,6 +81,7 @@ import {
 import { errorMessage } from "./auth";
 import ErrorBoundary from "./ErrorBoundary";
 import { MAX_UPLOAD_MB, validateOrderCsv } from "./order-csv";
+import CompanyRuleWatch from "./RuleWatch";
 const RegulationsPage = lazy(() => import("./Regulations"));
 const TradeMapPage = lazy(() => import("./TradeMap"));
 const ReportsPage = lazy(() => import("./Reports"));
@@ -204,7 +212,8 @@ function App() {
   const [orders, setOrders] = useState<Order[]>(() =>
     live
       ? []
-      : readSaved(
+      : // Risk is worked out again on load, so orders saved by older versions are checked too.
+        readSaved(
           "em-orders",
           initialOrders,
           (v) =>
@@ -223,7 +232,7 @@ function App() {
                 Number.isFinite(o.value) &&
                 typeof o.risk === "boolean",
             ),
-        ),
+        ).map(withSampleRisk),
   );
   const [rules, setRules] = useState<Rule[]>(() =>
     live
@@ -350,10 +359,13 @@ function App() {
     if (modal === "demo" && demoStep >= 0 && demoStep < 6) {
       const t = setTimeout(() => {
         if (demoStep === 5) {
-          setOrders((v) => [
-            ...initialOrders,
-            ...v.filter((o) => !initialOrders.some((seed) => seed.id === o.id)),
-          ]);
+          // The change lands: every order, seeded or imported, is checked against it.
+          setOrders((v) =>
+            [
+              ...initialOrders,
+              ...v.filter((o) => !initialOrders.some((seed) => seed.id === o.id)),
+            ].map(withSampleRisk),
+          );
           setSent([]);
         }
         setDemoStep((x) => x + 1);
@@ -378,16 +390,32 @@ function App() {
       active = false;
     };
   }, [route, live]);
-  const isSeed = (o: Order) => initialOrders.some((seed) => seed.id === o.id);
-  const isClear = (o: Order) =>
-    live ? o.status === "clear" : !o.risk && isSeed(o);
-  const isPending = (o: Order) =>
-    live ? o.status === "awaiting_analysis" : !isSeed(o);
+  // The demo checks every order against the sample rule change, so none waits for analysis.
+  const isClear = (o: Order) => (live ? o.status === "clear" : !o.risk);
+  const isPending = (o: Order) => live && o.status === "awaiting_analysis";
   const clearOrders = orders.filter(isClear);
   const pendingOrders = orders.filter(isPending);
   const exposed = orders.filter((o) => o.risk);
-  const atRisk = exposed.length * (buyer ? 7400 : 1200);
-  const currency = buyer ? "SGD" : "USD";
+  const atRisk =
+    exposed.length * (buyer ? sampleCosts.buyer.margin : makerCost);
+  const currency = buyer
+    ? sampleCosts.buyer.currency
+    : sampleCosts.maker.currency;
+  // The demo's soonest affected shipment still ahead (or the latest one, if all have sailed).
+  const upcoming = [...exposed].sort((a, b) =>
+    a.shipDate.localeCompare(b.shipDate),
+  );
+  const nextExposed =
+    upcoming.find((o) => daysUntil(o.shipDate) >= 0) || upcoming.at(-1);
+  const exposedSuppliers = [...new Set(exposed.map((o) => o.supplier))];
+  // What the rule-change walkthrough finds, worked out while its steps play.
+  const demoMatches = orders.filter((o) => sampleGap(o));
+  const plural = (n: number, word: string) =>
+    `${n} ${word}${n === 1 ? "" : "s"}`;
+  const listNames = (names: string[]) =>
+    names.length > 2
+      ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`
+      : names.join(" and ");
   const startDemo = () => {
     if (live) {
       setToast(
@@ -395,13 +423,7 @@ function App() {
       );
       return;
     }
-    setOrders((v) =>
-      v.map((o) =>
-        initialOrders.some((seed) => seed.id === o.id)
-          ? { ...o, risk: false }
-          : o,
-      ),
-    );
+    setOrders((v) => v.map((o) => ({ ...o, risk: false })));
     setSent([]);
     setDemoStep(0);
     setModal("demo");
@@ -409,7 +431,7 @@ function App() {
   const openMessage = (o: Order) => {
     setSelected(o);
     setMessage(
-      `Hello ${o.supplier},\n\nWe’re preparing ${o.id} (${o.product}) for shipment on ${date(o.shipDate)} to ${o.destination}.\n\nPlease share the plot-level geolocation data and supporting origin records for the acacia used in this order. We need these to review the documentation for our EU-bound shipment.\n\nCould you confirm availability and an expected delivery date?\n\nThank you,\n${profile.name} · ${profile.company || "Your company"}`,
+      `Hello ${o.supplier},\n\nWe’re preparing ${o.id} (${o.product}) for shipment on ${date(o.shipDate)} to ${o.destination}.\n\nPlease share the ${sampleObligation.requirement} data and supporting origin records for the wood used in this order. We need these to review the documentation for our EU-bound shipment.\n\nCould you confirm availability and an expected delivery date?\n\nThank you,\n${profile.name} · ${profile.company || "Your company"}`,
     );
     setModal("message");
   };
@@ -440,7 +462,7 @@ function App() {
     setImportErrors([]);
     if (!file.name.toLowerCase().endsWith(".csv")) {
       setImportErrors([
-        "Please choose a CSV file. Excel, photo, and PDF processing will be available with the backend.",
+        "Please choose a CSV file. For an Excel sheet, use File › Save as › CSV first.",
       ]);
       return;
     }
@@ -497,8 +519,12 @@ function App() {
   };
   async function commitImport() {
     if (!live) {
-      setOrders((v) => [...v, ...preview]);
-      setToast(`${preview.length} orders imported in the sample demo.`);
+      const checked = preview.map(withSampleRisk);
+      const flagged = checked.filter((o) => o.risk).length;
+      setOrders((v) => [...v, ...checked]);
+      setToast(
+        `${plural(checked.length, "order")} imported. ${flagged ? `${plural(flagged, "order")} need${flagged === 1 ? "s" : ""} action under the sample rule change.` : "None is affected by the sample rule change."}`,
+      );
     } else {
       if (!serverImport || serverImport.status !== "validated") return;
       const result = await api.commit(serverImport.id);
@@ -518,6 +544,9 @@ function App() {
         .map(([code, minor]) => money(minor / 100, code))
         .join(" + ") || "—"
     : money(atRisk, currency);
+  const costMoney = (n: number) => money(n, sampleCosts.maker.currency);
+  // "$2,400" needs "USD" after it; "SGD 14,800" already names its currency.
+  const riskCurrency = riskDisplay.includes(currency) ? "" : currency;
   const status = (o: Order) => (
     <span
       className={`status ${o.risk ? "red" : isClear(o) ? "green" : "amber"}`}
@@ -704,10 +733,26 @@ function App() {
               {live ? "CONNECTED WORKSPACE" : "DEMO WORKSPACE"}
             </span>
             {!live && (
-              <button className="perspective" onClick={() => setBuyer(!buyer)}>
-                {buyer ? "Buyer view" : "Maker view"}
-                <ChevronDown size={13} />
-              </button>
+              <div
+                className="perspective"
+                role="group"
+                aria-label="See the demo as the maker or the buyer"
+              >
+                <button
+                  aria-pressed={!buyer}
+                  title={`${profile.name}, the Vietnamese maker: documentation and delay costs in USD`}
+                  onClick={() => setBuyer(false)}
+                >
+                  Maker
+                </button>
+                <button
+                  aria-pressed={buyer}
+                  title="James Tan, a Singapore buyer of the same orders: margin exposure in SGD"
+                  onClick={() => setBuyer(true)}
+                >
+                  Buyer
+                </button>
+              </div>
             )}
             <button
               className="notification icon-btn"
@@ -771,14 +816,10 @@ function App() {
                 <>
                   <div className="eyebrow greeting">
                     <span>YOUR TRADE, IN THE CLEAR.</span>
-                    {live ? (
-                      <span>{todayLabel}</span>
-                    ) : (
-                      <span>
-                        THURSDAY, 08 OCT 2026{" "}
-                        <span className="muted">· SAMPLE DAY</span>
-                      </span>
-                    )}
+                    <span>
+                      {todayLabel}
+                      {!live && <span className="muted"> · SAMPLE DATA</span>}
+                    </span>
                   </div>
                   <section className="hero-heading">
                     <div>
@@ -827,11 +868,13 @@ function App() {
                         </div>
                         <p>Your first trade corridor.</p>
                       </div>
+                      {/* The map reads company data from the backend; the demo has none to map. */}
                       <button
-                        onClick={() => go("map")}
+                        onClick={() => go(live ? "map" : "orders")}
                         className="port-button"
                       >
-                        Explore your corridor <ArrowUpRight size={18} />
+                        {live ? "Explore your corridor" : "See your corridor's orders"}{" "}
+                        <ArrowUpRight size={18} />
                       </button>
                     </div>
                   </section>
@@ -868,7 +911,7 @@ function App() {
                         {live
                           ? `${overview?.countsByStatus.needs_data || 0} orders need more data`
                           : exposed.length
-                            ? "One documentation gap. A clear next step."
+                            ? `Missing ${sampleObligation.requirement} records. A clear next step.`
                             : "You’re all clear for now."}
                       </div>
                     </div>
@@ -881,14 +924,14 @@ function App() {
                       </span>
                       <div className="metric-value">
                         {riskDisplay}
-                        <span>{live ? "by currency" : currency}</span>
+                        <span>{live ? "by currency" : riskCurrency}</span>
                       </div>
                       <div className="metric-note">
                         {live
                           ? "Full order values; not estimated extra costs"
                           : buyer
-                            ? "Buyer margin exposure"
-                            : "Avoidable documentation & delay costs"}
+                            ? `Buyer margin exposure · ${plural(exposed.length, "order")} × ${money(sampleCosts.buyer.margin, sampleCosts.buyer.currency)}`
+                            : `Documentation & delay costs · ${plural(exposed.length, "order")} × ${money(makerCost, sampleCosts.maker.currency)}`}
                       </div>
                     </div>
                     <div>
@@ -900,22 +943,26 @@ function App() {
                           ? overview?.nearestAffectedShipDate
                             ? date(overview.nearestAffectedShipDate)
                             : "—"
-                          : exposed.length
-                            ? "19"
+                          : nextExposed
+                            ? Math.abs(daysUntil(nextExposed.shipDate))
                             : "—"}
                         <span>
                           {live
                             ? "next affected ship date"
-                            : exposed.length
-                              ? "days to prepare"
-                              : "no action needed"}
+                            : !nextExposed
+                              ? "no action needed"
+                              : daysUntil(nextExposed.shipDate) >= 0
+                                ? daysUntil(nextExposed.shipDate) === 1
+                                  ? "day to prepare"
+                                  : "days to prepare"
+                                : "days since it shipped"}
                         </span>
                       </div>
                       <div className="metric-note">
                         {live
                           ? "Reported by your workspace"
-                          : exposed.length
-                            ? "27 Oct · Rotterdam, Netherlands"
+                          : nextExposed
+                            ? `${date(nextExposed.shipDate)} · ${placeName(nextExposed.destination)} · ${nextExposed.id}`
                             : "No exposed shipments in this scenario"}
                       </div>
                     </div>
@@ -947,7 +994,7 @@ function App() {
                         <span className="mono muted">
                           {live
                             ? routeStops(profile).map(placeCode).join(" · ")
-                            : "EU · WOOD PRODUCTS"}
+                            : `${sampleObligation.market} · WOOD PRODUCTS`}
                         </span>
                       </div>
                       <h3>
@@ -958,14 +1005,14 @@ function App() {
                               ? "Orders awaiting analysis."
                               : "Your order status."
                           : exposed.length
-                            ? "Geolocation data missing."
+                            ? sampleObligation.short
                             : "Your orders are looking good."}
                       </h3>
                       <p>
                         {live
-                          ? "Order status comes from the backend. Exposure reports and supplier actions are not available yet."
+                          ? "Each order's document checklist for its market is on the trade map. Prepare a compliance report from an order's page."
                           : exposed.length
-                            ? "Binh Phu Wood must provide geolocation records for two EU-bound orders."
+                            ? `${listNames(exposedSuppliers)} must provide ${sampleObligation.requirement} records for ${plural(exposed.length, "EU-bound order")}.`
                             : "Run the sample rule change to see how ExportMate connects a new obligation to your open orders."}
                       </p>
                       <div className="order-tags">
@@ -1027,7 +1074,10 @@ function App() {
                       </p>
                       <div className="coverage">
                         <span>
-                          <i className="pulse" />3 sample source collections
+                          <i className="pulse" />
+                          {live
+                            ? "Official texts behind your market checklists"
+                            : `${sampleSources.length} sample source collections`}
                         </span>
                         <button
                           className="text-link"
@@ -1081,8 +1131,7 @@ function App() {
                         "All orders",
                         "Action needed",
                         "In the clear",
-                        "Awaiting analysis",
-                        ...(live ? ["Needs data"] : []),
+                        ...(live ? ["Awaiting analysis", "Needs data"] : []),
                       ].map((f) => (
                         <button
                           key={f}
@@ -1205,8 +1254,9 @@ function App() {
                       ) : (
                         <>
                           <p>
-                            Exposure reports and supplier actions are not
-                            available in the current backend.
+                            The document checklist for this order's market is
+                            on the trade map, and the compliance report above
+                            collects it with the official texts.
                           </p>
                           {serverDetail.source ? (
                             <>
@@ -1244,9 +1294,12 @@ function App() {
                           An actionable next step.
                         </h2>
                         <p>
-                          The sample obligation requires plot-level geolocation
-                          for acacia in EU-bound wood products. Your supplier
-                          record has no geolocation document for this lot.
+                          The sample obligation requires{" "}
+                          {sampleObligation.requirement} for{" "}
+                          {sampleObligation.materials.join(", ")} and HS{" "}
+                          {sampleObligation.hsPrefixes.join(", ")} wood products
+                          bound for the {sampleObligation.marketName}.{" "}
+                          {sampleGap(detail)}
                         </p>
                         <button
                           className="evidence-link"
@@ -1259,7 +1312,8 @@ function App() {
                           <span>
                             Review the source & your data
                             <small>
-                              Sample clause §9 · orders.csv / {detail.id}
+                              {sampleObligation.clause} · orders.csv /{" "}
+                              {detail.id}
                             </small>
                           </span>
                           <ArrowUpRight size={18} />
@@ -1267,26 +1321,41 @@ function App() {
                         <h3>The cost of waiting</h3>
                         <div className="cost-row">
                           <span>Documentation preparation</span>
-                          <b>$400</b>
+                          <b>{costMoney(sampleCosts.maker.documentation)}</b>
                         </div>
                         <div className="cost-row">
-                          <span>Potential delay · 4 days × $200</span>
-                          <b>$800</b>
+                          <span>
+                            Potential delay · {sampleCosts.maker.delayDays} days
+                            × {costMoney(sampleCosts.maker.delayPerDay)}
+                          </span>
+                          <b>
+                            {costMoney(
+                              sampleCosts.maker.delayDays *
+                                sampleCosts.maker.delayPerDay,
+                            )}
+                          </b>
                         </div>
                         <div className="cost-row total">
                           <span>Estimated maker exposure</span>
-                          <b>$1,200 USD</b>
+                          <b>
+                            {costMoney(makerCost)} {sampleCosts.maker.currency}
+                          </b>
                         </div>
                         <p className="fine-print">
-                          Illustrative estimate, not a tariff or guaranteed
-                          cost. Documentation $400 + potential delay $800. Order
+                          Illustrative estimate from the demo's cost
+                          assumptions, not a tariff or guaranteed cost. Order
                           value is not added to this estimate.
                         </p>
                         {buyer && (
                           <div className="notice">
-                            Buyer scenario: S$7,400 margin exposure per affected
-                            purchase order. This is a separate seeded estimate,
-                            not a currency conversion.
+                            Buyer scenario:{" "}
+                            {money(
+                              sampleCosts.buyer.margin,
+                              sampleCosts.buyer.currency,
+                            )}{" "}
+                            margin exposure per affected purchase order. This is
+                            a separate sample estimate, not a currency
+                            conversion.
                           </div>
                         )}
                         <h3>How we got here</h3>
@@ -1353,15 +1422,11 @@ function App() {
                   ) : (
                     <section className="panel clear-panel">
                       <ShieldCheck size={44} />
-                      <h2>
-                        {initialOrders.some((o) => o.id === detail.id)
-                          ? "In the clear."
-                          : "Imported. Ready for review."}
-                      </h2>
+                      <h2>In the clear.</h2>
                       <p>
-                        {initialOrders.some((o) => o.id === detail.id)
-                          ? "No matching obligation in this sample scenario."
-                          : "This order is stored in your browser. Live exposure analysis requires the backend."}
+                        The sample rule change ({sampleObligation.title}) doesn't
+                        apply to this order, or its supplier's records cover it.
+                        The demo checks only that one rule.
                       </p>
                       <Button onClick={() => go("orders")}>
                         Back to orders
@@ -1433,46 +1498,39 @@ function App() {
                   <PageHeading
                     label="THE WORLD CHANGES. STAY AHEAD."
                     title="Rule watch."
-                    description="Changes affecting your products and markets."
+                    description={
+                      live
+                        ? "The requirements behind your orders' market checklists."
+                        : "Changes affecting your products and markets."
+                    }
                     action={
-                      <Button onClick={startDemo}>
-                        <Play size={16} />
-                        Run rule-change demo
-                      </Button>
+                      live ? undefined : (
+                        <Button onClick={startDemo}>
+                          <Play size={16} />
+                          Run rule-change demo
+                        </Button>
+                      )
                     }
                   />
                   <div className="notice">
                     <ShieldCheck size={18} />
-                    Sample rule-change scenario. For stored official texts and
-                    versioned references, open the regulation library.
+                    {live
+                      ? "Built from your orders' market checklists. ExportMate doesn't yet read new rule texts by itself; the official texts are in the regulation library."
+                      : "Sample rule-change scenario: one illustrative rule, checked against every order in this demo, including ones you import."}
                   </div>
                   <a className="text-link" href="#/workspace/regulations">
                     Open regulation library <ArrowUpRight size={16} />
                   </a>
-                  <div className="fine-print">
-                    Automated regulation analysis is not available yet.
-                  </div>
+                  {live ? (
+                    <CompanyRuleWatch
+                      onOrder={(id) =>
+                        go("map/order/" + encodeURIComponent(id))
+                      }
+                    />
+                  ) : (
+                  <>
                   <div className="source-grid">
-                    {[
-                      [
-                        "EU",
-                        "European Union",
-                        "Wood & deforestation",
-                        "EUR-Lex",
-                      ],
-                      [
-                        "VN",
-                        "Vietnam",
-                        "Origin & export documentation",
-                        "Government law portal",
-                      ],
-                      [
-                        "SG",
-                        "Singapore",
-                        "Customs & re-export",
-                        "Singapore Customs",
-                      ],
-                    ].map(([code, name, scope, source]) => (
+                    {sampleSources.map(({ code, name, scope, source }) => (
                       <section className="source-card" key={code}>
                         <span className="country-code">{code}</span>
                         <span className="status green">
@@ -1494,32 +1552,33 @@ function App() {
                   </div>
                   <section className="panel">
                     <div className="rule-change-title">
-                      <h3>Geolocation documentation for EU-bound wood</h3>
+                      <h3>{sampleObligation.title}</h3>
                       <span
                         className={`status ${exposed.length ? "red" : "green"}`}
                       >
                         <i />
-                        {exposed.length} orders affected
+                        {plural(exposed.length, "order")} affected
                       </span>
                     </div>
                     <div className="diff-grid">
                       <div>
                         <span className="eyebrow">PREVIOUS SAMPLE</span>
-                        <p>
-                          Supplier-level origin documentation is present in the
-                          firm's existing records.
-                        </p>
+                        <p>{sampleObligation.before}</p>
                       </div>
                       <div>
                         <span className="eyebrow">NEW SAMPLE REQUIREMENT</span>
                         <p>
-                          Provide <mark>plot-level geolocation</mark> for the
-                          acacia used in each affected lot.
+                          Provide <mark>{sampleObligation.requirement}</mark>{" "}
+                          for the wood in each affected lot.
                         </p>
                       </div>
                     </div>
                     <div className="action-footer">
-                      <span>HS 4412.33 · Vietnam → Singapore → EU</span>
+                      <span>
+                        HS {sampleObligation.hsPrefixes.join(", ")} or{" "}
+                        {sampleObligation.materials.join(", ")} ·{" "}
+                        {routeStops(profile).join(" → ")}
+                      </span>
                       <button
                         className="text-link"
                         onClick={() => {
@@ -1532,6 +1591,8 @@ function App() {
                       </button>
                     </div>
                   </section>
+                  </>
+                  )}
                 </>
               )}
               {route === "data" && (
@@ -1630,8 +1691,9 @@ function App() {
                         <li>Ship date and HS code</li>
                       </ul>
                       <p className="fine-print">
-                        Coming with the backend: Excel imports, photographed
-                        stock slips, BOM matching, and document extraction.
+                        Not supported yet: Excel files (save them as CSV),
+                        photos of stock slips, bill-of-materials matching and
+                        reading documents.
                       </p>
                     </section>
                   </div>
@@ -1675,8 +1737,8 @@ function App() {
                         <>
                           <p>
                             {live
-                              ? "Validated by the server. Imported orders remain awaiting analysis until exposure reports are available."
-                              : "Validated locally. Imported orders need analysis before their exposure can be verified."}
+                              ? "Checked and ready. Imported orders show as awaiting analysis on the Orders page; their market checklists are on the trade map."
+                              : `Checked in your browser. On import, each order is checked against the sample rule change (${sampleObligation.title.toLowerCase()}).`}
                           </p>
                           <div className="table-scroll">
                             <table>
@@ -1772,8 +1834,8 @@ function App() {
                   <div className="notice">
                     <Settings2 size={18} />
                     {live
-                      ? "Rules are saved to your company playbook. Applying them to analysis is not available yet."
-                      : "Rules are saved in this browser for the sample demo."}
+                      ? "Rules are saved to your company playbook. The ExportMate assistant follows the ones switched on when it advises you; order statuses don't use them yet."
+                      : "Rules are saved in this browser. The ExportMate assistant follows the ones switched on when it advises you."}
                   </div>
                   <div className="playbook-grid">
                     <section>
@@ -2030,27 +2092,34 @@ function App() {
                     : "Now you know your next move."}
                 </h2>
                 <p>
-                  A simulated EU wood-documentation change, matched against{" "}
-                  {initialOrders.length} sample orders. This resets the sample scenario and demo
-                  confirmations. Imported orders are preserved.
+                  A simulated EU wood-documentation change, matched against your{" "}
+                  {plural(orders.length, "open order")}. This resets the sample
+                  orders and demo confirmations. Imported orders are kept and
+                  checked too.
                 </p>
                 <div className="demo-trace">
                   {[
                     [
                       "Relevance",
-                      "Matches acacia wood, HS 4412.33, EU destination.",
+                      `Covers HS ${sampleObligation.hsPrefixes.join(", ")} or ${sampleObligation.materials.join(", ")} products bound for the ${sampleObligation.market}.`,
                     ],
                     [
                       "Order exposure",
-                      "PO-2291 and PO-2304 match the affected material.",
+                      demoMatches.length
+                        ? `${listNames(demoMatches.slice(0, 4).map((o) => o.id))}${demoMatches.length > 4 ? ` and ${demoMatches.length - 4} more` : ""} ${demoMatches.length === 1 ? "lacks" : "lack"} supplier geolocation records.`
+                        : "No open order is covered and missing records.",
                     ],
                     [
                       "Cost impact",
-                      "$400 documentation + $800 potential delay per order.",
+                      buyer
+                        ? `${money(sampleCosts.buyer.margin, sampleCosts.buyer.currency)} buyer margin exposure per order.`
+                        : `${costMoney(sampleCosts.maker.documentation)} documentation + ${costMoney(sampleCosts.maker.delayDays * sampleCosts.maker.delayPerDay)} potential delay per order.`,
                     ],
                     [
                       "Action planner",
-                      "Draft a request for supplier geolocation records.",
+                      demoMatches.length
+                        ? `Draft a request to ${listNames([...new Set(demoMatches.map((o) => o.supplier))])} for geolocation records.`
+                        : "No supplier request needed.",
                     ],
                     [
                       "Auditor",
@@ -2088,13 +2157,20 @@ function App() {
                 {demoStep === 6 && (
                   <>
                     <div className="demo-result">
-                      <b>2 orders affected.</b>
-                      <span>$2,400 estimated maker exposure.</span>
+                      <b>{plural(exposed.length, "order")} affected.</b>
+                      <span>
+                        {riskDisplay} estimated {buyer ? "buyer" : "maker"}{" "}
+                        exposure.
+                      </span>
                     </div>
                     <Button
                       onClick={() => {
                         setModal(null);
-                        go("orders/PO-2291");
+                        go(
+                          exposed[0]
+                            ? "orders/" + encodeURIComponent(exposed[0].id)
+                            : "orders",
+                        );
                       }}
                     >
                       Review your next move
@@ -2165,26 +2241,32 @@ function App() {
                 <div className="evidence-data">
                   <span>orders.csv</span>
                   <b>{selected.id}</b>
-                  <span>Material</span>
-                  <b>Acacia · HS {selected.hsCode}</b>
+                  <span>Product</span>
+                  <b>
+                    {selected.product} · HS {selected.hsCode}
+                  </b>
                   <span>Supplier</span>
                   <b>{selected.supplier}</b>
                   <span>Destination</span>
                   <b>{selected.destination}</b>
                   <span>Geolocation evidence</span>
-                  <b className="danger">Missing in sample supplier record</b>
+                  <b className="danger">
+                    {sampleGap(selected) || "On file in the supplier record"}
+                  </b>
                 </div>
                 <h3>03 / Cost assumptions</h3>
                 <p>
-                  $400 documentation preparation + 4 possible delay days ×
-                  $200/day = <b>$1,200 estimated exposure</b>. Seeded planning
-                  assumptions, not figures mandated by the sample clause.
+                  {costMoney(sampleCosts.maker.documentation)} documentation
+                  preparation + {sampleCosts.maker.delayDays} possible delay
+                  days × {costMoney(sampleCosts.maker.delayPerDay)}/day ={" "}
+                  <b>{costMoney(makerCost)} estimated exposure</b>. Demo
+                  planning assumptions, not figures set by the sample clause.
                 </p>
                 <Button
                   onClick={() =>
                     download(
                       "exportmate-" + selected.id + "-evidence.txt",
-                      `FICTIONAL DEMO EVIDENCE\nOrder: ${selected.id}\nSupplier: ${selected.supplier}\nHS code: ${selected.hsCode}\nDestination: ${selected.destination}\nSample obligation: EU-WOOD-001\nMissing: plot-level geolocation\nAssumptions: USD 400 documentation + 4 days x USD 200/day = USD 1200.\nNot verified legal text or advice.\n`,
+                      `FICTIONAL DEMO EVIDENCE\nOrder: ${selected.id}\nProduct: ${selected.product}\nSupplier: ${selected.supplier}\nHS code: ${selected.hsCode}\nDestination: ${selected.destination}\nSample obligation: EU-WOOD-001 (${sampleObligation.title})\nFinding: ${sampleGap(selected) || "geolocation record on file"}\nAssumptions: ${sampleCosts.maker.currency} ${sampleCosts.maker.documentation} documentation + ${sampleCosts.maker.delayDays} days x ${sampleCosts.maker.currency} ${sampleCosts.maker.delayPerDay}/day = ${sampleCosts.maker.currency} ${makerCost}.\nNot verified legal text or advice.\n`,
                       "text/plain",
                     )
                   }

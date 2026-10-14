@@ -10,6 +10,7 @@ import { indexDocs, toDoc, kb } from "./rag.js";
 import { log } from "./log.js";
 import { ANONYMOUS, auditVisible, isShared, presentSources, publicAudit, publicStep, sourceVisible, visibleItems } from "./access.js";
 import { readJson, scanBlocked } from "./limits.js";
+import { demoMapOrders, demoPlaybook } from "./orders.js";
 import { SCAN_MODEL, TIERS } from "./models.js";
 
 const PORT = Number(process.env.PORT || 8080);
@@ -229,8 +230,10 @@ async function streamChat(req, res, body, origin, requestId) {
       company,
       access,
       requestId,
-      // The company's orders are read with the caller's own token (query_orders).
+      // The company's orders and playbook are read with the caller's own token (query_orders, get_playbook).
       backend: company ? (path) => backendGet(path, req.headers.authorization) : null,
+      // The browser demo sends its own; a company chat never uses what the client sends.
+      demo: company ? null : { orders: demoMapOrders(body.demo?.orders), playbook: demoPlaybook(body.demo?.rules) },
       onStep: (step) => write({ type: "step", step: publicStep(step) }),
     });
     logChat(result, trace);
