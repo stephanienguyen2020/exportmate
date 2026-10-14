@@ -47,9 +47,11 @@ Verification (from `frontend/`): `npm run build`; `npx playwright install chromi
 
 ## AI features (Google Cloud)
 
+How to use the assistant and News watch, and how they work: [docs/AI_GUIDE.md](docs/AI_GUIDE.md).
+
 The chat UI lives in [`frontend/ai/chat/`](frontend/ai/chat/), News watch in [`frontend/ai/news/`](frontend/ai/news/), and one Node service in [`ai/server/`](ai/server/) that serves every `/api/*` route.
 
-- **Assistant (RAG agent):** a launcher at the bottom-right of every screen; `#/chat` is the full-screen view with the session's audit trail. Gemini on Vertex AI plans and calls tools in a loop ([`ai/server/agent.js`](ai/server/agent.js)): `search_knowledge` (vector search), `query_inventory` and `get_alerts` (exact Firestore lookups), `calculate` (arithmetic, so figures are traceable) and `get_scan_status`. Every fact is cited with a numbered source. Before an answer is returned, an auditor step checks that citations resolve to retrieved evidence and that figures appear in tool results; a failing draft goes back to the model once.
+- **Assistant (RAG agent):** a launcher at the bottom-right of every screen; `#/chat` is the full-screen view with the session's audit trail. Gemini on Vertex AI plans and calls tools in a loop ([`ai/server/agent.js`](ai/server/agent.js)): `search_knowledge` (vector search), `query_inventory` and `get_alerts` (exact Firestore lookups), `calculate` (arithmetic, so figures are traceable), `get_scan_status`, and the workspace's own `query_orders` and `get_playbook` (plus `get_company_profile` when signed in). Every fact is cited with a numbered source. Before an answer is returned, an auditor step checks that citations resolve to retrieved evidence, that figures appear in tool results, that cited news is dated and that links are retrieved sources; a failing draft goes back to the model once, and one that still fails is shown marked "Needs review". Each question goes to a small fast model or a bigger one by rules (`router.js`).
 - **Vector database:** Firestore vector search over `gemini-embedding-001` embeddings (768 dimensions, cosine), in the `kb` collection ([`ai/server/rag.js`](ai/server/rag.js)). Indexed: stock items, news articles, alerts, sources and help guides ([`ai/server/seed/guides.js`](ai/server/seed/guides.js)). Each scan indexes its new articles and alerts; `npm run index` rebuilds everything and removes stale entries.
 - **Audit trail:** each answer streams its steps live (NDJSON) and stores an audit record in `audits`: question, reasoning summaries, every tool call with arguments and retrieved evidence (with similarity scores), auditor findings, checks, citations, model, token usage and timing. Open "Audit" under any answer, or the side panel on `#/chat`, which reloads the session's records from Firestore. Records can be downloaded as JSON. `GET /api/audits?session=<id>` returns only that session's records.
 - **News watch** (`#/workspace/news`, plus a section on Overview): every day at 07:00 Asia/Ho_Chi_Minh, Cloud Scheduler calls `POST /api/scan`. The service reads the enabled RSS/Atom sources, skips articles it has already analysed, and asks Gemini which stock items each new article could affect. Alerts store severity, direction (risk/opportunity/watch), affected SKUs with reasons, stock value exposed, and a next step.
@@ -68,7 +70,7 @@ Everything runs in one project, `skilful-scarab-511320-q9`, defined in [`infra/t
 | Cloud Scheduler | `exportmate-daily-news-scan`, OIDC-signed as `exportmate-scheduler@…` |
 | Cloud Build | images built as `exportmate-builder@…` into the `exportmate` Artifact Registry repo |
 | Cloud Logging / Monitoring | JSON logs; log-based metrics `exportmate_ai/chat_answers`, `chat_latency`, `guard_withheld`, `scan_failures` |
-| Models | `gemini-2.5-flash` for the agent and scans (`GEMINI_MODEL`), `gemini-embedding-001` for embeddings (`EMBED_MODEL`), both via Vertex AI |
+| Models | Assistant: `gemini-3.5-flash-lite` for simple questions and `gemini-4-argon` for complex ones (`GEMINI_MODEL_SIMPLE`, `GEMINI_MODEL_COMPLEX`); scans and the eval judge: `gemini-3.5-flash` (`GEMINI_MODEL`); embeddings: `gemini-embedding-001` (`EMBED_MODEL`); all via Vertex AI. These are the code defaults (`ai/server/models.js`); `GET /healthz` reports what the service runs |
 
 `frontend/vercel.json` rewrites `/api/*` to the Cloud Run URL; locally `frontend/vite.config.ts` proxies `/api` to `127.0.0.1:8080`.
 
@@ -85,7 +87,7 @@ npm test       # harness unit tests; `npm run eval` runs the golden set against 
 PROJECT_ID=skilful-scarab-511320-q9 ./deploy.sh   # build on Cloud Build, roll out the service and job
 ```
 
-The API is public for the prototype (max 3 instances). Chat is capped per hour at 40 questions per client and 200 per instance (`CHAT_LIMIT_PER_CLIENT`, `CHAT_LIMIT_PER_INSTANCE`). "Scan now" is limited to one scan per 10 minutes; the signed scheduler request skips that limit. Chat questions and answers are stored in `audits`. Alerts and answers are AI assessments of headlines and snippets, not legal advice. Signed-in orders and playbook rules live in the FastAPI backend; the assistant cannot see them yet. Sample-demo records remain browser-local.
+The API is public for the prototype (max 3 instances). Chat is capped per hour at 40 questions per client and 200 per instance (`CHAT_LIMIT_PER_CLIENT`, `CHAT_LIMIT_PER_INSTANCE`). "Scan now" is limited to one scan per 10 minutes; the signed scheduler request skips that limit. Chat questions and answers are stored in `audits`. Alerts and answers are AI assessments of headlines and snippets, not legal advice. Signed-in orders and playbook rules live in the FastAPI backend, and the assistant reads them with the user's own token. Sample-demo records remain browser-local; the demo's orders and switched-on rules travel with each chat question so the assistant can read them.
 
 ## Explore
 
@@ -93,12 +95,12 @@ The public landing at `#/` includes full How it works, About, and Contact sectio
 
 - **Overview:** corridor snapshot, exposure metrics and prioritized action.
 - **Orders:** search, status filters and order-impact detail.
-- **Rule watch:** sample sources, before/after requirement and the simulated five-agent review.
-- **Data room:** upload a CSV, inspect validation/preview, explicitly import; download a starter template.
-- **Playbook:** add, toggle and delete browser-local policies.
+- **Rule watch:** sample sources, before/after requirement and the simulated five-agent review (signed in: the requirements behind your orders' market checklists, with their official texts).
+- **Data room:** upload a CSV, inspect validation/preview, explicitly import; download a starter template. Imported demo orders are checked against the sample rule change like the seeded ones.
+- **Playbook:** add, toggle and delete browser-local policies; the assistant applies the ones switched on.
 - **Impact detail:** inspect cost assumptions and evidence; edit and confirm a simulated supplier message.
 
-Use “See ExportMate in action” or “Run rule-change demo” to walk from clear seed orders to two exposures, including an auditor rejection. The demo resets seed risk flags and demo confirmations, preserving imported orders. Imported records remain “Awaiting analysis.”
+Use “See ExportMate in action” or “Run rule-change demo” to walk from clear orders to the ones the sample rule change affects (two in the seed), including an auditor rejection. The demo resets the seed orders and demo confirmations and keeps imported orders, checking every order against the rule (`sampleCheck` in `frontend/src/data.ts`): EU-bound HS 4412.33 or acacia products whose supplier has no geolocation record. Counts, costs, dates and the next affected shipment are worked out from the orders, the demo's cost assumptions (`sampleCosts`) and today's date; seed ship dates count from today.
 
 The Maker/Buyer view switch illustrates separately seeded USD/SGD estimates. It is not tenant authorization or a currency conversion. All legal content is illustrative, and no external messages are sent.
 
@@ -117,7 +119,7 @@ Port photography: [Unsplash image](https://images.unsplash.com/photo-15785754371
 
 ## Scope
 
-The frontend integrates the available phase-one company APIs and the existing AI service. Live company access requires the deployed backend URL and Firebase web configuration. Regulation analysis, supplier message delivery, document extraction and chat access to company orders remain future backend work.
+The frontend integrates the available phase-one company APIs and the existing AI service. Live company access requires the deployed backend URL and Firebase web configuration. Regulation analysis, supplier message delivery and document extraction remain future backend work.
 
 ## Deploy frontend
 
