@@ -1,6 +1,17 @@
 // Client for the agent API: streams audit steps (NDJSON) and returns the answer.
 import { isApiSession } from "../../src/account-store";
 import { getToken } from "../../src/auth";
+import {
+  destinationCountry,
+  initialOrders,
+  initialRules,
+  readSaved,
+  sampleCheck,
+  sampleObligation,
+  withSampleRisk,
+  type Order,
+  type Rule,
+} from "../../src/data";
 
 export type Citation = {
   ref: number;
@@ -119,6 +130,38 @@ export async function companyAuth(): Promise<Record<string, string>> {
   }
 }
 
+// The browser demo's orders and playbook live in this browser, so the assistant can only
+// see them if they travel with the question. Orders needing action go first, then by ship
+// date, within the AI service's limits (ai/server/orders.js).
+const DEMO_ORDERS_SENT = 100;
+export function demoWorkspace() {
+  const orders = readSaved<Order[]>("em-orders", initialOrders, Array.isArray)
+    .filter((o) => o && typeof o.id === "string")
+    .map(withSampleRisk)
+    .sort((a, b) => Number(b.risk) - Number(a.risk) || a.shipDate.localeCompare(b.shipDate));
+  const rules = readSaved<Rule[]>("em-rules", initialRules, Array.isArray);
+  return {
+    orders: orders.slice(0, DEMO_ORDERS_SENT).map((o) => {
+      const check = sampleCheck(o);
+      const country = destinationCountry(o.destination);
+      return {
+        id: o.id,
+        product: o.product,
+        supplier: o.supplier,
+        destination: o.destination,
+        market: check ? sampleObligation.market : country,
+        value: o.value,
+        currency: o.currency || "USD",
+        shipDate: o.shipDate,
+        hsCode: o.hsCode,
+        status: o.risk ? "exposed" : "clear",
+        check: check && { title: `${sampleObligation.title} (sample rule)`, ...check },
+      };
+    }),
+    rules: rules.filter((r) => r && r.enabled).map(({ id, category, text }) => ({ id, category, text })),
+  };
+}
+
 export async function askAgent(
   messages: Message[],
   onStep: (step: AuditStep) => void,
@@ -136,6 +179,8 @@ export async function askAgent(
         text: m.text,
         sources: m.citations?.map((c) => `${c.type}: ${c.title}`),
       })),
+      // A company workspace's orders and playbook are read from the backend instead.
+      ...(isApiSession() ? {} : { demo: demoWorkspace() }),
     }),
   });
   if (!res.ok || !res.body) {

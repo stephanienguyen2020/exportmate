@@ -7,7 +7,7 @@
 //      │                   writes the cited answer
 //      ├─ stock_specialist      query_inventory, calculate
 //      ├─ news_specialist       get_alerts, get_scan_status, search_knowledge
-//      ├─ company_specialist    get_company_profile, query_orders (company workspaces only)
+//      ├─ company_specialist    get_company_profile, query_orders, get_playbook (when offered)
 //      └─ knowledge_specialist  search_knowledge (help guides, the news archive)
 //
 // Specialists run on the simple tier as tools of the analyst (SpecialistTool). Every tool call
@@ -37,7 +37,7 @@ export const SPECIALISTS = [
   {
     name: "company_specialist",
     tools: ["get_company_profile", "query_orders", "get_playbook"],
-    role: "you look up the signed-in company's own profile, orders with their document checklists, and playbook rules.",
+    role: "you look up the company's own profile, orders with their document checklists, and playbook rules.",
     description: "The company's own records: its profile, its orders (ids such as PO-2291, values, ship dates, statuses, document checklists) and playbook rules.",
   },
   {
@@ -81,12 +81,12 @@ class SpecialistTool extends AgentTool {
 }
 
 /**
- * The agent tree for one turn. `declarations` are the tools this turn may use (gateway scopes),
+ * The agent tree for one turn. `session` is { company, orders, playbook } (agent.js), `declarations` are the tools this turn may use (gateway scopes),
  * `runTool(name, args, agent)` runs one through the gateway, `plugins` go to every runner,
  * `hooks.before/after` wrap every model call, `onReport` records each specialist's report and
  * `routeTo()` returns "simple" or "complex" for the current message.
  */
-export function buildAssistant({ company, declarations, runTool, plugins, hooks, onReport, routeTo }) {
+export function buildAssistant({ session, declarations, runTool, plugins, hooks, onReport, routeTo }) {
   const available = new Map(declarations.map((d) => [d.name, d]));
   const toolsFor = (names) => names.filter((n) => available.has(n)).map((n) => new GatewayTool(available.get(n), runTool));
   const common = (tier) => ({
@@ -108,7 +108,7 @@ export function buildAssistant({ company, declarations, runTool, plugins, hooks,
         name: s.name,
         description: s.description,
         // Functions, not strings, so ADK doesn't read {braces} in the text as state placeholders.
-        instruction: () => specialistInstruction(company, s),
+        instruction: () => specialistInstruction(session, s),
         tools: toolsFor(s.tools),
       }),
   );
@@ -116,14 +116,14 @@ export function buildAssistant({ company, declarations, runTool, plugins, hooks,
     ...common("simple"),
     name: ANSWERING.simple,
     description: "Answers single lookups and how-to questions directly with the read tools, with citations.",
-    instruction: () => system(company),
+    instruction: () => system(session),
     tools: toolsFor([...available.keys()]),
   });
   const analyst = new LlmAgent({
     ...common("complex"),
     name: ANSWERING.complex,
     description: "Answers questions that need several facts, arithmetic or judgement by delegating to specialists, with citations.",
-    instruction: () => analystInstruction(company, team),
+    instruction: () => analystInstruction(session, team),
     tools: [...specialists.map((a) => new SpecialistTool(a, { plugins, onReport })), ...toolsFor(["calculate"])],
   });
   const root = new RoutedAgent({
@@ -145,15 +145,15 @@ export function buildAssistant({ company, declarations, runTool, plugins, hooks,
   const declared = (names) => names.filter((n) => available.has(n)).map((n) => available.get(n));
   const agents = {
     [ROOT]: config(root, "RoutedAgent", null, null, [quick.name, analyst.name]),
-    [quick.name]: config(quick, "LlmAgent", system(company), declared([...available.keys()])),
+    [quick.name]: config(quick, "LlmAgent", system(session), declared([...available.keys()])),
     [analyst.name]: config(
       analyst,
       "LlmAgent",
-      analystInstruction(company, team),
+      analystInstruction(session, team),
       [...specialists.map((a) => ({ name: a.name, description: a.description })), ...declared(["calculate"])],
       specialists.map((a) => a.name),
     ),
-    ...Object.fromEntries(specialists.map((a, n) => [a.name, config(a, "LlmAgent", specialistInstruction(company, team[n]), declared(team[n].tools))])),
+    ...Object.fromEntries(specialists.map((a, n) => [a.name, config(a, "LlmAgent", specialistInstruction(session, team[n]), declared(team[n].tools))])),
   };
   return { root, agents };
 }

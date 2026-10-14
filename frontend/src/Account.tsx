@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import {
   defaultProfile,
+  forgetAccountProfile,
   getProfile,
   putProfile,
   startSession,
@@ -310,13 +311,18 @@ export function AccountSettings({
             <label className="ac-field">
               Email
               <input type="email" value={p.email} readOnly />
-              <small>Email changes require backend verification.</small>
+              <small>
+                {live
+                  ? "Your sign-in email. It can't be changed here yet."
+                  : "The demo's sample email."}
+              </small>
             </label>
           </section>
           <section className="panel">
             <h2>Notifications</h2>
             <p className="ac-muted">
-              Delivery starts when channels are connected.
+              ExportMate doesn't send emails or messages yet. Your choices are
+              saved for when it does.
             </p>
             {[
               ["alerts", "Order alerts", "When an order needs attention."],
@@ -541,6 +547,8 @@ export default function AccountPage({ route }: { route: string }) {
       // The conversation may mention this company; the next account starts fresh.
       clearChat();
       if (live) {
+        // So the next person on this browser, or the demo, doesn't see this account's details.
+        forgetAccountProfile();
         setBusy(true);
         api
           .logout()
@@ -581,6 +589,8 @@ export default function AccountPage({ route }: { route: string }) {
   }
   const completeSignIn = () =>
     run(async () => {
+      // Leave the demo first, so the account's details are cached as the account's.
+      endSession();
       const verified = await signIn(email.trim(), password);
       setPassword("");
       if (!verified) {

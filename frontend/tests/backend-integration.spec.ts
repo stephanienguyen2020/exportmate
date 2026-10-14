@@ -79,6 +79,51 @@ const reportContent = (title: string) => ({
   ],
 });
 const noEdits = { header: false, sections: 0, rowsEdited: 0, rowsAdded: 0, rowsRemoved: 0 };
+const tradeMap = {
+  markets: [
+    {
+      code: "EU",
+      name: "European Union",
+      shortName: "EU",
+      hub: { latitude: 51.9, longitude: 4.5 },
+      countryIds: [],
+      searchTerms: [],
+    },
+  ],
+  orders: [
+    {
+      order,
+      placement: { city: "Rotterdam", country: "NL", market: "EU", location: null, approximate: true },
+      checks: [
+        {
+          requirementKey: "eudr-geolocation",
+          title: "Plot-level geolocation",
+          level: "supplier",
+          status: "missing",
+          note: "Not on file.",
+          source: {
+            regulationId: "reg-1",
+            regulationTitle: "EU Deforestation Regulation",
+            officialId: "2023/1115",
+            documentId: "doc-1",
+            documentTitle: "Regulation (EU) 2023/1115",
+            versionNumber: 2,
+            sourceUrl: null,
+            quote: "Geolocation of all plots of land where the commodities were produced.",
+          },
+        },
+      ],
+      gapCount: 1,
+    },
+  ],
+  suppliers: [],
+  sites: [],
+  observations: [],
+  documentKinds: [],
+  countries: [],
+  homeCountryIds: [],
+  checkRadiusKm: 25,
+};
 async function fixture(
   page: Page,
   options: {
@@ -225,6 +270,7 @@ async function fixture(
       }
       data = draft;
     }
+    else if (path === "/trade-map") data = tradeMap;
     else if (path === "/playbook/rules") {
       if (method === "POST") {
         const rule = { ...body, id: "rule-2" };
@@ -300,6 +346,22 @@ test("loads paginated API data, preserves statuses/currency, and reads source ev
   expect(
     requests.every((r) => r.auth === "Bearer dev:owner@example.com"),
   ).toBeTruthy();
+});
+
+test("rule watch shows the company's own requirements, not the sample scenario", async ({
+  page,
+}) => {
+  await fixture(page);
+  await login(page);
+  await expect(page.getByText("CONNECTED WORKSPACE")).toBeVisible();
+  await page.goto("/#/workspace/rules");
+  await expect(page.getByRole("heading", { name: "Plot-level geolocation" })).toBeVisible();
+  await expect(page.getByText("1 of 1 orders have a gap")).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: /EU Deforestation Regulation/ }),
+  ).toHaveAttribute("href", "#/workspace/regulations/documents/doc-1");
+  await expect(page.getByText("Geolocation documentation for EU-bound wood")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Run rule-change demo" })).toHaveCount(0);
 });
 
 test("prepares an order report, edits it, previews the PDF and emails it once", async ({
@@ -510,6 +572,10 @@ test("new accounts onboard through the API and the sample demo stays local", asy
   await page.goto("/#/login");
   await page.getByRole("button", { name: /demo/i }).click();
   await expect(page.getByText("DEMO WORKSPACE")).toBeVisible();
+  // Signing out forgot the account's cached profile; the demo shows its own company.
+  expect(await page.evaluate(() => localStorage.getItem("em-profile"))).toBeNull();
+  await expect(page.getByText("Binh Duong Wood Co.").first()).toBeVisible();
+  await expect(page.getByText("New Company", { exact: true })).toHaveCount(0);
   await page.goto("/#/workspace/orders");
   await expect(
     page.getByRole("button", { name: "PO-2291", exact: true }),
