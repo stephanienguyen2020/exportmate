@@ -17,6 +17,11 @@ class PlaybookRule(Base):
     text: Mapped[str] = mapped_column(Text, nullable=False)
     category: Mapped[str] = mapped_column(String(50), nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # A checked rule: WHEN every condition holds THEN the action. Null: stored only.
+    # Each condition is {"field", "op", "value"} (services/rule_checks.py lists the fields).
+    conditions: Mapped[list | None] = mapped_column(JSONB)
+    action: Mapped[str | None] = mapped_column(String(20))  # flag, owner_review, block
+    action_note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = created_column()
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 

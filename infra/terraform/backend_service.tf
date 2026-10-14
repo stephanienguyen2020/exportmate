@@ -11,7 +11,8 @@ locals {
     REPORT_EMAIL_FROM          = var.report_email_from
     # Company reports read News watch alerts. The deterministic URL (ai_service.tf) avoids a
     # cycle: the AI service already points at this backend.
-    AI_SERVICE_URL = local.ai_url
+    AI_SERVICE_URL       = local.ai_url
+    GOOGLE_CLOUD_PROJECT = var.project_id # Vertex AI project for Gemini
   }
 }
 

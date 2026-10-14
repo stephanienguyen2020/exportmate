@@ -9,8 +9,21 @@ Orders keep `supplier` as text from the CSV; it is matched to `suppliers.name_ke
 import enum
 import uuid
 from datetime import date, datetime
+from decimal import Decimal
 
-from sqlalchemy import Boolean, Date, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -21,6 +34,11 @@ class RequirementLevel(str, enum.Enum):
     supplier = "supplier"  # evidence a supplier provides once; reusable across orders
     shipment = "shipment"  # prepared for each shipment
     check = "check"  # something to recheck (e.g. a tariff category), not a document
+
+
+class SupplierDocumentUploadStatus(str, enum.Enum):
+    draft = "draft"  # read by AI, waiting for a person to confirm the fields
+    confirmed = "confirmed"
 
 
 class SiteKind(str, enum.Enum):
@@ -119,6 +137,8 @@ class MarketRequirement(Base):
         ForeignKey("regulation_documents.id"), index=True, nullable=False
     )
     source_quote: Mapped[str] = mapped_column(Text, nullable=False)
+    # A duty the text sets as a share of the order value, e.g. 25 for "25 percent ad valorem".
+    duty_rate_percent: Mapped[Decimal | None] = mapped_column(Numeric(6, 2))
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     __table_args__ = (UniqueConstraint("market_code", "requirement_key"),)
 
@@ -142,6 +162,8 @@ class Supplier(Base):
 
 
 class SupplierDocument(Base):
+    """A document a supplier holds, one per kind. Seeded, or confirmed from an upload."""
+
     __tablename__ = "supplier_documents"
     id: Mapped[uuid.UUID] = id_column()
     supplier_id: Mapped[uuid.UUID] = mapped_column(
@@ -150,8 +172,70 @@ class SupplierDocument(Base):
     kind: Mapped[str] = mapped_column(ForeignKey("document_kinds.kind"), nullable=False)
     detail: Mapped[str] = mapped_column(Text, nullable=False)
     standards: Mapped[list[str]] = mapped_column(ARRAY(String(100)), nullable=False, default=list)
+    document_number: Mapped[str | None] = mapped_column(String(100))
+    issuer: Mapped[str | None] = mapped_column(String(200))
+    expires_on: Mapped[date | None] = mapped_column(Date)
+    # The upload it was confirmed from; null for seeded records.
+    upload_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("supplier_document_uploads.id"))
     created_at: Mapped[datetime] = created_column()
     __table_args__ = (UniqueConstraint("supplier_id", "kind"),)
+
+
+class SupplierDocumentUpload(Base):
+    """A certificate file a company uploaded for a supplier, and the fields AI read from it.
+
+    The file is in Cloud Storage. Nothing is checked against it until a person confirms the
+    fields, which writes the supplier document."""
+
+    __tablename__ = "supplier_document_uploads"
+    id: Mapped[uuid.UUID] = id_column()
+    company_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    supplier_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("suppliers.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    checksum: Mapped[str] = mapped_column(String(64), nullable=False)
+    storage_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    extracted: Mapped[dict] = mapped_column(JSONB, nullable=False)  # what AI read
+    status: Mapped[SupplierDocumentUploadStatus] = mapped_column(
+        pg_enum(SupplierDocumentUploadStatus, "supplier_document_upload_status"),
+        nullable=False,
+        default=SupplierDocumentUploadStatus.draft,
+    )
+    created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = created_column()
+    confirmed_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class CostDefault(Base):
+    """A cost assumption shared by every company, e.g. delay USD 200 a day. Seeded."""
+
+    __tablename__ = "cost_defaults"
+    key: Mapped[str] = mapped_column(String(40), primary_key=True)  # "delay_per_day"
+    label: Mapped[str] = mapped_column(String(150), nullable=False)
+    # "days", or an ISO 4217 currency; money values are hundredths of the unit, like orders.
+    unit: Mapped[str] = mapped_column(String(4), nullable=False)
+    value: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class CompanyCostSetting(Base):
+    """A company's own value for a cost assumption; replaces the shared default."""
+
+    __tablename__ = "company_cost_settings"
+    company_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), primary_key=True
+    )
+    key: Mapped[str] = mapped_column(ForeignKey("cost_defaults.key"), primary_key=True)
+    unit: Mapped[str] = mapped_column(String(4), nullable=False)
+    value: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    updated_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    updated_at: Mapped[datetime] = created_column()
 
 
 class CompanySite(Base):

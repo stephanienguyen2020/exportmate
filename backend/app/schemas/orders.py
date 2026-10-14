@@ -1,8 +1,6 @@
 import uuid
 from datetime import date
 
-from pydantic import Field
-
 from app.database.models import Order, OrderStatus
 from app.schemas.common import CamelCaseModel
 
@@ -38,9 +36,3 @@ class SourceRowOut(CamelCaseModel):
     row_number: int
     raw: dict[str, str]
     row_hash: str
-
-
-class OrderDetailOut(CamelCaseModel):
-    order: OrderOut
-    source: SourceRowOut | None  # None for seeded orders
-    exposures: list = Field(default_factory=list)  # filled in phase 2

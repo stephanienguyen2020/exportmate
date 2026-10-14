@@ -14,12 +14,15 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 
 from app import seed_reference_data
+from app.core import gemini
 from app.core.config import get_settings
+from app.core.errors import AppError
 from app.database.models import Base, Role
 from app.database.queries import users as user_queries
 from app.database.session import get_engine, open_session
 from app.main import create_app
 from app.services import regulations as regulation_service
+from app.services import supplier_documents as supplier_document_service
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 
@@ -73,10 +76,15 @@ class InMemoryFileStorage:
         del self.files[path]
 
 
+# Every module that saves or reads files in Cloud Storage.
+FILE_STORAGE_USERS = [regulation_service, supplier_document_service]
+
+
 @pytest.fixture(autouse=True)
 def file_storage(monkeypatch: pytest.MonkeyPatch) -> InMemoryFileStorage:
     storage = InMemoryFileStorage()
-    monkeypatch.setattr(regulation_service, "get_file_storage", lambda: storage)
+    for module in FILE_STORAGE_USERS:
+        monkeypatch.setattr(module, "get_file_storage", lambda: storage)
     return storage
 
 
@@ -89,6 +97,28 @@ def fake_official_text(url: str, accept: str | None) -> bytes:
 @pytest.fixture(autouse=True)
 def official_texts(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(seed_reference_data, "fetch_official_text", fake_official_text)
+
+
+class FakeGemini:
+    """Stands in for Gemini. Tests set `answers[task]` to a function of (prompt, file) that
+    returns the schema's object; a task with no answer fails like an unreachable model."""
+
+    def __init__(self):
+        self.answers: dict = {}
+        self.calls: list[dict] = []
+
+    def generate_json(self, task, prompt, schema, file=None):
+        self.calls.append({"task": task, "prompt": prompt, "file": file})
+        if task not in self.answers:
+            raise AppError(503, "ai_unavailable", "The AI step failed. Try again in a minute.")
+        return schema.model_validate(self.answers[task](prompt, file))
+
+
+@pytest.fixture(autouse=True)
+def fake_gemini(monkeypatch: pytest.MonkeyPatch) -> FakeGemini:
+    fake = FakeGemini()
+    monkeypatch.setattr(gemini, "generate_json", fake.generate_json)
+    return fake
 
 
 @pytest.fixture

@@ -44,6 +44,13 @@ class Settings(BaseSettings):
     report_emails_per_hour: int = 20
     # AI service origin; company reports read its news alerts with the caller's token.
     ai_service_url: str = "http://127.0.0.1:8080"
+    # Gemini on Vertex AI (core/gemini.py), in the project above.
+    gemini_model: str = "gemini-2.5-flash"
+    gemini_location: str = "global"
+    gemini_timeout_seconds: int = 90
+    # Per user per hour.
+    supplier_document_uploads_per_hour: int = 60
+    analysis_runs_per_hour: int = 60
 
     @model_validator(mode="after")
     def no_dev_auth_in_production(self):

@@ -26,7 +26,8 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
 | 403 | `forbidden` | The caller's role is too low |
 | 404 | `not_found` | Missing, or it belongs to another company |
 | 422 | `invalid_input` | Validation failed. `fieldErrors` holds one message per field |
-| 429 | `rate_limited` | Upload limit reached (60 per user per hour, counted per instance) |
+| 429 | `rate_limited` | Per-user hourly limit reached, counted per instance: uploads 60, analysis runs 60 |
+| 503 | `ai_unavailable` / `ai_not_configured` | An AI step (Gemini) failed or isn't set up (`GOOGLE_CLOUD_PROJECT`). Nothing was saved; try again |
 
 ## Index
 
@@ -68,7 +69,15 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
 | `GET /regulation-documents/{id}/file` | viewer | Regulation library |
 | `GET /regulations` | viewer | Regulation library |
 | `GET /regulations/{id}` | viewer | Regulation library |
-| [Planned](#planned) | | Phases 2–4 |
+| `GET /playbook/fields` | viewer | Not yet (playbook rule form) |
+| `GET /company/cost-settings` | viewer | Not yet (settings, report cost lines) |
+| `PATCH /company/cost-settings` | owner | Not yet (settings) |
+| `POST /runs` | editor | Not yet ("Analyse", replacing the simulated five-agent review) |
+| `GET /runs/{id}` | viewer | Not yet (run panel) |
+| `GET /reports/{id}` | viewer | Not yet (report view) |
+| `POST /suppliers/{id}/documents` | editor | Not yet (supplier panel) |
+| `POST /supplier-documents/{id}/confirm` | editor | Not yet (supplier panel) |
+| [Planned](#planned) | | Phases 3–4 |
 
 "Every workspace load" means `refreshWorkspace()` in `frontend/src/main.tsx`. It runs on entering the workspace, after a commit, and on "Retry". It calls `GET /me`, then `GET /orders`, `GET /playbook/rules` and `GET /overview` in parallel. The browser-only demo session calls none of these: it uses localStorage.
 
@@ -145,7 +154,7 @@ Not called by the frontend. When a signed-in user chats, `ai/server` calls it wi
   "sourcesCheckedAt": null}}
 ```
 - `countsByStatus` always lists all 4 statuses. Value at risk and nearest date count only `exposed` orders, and the date only counts ship dates from today on.
-- `sourcesCheckedAt` is always `null` for now. The dashboard takes its scan time from `ai/server` `/api/impacts`.
+- `sourcesCheckedAt` is always `null` until the crawler exists (phase 4, `GET /sources`). The dashboard takes its scan time from `ai/server` `/api/impacts`.
 
 Dashboard tiles, loaded on every workspace load.
 
@@ -166,9 +175,10 @@ On every workspace load, `api.orders()` reads every page (`limit=200`) until `ne
 {"data": {"order": {…as above…},
   "source": {"importId": "…", "rowNumber": 2, "rowHash": "…",
              "raw": {"id": "PO-2291", "product": "…", "value": "24000", "…": "…"}},
-  "exposures": []}}
+  "exposures": [{"reportId": "…", "requirementKey": "geolocation", "title": "Plot-level geolocation",
+                  "status": "missing", "note": "Not on file from Binh Phu Wood.", "source": {…}}]}}
 ```
-`source` is the CSV row the order came from, or `null` for seeded orders. `exposures` stays empty until analysis exists (phase 2).
+`source` is the CSV row the order came from, or `null` for seeded orders. `exposures` are the `missing` and `mismatch` findings of the order's latest report (`GET /reports/{id}`); empty before its first run.
 Opening `#/workspace/orders/<id>` in a live session.
 
 ## CSV import
@@ -203,19 +213,39 @@ Uploads never committed are deleted by `python -m app.cleanup_imports --older-th
 
 ## Playbook
 
-Playbook page. Rules are only stored for now; they don't affect analysis yet. Every change records a new playbook revision. Each response returns its number in `meta.revision`.
+Playbook page. Every change records a new playbook revision. Each response returns its number in `meta.revision`. A rule with `when` and `then` is **checked** by every analysis run; one without them is stored only (REQUIREMENTS.md §4.4).
+
+```json
+{"id": "…", "text": "Problems over USD 2,000 go to the owner", "category": "Threshold", "enabled": true,
+ "when": [{"field": "estimated_cost", "op": "greater_than", "value": {"amountMinor": 200000, "currency": "USD"}}],
+ "then": {"action": "owner_review", "note": null},
+ "checked": true, "createdAt": "…"}
+```
 
 ### `GET /playbook/rules` (viewer)
-`[{"id": "…", "text": "Flag any order where the projected margin drops below 8%.", "category": "Threshold", "enabled": true, "createdAt": "…"}]`. Loaded on every workspace load.
+Every live rule in the shape above. Loaded on every workspace load.
 
 ### `POST /playbook/rules` (editor)
-`{"text": "…", "category": "Policy" | "Threshold" | "Supplier" | "Watchlist", "enabled": true}`. `text` is 1–500 chars. Returns `201` with the rule. "Add rule" form.
+`{"text": "…", "category": "Policy" | "Threshold" | "Supplier" | "Watchlist", "enabled": true, "when": [...], "then": {...}}`. `text` is 1–500 chars; `when` (1–10 conditions) and `then` are optional but go together. Returns `201`. The frontend's "Add rule" form sends only text and category today.
+- `422 invalid_rule` with the failing path, e.g. `{"when.0.field": "Unknown field. Use one of: …"}`: unknown field, a comparison the field doesn't allow, a value of the wrong type, an unknown market or document kind, or only one of `when`/`then`.
 
 ### `PATCH /playbook/rules/{id}` (editor)
-Any of `text`, `category`, `enabled`. The UI sends only `{"enabled": <flipped>}` from the on/off switch.
+Any of `text`, `category`, `enabled`, and `when` + `then` together (`null` for both makes the rule stored only). The UI sends only `{"enabled": <flipped>}` from the on/off switch.
 
 ### `DELETE /playbook/rules/{id}` (editor)
 Returns `{"deleted": true}`. Delete button on a rule.
+
+### `GET /playbook/fields` (viewer)
+What the rule form's dropdowns offer:
+```json
+{"fields": [{"key": "days_until_ship", "label": "Days until ship date", "type": "number",
+             "ops": {"less_than": "less than", "greater_than": "more than", "equals": "is"}, "options": null},
+            {"key": "market", "label": "Market", "type": "text", "ops": {…},
+             "options": [{"value": "EU", "label": "European Union"}, …]}, …],
+ "actions": {"flag": "Add a note to the report", "owner_review": "…", "block": "…"},
+ "noValueOps": ["is_empty", "is_not_empty"]}
+```
+Fields: `market`, `supplier`, `hs_code`, `order_value`, `days_until_ship`, `missing_documents`, `estimated_cost` (the problems' cost, without duties). Money values are `{"amountMinor", "currency"}` and only compare with amounts in the same currency.
 
 ## Trade map
 
@@ -230,7 +260,7 @@ Everything the map draws, in one call when the page opens:
 | `orders[]` | `order`, `placement` (city, country, market, location, `approximate` = placed at the country centre), `checks[]`, `gapCount` |
 | `orders[].checks[]` | `requirementKey`, `title`, `level` (`supplier` / `shipment` / `check`), `status` (`on_file` / `missing` / `mismatch` / `prepare` / `check` / `unknown`), `note`, `source` |
 | `checks[].source` | The shared regulation version behind the requirement and the sentence that requires it: `regulationTitle`, `officialId`, `documentId` (→ `GET /regulation-documents/{id}/file`), `versionNumber`, `sourceUrl`, `quote` |
-| `suppliers[]` | From orders (matched by trimmed, lower-case name) + the supplier list. `id`/`documents` are `null` when the supplier is only named on orders |
+| `suppliers[]` | From orders (matched by trimmed, lower-case name) + the supplier list. `id`/`documents` are `null` when the supplier is only named on orders. A document has `kind`, `detail`, `standards`, and `documentNumber`/`issuer`/`expiresOn` when confirmed from an upload |
 | `sites[]` | Factories, ports, warehouses. `isRouteOrigin` marks the company's route start |
 | `observations[]` | Satellite samples (`isSample: true`) with a GeoJSON `extent` and `nearby` suppliers/sites within `checkRadiusKm` (default 25). Order statuses never change because of them |
 | `documentKinds`, `homeCountryIds`, `checkRadiusKm` | Labels, the countries to highlight, the flood check radius |
@@ -240,7 +270,7 @@ Everything the map draws, in one call when the page opens:
 
 `nearby[].distanceKm` estimates distance to the mapped polygon (including holes) using a local equirectangular projection. The proximity threshold is applied before rounding up to whole kilometres; zero means on or inside the extent. It is a screening estimate, not a survey measurement. The dashed overview circle is an approximate search-area illustration.
 
-`gapCount` counts the checks that are `missing` or `mismatch`. The market panel ("changes to check") is built in the frontend from these checks.
+A supplier document that expires before the order's ship date is a `mismatch`. `gapCount` counts the checks that are `missing` or `mismatch`. The market panel ("changes to check") is built in the frontend from these checks.
 
 The assistant's `query_orders` tool (`ai/server/orders.js`) also reads this route, with the chatting user's own token, to answer questions about the company's orders and their checklists.
 
@@ -330,6 +360,79 @@ Every regulation, oldest first, with `versionCount` and `latestVersion`. With `o
 ### `GET /regulations/{id}` (viewer)
 The regulation plus `versions[]`, newest first.
 
+## Cost settings
+
+The numbers analysis uses when a regulation doesn't give one (REQUIREMENTS.md §4.6 step 3). Shared defaults are seeded (`reference.json` `costDefaults`); a company can set its own.
+
+### `GET /company/cost-settings` (viewer)
+```json
+[{"key": "delay_per_day", "label": "Delay: cost of each day an order waits (storage, late fees)",
+  "unit": "USD", "value": 35000, "source": "company_setting", "defaultUnit": "USD", "defaultValue": 20000},
+ {"key": "supplier_lead_days", "label": "Days a supplier needs to send a new document",
+  "unit": "days", "value": 14, "source": "default", "defaultUnit": "days", "defaultValue": 14}, …]
+```
+Keys: `delay_per_day`, `missing_document`, `new_test` (money: `value` in hundredths of `unit`), `supplier_lead_days` (`unit` `days`).
+
+### `PATCH /company/cost-settings` (owner)
+`{"settings": [{"key": "delay_per_day", "value": 35000, "unit": "USD"}]}`. `value: null` goes back to the default. A money setting may change currency; a days setting can't. Returns the full list. `422` for an unknown key or a bad unit.
+
+## Analysis (runs and reports)
+
+A run checks orders against the market requirements, prices the problems, applies the checked playbook rules, suggests one action and audits the result (REQUIREMENTS.md §4.6). Plain code, no AI: it finishes inside the request.
+
+### `POST /runs` (editor, rate limited)
+Body optional: `{"orderIds": ["PO-2291"]}` (default: every order). Updates each order's `status` and returns `201` with the run:
+```json
+{"id": "…", "status": "done", "orderCount": 4, "playbookRevision": 3,
+ "steps": [{"name": "relevance", "summary": "3 of 4 orders ship to a market with a checklist (EU, US)."},
+           {"name": "exposure", "summary": "1 exposed, 1 clear, 2 need data. Checked against 30 market requirements."},
+           {"name": "cost", "summary": "Estimated cost: USD 14,775.00."},
+           {"name": "playbook", "summary": "2 checked rules (playbook revision 3) fired 2 times. …"},
+           {"name": "plan", "summary": "4 orders have a suggested action."},
+           {"name": "auditor", "summary": "4 of 4 reports passed the checks; 1 go to human review."}],
+ "costSettings": [ …the values used… ], "error": null, "createdAt": "…", "finishedAt": "…",
+ "reports": [{"id": "…", "orderId": "PO-2291", "state": "pass", "orderStatus": "exposed", "blocked": false,
+              "costTotals": {"USD": 120000}}]}
+```
+- `422 unknown_orders`, `422 no_orders`. `500 analysis_failed`: the run is saved as `failed` and nothing else changes.
+
+### `GET /runs/{id}` (viewer)
+The same shape. Step summaries never include AI reasoning.
+
+### `GET /reports/{id}` (viewer)
+One order's report. Stored as it was written, so it reads the same after requirements, rules or settings change.
+
+| Key | Holds |
+| --- | --- |
+| `state` | `pass`, `needs_data` (no checklist for the destination, or no supplier record), `needs_human_review` (an `owner_review` rule fired or the audit failed), `rejected` (reserved) |
+| `orderStatus`, `blocked` | What the order became (`exposed` / `clear` / `needs_data`); `blocked` when a `block` rule fired |
+| `order`, `orderSource` | The order as analysed and its CSV row (`importId`, `rowNumber`) |
+| `findings[]` | Every requirement checked, as in the trade map's `checks[]`, each with its source and quote |
+| `costLines[]` | `kind` (`missing_document` / `new_test` / `delay` / `duty`), `label`, `quantity`, `unitAmountMinor` or `baseAmountMinor` + `ratePercent`, `amountMinor`, `currency`, `formula` ("4 days × USD 200.00"), `basis[]` (`regulation` with its source, `company_setting` or `default`) |
+| `costTotals`, `problemCostTotals` | By currency; the second leaves out duties (what playbook rules on `estimated_cost` compare) |
+| `rulesFired[]`, `rulesNotChecked` | Checked rules that fired (`ruleId`, `text`, `action`, `note`, `conditions` in words); enabled rules that are stored only |
+| `suggestedAction` | `kind` (`complete_data` / `request_documents` / `move_ship_date` / `recheck_landed_cost` / `none`), `text`, `requestBy` |
+| `audit` | `passed`, `problems[]`: every finding has a quote, every cost line re-computes and names its basis, totals add up, every rule exists |
+| `missingData`, `daysUntilShip`, `market` | What's missing, days to the ship date at run time, the market |
+
+## Supplier documents
+
+A supplier's certificate uploaded as a file: AI reads it, a person confirms the fields, then it counts in the trade map and analysis.
+
+### `POST /suppliers/{id}/documents` (editor, rate limited, AI)
+`multipart/form-data` with `file`: `.pdf`, `.png`, `.jpg`/`.jpeg`, ≤4 MB, checked by its first bytes. The file is saved in Cloud Storage and Gemini reads it. Returns `201` with the draft:
+```json
+{"id": "…", "supplierId": "…", "filename": "geo.pdf", "contentType": "application/pdf", "sizeBytes": 51234,
+ "status": "draft", "createdAt": "…", "confirmedAt": null,
+ "extracted": {"kind": "geolocation", "documentNumber": "GEO-2026-118", "issuer": "…",
+               "issuedOn": "2026-09-01", "expiresOn": "2027-10-14", "standards": [],
+               "detail": "Plot coordinates for the 2026 acacia harvest, 4 plots", "notes": null}}
+```
+A `kind` that isn't a known document kind and dates that aren't `YYYY-MM-DD` come back `null`. Nothing is saved when the AI step fails (`503`). `404` for another company's supplier; `422 invalid_file_type` / `file_too_large` / `empty_file` / `invalid_file`.
+
+### `POST /supplier-documents/{id}/confirm` (editor)
+`{id}` is the upload. Body: the fields as the person checked them: `kind`, `detail`, `standards`, `documentNumber`, `issuer`, `expiresOn`. Writes the supplier's document of that kind (replacing an older one) and returns it with its `uploadId`. `409 already_confirmed`, `422` for an unknown kind.
+
 ---
 
 ## Reports
@@ -377,20 +480,18 @@ The PDF of the saved content, `inline` for the preview; `?download=true` makes i
 
 ## Planned
 
-Not built. Shapes follow the requirements and may change. Phases are the ones in REQUIREMENTS.md §5.
+Not built. Shapes follow the requirements and may change. Phases are the ones in REQUIREMENTS.md §5. Phase 2 is mostly built (above; the frontend doesn't call the new endpoints yet). Requirement drafting and HS code suggestions wait for retrieval (RAG).
 
 | Endpoint | Phase | Role | Does | Will be used by |
 | --- | --- | --- | --- | --- |
-| `GET /sources` | 2 | viewer | Rule sources and when each was last checked; fills `sourcesCheckedAt` | Dashboard "last checked" |
-| `GET /regulations/{id}/requirements?version=` | 2 | viewer | The market requirements a version sets (the obligations), each with its quote, plus what changed from the previous version | Rule-change review, regulation page |
-| `PATCH /market-requirements/{id}` | 2 | operator (owner for company requirements) | Edit a drafted requirement and mark it `draft` → `reviewed`. Only reviewed ones are checked and alert | Rule-change review |
-| `POST /runs` | 2 | editor | Start an analysis (match → cost → plan → auditor). Saves the run and queues a Cloud Task. Returns the run ID | "Analyse" / rule-change flow, replacing today's simulated five-agent review |
-| `POST /internal/runs/{id}/execute` | 2 | Cloud Tasks only (OIDC) | Does the run's work and saves each step. Called directly when running locally | Not the frontend |
-| `GET /runs/{id}` | 2 | viewer | Run status and step summaries (no raw AI reasoning). Polled, so progress survives a refresh | Run progress panel |
-| `GET /reports/{id}` | 2 | viewer | Report: affected orders, cost lines (`amountMinor` + currency), citations to rule clauses and CSV rows. `state`: `pass` / `needs_data` / `rejected` / `needs_human_review` | Order detail `exposures`, report view |
+| `GET /sources` | 4 | viewer | Rule sources the crawler watches and when each was last checked; fills `sourcesCheckedAt` | Dashboard "last checked" |
 | `POST /reports/{id}/feedback` | 3 | viewer | Thumbs up/down + note on a report | Report view |
-| `GET /orders/{id}/hs-suggestions`, `POST /hs-suggestions/{id}/accept` / `reject` | 2 | viewer / editor | AI-suggested HS codes for orders without one. Accepting sets the code and re-matches that order | Order detail (`needs_data`) |
-| `POST /actions/drafts` | 3 | editor | Draft a supplier message from a `pass` report | "Draft email" |
+| `GET /regulations/{id}/requirements?version=` | 2 (later, with RAG) | viewer | The market requirements a version sets, each with its quote, plus what changed from the previous version | Rule-change review, regulation page |
+| `POST /regulation-documents/{id}/requirements` | 2 (later, with RAG) | editor | AI drafts the market requirements of one version of the company's own regulation; quotes checked against the text (PDF text too); long texts searched by section | Rule-change review |
+| `PATCH /market-requirements/{id}` | 2 (later, with RAG) | owner | Edit a drafted requirement and mark it `reviewed` / `rejected`. Only reviewed ones are checked | Rule-change review |
+| `POST /orders/{id}/hs-suggestions`, `GET …`, `POST /hs-suggestions/{id}/accept` / `reject` | 2 (later, with RAG) | editor / viewer | AI suggests HS codes for orders without one, from the company's past orders and the HS headings it retrieves. Accepting sets the code and analyses the order again. Needs empty `hsCode` cells allowed in the CSV | Order detail (`needs_data`) |
+| `POST /internal/runs/{id}/execute` | later | Cloud Tasks only (OIDC) | Runs a run's work outside the request, once a step waits on AI (e.g. the phase 3 message draft). Phase 2 runs finish inside `POST /runs` | Not the frontend |
+| `POST /actions/drafts` | 3 | editor | AI drafts a supplier message from a `pass` report that isn't `blocked` | "Draft email" |
 | `PATCH /actions/{id}` | 3 | editor | Edit text or recipient. Resets an approved action to `draft` | Message editor |
 | `POST /actions/{id}/approve` | 3 | owner | Records who, when and a hash of the exact text | "Approve" |
 | `POST /actions/{id}/send` | 3 | owner | Sends once (`Idempotency-Key` header). Sandbox email in v1 | "Send" |
