@@ -4,36 +4,50 @@ A responsive trade-compliance frontend for small manufacturers, inspired by the 
 
 ## Deployment
 
-Production: [exportmate.vercel.app](https://exportmate.vercel.app). Vercel project: `exportmate` under `stephanies-projects-5bf9fd09`. Build configuration is in `vercel.json`; temporary files and local environment files are excluded by `.vercelignore`.
+Production: [exportmate.vercel.app](https://exportmate.vercel.app). Vercel project: `exportmate` under `stephanies-projects-5bf9fd09`. Build configuration is in `frontend/vercel.json`; temporary files and local environment files are excluded by `frontend/.vercelignore`.
+
+## Repository layout
+
+- `frontend/`: React screens, chat/news UI, static assets, API proxy, tests, frontend docs and build/deploy configuration.
+- `backend/`: FastAPI company API, database migrations and API documentation.
+- `ai/server/`: AI service, independent from the browser app.
+- `infra/`: shared cloud infrastructure.
+
+The `main` branch requires a pull request and passing `frontend`, `backend`, and `ai-server` checks, including for administrators. Force pushes and branch deletion are disabled.
+
+## Regulation library
+
+`#/workspace/regulations` lists shared official texts and company references. Search by title or official ID, inspect version history, and download exact source files. Owners/editors can upload a new PDF/HTML/TXT reference or a new version of a company regulation (up to 4 MB). Shared texts are read-only. Trade-map requirement citations link to exact source document versions. Uploads store reference files; requirement extraction and analysis remain planned backend features.
 
 ## Run
 
 ```sh
+cd frontend
 npm install
 npm run dev
 ```
 
 Open the local URL printed by Vite (normally http://127.0.0.1:5173). `npm run build` type-checks and produces `dist/`; `npm run preview` serves the production build. The sample demo needs no credentials. Signed-in workspaces require the backend and Firebase configuration below.
 
-To run the whole stack (Postgres, backend, AI service and frontend) with one command, use `./dev.sh`. It needs Docker and [uv](https://docs.astral.sh/uv/), installs dependencies when lockfiles change, migrates and seeds the database, and uses dev sign-in: log in as `lan@example.com` with any password of 8+ characters. Ctrl+C stops everything except Postgres.
+To run the whole stack (Postgres, backend, AI service and frontend) with one command, use `./dev.sh` from the repository root. It needs Docker and [uv](https://docs.astral.sh/uv/), installs dependencies when lockfiles change, migrates and seeds the database, and uses dev sign-in: log in as `lan@example.com` with any password of 8+ characters. Ctrl+C stops everything except Postgres.
 
 ## Company API integration
 
 The signed-in workspace uses the FastAPI contracts in `backend/app/schemas`: account/profile and onboarding, paginated orders and original CSV row details, overview, two-step CSV validation/commit, and playbook CRUD. Firebase handles sign-in, signup, email verification and password recovery. Requests use refreshed Firebase ID tokens. Viewer accounts cannot import or change rules; company settings require an owner.
 
-Copy `.env.example` to `.env.local` and fill in the Firebase **web app** configuration. For Vercel, set `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_APP_ID`, and the server-side `BACKEND_URL` (the deployed FastAPI HTTPS origin), then redeploy. Enable Firebase email/password sign-in and authorize `exportmate.vercel.app` in Firebase Authentication. The backend must use the same Firebase project. Never put service-account keys or database credentials in `VITE_*` variables.
+Copy `frontend/.env.example` to `frontend/.env.local` and fill in the Firebase **web app** configuration. For Vercel, set `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_APP_ID`, and the server-side `BACKEND_URL` (the deployed FastAPI HTTPS origin), then redeploy. Enable Firebase email/password sign-in and authorize `exportmate.vercel.app` in Firebase Authentication. The backend must use the same Firebase project. Never put service-account keys or database credentials in `VITE_*` variables.
 
-`/api/v1/*` is routed through `api/backend.ts` to `BACKEND_URL`; the broader `/api/*` AI rewrite remains separate. Missing backend configuration returns a clear 503 rather than routing company requests to the AI service. `VITE_BACKEND_API_URL` can optionally point directly to a backend `/api/v1` endpoint when its CORS allows the frontend. Local Vite routes `/api/v1` to port 8000 and `/api` to port 8080.
+`/api/v1/*` is routed through `frontend/api/backend.ts` to `BACKEND_URL`; the broader `/api/*` AI rewrite remains separate. Missing backend configuration returns a clear 503 rather than routing company requests to the AI service. `VITE_BACKEND_API_URL` can optionally point directly to a backend `/api/v1` endpoint when its CORS allows the frontend. Local Vite routes `/api/v1` to port 8000 and `/api` to port 8080.
 
 For local backend development, use `VITE_AUTH_MODE=dev` together with backend `AUTH_MODE=dev`, seed the backend, and sign in as `lan@example.com` with any password of at least eight characters. Development tokens are disabled in production builds. “Explore the demo” remains an explicitly browser-local sample workspace; it never falls back from a failed API request to sample records. Live order statuses and currencies come from the server. Exposure reports, analysis and supplier actions remain pending backend phases and are not presented as live reports.
 
-CSV imports use server validation and explicit commit; repeated clicks are blocked. The Vercel upload path uses a 4 MB file limit to leave room for multipart overhead. Backend uploads made directly support the backend's 5 MB limit.
+CSV imports use server validation and explicit commit; repeated clicks are blocked. The Vercel upload path uses a 4 MB file limit to leave room for multipart overhead. The backend enforces the same 4 MB limit.
 
-Verification: `npm run build`; `npx playwright install chromium` once, then `npm test` (Node 22.18+ for the proxy test). Browser integration tests exercise contract-shaped API responses, pagination, bearer headers, errors, roles, imports, playbook mutations, profile updates, onboarding, logout, demo isolation and who may change News watch sources. GitHub Actions (`.github/workflows/ci.yml`) runs these plus the backend's ruff, `alembic check` and pytest on every push to main and every pull request. With the local backend running, `TEST_REAL_BACKEND=1 npm test` also exercises a real FastAPI/Postgres round trip in a separate test company. Deployed Firebase authentication still needs its own end-to-end check.
+Verification (from `frontend/`): `npm run build`; `npx playwright install chromium` once, then `npm test` (Node 22.18+ for the proxy test). Browser integration tests exercise contract-shaped API responses, pagination, bearer headers, errors, roles, imports, playbook mutations, profile updates, onboarding, logout, demo isolation and who may change News watch sources. GitHub Actions (`.github/workflows/ci.yml`) runs these plus the backend's ruff, `alembic check` and pytest on every push to main and every pull request. With the local backend running, `TEST_REAL_BACKEND=1 npm test` also exercises a real FastAPI/Postgres round trip in a separate test company. Deployed Firebase authentication still needs its own end-to-end check.
 
 ## AI features (Google Cloud)
 
-All AI code lives in [`ai/`](ai/): the chat UI in [`ai/chat/`](ai/chat/), News watch in [`ai/news/`](ai/news/), and one Node service in [`ai/server/`](ai/server/) that serves every `/api/*` route.
+The chat UI lives in [`frontend/ai/chat/`](frontend/ai/chat/), News watch in [`frontend/ai/news/`](frontend/ai/news/), and one Node service in [`ai/server/`](ai/server/) that serves every `/api/*` route.
 
 - **Assistant (RAG agent):** a launcher at the bottom-right of every screen; `#/chat` is the full-screen view with the session's audit trail. Gemini on Vertex AI plans and calls tools in a loop ([`ai/server/agent.js`](ai/server/agent.js)): `search_knowledge` (vector search), `query_inventory` and `get_alerts` (exact Firestore lookups), `calculate` (arithmetic, so figures are traceable) and `get_scan_status`. Every fact is cited with a numbered source. Before an answer is returned, an auditor step checks that citations resolve to retrieved evidence and that figures appear in tool results; a failing draft goes back to the model once.
 - **Vector database:** Firestore vector search over `gemini-embedding-001` embeddings (768 dimensions, cosine), in the `kb` collection ([`ai/server/rag.js`](ai/server/rag.js)). Indexed: stock items, news articles, alerts, sources and help guides ([`ai/server/seed/guides.js`](ai/server/seed/guides.js)). Each scan indexes its new articles and alerts; `npm run index` rebuilds everything and removes stale entries.
@@ -56,7 +70,7 @@ Everything runs in one project, `skilful-scarab-511320-q9`, defined in [`infra/t
 | Cloud Logging / Monitoring | JSON logs; log-based metrics `exportmate_ai/chat_answers`, `chat_latency`, `guard_withheld`, `scan_failures` |
 | Models | `gemini-2.5-flash` for the agent and scans (`GEMINI_MODEL`), `gemini-embedding-001` for embeddings (`EMBED_MODEL`), both via Vertex AI |
 
-`vercel.json` rewrites `/api/*` to the Cloud Run URL; locally `vite.config.ts` proxies `/api` to `127.0.0.1:8080`.
+`frontend/vercel.json` rewrites `/api/*` to the Cloud Run URL; locally `frontend/vite.config.ts` proxies `/api` to `127.0.0.1:8080`.
 
 ### Run and deploy
 
@@ -66,7 +80,7 @@ cd ai/server && npm install
 npm run seed   # load synthetic stock and default sources, then rebuild the vector index
 npm run scan   # run one news scan now (add --lookback=14 to re-read two weeks)
 npm run index  # rebuild the vector index; `node rag.js "<query>"` runs a test search
-npm run dev    # API on :8080 (run `npm run dev` in the repo root too)
+npm run dev    # API on :8080 (run `npm run dev` in frontend/ too)
 npm test       # harness unit tests; `npm run eval` runs the golden set against Gemini
 PROJECT_ID=skilful-scarab-511320-q9 ./deploy.sh   # build on Cloud Build, roll out the service and job
 ```
@@ -92,15 +106,19 @@ Browser storage keys: `em-orders`, `em-rules`, `em-sent`, `em-profile`, `em-inqu
 
 ## Planning documents
 
-- [Page plan](docs/FRONTEND_PLAN.md)
-- [Complete site and account flow](docs/ACCOUNT_AND_SITE_PLAN.md)
-- [Landing design and artwork prompt](docs/LANDING_DESIGN.md)
+- [Page plan](frontend/docs/FRONTEND_PLAN.md)
+- [Complete site and account flow](frontend/docs/ACCOUNT_AND_SITE_PLAN.md)
+- [Landing design and artwork prompt](frontend/docs/LANDING_DESIGN.md)
 - Backend: [requirements](backend/docs/REQUIREMENTS.md), [technical decisions](backend/docs/DECISIONS.md), [API](backend/docs/API.md), [original implementation plan](backend/docs/BACKEND_PLAN.md)
 
 ## Assets
 
-Port photography: [Unsplash image](https://images.unsplash.com/photo-1578575437130-527eed3abbec), stored locally at `public/port.jpg`. DM Sans and DM Mono load from Google Fonts with system fallbacks. Icons: Lucide. The image is illustrative global-trade photography, not a claim that the depicted port is on the demo corridor.
+Port photography: [Unsplash image](https://images.unsplash.com/photo-1578575437130-527eed3abbec), stored locally at `frontend/public/port.jpg`. DM Sans and DM Mono load from Google Fonts with system fallbacks. Icons: Lucide. The image is illustrative global-trade photography, not a claim that the depicted port is on the demo corridor.
 
 ## Scope
 
 The frontend integrates the available phase-one company APIs and the existing AI service. Live company access requires the deployed backend URL and Firebase web configuration. Regulation analysis, supplier message delivery, document extraction and chat access to company orders remain future backend work.
+
+## Deploy frontend
+
+The Vercel project `exportmate` uses Root Directory `frontend`, Vite, and `frontend/vercel.json`. Run `vercel --prod` from the repository root after linking the project. Configure Firebase web variables and `BACKEND_URL` in Vercel for both Production and Preview; never enable dev auth in deployment. GitHub PRs create preview deployments; merging to `main` deploys production.

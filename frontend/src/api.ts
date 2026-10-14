@@ -72,13 +72,19 @@ export type MapMarket = {
   searchTerms: string[];
 };
 export type CheckStatus =
-  | "on_file"
-  | "missing"
-  | "mismatch"
-  | "prepare"
-  | "check"
-  | "unknown";
+  "on_file" | "missing" | "mismatch" | "prepare" | "check" | "unknown";
+export type RequirementSource = {
+  regulationId: string;
+  documentTitle: string;
+  regulationTitle: string;
+  officialId: string | null;
+  documentId: string;
+  versionNumber: number;
+  sourceUrl: string | null;
+  quote: string;
+};
 export type RequirementCheck = {
+  source?: RequirementSource;
   requirementKey: string;
   title: string;
   level: "supplier" | "shipment" | "check";
@@ -165,6 +171,28 @@ export type MarketComparison = {
   unknown: ComparisonItem[];
   dropped: string[];
 };
+export type RegulationDocument = {
+  id: string;
+  title: string;
+  filename: string;
+  contentType: string;
+  sizeBytes: number;
+  checksum: string;
+  sourceUrl: string | null;
+  regulationId: string;
+  versionNumber: number;
+  createdAt: string;
+};
+export type Regulation = {
+  id: string;
+  title: string;
+  officialId: string | null;
+  shared: boolean;
+  versionCount: number;
+  latestVersion: RegulationDocument | null;
+  createdAt: string;
+};
+export type RegulationDetail = Regulation & { versions: RegulationDocument[] };
 type Envelope<T> = {
   data: T;
   meta: { nextCursor?: string | null; total?: number; revision?: number };
@@ -182,10 +210,10 @@ const base = (import.meta.env.VITE_BACKEND_API_URL || "/api/v1").replace(
   /\/$/,
   "",
 );
-export async function request<T>(
+async function authenticatedResponse(
   path: string,
   options: RequestInit = {},
-): Promise<Envelope<T>> {
+): Promise<Response> {
   const headers = new Headers(options.headers);
   headers.set("Authorization", `Bearer ${await getToken()}`);
   if (options.body && !(options.body instanceof FormData))
@@ -197,8 +225,8 @@ export async function request<T>(
       ? AbortSignal.any([options.signal, AbortSignal.timeout(30000)])
       : AbortSignal.timeout(30000),
   });
-  const body = await response.json().catch(() => null);
   if (!response.ok) {
+    const body = await response.json().catch(() => null);
     const fields = body?.error?.fieldErrors;
     const details = fields
       ? Object.entries(fields)
@@ -213,6 +241,14 @@ export async function request<T>(
       body?.error?.code || "request_failed",
     );
   }
+  return response;
+}
+export async function request<T>(
+  path: string,
+  options: RequestInit = {},
+): Promise<Envelope<T>> {
+  const response = await authenticatedResponse(path, options);
+  const body = await response.json().catch(() => null);
   if (!body || !("data" in body))
     throw new Error(
       "The backend returned an unexpected response. Check the API deployment configuration.",
@@ -335,6 +371,36 @@ export const api = {
     request<{ ordersCreated: number }>(`/imports/${id}/commit`, {
       method: "POST",
     }).then((r) => r.data),
+  regulations: (signal?: AbortSignal) =>
+    request<Regulation[]>("/regulations", { signal }).then((r) => r.data),
+  regulation: (id: string, signal?: AbortSignal) =>
+    request<RegulationDetail>(`/regulations/${encodeURIComponent(id)}`, {
+      signal,
+    }).then((r) => r.data),
+  regulationDocument: (id: string, signal?: AbortSignal) =>
+    request<RegulationDocument>(
+      `/regulation-documents/${encodeURIComponent(id)}`,
+      { signal },
+    ).then((r) => r.data),
+  uploadRegulation: (form: FormData) =>
+    request<RegulationDocument>("/regulation-documents", {
+      method: "POST",
+      body: form,
+    }).then((r) => r.data),
+  async downloadRegulation(id: string, filename: string) {
+    const response = await authenticatedResponse(
+      `/regulation-documents/${encodeURIComponent(id)}/file`,
+    );
+    // Files are attachments, including HTML: never embed uploaded content in our origin.
+    const url = URL.createObjectURL(await response.blob());
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  },
   tradeMap: (signal?: AbortSignal) =>
     request<TradeMap>("/trade-map", { signal }).then((r) => r.data),
   compareMarkets: (orderId: string, market: string, signal?: AbortSignal) =>
