@@ -227,8 +227,10 @@ Everything the map draws, in one call when the page opens:
 
 `gapCount` counts the checks that are `missing` or `mismatch`. The market panel ("changes to check") is built in the frontend from these checks.
 
-### `GET /trade-map/compare?orderId=PO-2291&market=US` (viewer)
-"What if this order went to another market?" Paperwork only.
+### `GET /trade-map/compare` (viewer)
+One what-if at a time. Send exactly one of `market`, `shipDate`, or `via`.
+
+`?orderId=PO-2291&market=US` — another market. Paperwork only.
 ```json
 {"data": {"orderId": "PO-2291", "fromMarket": "EU", "toMarket": "US",
   "reuse":      [{"title": "FSC chain of custody", "note": "…", "tag": null}],
@@ -239,8 +241,15 @@ Everything the map draws, in one call when the page opens:
 `reuse` means matching supplier records are on file for review; it does not establish validity or shipment coverage. Shipment requirements always stay in `reevaluate`, even when the form is unchanged (`tag: "Prepare"`). Other tags are `New` and `Changes`. `dropped` means absent from the target checklist, not legally unnecessary.
 
 - `422 unknown_market`, `422 same_market` (the order already goes there), `404` for an unknown order.
+- `422 invalid_input` when the call sends none of, or more than one of, `market`, `shipDate`, and `via`.
 
-Called from the order's "What if" panel each time the target market changes. A new call cancels the previous one.
+`?orderId=PO-2291&shipDate=2027-02-01` compares the planned ship date with that day. `kind` is `ship_date`. Lines whose `effectiveOn` falls between the two dates are in `reevaluate` (`tag: "New"` when the new date is the one that brings them into force). A `changesOn` date between them is `tag: "Changes"`. Lines listed on both dates are in `reuse`. Arrival time and the buyer's window stay in `unknown`. `422 same_date` when the date is already the planned one.
+
+`?orderId=PO-2291&via=SG` compares a routing. `via` is `direct`, `SG`, `MY`, `HK`, `AE`, or `LK`. `kind` is `route`. `routeSensitive` checklist lines (origin proofs) go to `reevaluate` when there is an intermediate stop. `distanceKm` is the great-circle length via that stop when an origin coordinate exists; `assumptions` says it is not a voyage or a freight quote. Freight, sailing time, and congestion stay in `unknown`. `422 unknown_route`, `422 same_route` when the stop is already the destination country.
+
+Checklists are scoped by HS prefix: wood lines (chapters 44 and furniture 9401/9403), food (chapters 01–23), textiles (50–63), and listed electronics headings. A prefix-less line, such as proof of origin or ISPM 15 packaging, still applies across those products. Each line still cites an official text.
+
+Called from the order's "What if" panel each time the market, date, or route changes. A new call cancels the previous one.
 
 ## Regulations
 

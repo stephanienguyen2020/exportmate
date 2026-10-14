@@ -2,6 +2,8 @@ import uuid
 from datetime import date
 from typing import Literal
 
+from pydantic import Field
+
 from app.database.models import ObservationConfidence, RequirementLevel, SiteKind
 from app.schemas.common import CamelCaseModel
 from app.schemas.orders import OrderOut
@@ -138,9 +140,17 @@ class ComparisonItemOut(CamelCaseModel):
 
 class MarketComparisonOut(CamelCaseModel):
     order_id: str
+    kind: Literal["market", "ship_date", "route"] = "market"
     from_market: str | None
     to_market: str
+    from_ship_date: date | None = None
+    to_ship_date: date | None = None
+    via: str | None = None
+    via_name: str | None = None
+    # Great-circle kilometres for a route. Not a voyage and not a freight quote.
+    distance_km: int | None = None
     reuse: list[ComparisonItemOut]
     reevaluate: list[ComparisonItemOut]
     unknown: list[ComparisonItemOut]
     dropped: list[str]
+    assumptions: list[str] = Field(default_factory=list)

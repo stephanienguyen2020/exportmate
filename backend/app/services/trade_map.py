@@ -13,6 +13,7 @@ import time
 import uuid
 from collections import defaultdict
 from dataclasses import dataclass
+from datetime import date
 
 from sqlalchemy.orm import Session
 
@@ -20,6 +21,7 @@ from app.core.config import get_settings
 from app.core.context import CompanyContext
 from app.core.errors import AppError, not_found_error
 from app.database.models import (
+    Company,
     CompanySite,
     Country,
     Market,
@@ -63,6 +65,15 @@ _COUNTRY_ALIASES = {"UK": "GB"}
 _GAP_STATUSES = {"missing", "mismatch"}
 OBSERVATION_LIMIT = 100
 EARTH_RADIUS_KM = 6371.0
+# Intermediate stops a comparison can try. "direct" has no hub. Each hub is a seeded port.
+ROUTE_HUBS: dict[str, tuple[str, str] | None] = {
+    "direct": None,
+    "SG": ("Singapore", "SG"),
+    "MY": ("Port Klang", "MY"),
+    "HK": ("Hong Kong", "HK"),
+    "AE": ("Jebel Ali", "AE"),
+    "LK": ("Colombo", "LK"),
+}
 
 SupplierDocs = dict[str, SupplierDocument]
 
@@ -141,6 +152,11 @@ def applies_to(requirement: MarketRequirement, hs_code: str) -> bool:
     return not requirement.hs_prefixes or any(digits.startswith(p) for p in requirement.hs_prefixes)
 
 
+def applies_on(requirement: MarketRequirement, on: date) -> bool:
+    """A line with effective_on applies on that day and after. No date means already in force."""
+    return requirement.effective_on is None or on >= requirement.effective_on
+
+
 def _check_requirement(
     requirement: MarketRequirement, supplier: str, documents: SupplierDocs | None
 ) -> tuple[CheckStatus, str]:
@@ -166,7 +182,7 @@ def _evaluate(
     return [
         (req, *_check_requirement(req, order.supplier, documents))
         for req in requirements
-        if applies_to(req, order.hs_code)
+        if applies_to(req, order.hs_code) and applies_on(req, order.ship_date)
     ]
 
 
@@ -205,7 +221,11 @@ def compare_requirements(
 ) -> MarketComparisonOut:
     """Paperwork only: which documents carry over, what needs another look, what we can't tell."""
     current = from_market.code if from_market else None
-    before = {r.requirement_key: r for r in from_requirements if applies_to(r, order.hs_code)}
+    before = {
+        r.requirement_key: r
+        for r in from_requirements
+        if applies_to(r, order.hs_code) and applies_on(r, order.ship_date)
+    }
     reuse: list[ComparisonItemOut] = []
     reevaluate: list[ComparisonItemOut] = []
     unknown: list[ComparisonItemOut] = []
@@ -572,6 +592,272 @@ def build_trade_map(db: Session, ctx: CompanyContext) -> TradeMapOut:
     )
 
 
+def _load_order(db: Session, ctx: CompanyContext, order_id: str) -> Order:
+    order = order_queries.get_order_by_external_id(db, ctx.company_id, order_id)
+    if not order:
+        raise not_found_error("Order")
+    return order
+
+
+def _supplier_documents(db: Session, ctx: CompanyContext, order: Order) -> SupplierDocs | None:
+    supplier = map_queries.get_supplier_by_name_key(
+        db, ctx.company_id, supplier_name_key(order.supplier)
+    )
+    if not supplier:
+        return None
+    return _documents_by_supplier(db, [supplier])[supplier.id]
+
+
+def _origin_point(
+    db: Session, ctx: CompanyContext, gazetteer: Gazetteer
+) -> tuple[float, float] | None:
+    """Recorded route-origin site, or the company profile's origin country centre."""
+    sites = map_queries.list_company_sites(db, ctx.company_id)
+    origin = next((site for site in sites if site.is_route_origin), None)
+    if origin:
+        return origin.latitude, origin.longitude
+    company = db.get(Company, ctx.company_id)
+    if not company:
+        return None
+    name = company.origin.casefold()
+    for country in gazetteer.countries.values():
+        if country.name.casefold() == name and country.center_latitude is not None:
+            return country.center_latitude, country.center_longitude
+    return None
+
+
+def _log_comparison(
+    ctx: CompanyContext, order: Order, result: MarketComparisonOut, supplier_record: bool
+) -> None:
+    log.info(
+        "trade_map.compared",
+        extra={
+            "company_id": str(ctx.company_id),
+            "order_id": order.external_id,
+            "kind": result.kind,
+            "from_market": result.from_market,
+            "to_market": result.to_market,
+            "reuse": len(result.reuse),
+            "reevaluate": len(result.reevaluate),
+            "unknown": len(result.unknown),
+            "supplier_record": supplier_record,
+        },
+    )
+
+
+def compare_ship_date(
+    db: Session, ctx: CompanyContext, order_id: str, proposed: date
+) -> MarketComparisonOut:
+    """Which checklist lines start, stop, or change between the planned date and `proposed`.
+
+    Uses the dates written on the checklist. It does not estimate arrival or a buyer's window.
+    """
+    order = _load_order(db, ctx, order_id)
+    if proposed == order.ship_date:
+        raise AppError(
+            422,
+            "same_date",
+            f"{order.external_id} is already planned for {proposed.isoformat()}.",
+            {"shipDate": "Pick a different date"},
+        )
+    gazetteer = _load_gazetteer(db)
+    placement = locate_destination(order.destination, gazetteer)
+    requirements = _requirements_by_market(db).get(placement.market, []) if placement.market else []
+    current, reuse, reevaluate = order.ship_date, [], []
+    for req in requirements:
+        if not applies_to(req, order.hs_code):
+            continue
+        now, then = applies_on(req, current), applies_on(req, proposed)
+        crosses = req.changes_on is not None and min(current, proposed) < req.changes_on <= max(
+            current, proposed
+        )
+        if now != then:
+            starting = then and not now
+            reevaluate.append(
+                ComparisonItemOut(
+                    title=req.title,
+                    note=(
+                        f"Listed from {req.effective_on.isoformat()}. "
+                        f"{'It applies on the new date.' if starting else 'It does not apply on the new date.'} "
+                        f"{req.why}"
+                    ),
+                    tag="New" if starting else None,
+                )
+            )
+        elif crosses and then:
+            reevaluate.append(
+                ComparisonItemOut(
+                    title=req.title,
+                    note=req.change_note or req.why,
+                    tag="Changes",
+                )
+            )
+        elif now:
+            reuse.append(
+                ComparisonItemOut(
+                    title=req.title,
+                    note="Still listed on both dates. The documents on file do not change because the date moved.",
+                )
+            )
+    market = placement.market or ""
+    result = MarketComparisonOut(
+        order_id=order.external_id,
+        kind="ship_date",
+        from_market=placement.market,
+        to_market=market,
+        from_ship_date=current,
+        to_ship_date=proposed,
+        reuse=reuse,
+        reevaluate=reevaluate,
+        unknown=[
+            ComparisonItemOut(
+                title="Buyer delivery window",
+                note="The contract date the buyer will accept is not in this dataset.",
+            ),
+            ComparisonItemOut(
+                title="Arrival date",
+                note="Transit time is not in this dataset, so this does not estimate when the goods arrive.",
+            ),
+        ],
+        dropped=[],
+        assumptions=[
+            "Only the checklist's effective dates and stated change dates are compared.",
+            "The destination market and the documents on file stay the same.",
+            "A date on a checklist is not a full legal calendar.",
+        ],
+    )
+    if not placement.market:
+        result.unknown.insert(
+            0,
+            ComparisonItemOut(
+                title="No mapped market",
+                note=f"{order.destination} is not in a market on this map, so there is no checklist to date.",
+            ),
+        )
+    _log_comparison(ctx, order, result, _supplier_documents(db, ctx, order) is not None)
+    return result
+
+
+def compare_route(db: Session, ctx: CompanyContext, order_id: str, via: str) -> MarketComparisonOut:
+    """What a different routing changes in the checklist, plus the great-circle distance.
+
+    Freight, sailing time and congestion are not in the dataset and stay unknown.
+    """
+    code = via.strip()
+    code = code if code.casefold() == "direct" else code.upper()
+    if code not in ROUTE_HUBS:
+        raise AppError(422, "unknown_route", f"Unknown route: {via}.", {"via": "Unknown route"})
+    order = _load_order(db, ctx, order_id)
+    gazetteer = _load_gazetteer(db)
+    placement = locate_destination(order.destination, gazetteer)
+    hub = ROUTE_HUBS[code]
+    if hub and placement.country == hub[1]:
+        raise AppError(
+            422,
+            "same_route",
+            f"{hub[0]} is already in the destination country.",
+            {"via": "Pick a stop that is not the destination"},
+        )
+    requirements = _requirements_by_market(db).get(placement.market, []) if placement.market else []
+    reuse, reevaluate = [], []
+    hub_name = "Direct" if hub is None else hub[0]
+    for req in requirements:
+        if not applies_to(req, order.hs_code) or not applies_on(req, order.ship_date):
+            continue
+        if req.route_sensitive and hub is not None:
+            reevaluate.append(
+                ComparisonItemOut(
+                    title=req.title,
+                    note=f"A stop in {hub_name} can change the consignment rule for this proof. "
+                    "Recheck it for this routing. This is not a new duty calculation.",
+                    tag="Changes",
+                )
+            )
+        elif req.route_sensitive:
+            reuse.append(
+                ComparisonItemOut(
+                    title=req.title,
+                    note="Direct routing. Prepare the destination market's proof; a later stop would need it rechecked.",
+                )
+            )
+        else:
+            reuse.append(
+                ComparisonItemOut(
+                    title=req.title,
+                    note="The destination market is unchanged, so this checklist line stays.",
+                )
+            )
+    distance = _route_distance(db, ctx, gazetteer, placement, hub)
+    unknown = [
+        ComparisonItemOut(
+            title="Freight cost",
+            note="No rate card is stored, so this does not estimate a price.",
+        ),
+        ComparisonItemOut(
+            title="Sailing time",
+            note="No carrier schedule is stored, so this does not estimate days on the water.",
+        ),
+        ComparisonItemOut(
+            title="Port congestion and insurance",
+            note="Those risks are not in this dataset. Ask the forwarder before changing the booking.",
+        ),
+    ]
+    assumptions = [
+        "The destination market stays the same. Only the path to it changes.",
+        "A transshipment does not by itself clear or create a market checklist.",
+    ]
+    if distance is None:
+        unknown.append(
+            ComparisonItemOut(
+                title="Distance",
+                note="No origin coordinates are recorded, so the great-circle distance is not estimated.",
+            )
+        )
+    else:
+        assumptions.append(
+            f"About {distance} km is the great-circle length"
+            + (f" via {hub_name}" if hub else "")
+            + ". It is not a voyage and not a freight quote."
+        )
+    market = placement.market or ""
+    result = MarketComparisonOut(
+        order_id=order.external_id,
+        kind="route",
+        from_market=placement.market,
+        to_market=market,
+        via=code,
+        via_name=hub_name,
+        distance_km=distance,
+        reuse=reuse,
+        reevaluate=reevaluate,
+        unknown=unknown,
+        dropped=[],
+        assumptions=assumptions,
+    )
+    _log_comparison(ctx, order, result, _supplier_documents(db, ctx, order) is not None)
+    return result
+
+
+def _route_distance(
+    db: Session,
+    ctx: CompanyContext,
+    gazetteer: Gazetteer,
+    placement: OrderPlacementOut,
+    hub: tuple[str, str] | None,
+) -> int | None:
+    origin = _origin_point(db, ctx, gazetteer)
+    if origin is None or placement.location is None:
+        return None
+    dest = (placement.location.latitude, placement.location.longitude)
+    if hub is None:
+        return round(distance_km(*origin, *dest))
+    port = gazetteer.ports.get((hub[0].lower(), hub[1]))
+    if port is None:
+        return None
+    via = (port.latitude, port.longitude)
+    return round(distance_km(*origin, *via) + distance_km(*via, *dest))
+
+
 def compare_order_markets(
     db: Session, ctx: CompanyContext, order_id: str, market_code: str
 ) -> MarketComparisonOut:
@@ -580,9 +866,7 @@ def compare_order_markets(
         raise AppError(
             422, "unknown_market", f"Unknown market: {market_code}.", {"market": "Unknown market"}
         )
-    order = order_queries.get_order_by_external_id(db, ctx.company_id, order_id)
-    if not order:
-        raise not_found_error("Order")
+    order = _load_order(db, ctx, order_id)
     gazetteer = _load_gazetteer(db)
     placement = locate_destination(order.destination, gazetteer)
     if placement.market == target.code:
@@ -592,10 +876,7 @@ def compare_order_markets(
             f"{order.external_id} already ships to {target.name}.",
             {"market": "Pick a different market"},
         )
-    supplier = map_queries.get_supplier_by_name_key(
-        db, ctx.company_id, supplier_name_key(order.supplier)
-    )
-    docs = _documents_by_supplier(db, [supplier])[supplier.id] if supplier else None
+    docs = _supplier_documents(db, ctx, order)
     requirements = _requirements_by_market(db)
     result = compare_requirements(
         order,
@@ -605,17 +886,5 @@ def compare_order_markets(
         requirements.get(target.code, []),
         docs,
     )
-    log.info(
-        "trade_map.compared",
-        extra={
-            "company_id": str(ctx.company_id),
-            "order_id": order.external_id,
-            "from_market": result.from_market,
-            "to_market": result.to_market,
-            "reuse": len(result.reuse),
-            "reevaluate": len(result.reevaluate),
-            "unknown": len(result.unknown),
-            "supplier_record": supplier is not None,
-        },
-    )
+    _log_comparison(ctx, order, result, docs is not None)
     return result

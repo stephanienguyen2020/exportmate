@@ -195,6 +195,88 @@ def test_compare_markets(client, reference):
     assert error_code("orderId=PO-1&market=XX") == (422, "unknown_market")
     assert error_code("orderId=PO-404&market=US") == (404, "not_found")
     assert error_code("orderId=PO-1") == (422, "invalid_input")
+    assert error_code("orderId=PO-1&market=US&shipDate=2027-01-01") == (422, "invalid_input")
+
+
+def test_compare_ship_date_uses_checklist_dates(client, reference):
+    headers = onboard(client, "lan@example.com")
+    seed_company("lan@example.com")
+    import_orders(client, headers, MAP_CSV)
+
+    early = client.get(
+        "/api/v1/trade-map/compare?orderId=PO-1&shipDate=2026-07-01", headers=headers
+    )
+    assert early.status_code == 200, early.text
+    result = early.json()["data"]
+    assert result["kind"] == "ship_date"
+    assert (result["fromShipDate"], result["toShipDate"]) == ("2026-10-27", "2026-07-01")
+    moved = {item["title"]: item["tag"] for item in result["reevaluate"]}
+    assert moved["Formaldehyde emission test"] is None
+    assert "Timber legality evidence" not in moved
+    assert any(item["title"] == "Timber legality evidence" for item in result["reuse"])
+    assert any(
+        "Transit time" in item["note"] or item["title"] == "Arrival date"
+        for item in result["unknown"]
+    )
+
+    later = client.get(
+        "/api/v1/trade-map/compare?orderId=PO-2&shipDate=2027-02-01", headers=headers
+    )
+    assert later.status_code == 200, later.text
+    changed = {item["title"]: item["tag"] for item in later.json()["data"]["reevaluate"]}
+    assert changed["Section 232 tariff category"] == "Changes"
+    same = client.get("/api/v1/trade-map/compare?orderId=PO-1&shipDate=2026-10-27", headers=headers)
+    assert same.status_code == 422
+    assert same.json()["error"]["code"] == "same_date"
+
+
+def test_compare_route_names_what_to_recheck_and_not_a_freight_quote(client, reference):
+    headers = onboard(client, "lan@example.com")
+    seed_company("lan@example.com")
+    import_orders(client, headers, MAP_CSV)
+
+    via = client.get("/api/v1/trade-map/compare?orderId=PO-1&via=sg", headers=headers)
+    assert via.status_code == 200, via.text
+    result = via.json()["data"]
+    assert result["kind"] == "route"
+    assert (result["via"], result["viaName"]) == ("SG", "Singapore")
+    assert result["distanceKm"] > 0
+    assert [item["title"] for item in result["reevaluate"]] == ["Proof of origin"]
+    assert any("not a voyage" in line for line in result["assumptions"])
+    assert {item["title"] for item in result["unknown"]} >= {
+        "Freight cost",
+        "Sailing time",
+        "Port congestion and insurance",
+    }
+
+    direct = client.get("/api/v1/trade-map/compare?orderId=PO-1&via=direct", headers=headers)
+    assert direct.status_code == 200, direct.text
+    assert direct.json()["data"]["reevaluate"] == []
+    assert any(item["title"] == "Proof of origin" for item in direct.json()["data"]["reuse"])
+    unknown = client.get("/api/v1/trade-map/compare?orderId=PO-1&via=XX", headers=headers)
+    assert unknown.status_code == 422
+    assert unknown.json()["error"]["code"] == "unknown_route"
+
+
+def test_checklists_follow_the_product_not_only_wood(client, reference):
+    headers = onboard(client, "lan@example.com")
+    import_orders(
+        client,
+        headers,
+        "id,product,supplier,destination,value,shipDate,hsCode\n"
+        'PO-F,Milk powder,Dairy Co,"Rotterdam, NL",8000,2026-11-02,0401.10\n'
+        'PO-T,Cotton shirts,Textile Co,"Hamburg, DE",9000,2026-11-03,6109.10\n'
+        'PO-E,Wireless handsets,Radio Co,"Rotterdam, NL",12000,2026-11-04,8517.12\n',
+    )
+    orders = orders_by_id(get_map(client, headers))
+    food = {c["requirementKey"] for c in orders["PO-F"]["checks"]}
+    textile = {c["requirementKey"] for c in orders["PO-T"]["checks"]}
+    electronics = {c["requirementKey"] for c in orders["PO-E"]["checks"]}
+    assert "food-trace" in food
+    assert "legality" not in food and "geolocation" not in food
+    assert "fibre-label" in textile and "food-trace" not in textile
+    assert "rohs" in electronics and "fibre-label" not in electronics
+    assert "ispm15" in food and "origin" in food
 
 
 def test_market_requirements_cite_their_official_text(client, reference):

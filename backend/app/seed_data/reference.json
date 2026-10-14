@@ -1,145 +1,1308 @@
 {
   "_note": "Shared reference data for the trade map, loaded into Postgres by `python -m app.seed_reference_data`. Coordinates are [longitude, latitude]. Each market requirement cites an official text (`source`: a document key in regulation_sources.json) and the sentence that sets it (`quote`). Not legal advice (docs/REQUIREMENTS.md 4.5).",
   "documentKinds": [
-    { "kind": "legality", "label": "Timber legality evidence" },
-    { "kind": "geolocation", "label": "Plot-level geolocation" },
-    { "kind": "species", "label": "Species & harvest-country declaration" },
-    { "kind": "formaldehyde", "label": "Formaldehyde emission test" },
-    { "kind": "inputs", "label": "Core-veneer origin certification" },
-    { "kind": "chain", "label": "Chain-of-custody certificate" }
+    {
+      "kind": "legality",
+      "label": "Timber legality evidence"
+    },
+    {
+      "kind": "geolocation",
+      "label": "Plot-level geolocation"
+    },
+    {
+      "kind": "species",
+      "label": "Species & harvest-country declaration"
+    },
+    {
+      "kind": "formaldehyde",
+      "label": "Formaldehyde emission test"
+    },
+    {
+      "kind": "inputs",
+      "label": "Core-veneer origin certification"
+    },
+    {
+      "kind": "chain",
+      "label": "Chain-of-custody certificate"
+    },
+    {
+      "kind": "traceability",
+      "label": "Food traceability record"
+    },
+    {
+      "kind": "rohs",
+      "label": "RoHS substance declaration"
+    }
   ],
   "markets": [
-    { "code": "EU", "name": "European Union", "shortName": "EU", "hub": [9, 50.5], "searchTerms": ["EU", "EUDR", "European", "Europe"] },
-    { "code": "UK", "name": "United Kingdom", "shortName": "UK", "hub": [-4, 54.5], "searchTerms": ["UK", "U.K.", "United Kingdom", "Britain", "British"] },
-    { "code": "US", "name": "United States", "shortName": "US", "hub": [-97, 38.5], "searchTerms": ["US", "U.S.", "USA", "United States", "American", "Section 232", "Lacey"] },
-    { "code": "CA", "name": "Canada", "shortName": "Canada", "hub": [-100, 57], "searchTerms": ["Canada", "Canadian"] },
-    { "code": "JP", "name": "Japan", "shortName": "Japan", "hub": [138.5, 36.5], "searchTerms": ["Japan", "Japanese"] },
-    { "code": "KR", "name": "South Korea", "shortName": "Korea", "hub": [127.8, 36.4], "searchTerms": ["Korea", "Korean"] },
-    { "code": "SG", "name": "Singapore", "shortName": "Singapore", "hub": [103.8, 1.35], "searchTerms": ["Singapore"] },
-    { "code": "AU", "name": "Australia", "shortName": "Australia", "hub": [134, -25.5], "searchTerms": ["Australia", "Australian"] }
+    {
+      "code": "EU",
+      "name": "European Union",
+      "shortName": "EU",
+      "hub": [
+        9,
+        50.5
+      ],
+      "searchTerms": [
+        "EU",
+        "EUDR",
+        "European",
+        "Europe"
+      ]
+    },
+    {
+      "code": "UK",
+      "name": "United Kingdom",
+      "shortName": "UK",
+      "hub": [
+        -4,
+        54.5
+      ],
+      "searchTerms": [
+        "UK",
+        "U.K.",
+        "United Kingdom",
+        "Britain",
+        "British"
+      ]
+    },
+    {
+      "code": "US",
+      "name": "United States",
+      "shortName": "US",
+      "hub": [
+        -97,
+        38.5
+      ],
+      "searchTerms": [
+        "US",
+        "U.S.",
+        "USA",
+        "United States",
+        "American",
+        "Section 232",
+        "Lacey"
+      ]
+    },
+    {
+      "code": "CA",
+      "name": "Canada",
+      "shortName": "Canada",
+      "hub": [
+        -100,
+        57
+      ],
+      "searchTerms": [
+        "Canada",
+        "Canadian"
+      ]
+    },
+    {
+      "code": "JP",
+      "name": "Japan",
+      "shortName": "Japan",
+      "hub": [
+        138.5,
+        36.5
+      ],
+      "searchTerms": [
+        "Japan",
+        "Japanese"
+      ]
+    },
+    {
+      "code": "KR",
+      "name": "South Korea",
+      "shortName": "Korea",
+      "hub": [
+        127.8,
+        36.4
+      ],
+      "searchTerms": [
+        "Korea",
+        "Korean"
+      ]
+    },
+    {
+      "code": "SG",
+      "name": "Singapore",
+      "shortName": "Singapore",
+      "hub": [
+        103.8,
+        1.35
+      ],
+      "searchTerms": [
+        "Singapore"
+      ]
+    },
+    {
+      "code": "AU",
+      "name": "Australia",
+      "shortName": "Australia",
+      "hub": [
+        134,
+        -25.5
+      ],
+      "searchTerms": [
+        "Australia",
+        "Australian"
+      ]
+    }
   ],
   "countries": [
-    { "alpha2": "AT", "numeric": "040", "name": "Austria", "market": "EU" },
-    { "alpha2": "BE", "numeric": "056", "name": "Belgium", "market": "EU", "center": [4.5, 50.6] },
-    { "alpha2": "BG", "numeric": "100", "name": "Bulgaria", "market": "EU" },
-    { "alpha2": "HR", "numeric": "191", "name": "Croatia", "market": "EU" },
-    { "alpha2": "CY", "numeric": "196", "name": "Cyprus", "market": "EU" },
-    { "alpha2": "CZ", "numeric": "203", "name": "Czechia", "market": "EU" },
-    { "alpha2": "DK", "numeric": "208", "name": "Denmark", "market": "EU", "center": [9.5, 56] },
-    { "alpha2": "EE", "numeric": "233", "name": "Estonia", "market": "EU" },
-    { "alpha2": "FI", "numeric": "246", "name": "Finland", "market": "EU" },
-    { "alpha2": "FR", "numeric": "250", "name": "France", "market": "EU", "center": [2.3, 46.6] },
-    { "alpha2": "DE", "numeric": "276", "name": "Germany", "market": "EU", "center": [10.4, 51.1] },
-    { "alpha2": "GR", "numeric": "300", "name": "Greece", "market": "EU", "center": [22, 39.1] },
-    { "alpha2": "HU", "numeric": "348", "name": "Hungary", "market": "EU" },
-    { "alpha2": "IE", "numeric": "372", "name": "Ireland", "market": "EU", "center": [-8, 53.2] },
-    { "alpha2": "IT", "numeric": "380", "name": "Italy", "market": "EU", "center": [12.5, 42.8] },
-    { "alpha2": "LV", "numeric": "428", "name": "Latvia", "market": "EU" },
-    { "alpha2": "LT", "numeric": "440", "name": "Lithuania", "market": "EU" },
-    { "alpha2": "LU", "numeric": "442", "name": "Luxembourg", "market": "EU" },
-    { "alpha2": "MT", "numeric": "470", "name": "Malta", "market": "EU" },
-    { "alpha2": "NL", "numeric": "528", "name": "Netherlands", "market": "EU", "center": [5.3, 52.1] },
-    { "alpha2": "PL", "numeric": "616", "name": "Poland", "market": "EU", "center": [19.4, 52.1] },
-    { "alpha2": "PT", "numeric": "620", "name": "Portugal", "market": "EU", "center": [-8.2, 39.6] },
-    { "alpha2": "RO", "numeric": "642", "name": "Romania", "market": "EU" },
-    { "alpha2": "SK", "numeric": "703", "name": "Slovakia", "market": "EU" },
-    { "alpha2": "SI", "numeric": "705", "name": "Slovenia", "market": "EU" },
-    { "alpha2": "ES", "numeric": "724", "name": "Spain", "market": "EU", "center": [-3.7, 40.3] },
-    { "alpha2": "SE", "numeric": "752", "name": "Sweden", "market": "EU", "center": [15, 60.1] },
-    { "alpha2": "GB", "numeric": "826", "name": "United Kingdom", "market": "UK", "center": [-1.5, 52.6] },
-    { "alpha2": "US", "numeric": "840", "name": "United States", "market": "US", "center": [-97, 38.5] },
-    { "alpha2": "CA", "numeric": "124", "name": "Canada", "market": "CA", "center": [-96, 56] },
-    { "alpha2": "JP", "numeric": "392", "name": "Japan", "market": "JP", "center": [138, 36.2] },
-    { "alpha2": "KR", "numeric": "410", "name": "South Korea", "market": "KR", "center": [127.8, 36.3] },
-    { "alpha2": "SG", "numeric": "702", "name": "Singapore", "market": "SG", "center": [103.8, 1.35] },
-    { "alpha2": "AU", "numeric": "036", "name": "Australia", "market": "AU", "center": [134, -25.5] },
-    { "alpha2": "VN", "numeric": "704", "name": "Vietnam" },
-    { "alpha2": "LA", "numeric": "418", "name": "Laos" }
+    {
+      "alpha2": "AT",
+      "numeric": "040",
+      "name": "Austria",
+      "market": "EU"
+    },
+    {
+      "alpha2": "BE",
+      "numeric": "056",
+      "name": "Belgium",
+      "market": "EU",
+      "center": [
+        4.5,
+        50.6
+      ]
+    },
+    {
+      "alpha2": "BG",
+      "numeric": "100",
+      "name": "Bulgaria",
+      "market": "EU"
+    },
+    {
+      "alpha2": "HR",
+      "numeric": "191",
+      "name": "Croatia",
+      "market": "EU"
+    },
+    {
+      "alpha2": "CY",
+      "numeric": "196",
+      "name": "Cyprus",
+      "market": "EU"
+    },
+    {
+      "alpha2": "CZ",
+      "numeric": "203",
+      "name": "Czechia",
+      "market": "EU"
+    },
+    {
+      "alpha2": "DK",
+      "numeric": "208",
+      "name": "Denmark",
+      "market": "EU",
+      "center": [
+        9.5,
+        56
+      ]
+    },
+    {
+      "alpha2": "EE",
+      "numeric": "233",
+      "name": "Estonia",
+      "market": "EU"
+    },
+    {
+      "alpha2": "FI",
+      "numeric": "246",
+      "name": "Finland",
+      "market": "EU"
+    },
+    {
+      "alpha2": "FR",
+      "numeric": "250",
+      "name": "France",
+      "market": "EU",
+      "center": [
+        2.3,
+        46.6
+      ]
+    },
+    {
+      "alpha2": "DE",
+      "numeric": "276",
+      "name": "Germany",
+      "market": "EU",
+      "center": [
+        10.4,
+        51.1
+      ]
+    },
+    {
+      "alpha2": "GR",
+      "numeric": "300",
+      "name": "Greece",
+      "market": "EU",
+      "center": [
+        22,
+        39.1
+      ]
+    },
+    {
+      "alpha2": "HU",
+      "numeric": "348",
+      "name": "Hungary",
+      "market": "EU"
+    },
+    {
+      "alpha2": "IE",
+      "numeric": "372",
+      "name": "Ireland",
+      "market": "EU",
+      "center": [
+        -8,
+        53.2
+      ]
+    },
+    {
+      "alpha2": "IT",
+      "numeric": "380",
+      "name": "Italy",
+      "market": "EU",
+      "center": [
+        12.5,
+        42.8
+      ]
+    },
+    {
+      "alpha2": "LV",
+      "numeric": "428",
+      "name": "Latvia",
+      "market": "EU"
+    },
+    {
+      "alpha2": "LT",
+      "numeric": "440",
+      "name": "Lithuania",
+      "market": "EU"
+    },
+    {
+      "alpha2": "LU",
+      "numeric": "442",
+      "name": "Luxembourg",
+      "market": "EU"
+    },
+    {
+      "alpha2": "MT",
+      "numeric": "470",
+      "name": "Malta",
+      "market": "EU"
+    },
+    {
+      "alpha2": "NL",
+      "numeric": "528",
+      "name": "Netherlands",
+      "market": "EU",
+      "center": [
+        5.3,
+        52.1
+      ]
+    },
+    {
+      "alpha2": "PL",
+      "numeric": "616",
+      "name": "Poland",
+      "market": "EU",
+      "center": [
+        19.4,
+        52.1
+      ]
+    },
+    {
+      "alpha2": "PT",
+      "numeric": "620",
+      "name": "Portugal",
+      "market": "EU",
+      "center": [
+        -8.2,
+        39.6
+      ]
+    },
+    {
+      "alpha2": "RO",
+      "numeric": "642",
+      "name": "Romania",
+      "market": "EU"
+    },
+    {
+      "alpha2": "SK",
+      "numeric": "703",
+      "name": "Slovakia",
+      "market": "EU"
+    },
+    {
+      "alpha2": "SI",
+      "numeric": "705",
+      "name": "Slovenia",
+      "market": "EU"
+    },
+    {
+      "alpha2": "ES",
+      "numeric": "724",
+      "name": "Spain",
+      "market": "EU",
+      "center": [
+        -3.7,
+        40.3
+      ]
+    },
+    {
+      "alpha2": "SE",
+      "numeric": "752",
+      "name": "Sweden",
+      "market": "EU",
+      "center": [
+        15,
+        60.1
+      ]
+    },
+    {
+      "alpha2": "GB",
+      "numeric": "826",
+      "name": "United Kingdom",
+      "market": "UK",
+      "center": [
+        -1.5,
+        52.6
+      ]
+    },
+    {
+      "alpha2": "US",
+      "numeric": "840",
+      "name": "United States",
+      "market": "US",
+      "center": [
+        -97,
+        38.5
+      ]
+    },
+    {
+      "alpha2": "CA",
+      "numeric": "124",
+      "name": "Canada",
+      "market": "CA",
+      "center": [
+        -96,
+        56
+      ]
+    },
+    {
+      "alpha2": "JP",
+      "numeric": "392",
+      "name": "Japan",
+      "market": "JP",
+      "center": [
+        138,
+        36.2
+      ]
+    },
+    {
+      "alpha2": "KR",
+      "numeric": "410",
+      "name": "South Korea",
+      "market": "KR",
+      "center": [
+        127.8,
+        36.3
+      ]
+    },
+    {
+      "alpha2": "SG",
+      "numeric": "702",
+      "name": "Singapore",
+      "market": "SG",
+      "center": [
+        103.8,
+        1.35
+      ]
+    },
+    {
+      "alpha2": "AU",
+      "numeric": "036",
+      "name": "Australia",
+      "market": "AU",
+      "center": [
+        134,
+        -25.5
+      ]
+    },
+    {
+      "alpha2": "VN",
+      "numeric": "704",
+      "name": "Vietnam",
+      "center": [
+        107.6,
+        16.1
+      ]
+    },
+    {
+      "alpha2": "LA",
+      "numeric": "418",
+      "name": "Laos"
+    },
+    {
+      "alpha2": "MY",
+      "numeric": "458",
+      "name": "Malaysia",
+      "center": [
+        101.7,
+        3.1
+      ]
+    },
+    {
+      "alpha2": "HK",
+      "numeric": "344",
+      "name": "Hong Kong",
+      "center": [
+        114.17,
+        22.32
+      ]
+    },
+    {
+      "alpha2": "AE",
+      "numeric": "784",
+      "name": "United Arab Emirates",
+      "center": [
+        54.37,
+        24.47
+      ]
+    },
+    {
+      "alpha2": "LK",
+      "numeric": "144",
+      "name": "Sri Lanka",
+      "center": [
+        80.77,
+        7.87
+      ]
+    }
   ],
   "ports": [
-    { "name": "Rotterdam", "country": "NL", "at": [4.4, 51.92] },
-    { "name": "Antwerp", "country": "BE", "at": [4.4, 51.22] },
-    { "name": "Hamburg", "country": "DE", "at": [9.97, 53.55] },
-    { "name": "Bremerhaven", "country": "DE", "at": [8.58, 53.54] },
-    { "name": "Felixstowe", "country": "GB", "at": [1.35, 51.96] },
-    { "name": "Southampton", "country": "GB", "at": [-1.4, 50.9] },
-    { "name": "Le Havre", "country": "FR", "at": [0.11, 49.49] },
-    { "name": "Gdansk", "country": "PL", "at": [18.65, 54.35] },
-    { "name": "Valencia", "country": "ES", "at": [-0.33, 39.45] },
-    { "name": "Barcelona", "country": "ES", "at": [2.17, 41.38] },
-    { "name": "Genoa", "country": "IT", "at": [8.93, 44.41] },
-    { "name": "Piraeus", "country": "GR", "at": [23.63, 37.94] },
-    { "name": "Dublin", "country": "IE", "at": [-6.2, 53.35] },
-    { "name": "Los Angeles", "country": "US", "at": [-118.27, 33.74] },
-    { "name": "Long Beach", "country": "US", "at": [-118.19, 33.77] },
-    { "name": "Oakland", "country": "US", "at": [-122.29, 37.8] },
-    { "name": "Seattle", "country": "US", "at": [-122.34, 47.6] },
-    { "name": "Houston", "country": "US", "at": [-95.27, 29.73] },
-    { "name": "Savannah", "country": "US", "at": [-81.09, 32.08] },
-    { "name": "Charleston", "country": "US", "at": [-79.93, 32.78] },
-    { "name": "Norfolk", "country": "US", "at": [-76.3, 36.85] },
-    { "name": "New York", "country": "US", "at": [-74, 40.67] },
-    { "name": "Vancouver", "country": "CA", "at": [-123.1, 49.29] },
-    { "name": "Montreal", "country": "CA", "at": [-73.55, 45.5] },
-    { "name": "Toronto", "country": "CA", "at": [-79.38, 43.65] },
-    { "name": "Tokyo", "country": "JP", "at": [139.78, 35.62] },
-    { "name": "Yokohama", "country": "JP", "at": [139.64, 35.45] },
-    { "name": "Osaka", "country": "JP", "at": [135.43, 34.64] },
-    { "name": "Kobe", "country": "JP", "at": [135.2, 34.68] },
-    { "name": "Nagoya", "country": "JP", "at": [136.88, 35.08] },
-    { "name": "Busan", "country": "KR", "at": [129.04, 35.1] },
-    { "name": "Incheon", "country": "KR", "at": [126.6, 37.46] },
-    { "name": "Singapore", "country": "SG", "at": [103.84, 1.26] },
-    { "name": "Sydney", "country": "AU", "at": [151.2, -33.86] },
-    { "name": "Melbourne", "country": "AU", "at": [144.92, -37.83] },
-    { "name": "Brisbane", "country": "AU", "at": [153.17, -27.38] }
+    {
+      "name": "Rotterdam",
+      "country": "NL",
+      "at": [
+        4.4,
+        51.92
+      ]
+    },
+    {
+      "name": "Antwerp",
+      "country": "BE",
+      "at": [
+        4.4,
+        51.22
+      ]
+    },
+    {
+      "name": "Hamburg",
+      "country": "DE",
+      "at": [
+        9.97,
+        53.55
+      ]
+    },
+    {
+      "name": "Bremerhaven",
+      "country": "DE",
+      "at": [
+        8.58,
+        53.54
+      ]
+    },
+    {
+      "name": "Felixstowe",
+      "country": "GB",
+      "at": [
+        1.35,
+        51.96
+      ]
+    },
+    {
+      "name": "Southampton",
+      "country": "GB",
+      "at": [
+        -1.4,
+        50.9
+      ]
+    },
+    {
+      "name": "Le Havre",
+      "country": "FR",
+      "at": [
+        0.11,
+        49.49
+      ]
+    },
+    {
+      "name": "Gdansk",
+      "country": "PL",
+      "at": [
+        18.65,
+        54.35
+      ]
+    },
+    {
+      "name": "Valencia",
+      "country": "ES",
+      "at": [
+        -0.33,
+        39.45
+      ]
+    },
+    {
+      "name": "Barcelona",
+      "country": "ES",
+      "at": [
+        2.17,
+        41.38
+      ]
+    },
+    {
+      "name": "Genoa",
+      "country": "IT",
+      "at": [
+        8.93,
+        44.41
+      ]
+    },
+    {
+      "name": "Piraeus",
+      "country": "GR",
+      "at": [
+        23.63,
+        37.94
+      ]
+    },
+    {
+      "name": "Dublin",
+      "country": "IE",
+      "at": [
+        -6.2,
+        53.35
+      ]
+    },
+    {
+      "name": "Los Angeles",
+      "country": "US",
+      "at": [
+        -118.27,
+        33.74
+      ]
+    },
+    {
+      "name": "Long Beach",
+      "country": "US",
+      "at": [
+        -118.19,
+        33.77
+      ]
+    },
+    {
+      "name": "Oakland",
+      "country": "US",
+      "at": [
+        -122.29,
+        37.8
+      ]
+    },
+    {
+      "name": "Seattle",
+      "country": "US",
+      "at": [
+        -122.34,
+        47.6
+      ]
+    },
+    {
+      "name": "Houston",
+      "country": "US",
+      "at": [
+        -95.27,
+        29.73
+      ]
+    },
+    {
+      "name": "Savannah",
+      "country": "US",
+      "at": [
+        -81.09,
+        32.08
+      ]
+    },
+    {
+      "name": "Charleston",
+      "country": "US",
+      "at": [
+        -79.93,
+        32.78
+      ]
+    },
+    {
+      "name": "Norfolk",
+      "country": "US",
+      "at": [
+        -76.3,
+        36.85
+      ]
+    },
+    {
+      "name": "New York",
+      "country": "US",
+      "at": [
+        -74,
+        40.67
+      ]
+    },
+    {
+      "name": "Vancouver",
+      "country": "CA",
+      "at": [
+        -123.1,
+        49.29
+      ]
+    },
+    {
+      "name": "Montreal",
+      "country": "CA",
+      "at": [
+        -73.55,
+        45.5
+      ]
+    },
+    {
+      "name": "Toronto",
+      "country": "CA",
+      "at": [
+        -79.38,
+        43.65
+      ]
+    },
+    {
+      "name": "Tokyo",
+      "country": "JP",
+      "at": [
+        139.78,
+        35.62
+      ]
+    },
+    {
+      "name": "Yokohama",
+      "country": "JP",
+      "at": [
+        139.64,
+        35.45
+      ]
+    },
+    {
+      "name": "Osaka",
+      "country": "JP",
+      "at": [
+        135.43,
+        34.64
+      ]
+    },
+    {
+      "name": "Kobe",
+      "country": "JP",
+      "at": [
+        135.2,
+        34.68
+      ]
+    },
+    {
+      "name": "Nagoya",
+      "country": "JP",
+      "at": [
+        136.88,
+        35.08
+      ]
+    },
+    {
+      "name": "Busan",
+      "country": "KR",
+      "at": [
+        129.04,
+        35.1
+      ]
+    },
+    {
+      "name": "Incheon",
+      "country": "KR",
+      "at": [
+        126.6,
+        37.46
+      ]
+    },
+    {
+      "name": "Singapore",
+      "country": "SG",
+      "at": [
+        103.84,
+        1.26
+      ]
+    },
+    {
+      "name": "Sydney",
+      "country": "AU",
+      "at": [
+        151.2,
+        -33.86
+      ]
+    },
+    {
+      "name": "Melbourne",
+      "country": "AU",
+      "at": [
+        144.92,
+        -37.83
+      ]
+    },
+    {
+      "name": "Brisbane",
+      "country": "AU",
+      "at": [
+        153.17,
+        -27.38
+      ]
+    },
+    {
+      "name": "Port Klang",
+      "country": "MY",
+      "at": [
+        101.39,
+        3.0
+      ]
+    },
+    {
+      "name": "Hong Kong",
+      "country": "HK",
+      "at": [
+        114.17,
+        22.29
+      ]
+    },
+    {
+      "name": "Jebel Ali",
+      "country": "AE",
+      "at": [
+        55.06,
+        24.99
+      ]
+    },
+    {
+      "name": "Colombo",
+      "country": "LK",
+      "at": [
+        79.85,
+        6.95
+      ]
+    }
   ],
   "requirements": {
     "EU": [
-      {"key": "legality", "title": "Timber legality evidence", "level": "supplier", "documentKind": "legality", "why": "The buyer's due diligence must show the wood was harvested legally.", "source": "eudr-consolidated-2026-09-18", "quote": "Article 3: Relevant commodities and relevant products shall not be placed or made available on the market or exported, unless all the following conditions are fulfilled: (a) they are deforestation-free; (b) they have been produced in accordance with the relevant legislation of the country of production; …"},
-      {"key": "geolocation", "title": "Plot-level geolocation", "level": "supplier", "documentKind": "geolocation", "why": "EU deforestation rules ask for the plots where the wood was harvested.", "source": "eudr-consolidated-2026-09-18", "quote": "Article 9(1)(d): the geolocation of all plots of land where the relevant commodities that the relevant product contains, or has been made using, were produced, as well as the date or time range of production"},
-      {"key": "dds", "title": "Due diligence data for the EU importer", "level": "shipment", "form": "Lot data with geolocation and legality references", "why": "Your buyer files a due diligence statement for each shipment.", "source": "eudr-consolidated-2026-09-18", "quote": "Article 3(c): they are covered by a due diligence statement or a simplified declaration, as required by the relevant provisions of this Regulation."},
-      {"key": "formaldehyde", "title": "Formaldehyde emission test", "level": "supplier", "documentKind": "formaldehyde", "hsPrefixes": ["4412", "9403"], "why": "From 6 August 2026, furniture and wood-based articles may release at most 0.062 mg/m³ of formaldehyde under the Appendix 14 test conditions.", "source": "reach-formaldehyde-2023-1464", "quote": "Annex XVII, entry 77: Shall not be placed on the market in articles, after 6 August 2026, if, under the test conditions specified in Appendix 14, the concentration of formaldehyde released from those articles exceeds: (a) 0,062 mg/m3 for furniture and wood-based articles; (b) 0,080 mg/m3 for articles other than furniture and wood-based articles."},
-      {"key": "origin", "title": "Proof of origin", "level": "shipment", "form": "EVFTA certificate of origin or origin declaration", "why": "Issued per shipment. The form decides which tariff preference applies.", "source": "evfta-2020", "quote": "Protocol 1, Article 15(2): Products originating in Viet Nam shall, on importation into the Union, benefit from this Agreement upon submission of any of the following proofs of origin: (a) a certificate of origin made out in accordance with Articles 16 (Procedure for the Issuance of a Certificate of Origin) to 18 (Issuance of a Duplicate Certificate of Origin); …"},
-      {"key": "ispm15", "title": "ISPM 15 wood packaging", "level": "shipment", "form": "Heat-treated, marked pallets and crates", "why": "Applies to wooden packaging in every market on this map.", "source": "ispm-15-2018", "quote": "Approved phytosanitary measures that significantly reduce the risk of pest introduction and spread via wood packaging material consist of the use of debarked wood (with a specified tolerance for remaining bark) and the application of approved treatments (as prescribed in Annex 1)."}
+      {
+        "key": "legality",
+        "title": "Timber legality evidence",
+        "level": "supplier",
+        "documentKind": "legality",
+        "why": "The buyer's due diligence must show the wood was harvested legally.",
+        "source": "eudr-consolidated-2026-09-18",
+        "quote": "Article 3: Relevant commodities and relevant products shall not be placed or made available on the market or exported, unless all the following conditions are fulfilled: (a) they are deforestation-free; (b) they have been produced in accordance with the relevant legislation of the country of production; …",
+        "hsPrefixes": [
+          "44",
+          "9401",
+          "9403"
+        ]
+      },
+      {
+        "key": "geolocation",
+        "title": "Plot-level geolocation",
+        "level": "supplier",
+        "documentKind": "geolocation",
+        "why": "EU deforestation rules ask for the plots where the wood was harvested.",
+        "source": "eudr-consolidated-2026-09-18",
+        "quote": "Article 9(1)(d): the geolocation of all plots of land where the relevant commodities that the relevant product contains, or has been made using, were produced, as well as the date or time range of production",
+        "hsPrefixes": [
+          "44",
+          "9401",
+          "9403"
+        ]
+      },
+      {
+        "key": "dds",
+        "title": "Due diligence data for the EU importer",
+        "level": "shipment",
+        "form": "Lot data with geolocation and legality references",
+        "why": "Your buyer files a due diligence statement for each shipment.",
+        "source": "eudr-consolidated-2026-09-18",
+        "quote": "Article 3(c): they are covered by a due diligence statement or a simplified declaration, as required by the relevant provisions of this Regulation.",
+        "hsPrefixes": [
+          "44",
+          "9401",
+          "9403"
+        ]
+      },
+      {
+        "key": "formaldehyde",
+        "title": "Formaldehyde emission test",
+        "level": "supplier",
+        "documentKind": "formaldehyde",
+        "hsPrefixes": [
+          "4412",
+          "9403"
+        ],
+        "why": "From 6 August 2026, furniture and wood-based articles may release at most 0.062 mg/m³ of formaldehyde under the Appendix 14 test conditions.",
+        "source": "reach-formaldehyde-2023-1464",
+        "quote": "Annex XVII, entry 77: Shall not be placed on the market in articles, after 6 August 2026, if, under the test conditions specified in Appendix 14, the concentration of formaldehyde released from those articles exceeds: (a) 0,062 mg/m3 for furniture and wood-based articles; (b) 0,080 mg/m3 for articles other than furniture and wood-based articles.",
+        "effectiveOn": "2026-08-06"
+      },
+      {
+        "key": "origin",
+        "title": "Proof of origin",
+        "level": "shipment",
+        "form": "EVFTA certificate of origin or origin declaration",
+        "why": "Issued per shipment. The form decides which tariff preference applies.",
+        "source": "evfta-2020",
+        "quote": "Protocol 1, Article 15(2): Products originating in Viet Nam shall, on importation into the Union, benefit from this Agreement upon submission of any of the following proofs of origin: (a) a certificate of origin made out in accordance with Articles 16 (Procedure for the Issuance of a Certificate of Origin) to 18 (Issuance of a Duplicate Certificate of Origin); …",
+        "routeSensitive": true
+      },
+      {
+        "key": "ispm15",
+        "title": "ISPM 15 wood packaging",
+        "level": "shipment",
+        "form": "Heat-treated, marked pallets and crates",
+        "why": "Applies to wooden packaging in every market on this map.",
+        "source": "ispm-15-2018",
+        "quote": "Approved phytosanitary measures that significantly reduce the risk of pest introduction and spread via wood packaging material consist of the use of debarked wood (with a specified tolerance for remaining bark) and the application of approved treatments (as prescribed in Annex 1)."
+      },
+      {
+        "key": "food-trace",
+        "title": "Food traceability record",
+        "level": "supplier",
+        "documentKind": "traceability",
+        "hsPrefixes": [
+          "01",
+          "02",
+          "03",
+          "04",
+          "07",
+          "08",
+          "09",
+          "10",
+          "11",
+          "12",
+          "15",
+          "16",
+          "17",
+          "18",
+          "19",
+          "20",
+          "21",
+          "22",
+          "23"
+        ],
+        "why": "EU food law requires one step up and one step down traceability for food.",
+        "source": "general-food-law-178-2002",
+        "quote": "Article 18(1): The traceability of food, feed, food-producing animals, and any other substance intended to be, or expected to be, incorporated into a food or feed shall be established at all stages of production, processing and distribution."
+      },
+      {
+        "key": "fibre-label",
+        "title": "Fibre composition label",
+        "level": "shipment",
+        "form": "Fibre composition on the label and in the trade documents",
+        "hsPrefixes": [
+          "50",
+          "51",
+          "52",
+          "53",
+          "54",
+          "55",
+          "56",
+          "57",
+          "58",
+          "59",
+          "60",
+          "61",
+          "62",
+          "63"
+        ],
+        "why": "Textile products need the fibre composition before they are made available in the EU.",
+        "source": "textile-labelling-1007-2011",
+        "quote": "Article 16(1): When making a textile product available on the market, the textile fibre composition descriptions referred to in Articles 5, 7, 8 and 9 shall be indicated in catalogues and trade literature, on packaging, labels and markings in a manner that is easily legible, visible, clear and in print which is uniform as regards its size, style and font."
+      },
+      {
+        "key": "rohs",
+        "title": "RoHS substance declaration",
+        "level": "supplier",
+        "documentKind": "rohs",
+        "hsPrefixes": [
+          "8504",
+          "8517",
+          "8518",
+          "8525",
+          "8528",
+          "8541",
+          "8542"
+        ],
+        "why": "Electrical equipment placed on the EU market must stay within the Annex II substance limits.",
+        "source": "rohs-2011-65",
+        "quote": "Article 4(1): Member States shall ensure that EEE placed on the market, including cables and spare parts for its repair, its reuse, updating of its functionalities or upgrading of its capacity, does not contain the substances listed in Annex II."
+      }
     ],
     "UK": [
-      {"key": "legality", "title": "Timber legality evidence", "level": "supplier", "documentKind": "legality", "why": "UK timber rules prohibit illegally harvested wood.", "source": "eu-timber-regulation-995-2010", "quote": "Article 4: 1. The placing on the market of illegally harvested timber or timber products derived from such timber shall be prohibited. 2. Operators shall exercise due diligence when placing timber or timber products on the market."},
-      {"key": "origin", "title": "Proof of origin", "level": "shipment", "form": "UKVFTA certificate of origin or origin declaration", "why": "Issued per shipment. The form decides which tariff preference applies.", "source": "ukvfta-2021", "quote": "Products originating in Viet Nam shall, on importation into the UK, benefit from this Agreement upon submission of any of the following proofs of origin: (a) a certificate of origin made out in accordance with Articles 16 (Procedure for the Issuance of a Certificate of Origin) to 18 (Issuance of a Duplicate Certificate of Origin); …"},
-      {"key": "ispm15", "title": "ISPM 15 wood packaging", "level": "shipment", "form": "Heat-treated, marked pallets and crates", "why": "Applies to wooden packaging in every market on this map.", "source": "ispm-15-2018", "quote": "Approved phytosanitary measures that significantly reduce the risk of pest introduction and spread via wood packaging material consist of the use of debarked wood (with a specified tolerance for remaining bark) and the application of approved treatments (as prescribed in Annex 1)."}
+      {
+        "key": "legality",
+        "title": "Timber legality evidence",
+        "level": "supplier",
+        "documentKind": "legality",
+        "why": "UK timber rules prohibit illegally harvested wood.",
+        "source": "eu-timber-regulation-995-2010",
+        "quote": "Article 4: 1. The placing on the market of illegally harvested timber or timber products derived from such timber shall be prohibited. 2. Operators shall exercise due diligence when placing timber or timber products on the market.",
+        "hsPrefixes": [
+          "44",
+          "9401",
+          "9403"
+        ]
+      },
+      {
+        "key": "origin",
+        "title": "Proof of origin",
+        "level": "shipment",
+        "form": "UKVFTA certificate of origin or origin declaration",
+        "why": "Issued per shipment. The form decides which tariff preference applies.",
+        "source": "ukvfta-2021",
+        "quote": "Products originating in Viet Nam shall, on importation into the UK, benefit from this Agreement upon submission of any of the following proofs of origin: (a) a certificate of origin made out in accordance with Articles 16 (Procedure for the Issuance of a Certificate of Origin) to 18 (Issuance of a Duplicate Certificate of Origin); …",
+        "routeSensitive": true
+      },
+      {
+        "key": "ispm15",
+        "title": "ISPM 15 wood packaging",
+        "level": "shipment",
+        "form": "Heat-treated, marked pallets and crates",
+        "why": "Applies to wooden packaging in every market on this map.",
+        "source": "ispm-15-2018",
+        "quote": "Approved phytosanitary measures that significantly reduce the risk of pest introduction and spread via wood packaging material consist of the use of debarked wood (with a specified tolerance for remaining bark) and the application of approved treatments (as prescribed in Annex 1)."
+      }
     ],
     "US": [
-      {"key": "legality", "title": "Timber legality evidence", "level": "supplier", "documentKind": "legality", "why": "The Lacey Act prohibits illegally harvested wood.", "source": "lacey-act-uscode-2024", "quote": "§ 3372(a)(2): to import, export, transport, sell, receive, acquire, or purchase in interstate or foreign commerce— … (B) any plant— (i) taken, possessed, transported, or sold in violation of any law or regulation of any State, or any foreign law, that protects plants …"},
-      {"key": "species", "title": "Species & harvest-country declaration", "level": "supplier", "documentKind": "species", "why": "Feeds the Lacey Act plant declaration.", "source": "lacey-act-uscode-2024", "quote": "§ 3372(f)(1): it shall be unlawful for any person to import any plant unless the person files upon importation a declaration that contains— (A) the scientific name of any plant (including the genus and species of the plant) contained in the importation; … (C) the name of the country from which the plant was taken."},
-      {"key": "lacey", "title": "Lacey Act declaration", "level": "shipment", "form": "PPQ 505 species and harvest-country data", "why": "Filed for each shipment of covered wood products.", "source": "lacey-act-uscode-2024", "quote": "§ 3372(f)(1): it shall be unlawful for any person to import any plant unless the person files upon importation a declaration that contains— (A) the scientific name of any plant (including the genus and species of the plant) contained in the importation; … (C) the name of the country from which the plant was taken."},
-      {"key": "formaldehyde", "title": "Formaldehyde emission test", "level": "supplier", "documentKind": "formaldehyde", "acceptedStandards": ["TSCA Title VI"], "hsPrefixes": ["4412", "9403"], "why": "Composite wood in panels and furniture needs TSCA Title VI certification.", "source": "tsca-title-vi-ecfr", "quote": "§ 770.15(a): Beginning June 1, 2018, only certified composite wood products, whether in the form of panels or incorporated into component parts or finished goods, are permitted to be sold, supplied, offered for sale, or manufactured (including imported) in the United States, unless the product is specifically exempted by this part."},
-      {"key": "inputs", "title": "Core-veneer origin certification", "level": "supplier", "documentKind": "inputs", "hsPrefixes": ["4412"], "why": "US trade-remedy certification for plywood made in Vietnam.", "source": "plywood-circumvention-88fr46740", "quote": "If an exporter of hardwood plywood assembled in Vietnam claims that its hardwood plywood was not produced using any of the Chinese hardwood plywood input scenarios subject to these inquiries, it must prepare and maintain an exporter certification and documentation supporting the exporter certification (see Appendix IV)."},
-      {"key": "adcvd", "title": "Anti-dumping and countervailing duties on plywood", "level": "check", "hsPrefixes": ["4412"], "why": "Commerce found dumping and subsidies on hardwood plywood from Vietnam (July 2026) and the ITC found injury (September 2026). Duty orders follow: check the cash-deposit rate for your supplier.", "source": "plywood-adcvd-itc-91fr57383", "quote": "… an industry in the United States is materially injured by reason of imports of hardwood and decorative plywood (excluding all softwood structural plywood) from China, Indonesia, and Vietnam …"},
-      {"key": "tariff", "title": "Section 232 tariff category", "level": "check", "hsPrefixes": ["940161", "940340"], "why": "Upholstered seating and kitchen cabinets & vanities carry a 25% US tariff, rising to 30% and 50% on 1 January 2027 (91 FR 1039). Recheck landed cost.", "source": "section-232-proclamation-90fr48127", "quote": "(2) Except as otherwise provided in this proclamation, imports of certain upholstered wooden products, as listed in Annex I to this proclamation, will be subject to a 25 percent ad valorem duty rate. (3) Except as otherwise provided in this proclamation, imports of kitchen cabinets and vanities, as listed in Annex I to this proclamation, will be subject to a 25 percent ad valorem duty rate."},
-      {"key": "ispm15", "title": "ISPM 15 wood packaging", "level": "shipment", "form": "Heat-treated, marked pallets and crates", "why": "Applies to wooden packaging in every market on this map.", "source": "ispm-15-2018", "quote": "Approved phytosanitary measures that significantly reduce the risk of pest introduction and spread via wood packaging material consist of the use of debarked wood (with a specified tolerance for remaining bark) and the application of approved treatments (as prescribed in Annex 1)."}
+      {
+        "key": "legality",
+        "title": "Timber legality evidence",
+        "level": "supplier",
+        "documentKind": "legality",
+        "why": "The Lacey Act prohibits illegally harvested wood.",
+        "source": "lacey-act-uscode-2024",
+        "quote": "§ 3372(a)(2): to import, export, transport, sell, receive, acquire, or purchase in interstate or foreign commerce— … (B) any plant— (i) taken, possessed, transported, or sold in violation of any law or regulation of any State, or any foreign law, that protects plants …",
+        "hsPrefixes": [
+          "44",
+          "9401",
+          "9403"
+        ]
+      },
+      {
+        "key": "species",
+        "title": "Species & harvest-country declaration",
+        "level": "supplier",
+        "documentKind": "species",
+        "why": "Feeds the Lacey Act plant declaration.",
+        "source": "lacey-act-uscode-2024",
+        "quote": "§ 3372(f)(1): it shall be unlawful for any person to import any plant unless the person files upon importation a declaration that contains— (A) the scientific name of any plant (including the genus and species of the plant) contained in the importation; … (C) the name of the country from which the plant was taken.",
+        "hsPrefixes": [
+          "44",
+          "9401",
+          "9403"
+        ]
+      },
+      {
+        "key": "lacey",
+        "title": "Lacey Act declaration",
+        "level": "shipment",
+        "form": "PPQ 505 species and harvest-country data",
+        "why": "Filed for each shipment of covered wood products.",
+        "source": "lacey-act-uscode-2024",
+        "quote": "§ 3372(f)(1): it shall be unlawful for any person to import any plant unless the person files upon importation a declaration that contains— (A) the scientific name of any plant (including the genus and species of the plant) contained in the importation; … (C) the name of the country from which the plant was taken.",
+        "hsPrefixes": [
+          "44",
+          "9401",
+          "9403"
+        ]
+      },
+      {
+        "key": "formaldehyde",
+        "title": "Formaldehyde emission test",
+        "level": "supplier",
+        "documentKind": "formaldehyde",
+        "acceptedStandards": [
+          "TSCA Title VI"
+        ],
+        "hsPrefixes": [
+          "4412",
+          "9403"
+        ],
+        "why": "Composite wood in panels and furniture needs TSCA Title VI certification.",
+        "source": "tsca-title-vi-ecfr",
+        "quote": "§ 770.15(a): Beginning June 1, 2018, only certified composite wood products, whether in the form of panels or incorporated into component parts or finished goods, are permitted to be sold, supplied, offered for sale, or manufactured (including imported) in the United States, unless the product is specifically exempted by this part.",
+        "effectiveOn": "2018-06-01"
+      },
+      {
+        "key": "inputs",
+        "title": "Core-veneer origin certification",
+        "level": "supplier",
+        "documentKind": "inputs",
+        "hsPrefixes": [
+          "4412"
+        ],
+        "why": "US trade-remedy certification for plywood made in Vietnam.",
+        "source": "plywood-circumvention-88fr46740",
+        "quote": "If an exporter of hardwood plywood assembled in Vietnam claims that its hardwood plywood was not produced using any of the Chinese hardwood plywood input scenarios subject to these inquiries, it must prepare and maintain an exporter certification and documentation supporting the exporter certification (see Appendix IV)."
+      },
+      {
+        "key": "adcvd",
+        "title": "Anti-dumping and countervailing duties on plywood",
+        "level": "check",
+        "hsPrefixes": [
+          "4412"
+        ],
+        "why": "Commerce found dumping and subsidies on hardwood plywood from Vietnam (July 2026) and the ITC found injury (September 2026). Duty orders follow: check the cash-deposit rate for your supplier.",
+        "source": "plywood-adcvd-itc-91fr57383",
+        "quote": "… an industry in the United States is materially injured by reason of imports of hardwood and decorative plywood (excluding all softwood structural plywood) from China, Indonesia, and Vietnam …"
+      },
+      {
+        "key": "tariff",
+        "title": "Section 232 tariff category",
+        "level": "check",
+        "hsPrefixes": [
+          "940161",
+          "940340"
+        ],
+        "why": "Upholstered seating and kitchen cabinets & vanities carry a 25% US tariff, rising to 30% and 50% on 1 January 2027 (91 FR 1039). Recheck landed cost.",
+        "source": "section-232-proclamation-90fr48127",
+        "quote": "(2) Except as otherwise provided in this proclamation, imports of certain upholstered wooden products, as listed in Annex I to this proclamation, will be subject to a 25 percent ad valorem duty rate. (3) Except as otherwise provided in this proclamation, imports of kitchen cabinets and vanities, as listed in Annex I to this proclamation, will be subject to a 25 percent ad valorem duty rate.",
+        "changesOn": "2027-01-01",
+        "changeNote": "The proclamation states a 25% rate and a later increase on 1 January 2027. Recheck the rate in force on the new ship date. This is not a duty calculation."
+      },
+      {
+        "key": "ispm15",
+        "title": "ISPM 15 wood packaging",
+        "level": "shipment",
+        "form": "Heat-treated, marked pallets and crates",
+        "why": "Applies to wooden packaging in every market on this map.",
+        "source": "ispm-15-2018",
+        "quote": "Approved phytosanitary measures that significantly reduce the risk of pest introduction and spread via wood packaging material consist of the use of debarked wood (with a specified tolerance for remaining bark) and the application of approved treatments (as prescribed in Annex 1)."
+      },
+      {
+        "key": "prior-notice",
+        "title": "FDA prior notice",
+        "level": "shipment",
+        "form": "Prior notice for each food article before it is offered for import",
+        "hsPrefixes": [
+          "01",
+          "02",
+          "03",
+          "04",
+          "07",
+          "08",
+          "09",
+          "10",
+          "11",
+          "12",
+          "15",
+          "16",
+          "17",
+          "18",
+          "19",
+          "20",
+          "21",
+          "22",
+          "23"
+        ],
+        "why": "Food offered for import into the United States needs prior notice to FDA.",
+        "source": "fda-prior-notice-21cfr-1-279",
+        "quote": "§ 1.279(a): You must submit prior notice of each article of food that is imported or offered for import into the United States."
+      },
+      {
+        "key": "fibre-label",
+        "title": "Fiber content label",
+        "level": "shipment",
+        "form": "Fiber content label or stamp",
+        "hsPrefixes": [
+          "50",
+          "51",
+          "52",
+          "53",
+          "54",
+          "55",
+          "56",
+          "57",
+          "58",
+          "59",
+          "60",
+          "61",
+          "62",
+          "63"
+        ],
+        "why": "A textile fiber product is misbranded if the fiber name or amount on the label is false.",
+        "source": "textile-fiber-products-identification-act",
+        "quote": "§ 70b: Except as otherwise provided in this subchapter, a textile fiber product shall be misbranded if it is falsely or deceptively stamped, tagged, labeled, or otherwise identified as to the name or amount of constituent fibers contained therein."
+      }
     ],
     "CA": [
-      {"key": "formaldehyde", "title": "Formaldehyde emission test", "level": "supplier", "documentKind": "formaldehyde", "acceptedStandards": ["TSCA Title VI"], "hsPrefixes": ["4412", "9403"], "why": "Canada's composite-wood rules accept TSCA Title VI certification.", "source": "canada-sor-2021-148", "quote": "The declaration of certification must be in the form of a certificate issued in accordance with TSCA Title VI or a document in English or French or both languages, for the product type."},
-      {"key": "origin", "title": "Proof of origin", "level": "shipment", "form": "CPTPP origin statement", "why": "Issued per shipment. The form decides which tariff preference applies.", "source": "cptpp-chapter-3", "quote": "Article 3.20: … each Party shall provide that an importer may make a claim for preferential tariff treatment, based on a certification of origin completed by the exporter, producer or importer."},
-      {"key": "ispm15", "title": "ISPM 15 wood packaging", "level": "shipment", "form": "Heat-treated, marked pallets and crates", "why": "Applies to wooden packaging in every market on this map.", "source": "ispm-15-2018", "quote": "Approved phytosanitary measures that significantly reduce the risk of pest introduction and spread via wood packaging material consist of the use of debarked wood (with a specified tolerance for remaining bark) and the application of approved treatments (as prescribed in Annex 1)."}
+      {
+        "key": "formaldehyde",
+        "title": "Formaldehyde emission test",
+        "level": "supplier",
+        "documentKind": "formaldehyde",
+        "acceptedStandards": [
+          "TSCA Title VI"
+        ],
+        "hsPrefixes": [
+          "4412",
+          "9403"
+        ],
+        "why": "Canada's composite-wood rules accept TSCA Title VI certification.",
+        "source": "canada-sor-2021-148",
+        "quote": "The declaration of certification must be in the form of a certificate issued in accordance with TSCA Title VI or a document in English or French or both languages, for the product type."
+      },
+      {
+        "key": "origin",
+        "title": "Proof of origin",
+        "level": "shipment",
+        "form": "CPTPP origin statement",
+        "why": "Issued per shipment. The form decides which tariff preference applies.",
+        "source": "cptpp-chapter-3",
+        "quote": "Article 3.20: … each Party shall provide that an importer may make a claim for preferential tariff treatment, based on a certification of origin completed by the exporter, producer or importer.",
+        "routeSensitive": true
+      },
+      {
+        "key": "ispm15",
+        "title": "ISPM 15 wood packaging",
+        "level": "shipment",
+        "form": "Heat-treated, marked pallets and crates",
+        "why": "Applies to wooden packaging in every market on this map.",
+        "source": "ispm-15-2018",
+        "quote": "Approved phytosanitary measures that significantly reduce the risk of pest introduction and spread via wood packaging material consist of the use of debarked wood (with a specified tolerance for remaining bark) and the application of approved treatments (as prescribed in Annex 1)."
+      }
     ],
     "JP": [
-      {"key": "legality", "title": "Timber legality evidence", "level": "supplier", "documentKind": "legality", "why": "The 2023 amendment requires importers to confirm legality and keep records.", "source": "japan-clean-wood-act-2023-outline", "quote": "… when upstream wood-related business entities/wood-related importers receive wood and wood products from business entities producing and selling logs or from foreign business entities exporting wood, the following activities are required: 1) Collection of information on raw materials, and confirmation of legality; 2) Creation/Storage of records; 3) Communication of information (Article 6 through Article 8)."},
-      {"key": "origin", "title": "Proof of origin", "level": "shipment", "form": "CPTPP or VJEPA proof of origin", "why": "Issued per shipment. The form decides which tariff preference applies.", "source": "cptpp-chapter-3", "quote": "Article 3.20: … each Party shall provide that an importer may make a claim for preferential tariff treatment, based on a certification of origin completed by the exporter, producer or importer."},
-      {"key": "ispm15", "title": "ISPM 15 wood packaging", "level": "shipment", "form": "Heat-treated, marked pallets and crates", "why": "Applies to wooden packaging in every market on this map.", "source": "ispm-15-2018", "quote": "Approved phytosanitary measures that significantly reduce the risk of pest introduction and spread via wood packaging material consist of the use of debarked wood (with a specified tolerance for remaining bark) and the application of approved treatments (as prescribed in Annex 1)."}
+      {
+        "key": "legality",
+        "title": "Timber legality evidence",
+        "level": "supplier",
+        "documentKind": "legality",
+        "why": "The 2023 amendment requires importers to confirm legality and keep records.",
+        "source": "japan-clean-wood-act-2023-outline",
+        "quote": "… when upstream wood-related business entities/wood-related importers receive wood and wood products from business entities producing and selling logs or from foreign business entities exporting wood, the following activities are required: 1) Collection of information on raw materials, and confirmation of legality; 2) Creation/Storage of records; 3) Communication of information (Article 6 through Article 8).",
+        "hsPrefixes": [
+          "44",
+          "9401",
+          "9403"
+        ]
+      },
+      {
+        "key": "origin",
+        "title": "Proof of origin",
+        "level": "shipment",
+        "form": "CPTPP or VJEPA proof of origin",
+        "why": "Issued per shipment. The form decides which tariff preference applies.",
+        "source": "cptpp-chapter-3",
+        "quote": "Article 3.20: … each Party shall provide that an importer may make a claim for preferential tariff treatment, based on a certification of origin completed by the exporter, producer or importer.",
+        "routeSensitive": true
+      },
+      {
+        "key": "ispm15",
+        "title": "ISPM 15 wood packaging",
+        "level": "shipment",
+        "form": "Heat-treated, marked pallets and crates",
+        "why": "Applies to wooden packaging in every market on this map.",
+        "source": "ispm-15-2018",
+        "quote": "Approved phytosanitary measures that significantly reduce the risk of pest introduction and spread via wood packaging material consist of the use of debarked wood (with a specified tolerance for remaining bark) and the application of approved treatments (as prescribed in Annex 1)."
+      }
     ],
     "KR": [
-      {"key": "legality", "title": "Timber legality evidence", "level": "supplier", "documentKind": "legality", "why": "Legal timber import declaration for covered wood products.", "source": "korea-timber-act-14657-wto", "quote": "Article 19-2: Where an importer imports any timber or timber product prescribed by Presidential Decree to sell or use it for business purposes, he/she shall file an import declaration thereof with the Minister of the Korea Forest Service, …"},
-      {"key": "ispm15", "title": "ISPM 15 wood packaging", "level": "shipment", "form": "Heat-treated, marked pallets and crates", "why": "Applies to wooden packaging in every market on this map.", "source": "ispm-15-2018", "quote": "Approved phytosanitary measures that significantly reduce the risk of pest introduction and spread via wood packaging material consist of the use of debarked wood (with a specified tolerance for remaining bark) and the application of approved treatments (as prescribed in Annex 1)."}
+      {
+        "key": "legality",
+        "title": "Timber legality evidence",
+        "level": "supplier",
+        "documentKind": "legality",
+        "why": "Legal timber import declaration for covered wood products.",
+        "source": "korea-timber-act-14657-wto",
+        "quote": "Article 19-2: Where an importer imports any timber or timber product prescribed by Presidential Decree to sell or use it for business purposes, he/she shall file an import declaration thereof with the Minister of the Korea Forest Service, …",
+        "hsPrefixes": [
+          "44",
+          "9401",
+          "9403"
+        ]
+      },
+      {
+        "key": "ispm15",
+        "title": "ISPM 15 wood packaging",
+        "level": "shipment",
+        "form": "Heat-treated, marked pallets and crates",
+        "why": "Applies to wooden packaging in every market on this map.",
+        "source": "ispm-15-2018",
+        "quote": "Approved phytosanitary measures that significantly reduce the risk of pest introduction and spread via wood packaging material consist of the use of debarked wood (with a specified tolerance for remaining bark) and the application of approved treatments (as prescribed in Annex 1)."
+      }
     ],
     "SG": [
-      {"key": "origin", "title": "Proof of origin", "level": "shipment", "form": "ATIGA Form D", "why": "Issued per shipment. The form decides which tariff preference applies.", "source": "atiga-form-d-aftac35", "quote": "The main conditions for admission to the preferential treatment under the ATIGA are that goods sent to any Member States listed above must: (i) fall within a description of products eligible for concessions in the country of destination; (ii) comply with the consignment conditions … and (iii) comply with the origin criteria set out in Chapter 3 of the ATIGA."},
-      {"key": "ispm15", "title": "ISPM 15 wood packaging", "level": "shipment", "form": "Heat-treated, marked pallets and crates", "why": "Applies to wooden packaging in every market on this map.", "source": "ispm-15-2018", "quote": "Approved phytosanitary measures that significantly reduce the risk of pest introduction and spread via wood packaging material consist of the use of debarked wood (with a specified tolerance for remaining bark) and the application of approved treatments (as prescribed in Annex 1)."}
+      {
+        "key": "origin",
+        "title": "Proof of origin",
+        "level": "shipment",
+        "form": "ATIGA Form D",
+        "why": "Issued per shipment. The form decides which tariff preference applies.",
+        "source": "atiga-form-d-aftac35",
+        "quote": "The main conditions for admission to the preferential treatment under the ATIGA are that goods sent to any Member States listed above must: (i) fall within a description of products eligible for concessions in the country of destination; (ii) comply with the consignment conditions … and (iii) comply with the origin criteria set out in Chapter 3 of the ATIGA.",
+        "routeSensitive": true
+      },
+      {
+        "key": "ispm15",
+        "title": "ISPM 15 wood packaging",
+        "level": "shipment",
+        "form": "Heat-treated, marked pallets and crates",
+        "why": "Applies to wooden packaging in every market on this map.",
+        "source": "ispm-15-2018",
+        "quote": "Approved phytosanitary measures that significantly reduce the risk of pest introduction and spread via wood packaging material consist of the use of debarked wood (with a specified tolerance for remaining bark) and the application of approved treatments (as prescribed in Annex 1)."
+      }
     ],
     "AU": [
-      {"key": "legality", "title": "Timber legality evidence", "level": "supplier", "documentKind": "legality", "why": "Illegal logging rules require importer due diligence.", "source": "australia-ilpa-compilation-6", "quote": "Section 12(1): A person commits an offence if: (a) the person imports a thing; and (b) the thing is a regulated timber product; and (c) the person does not comply with one or more due diligence requirements for importing the regulated timber product; …"},
-      {"key": "origin", "title": "Proof of origin", "level": "shipment", "form": "CPTPP or AANZFTA proof of origin", "why": "Issued per shipment. The form decides which tariff preference applies.", "source": "cptpp-chapter-3", "quote": "Article 3.20: … each Party shall provide that an importer may make a claim for preferential tariff treatment, based on a certification of origin completed by the exporter, producer or importer."},
-      {"key": "ispm15", "title": "ISPM 15 wood packaging", "level": "shipment", "form": "Heat-treated, marked pallets and crates", "why": "Applies to wooden packaging in every market on this map.", "source": "ispm-15-2018", "quote": "Approved phytosanitary measures that significantly reduce the risk of pest introduction and spread via wood packaging material consist of the use of debarked wood (with a specified tolerance for remaining bark) and the application of approved treatments (as prescribed in Annex 1)."}
+      {
+        "key": "legality",
+        "title": "Timber legality evidence",
+        "level": "supplier",
+        "documentKind": "legality",
+        "why": "Illegal logging rules require importer due diligence.",
+        "source": "australia-ilpa-compilation-6",
+        "quote": "Section 12(1): A person commits an offence if: (a) the person imports a thing; and (b) the thing is a regulated timber product; and (c) the person does not comply with one or more due diligence requirements for importing the regulated timber product; …",
+        "hsPrefixes": [
+          "44",
+          "9401",
+          "9403"
+        ]
+      },
+      {
+        "key": "origin",
+        "title": "Proof of origin",
+        "level": "shipment",
+        "form": "CPTPP or AANZFTA proof of origin",
+        "why": "Issued per shipment. The form decides which tariff preference applies.",
+        "source": "cptpp-chapter-3",
+        "quote": "Article 3.20: … each Party shall provide that an importer may make a claim for preferential tariff treatment, based on a certification of origin completed by the exporter, producer or importer.",
+        "routeSensitive": true
+      },
+      {
+        "key": "ispm15",
+        "title": "ISPM 15 wood packaging",
+        "level": "shipment",
+        "form": "Heat-treated, marked pallets and crates",
+        "why": "Applies to wooden packaging in every market on this map.",
+        "source": "ispm-15-2018",
+        "quote": "Approved phytosanitary measures that significantly reduce the risk of pest introduction and spread via wood packaging material consist of the use of debarked wood (with a specified tolerance for remaining bark) and the application of approved treatments (as prescribed in Annex 1)."
+      }
     ]
   }
 }
