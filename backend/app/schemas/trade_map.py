@@ -1,8 +1,8 @@
 import uuid
 from datetime import date
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import Field
+from pydantic import Field, StringConstraints, field_validator, model_validator
 
 from app.database.models import ObservationConfidence, RequirementLevel, SiteKind
 from app.schemas.common import CamelCaseModel
@@ -14,6 +14,17 @@ CheckStatus = Literal["on_file", "missing", "mismatch", "prepare", "check", "unk
 class GeoPoint(CamelCaseModel):
     latitude: float
     longitude: float
+
+
+class GeoPointIn(CamelCaseModel):
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+
+
+class CountryOut(CamelCaseModel):
+    code: str  # ISO 3166-1 alpha-2
+    numeric_code: str  # matches world-atlas feature ids
+    name: str
 
 
 class MarketOut(CamelCaseModel):
@@ -79,6 +90,7 @@ class MapSupplierOut(CamelCaseModel):
     id: uuid.UUID | None  # None: named on orders but not in the supplier list
     name: str
     place: str | None
+    country: str | None
     location: GeoPoint | None
     supplies: str | None
     documents: list[SupplierDocumentOut] | None  # None: no supplier record to check against
@@ -86,11 +98,13 @@ class MapSupplierOut(CamelCaseModel):
 
 
 class SiteOut(CamelCaseModel):
+    id: uuid.UUID
     key: str
     kind: SiteKind
     name: str
     short_name: str
     place: str
+    country: str | None
     location: GeoPoint
     note: str
     is_route_origin: bool
@@ -128,6 +142,7 @@ class TradeMapOut(CamelCaseModel):
     sites: list[SiteOut]
     observations: list[SatelliteObservationOut]
     document_kinds: list[DocumentKindOut]
+    countries: list[CountryOut]  # the countries a supplier or site can be in
     home_country_ids: list[str]  # countries with the company's sites or suppliers
     check_radius_km: float
 
@@ -156,3 +171,145 @@ class MarketComparisonOut(CamelCaseModel):
     unknown: list[ComparisonItemOut]
     dropped: list[str]
     assumptions: list[str] = Field(default_factory=list)
+
+
+# --- Entering suppliers and sites (editors)
+
+ShortText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+CountryCode = Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^[A-Za-z]{2}$")]
+Standard = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+MAX_SUPPLIER_DOCUMENTS = 20
+MAX_STANDARDS = 10
+
+
+def _optional_text(value: str | None) -> str | None:
+    """Blank optional text is stored as null."""
+    if value is None:
+        return None
+    return value.strip() or None
+
+
+def _country_code(value: str | None) -> str | None:
+    # ISO reserves "UK" for the United Kingdom, whose code is GB; people write both.
+    if value is None:
+        return None
+    code = value.upper()
+    return "GB" if code == "UK" else code
+
+
+def _keep_required(model: CamelCaseModel, fields: tuple[str, ...]) -> None:
+    for field in fields:
+        if field in model.model_fields_set and getattr(model, field) is None:
+            raise ValueError(f"{field} can't be cleared")
+
+
+class SupplierDocumentIn(CamelCaseModel):
+    kind: str = Field(min_length=1, max_length=40)
+    detail: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
+    standards: list[Standard] = Field(default_factory=list, max_length=MAX_STANDARDS)
+
+
+def _one_document_per_kind(documents: list[SupplierDocumentIn] | None):
+    if documents is not None:
+        kinds = [d.kind for d in documents]
+        if len(kinds) != len(set(kinds)):
+            raise ValueError("One document per kind")
+    return documents
+
+
+class SupplierIn(CamelCaseModel):
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)]
+    place: str | None = Field(default=None, max_length=200)
+    country: CountryCode | None = None
+    location: GeoPointIn | None = None
+    supplies: str | None = Field(default=None, max_length=1000)
+    documents: list[SupplierDocumentIn] = Field(
+        default_factory=list, max_length=MAX_SUPPLIER_DOCUMENTS
+    )
+
+    _optional = field_validator("place", "supplies")(_optional_text)
+    _country = field_validator("country")(_country_code)
+    _documents = field_validator("documents")(_one_document_per_kind)
+
+
+class SupplierUpdate(CamelCaseModel):
+    """Changes only the fields sent. `documents` replaces the whole list."""
+
+    name: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)]
+        | None
+    ) = None
+    place: str | None = Field(default=None, max_length=200)
+    country: CountryCode | None = None
+    location: GeoPointIn | None = None
+    supplies: str | None = Field(default=None, max_length=1000)
+    documents: list[SupplierDocumentIn] | None = Field(
+        default=None, max_length=MAX_SUPPLIER_DOCUMENTS
+    )
+
+    _optional = field_validator("place", "supplies")(_optional_text)
+    _country = field_validator("country")(_country_code)
+    _documents = field_validator("documents")(_one_document_per_kind)
+
+    @model_validator(mode="after")
+    def required_fields_stay_set(self):
+        _keep_required(self, ("name", "documents"))
+        return self
+
+
+class SupplierOut(CamelCaseModel):
+    id: uuid.UUID
+    name: str
+    place: str | None
+    country: str | None
+    location: GeoPoint | None
+    supplies: str | None
+    documents: list[SupplierDocumentOut]
+
+
+class SiteIn(CamelCaseModel):
+    kind: SiteKind
+    name: ShortText
+    # Shown next to the marker. Defaults to the name.
+    short_name: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=60)] | None
+    ) = None
+    place: ShortText
+    country: CountryCode | None = None
+    location: GeoPointIn
+    note: str = Field(default="", max_length=1000)
+    # Order routes start here. Setting it moves the start from any other site.
+    is_route_origin: bool = False
+
+    _country = field_validator("country")(_country_code)
+
+    @field_validator("note")
+    @classmethod
+    def strip_note(cls, value: str) -> str:
+        return value.strip()
+
+
+class SiteUpdate(CamelCaseModel):
+    """Changes only the fields sent."""
+
+    kind: SiteKind | None = None
+    name: ShortText | None = None
+    short_name: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=60)] | None
+    ) = None
+    place: ShortText | None = None
+    country: CountryCode | None = None
+    location: GeoPointIn | None = None
+    note: str | None = Field(default=None, max_length=1000)
+    is_route_origin: bool | None = None
+
+    _country = field_validator("country")(_country_code)
+
+    @model_validator(mode="after")
+    def required_fields_stay_set(self):
+        _keep_required(
+            self, ("kind", "name", "short_name", "place", "location", "note", "is_route_origin")
+        )
+        if self.note is not None:
+            self.note = self.note.strip()
+        return self

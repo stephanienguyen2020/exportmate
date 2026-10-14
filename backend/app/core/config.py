@@ -38,6 +38,12 @@ class Settings(BaseSettings):
     google_cloud_project: str | None = None
     # Suppliers and sites this close to an observed flood extent get a check-in prompt.
     flood_check_radius_km: float = 25.0
+    # Order reports by email (core/email.py). No Resend key: sandbox, nothing is delivered.
+    resend_api_key: str = ""
+    report_email_from: str = "ExportMate <reports@exportmate.app>"
+    report_emails_per_hour: int = 20
+    # AI service origin; company reports read its news alerts with the caller's token.
+    ai_service_url: str = "http://127.0.0.1:8080"
 
     @model_validator(mode="after")
     def no_dev_auth_in_production(self):

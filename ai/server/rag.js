@@ -37,6 +37,16 @@ export async function embed(texts, taskType) {
   return out;
 }
 
+// Query embeddings already computed on this instance, so a repeated search isn't embedded again.
+const queryVectors = new Map();
+async function embedQuery(query) {
+  if (queryVectors.has(query)) return queryVectors.get(query);
+  const [vector] = await embed([query], "RETRIEVAL_QUERY");
+  if (queryVectors.size >= 500) queryVectors.delete(queryVectors.keys().next().value); // oldest first
+  queryVectors.set(query, vector);
+  return vector;
+}
+
 // Which sources a record came from and who owns them, so searches only return what the
 // asking company may see (access.js). Records from before sources had owners have neither.
 const origin = (r) => ({
@@ -149,7 +159,7 @@ export async function reindexAll() {
  * `types` pre-filter uses the (type, embedding) index.
  */
 export async function search(query, { types, limit = 6, filter = () => true } = {}) {
-  const [vector] = await embed([query], "RETRIEVAL_QUERY");
+  const vector = await embedQuery(query);
   const pool = Math.min(limit * 3, 30);
   const nearest = (q) =>
     q

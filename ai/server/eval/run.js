@@ -2,13 +2,23 @@
 // Usage: npm run eval                       all cases
 //        npm run eval -- --only=latest-scan,unknown-sku
 //        npm run eval -- --judge            also grade answers with an LLM judge
+//        npm run eval -- --tier=complex     every case on one model tier instead of the router's choice
+//        npm run eval -- --vertex           also create an evaluation run on Agent Platform (Gen AI evaluation:
+//                                           tool use, hallucination, response quality, safety; eval/vertex, needs uv)
 // On GCP: gcloud run jobs execute exportmate-ai-task --args="node eval/run.js --judge" --wait
 // Each run is stored in the Firestore `eval_runs` collection and compared with the
 // previous run; it exits 1 if a case that passed now fails (a regression). Run it
-// after every change to the prompt, model, embeddings, retrieval or tools.
+// after every change to the prompt, model, router, embeddings, retrieval or tools.
+// The answer cache is off for evals: every case is answered by the model.
+import { spawnSync } from "node:child_process";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { GoogleGenAI, Type } from "@google/genai";
 import { runAgent } from "../agent.js";
+import { demoMapOrders, demoPlaybook } from "../orders.js";
 import { PROJECT, db, inventory, list } from "../db.js";
+import { SCAN_MODEL, TIERS } from "../models.js";
 import { summarizeAudits } from "../metrics.js";
 import { POLICY_VERSION, RULES } from "../policy.js";
 import { goldenCases } from "./golden.js";
@@ -18,7 +28,10 @@ const evalRuns = db.collection("eval_runs");
 const arg = (name) => process.argv.find((a) => a.startsWith(`--${name}`))?.split("=")[1] ?? (process.argv.includes(`--${name}`) ? "" : undefined);
 const only = arg("only")?.split(",").filter(Boolean);
 const useJudge = arg("judge") !== undefined;
-const JUDGE_MODEL = process.env.JUDGE_MODEL || process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const tier = arg("tier") || undefined;
+const toVertex = arg("vertex") !== undefined;
+if (tier && !TIERS[tier]) throw new Error(`--tier must be one of ${Object.keys(TIERS).join(", ")}`);
+const JUDGE_MODEL = process.env.JUDGE_MODEL || SCAN_MODEL;
 const ai = new GoogleGenAI({ vertexai: true, project: PROJECT, location: process.env.GOOGLE_CLOUD_LOCATION || "global" });
 
 const VERDICT = {
@@ -54,22 +67,60 @@ ${testCase.rubric ? `RUBRIC: ${testCase.rubric}` : "RUBRIC: none (return rubric 
   return JSON.parse(res.text || "{}");
 }
 
+// One golden case as Agent Platform agent data (types.evals.AgentData): the agent's config and the
+// conversation as ADK-style events, rebuilt from the audit steps and the tool results.
+const AGENT = "exportmate_assistant";
+const text = (role, author, t) => ({ author, content: { role, parts: [{ text: t }] } });
+function vertexCase(c, r, s) {
+  const outputs = [...r.trace.toolResults];
+  const turns = [];
+  const history = c.messages.slice(0, -1);
+  for (let i = 0; i < history.length; i += 2)
+    turns.push({ turn_index: turns.length, events: history.slice(i, i + 2).map((m) => (m.role === "user" ? text("user", "user", m.text) : text("model", AGENT, m.text))) });
+  const events = [text("user", "user", c.messages.at(-1).text)];
+  for (const step of r.steps) {
+    if (step.kind === "plan")
+      events.push({ author: AGENT, content: { role: "model", parts: [...(step.note ? [{ text: step.note }] : []), ...step.calls.map((x) => ({ function_call: { name: x.name, args: x.args } }))] } });
+    else if (step.kind === "tool") events.push({ author: AGENT, content: { role: "user", parts: [{ function_response: { name: step.name, response: outputs.shift() } }] } });
+    else if (step.kind === "draft") events.push(text("model", AGENT, step.excerpt));
+    else if (step.kind === "review") events.push(text("user", "auditor", `Auditor review of your draft: ${step.problems.join(" ")}`));
+  }
+  if (r.answer) events.push(text("model", AGENT, r.answer));
+  turns.push({ turn_index: turns.length, events });
+  return {
+    id: c.id,
+    category: c.category,
+    prompt: c.messages.at(-1).text,
+    agent_data: {
+      agents: { [AGENT]: { agent_id: AGENT, agent_type: "LlmAgent", description: "ExportMate trade-compliance assistant", instruction: r.trace.instruction, tools: [{ function_declarations: r.trace.tools }] } },
+      turns,
+    },
+    golden_pass: s.pass,
+    auditor_pass: r.status === "ok" && r.checks.every((x) => x.ok),
+    tier: r.route.tier,
+    escalated: Boolean(r.route.escalated),
+    latency_s: r.latencyMs / 1000,
+  };
+}
+
 const items = await list(inventory);
 const cases = goldenCases(items, { rules: RULES }).filter((c) => !only || only.includes(c.id));
 const sessionId = `eval-${Date.now().toString(36)}`;
-console.log(`Eval ${sessionId}: ${cases.length} cases, policy ${POLICY_VERSION}${useJudge ? `, judge ${JUDGE_MODEL}` : ""}`);
+console.log(`Eval ${sessionId}: ${cases.length} cases, policy ${POLICY_VERSION}${tier ? `, all on ${tier} (${TIERS[tier].model})` : ""}${useJudge ? `, judge ${JUDGE_MODEL}` : ""}`);
 
 const scored = [];
 const results = [];
 for (const c of cases) {
-  const result = await runAgent({ messages: c.messages, sessionId, channel: "eval", withEvidence: true });
+  // A demo case's orders and playbook go through the same checks as a demo chat's (index.js).
+  const demo = c.demo ? { orders: demoMapOrders(c.demo.orders), playbook: demoPlaybook(c.demo.rules) } : null;
+  const result = await runAgent({ messages: c.messages, sessionId, channel: "eval", withEvidence: true, tier, demo });
   const verdict = useJudge ? await judge(c, result).catch((e) => ({ faithfulness: null, relevance: null, reason: `judge failed: ${e.message}` })) : null;
   const s = scoreCase(c, result, verdict);
   results.push(result);
   scored.push(s);
   const failed = s.checks.filter((x) => !x.ok);
   console.log(
-    `${s.pass ? "PASS" : "FAIL"} ${c.id.padEnd(24)} ${(s.metrics.latencyMs / 1000).toFixed(1)}s ${s.metrics.toolCalls} tools${s.metrics.revised ? ", revised" : ""}` +
+    `${s.pass ? "PASS" : "FAIL"} ${c.id.padEnd(24)} ${(s.metrics.latencyMs / 1000).toFixed(1)}s ${s.metrics.toolCalls} tools, ${result.route.tier}${result.route.escalated ? "→complex" : ""}${s.metrics.revised ? ", revised" : ""}` +
       (failed.length ? `\n     ${failed.map((x) => `${x.name}: ${x.detail}`).join("\n     ")}` : ""),
   );
 }
@@ -81,7 +132,8 @@ const diff = compareRuns(previous, scored);
 const saved = await evalRuns.add({
   runAt: new Date().toISOString(),
   sessionId,
-  model: results[0]?.model,
+  models: { simple: TIERS.simple.model, complex: TIERS.complex.model },
+  tier: tier || "routed",
   policyVersion: POLICY_VERSION,
   judge: useJudge ? JUDGE_MODEL : null,
   only: only || null,
@@ -100,4 +152,17 @@ if (previous) {
   if (diff.regressions.length) console.log(`  regressions: ${diff.regressions.join(", ")}`);
 }
 console.log(`Saved eval_runs/${saved.id} in Firestore (${PROJECT})`);
+
+// Hands the run to eval/vertex/vertex_eval.py, which creates an evaluation run on Agent Platform:
+// every case as agent data (the instruction and tools the model had, earlier turns, each function
+// call and response, the auditor's send-back and the answer) plus this runner's own scores.
+if (toVertex) {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const file = join(here, "results", `${sessionId}.vertex.json`);
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, JSON.stringify({ run: { sessionId, firestoreRun: saved.id, policyVersion: POLICY_VERSION, tier: tier || "routed" }, cases: cases.map((c, n) => vertexCase(c, results[n], scored[n])) }));
+  console.log(`\nCreating an Agent Platform evaluation run (${file})`);
+  const py = spawnSync("uv", ["run", "--project", join(here, "vertex"), "python", join(here, "vertex", "vertex_eval.py"), file], { stdio: "inherit" });
+  if (py.error || py.status !== 0) console.error(`Agent Platform evaluation failed${py.error ? `: ${py.error.message}` : ""}; the export is in ${file}`);
+}
 process.exit(diff.regressions.length ? 1 : 0);

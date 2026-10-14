@@ -12,6 +12,7 @@ locals {
     "iam.googleapis.com",
     "identitytoolkit.googleapis.com",
     "logging.googleapis.com",
+    "modelarmor.googleapis.com",
     "run.googleapis.com",
     "secretmanager.googleapis.com",
     "serviceusage.googleapis.com",

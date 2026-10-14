@@ -8,7 +8,31 @@ locals {
     FIREBASE_PROJECT_ID        = var.project_id
     ALLOWED_ORIGINS            = var.allowed_origins
     REGULATION_DOCUMENT_BUCKET = google_storage_bucket.regulation_documents.name
+    REPORT_EMAIL_FROM          = var.report_email_from
+    # Company reports read News watch alerts. The deterministic URL (ai_service.tf) avoids a
+    # cycle: the AI service already points at this backend.
+    AI_SERVICE_URL = local.ai_url
   }
+}
+
+# Resend key for emailed order reports. Terraform makes the empty secret; add the key by hand
+# so it never lands in Terraform state:
+#   printf %s "$KEY" | gcloud secrets versions add backend-resend-api-key --data-file=-
+# then set resend_enabled = true. Until then reports are sent in sandbox mode (not delivered).
+resource "google_secret_manager_secret" "resend_api_key" {
+  secret_id = "backend-resend-api-key"
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.apis]
+}
+
+resource "google_secret_manager_secret_iam_member" "backend_reads_resend_api_key" {
+  secret_id = google_secret_manager_secret.resend_api_key.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.backend.email}"
 }
 
 resource "google_cloud_run_v2_service" "backend" {
@@ -59,6 +83,19 @@ resource "google_cloud_run_v2_service" "backend" {
         }
       }
 
+      dynamic "env" {
+        for_each = var.resend_enabled ? [google_secret_manager_secret.resend_api_key.secret_id] : []
+        content {
+          name = "RESEND_API_KEY"
+          value_source {
+            secret_key_ref {
+              secret  = env.value
+              version = "latest"
+            }
+          }
+        }
+      }
+
       volume_mounts {
         name       = "cloudsql"
         mount_path = "/cloudsql"
@@ -77,6 +114,7 @@ resource "google_cloud_run_v2_service" "backend" {
   depends_on = [
     google_secret_manager_secret_version.database_url,
     google_secret_manager_secret_iam_member.backend_reads_database_url,
+    google_secret_manager_secret_iam_member.backend_reads_resend_api_key,
     google_project_iam_member.backend_cloudsql_client,
   ]
 }

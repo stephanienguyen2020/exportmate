@@ -18,6 +18,15 @@ test("company-only rules apply only in a company workspace", () => {
   assert.ok(rulesFor({ company: {} }).some((r) => r.id === "company-profile"));
 });
 
+test("order and playbook rules apply wherever the tools can read them, demo included", () => {
+  const ids = (session) => rulesFor(session).map((r) => r.id);
+  assert.ok(!ids(null).includes("company-orders"));
+  assert.ok(!ids({ company: null, orders: null }).includes("playbook"));
+  const demo = ids({ company: null, orders: () => [], playbook: () => [] });
+  assert.ok(demo.includes("company-orders") && demo.includes("playbook"));
+  assert.ok(!demo.includes("company-profile"));
+});
+
 test("the policy version changes with the rules", () => {
   assert.match(POLICY_VERSION, /^[0-9a-f]{10}$/);
   assert.equal(version(RULES), POLICY_VERSION);

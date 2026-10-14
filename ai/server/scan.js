@@ -9,17 +9,20 @@ import { fetchFeed } from "./feeds.js";
 import { indexDocs, toDoc } from "./rag.js";
 import { withRetry } from "./gateway.js";
 import { asData, findInjection } from "./guard.js";
+import { armor } from "./armor.js";
 import { version } from "./policy.js";
 import { log } from "./log.js";
 import { isShared } from "./access.js";
-import { aboutWoodGoods } from "./relevance.js";
+import { decide } from "./relevance.js";
+import { SCAN_MODEL } from "./models.js";
 
-const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+// Articles are assessed once: step 2 skips any article an earlier scan already analysed.
+export const MODEL = SCAN_MODEL;
 const LOCATION = process.env.GOOGLE_CLOUD_LOCATION || "global";
 const LOOKBACK_DAYS = 3; // daily runs overlap a little so nothing is missed
 const FIRST_RUN_LOOKBACK_DAYS = 14;
 const MAX_NEW_ARTICLES = 80;
-const BATCH = 16;
+export const BATCH = 16;
 
 const ai = new GoogleGenAI({ vertexai: true, project: PROJECT, location: LOCATION });
 const hash = (s) => crypto.createHash("sha1").update(s).digest("hex").slice(0, 20);
@@ -77,7 +80,8 @@ function catalog(items) {
     .join("\n");
 }
 
-async function assess(batch, items) {
+/** Gemini's assessment of each article in a batch against the stock (also run by eval/scan-run.js). */
+export async function assess(batch, items) {
   const today = new Date().toISOString().slice(0, 10);
   const prompt = `Today is ${today}. You monitor trade news for Binh Duong Wood Co., a Vietnamese wood-products and furniture manufacturer and exporter.
 
@@ -102,7 +106,7 @@ ${RULES}`;
         responseMimeType: "application/json",
         responseSchema: SCHEMA,
         maxOutputTokens: 16384,
-        thinkingConfig: { thinkingBudget: 2048 },
+        thinkingConfig: { thinkingLevel: "MEDIUM" },
       },
     }),
   );
@@ -160,16 +164,29 @@ export async function runScan({ trigger = "manual", lookbackDays } = {}) {
       .sort((a, b) => (b.publishedAt || "").localeCompare(a.publishedAt || ""))
       .slice(0, MAX_NEW_ARTICLES);
 
-    // 3. Withhold articles whose text addresses the assistant (prompt injection): they are
-    // recorded as analysed and not relevant, never sent to Gemini and never indexed.
+    // 3. Withhold articles that address the assistant (prompt injection) or link to known
+    // malicious sites: guard.js's patterns first, then Model Armor when it is configured.
+    // Withheld articles are recorded as analysed and not relevant, never sent to Gemini and
+    // never indexed. An article Model Armor could not screen is left for the next scan.
     const found = [];
     const analysed = [];
-    const fresh = [];
+    const toScreen = [];
     for (const a of newest) {
       const match = findInjection(`${a.title}\n${a.snippet}\n${a.publisher}`);
       if (match) analysed.push({ ...a, relevant: false, withheld: match });
-      else fresh.push(a);
+      else toScreen.push(a);
     }
+    const verdicts = await armor.screenEach(toScreen.map((a) => `${a.title}\n${a.snippet}\n${a.publisher || ""}\n${a.url}`));
+    const fresh = [];
+    const unscreened = [];
+    toScreen.forEach((a, n) => {
+      const { match, error } = verdicts[n];
+      if (error) unscreened.push(error);
+      else if (match) analysed.push({ ...a, relevant: false, withheld: match });
+      else fresh.push(a);
+    });
+    if (unscreened.length)
+      log("ERROR", "scan.armor_failed", { scanId: scanRef.id, articles: unscreened.length, error: String(unscreened[0]?.message || unscreened[0]) });
 
     // 4. Ask Gemini, in batches, which stock each article touches.
     const bySku = new Map(items.map((i) => [i.sku, i]));
@@ -186,15 +203,7 @@ export async function runScan({ trigger = "manual", lookbackDays } = {}) {
       batch.forEach((a, n) => {
         const r = byIndex.get(n);
         if (!r) return;
-        const affected = (r.affected || [])
-          .filter((x) => bySku.has(x.sku))
-          .map((x) => {
-            const it = bySku.get(x.sku);
-            return { sku: x.sku, name: it.name, reason: x.reason, stockValueUsd: Math.round(it.qtyOnHand * it.unitCostUsd) };
-          });
-        const duplicate = Number.isInteger(r.sameAs) && r.sameAs !== n;
-        const otherCommodity = Boolean(r.relevant) && !aboutWoodGoods(a);
-        const relevant = Boolean(r.relevant && affected.length && !duplicate && !otherCommodity);
+        const { relevant, affected, otherCommodity } = decide(a, r, n, bySku);
         analysed.push({ ...a, relevant, ...(otherCommodity ? { filteredOut: "other_commodity" } : {}) });
         if (relevant)
           found.push({
@@ -256,6 +265,8 @@ export async function runScan({ trigger = "manual", lookbackDays } = {}) {
       articlesFetched: candidates.size,
       articlesAnalysed: analysed.length,
       articlesWithheld: analysed.filter((a) => a.withheld).length,
+      articlesUnscreened: unscreened.length,
+      modelArmor: armor.enabled,
       impactsFound: found.length,
       indexed: indexed?.embedded ?? null,
     };

@@ -1,6 +1,17 @@
 // Client for the agent API: streams audit steps (NDJSON) and returns the answer.
 import { isApiSession } from "../../src/account-store";
 import { getToken } from "../../src/auth";
+import {
+  destinationCountry,
+  initialOrders,
+  initialRules,
+  readSaved,
+  sampleCheck,
+  sampleObligation,
+  withSampleRisk,
+  type Order,
+  type Rule,
+} from "../../src/data";
 
 export type Citation = {
   ref: number;
@@ -29,7 +40,8 @@ export type GuardFlag = { where: string; match: string };
 
 export type AuditStep = {
   at: number;
-  kind: "plan" | "tool" | "draft" | "review" | "answer";
+  // cache: the answer was reused from an earlier audit (auditId, answeredAt); its steps follow.
+  kind: "plan" | "tool" | "draft" | "review" | "answer" | "cache";
   latencyMs?: number;
   note?: string;
   calls?: { name: string; args: Record<string, unknown> }[];
@@ -50,6 +62,10 @@ export type AuditStep = {
   problems?: string[];
   excerpt?: string;
   finishReason?: string;
+  // The model that made this call (plan, draft, answer); the router picks it per question.
+  model?: string;
+  auditId?: string;
+  answeredAt?: string;
 };
 
 export type Audit = {
@@ -72,6 +88,11 @@ export type Audit = {
   policyVersion?: string;
   requestId?: string;
   flags?: GuardFlag[];
+  // The router's choice: simple (small fast model) or complex, the signals behind it, and
+  // whether a simple-tier draft the auditor sent back was revised on the complex tier.
+  route?: { tier: "simple" | "complex"; reasons: string[]; escalated?: boolean };
+  // Present when the answer was reused from an earlier audit against the same data.
+  cache?: { auditId: string; answeredAt: string };
 };
 
 export type Message = { role: "user" | "model"; text: string; citations?: Citation[]; audit?: Audit };
@@ -109,6 +130,38 @@ export async function companyAuth(): Promise<Record<string, string>> {
   }
 }
 
+// The browser demo's orders and playbook live in this browser, so the assistant can only
+// see them if they travel with the question. Orders needing action go first, then by ship
+// date, within the AI service's limits (ai/server/orders.js).
+const DEMO_ORDERS_SENT = 100;
+export function demoWorkspace() {
+  const orders = readSaved<Order[]>("em-orders", initialOrders, Array.isArray)
+    .filter((o) => o && typeof o.id === "string")
+    .map(withSampleRisk)
+    .sort((a, b) => Number(b.risk) - Number(a.risk) || a.shipDate.localeCompare(b.shipDate));
+  const rules = readSaved<Rule[]>("em-rules", initialRules, Array.isArray);
+  return {
+    orders: orders.slice(0, DEMO_ORDERS_SENT).map((o) => {
+      const check = sampleCheck(o);
+      const country = destinationCountry(o.destination);
+      return {
+        id: o.id,
+        product: o.product,
+        supplier: o.supplier,
+        destination: o.destination,
+        market: check ? sampleObligation.market : country,
+        value: o.value,
+        currency: o.currency || "USD",
+        shipDate: o.shipDate,
+        hsCode: o.hsCode,
+        status: o.risk ? "exposed" : "clear",
+        check: check && { title: `${sampleObligation.title} (sample rule)`, ...check },
+      };
+    }),
+    rules: rules.filter((r) => r && r.enabled).map(({ id, category, text }) => ({ id, category, text })),
+  };
+}
+
 export async function askAgent(
   messages: Message[],
   onStep: (step: AuditStep) => void,
@@ -126,6 +179,8 @@ export async function askAgent(
         text: m.text,
         sources: m.citations?.map((c) => `${c.type}: ${c.title}`),
       })),
+      // A company workspace's orders and playbook are read from the backend instead.
+      ...(isApiSession() ? {} : { demo: demoWorkspace() }),
     }),
   });
   if (!res.ok || !res.body) {

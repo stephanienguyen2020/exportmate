@@ -12,6 +12,7 @@ dependencies = [
     "python-multipart>=0.0.18",
     "firebase-admin>=6.6",
     "google-cloud-storage>=2.18",
+    "fpdf2>=2.8",
 ]
 
 [dependency-groups]

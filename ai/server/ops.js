@@ -31,4 +31,6 @@ if (arg("json")) {
   console.log(`  guard          ${s.withheldPassages} third-party passages withheld`);
   console.log(`  policy         ${Object.entries(s.policyVersions).map(([k, v]) => `${k} (${v})`).join(", ")}`);
   console.log(`  models         ${Object.entries(s.models).map(([k, v]) => `${k} (${v})`).join(", ")}`);
+  console.log(`  router         ${Object.entries(s.tiers).map(([k, v]) => `${k} ${v}`).join(", ") || "none"}   simple answers escalated ${pct(s.escalationRate)}`);
+  console.log(`  answer cache   ${pct(s.cacheHitRate)} of answers reused`);
 }
