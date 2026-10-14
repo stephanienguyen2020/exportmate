@@ -710,3 +710,31 @@ test("a failed change shows an error toast, not a success one", async ({
   await expect(toast).toBeVisible();
   await expect(toast).toHaveClass(/error/);
 });
+
+test("a company user sees what the assistant remembers and can make it forget", async ({ page }) => {
+  await fixture(page);
+  let memories = [
+    { id: "101", fact: "I mainly sell plywood to the UK.", updatedAt: "2026-10-14T20:50:00Z" },
+    { id: "102", fact: "Keep answers to short bullet points.", updatedAt: "2026-10-14T20:50:00Z" },
+  ];
+  const calls: { method: string; path: string; auth?: string }[] = [];
+  await page.route("**/api/memories**", async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    calls.push({ method: request.method(), path, auth: request.headers().authorization });
+    if (request.method() === "DELETE") {
+      memories = memories.filter((m) => !path.endsWith(`/${m.id}`));
+      return route.fulfill({ json: { ok: true } });
+    }
+    return route.fulfill({ json: { memories, enabled: true } });
+  });
+  await login(page);
+  await page.goto("/#/workspace/account");
+  const panel = page.getByRole("region", { name: "What the assistant remembers" });
+  await expect(panel.getByText("I mainly sell plywood to the UK.")).toBeVisible();
+  await panel.getByRole("button", { name: "Forget: Keep answers to short bullet points." }).click();
+  await expect(panel.getByText("Forgotten.")).toBeVisible();
+  await expect(panel.getByText("Keep answers to short bullet points.")).toHaveCount(0);
+  expect(calls.find((c) => c.method === "DELETE")?.path).toBe("/api/memories/102");
+  expect(calls.every((c) => c.auth?.startsWith("Bearer "))).toBe(true);
+});
