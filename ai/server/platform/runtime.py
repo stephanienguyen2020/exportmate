@@ -103,6 +103,9 @@ def config(name, image=None, resource=None, identity="agent", gateway=None):
         **base,
         container_spec=types.ReasoningEngineSpecContainerSpec(image_uri=image, port=8080),
         class_methods=CLASS_METHODS,
+        # The agents are ADK (JavaScript); the console's Traces tab shows ADK agents' traces,
+        # which runtime.js sends (agents/telemetry.js).
+        agent_framework="google-adk",
         # The agent runs as its own Agent Identity (no service-account keys); IAM and Agent Gateway
         # policies are granted to it by infra/agent-platform/govern.sh.
         **({"identity_type": types.IdentityType.AGENT_IDENTITY} if identity == "agent" else {}),

@@ -1,6 +1,7 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { chatInput, server } from "../runtime.js";
+import { startTracing, traceResource } from "../agents/telemetry.js";
 
 const listening = new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve(server.address().port)));
 after(() => server.close());
@@ -40,4 +41,12 @@ test("the user's backend token only reaches the backend reader, never the turn's
   assert.doesNotMatch(JSON.stringify(turn), /secret-token-value/);
   // Without a company there is no backend to read.
   assert.equal(chatInput({ messages: [{ role: "user", text: "hi" }], sessionId: "session-1234", backendToken: "x" }).backend, null);
+});
+
+test("traces are filed under the Agent Runtime instance, and only there", () => {
+  const resource = traceResource({ project: "exportmate-app", location: "asia-southeast1", id: "7999914662302842880" });
+  assert.equal(resource["cloud.platform"], "gcp.agent_engine");
+  assert.equal(resource["cloud.resource_id"], "//aiplatform.googleapis.com/projects/exportmate-app/locations/asia-southeast1/reasoningEngines/7999914662302842880");
+  assert.equal(resource["service.name"], "7999914662302842880");
+  assert.equal(startTracing(), false); // no AGENT_RUNTIME in tests
 });
