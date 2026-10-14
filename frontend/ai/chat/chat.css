@@ -141,6 +141,12 @@
 .chat-msg li + li {
   margin-top: 4px;
 }
+.chat-msg code {
+  font: 0.92em "DM Mono", monospace;
+  background: #eef1ea;
+  border-radius: 3px;
+  padding: 1px 4px;
+}
 .chat-msg > :last-child {
   margin-bottom: 0;
 }

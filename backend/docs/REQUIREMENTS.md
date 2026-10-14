@@ -117,7 +117,7 @@ Rules:
 - Uploads never committed are deleted after 30 days.
 
 ### 4.4 Playbook rules
-**Status: built (stored only).**
+**Status: built (stored; the assistant applies the rules switched on when it advises, analysis doesn't use them).**
 
 - Fields: text, category (`Policy`, `Threshold`, `Supplier`, `Watchlist`), enabled.
 - Every change creates a new playbook revision; old ones are kept.
