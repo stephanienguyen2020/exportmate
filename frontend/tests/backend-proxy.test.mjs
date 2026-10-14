@@ -46,3 +46,16 @@ test('upstream failures return a readable error without internal details', async
   assert.equal(response.status, 502);
   assert.doesNotMatch(JSON.stringify(await response.json()), /private connection/);
 });
+test('document downloads preserve original bytes and attachment security headers', async () => {
+  process.env.BACKEND_URL = 'https://backend.example';
+  const bytes = Buffer.from([0x25, 0x50, 0x44, 0x46, 0xff, 0x00]);
+  globalThis.fetch = async () => new Response(bytes, { headers: {
+    'content-type': 'application/pdf',
+    'content-disposition': "attachment; filename*=UTF-8''source.pdf",
+    'x-content-type-options': 'nosniff',
+  } });
+  const response = await originalFetch(origin + '/api/backend?path=regulation-documents/doc-1/file');
+  assert.equal(response.headers.get('content-disposition'), "attachment; filename*=UTF-8''source.pdf");
+  assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+  assert.deepEqual(Buffer.from(await response.arrayBuffer()), bytes);
+});

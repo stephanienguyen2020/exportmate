@@ -75,7 +75,7 @@ docker info >/dev/null 2>&1 || die "Docker is not running. Start Docker Desktop 
 [ -f "${GOOGLE_APPLICATION_CREDENTIALS:-$HOME/.config/gcloud/application_default_credentials.json}" ] ||
   echo "warning: no Google credentials found, so AI chat and news will fail. Run: gcloud auth application-default login"
 
-install_node_deps "$ROOT"
+install_node_deps "$ROOT/frontend"
 install_node_deps "$ROOT/ai/server"
 
 # --- Database: start Postgres, migrate, load the demo company (seeding twice changes nothing).
@@ -102,7 +102,7 @@ uv run python -m app.seed_demo_data --email "$DEMO_EMAIL"
 say "Starting services"
 start api 36 "$ROOT/backend" uv run uvicorn app.main:app --reload --port 8000
 start ai 35 "$ROOT/ai/server" npm run dev
-start web 32 "$ROOT" env VITE_AUTH_MODE=dev npm run dev
+start web 32 "$ROOT/frontend" env VITE_AUTH_MODE=dev npm run dev
 
 wait_for_url "Backend" "http://127.0.0.1:8000/api/v1/health"
 wait_for_url "Frontend" "http://127.0.0.1:5173/"
