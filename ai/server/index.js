@@ -11,6 +11,7 @@ import { log } from "./log.js";
 import { ANONYMOUS, auditVisible, isShared, presentSources, publicAudit, publicStep, sourceVisible, visibleItems } from "./access.js";
 import { readJson, scanBlocked } from "./limits.js";
 import { deleteMemory, listMemories, remembers, userKeyFor } from "./agents/platform.js";
+import { AGENTS_AT, callAgents, streamTurn } from "./agents/remote.js";
 import { demoMapOrders, demoPlaybook } from "./orders.js";
 import { SCAN_MODEL, TIERS } from "./models.js";
 
@@ -227,22 +228,36 @@ async function streamChat(req, res, body, origin, requestId) {
     const access = company ? { companyId: company.company.id, disabled: await disabledSources(company.company.id) } : ANONYMOUS;
     // The signed-in user: their Agent Platform session and Memory Bank memories are their own.
     const user = company ? (await callerAccount(req.headers.authorization)).body.data?.user ?? null : null;
-    const result = await runAgent({
+    const turn = {
       messages,
       sessionId: body.sessionId,
       company,
       access,
       user: user && { id: user.id },
       requestId,
-      // The company's orders and playbook are read with the caller's own token (query_orders, get_playbook).
-      backend: company ? (path) => backendGet(path, req.headers.authorization) : null,
-      // The browser demo sends its own; a company chat never uses what the client sends.
+      // The browser demo sends its own orders and playbook; a company chat never uses what the client sends.
       demo: company ? null : { orders: demoMapOrders(body.demo?.orders), playbook: demoPlaybook(body.demo?.rules) },
-      onStep: (step) => write({ type: "step", step: publicStep(step) }),
-    });
-    logChat(result, trace);
-    if (result.status === "error") write({ type: "error", error: "The assistant is unavailable right now.", auditId: result.id });
-    else write({ type: "done", reply: result.answer, citations: result.citations, audit: publicAudit(result) });
+    };
+    if (AGENTS_AT) {
+      // The agents run on Agent Runtime (agents/remote.js): relay their events. The user's token
+      // goes along only so the company specialist can read orders and playbook with it.
+      const token = company ? req.headers.authorization.replace(/^Bearer /, "") : undefined;
+      for await (const event of streamTurn({ ...turn, backendToken: token })) {
+        write(event);
+        if (event.type === "done") logChat(event.audit, trace);
+        if (event.type === "error") log("ERROR", "chat.agents_error", { requestId, trace, auditId: event.auditId });
+      }
+    } else {
+      const result = await runAgent({
+        ...turn,
+        // The company's orders and playbook are read with the caller's own token (query_orders, get_playbook).
+        backend: company ? (path) => backendGet(path, req.headers.authorization) : null,
+        onStep: (step) => write({ type: "step", step: publicStep(step) }),
+      });
+      logChat(result, trace);
+      if (result.status === "error") write({ type: "error", error: "The assistant is unavailable right now.", auditId: result.id });
+      else write({ type: "done", reply: result.answer, citations: result.citations, audit: publicAudit(result) });
+    }
   } catch (e) {
     log("ERROR", "chat.failed", { requestId, trace, error: String(e?.message || e) });
     write({ type: "error", error: "The assistant is unavailable right now." });
@@ -412,10 +427,12 @@ async function memoryRoute(method, path, req) {
   if (status !== 200 || !account?.company || !account.user) return [401, { error: "Sign in to a company workspace to see what the assistant remembers." }];
   const userKey = userKeyFor({ company: { company: account.company }, user: account.user });
   if (!remembers(userKey)) return [200, { memories: [], enabled: false }];
-  if (method === "GET" && path === "/api/memories") return [200, { memories: await listMemories(userKey), enabled: true }];
+  if (method === "GET" && path === "/api/memories")
+    return [200, { memories: AGENTS_AT ? (await callAgents("list_memories", { userKey })).memories : await listMemories(userKey), enabled: true }];
   const m = path.match(/^\/api\/memories\/(\d{1,30})$/);
   if (method === "DELETE" && m) {
-    if (!(await deleteMemory(userKey, m[1]))) return [404, { error: "Memory not found" }];
+    const deleted = AGENTS_AT ? (await callAgents("delete_memory", { userKey, id: m[1] })).deleted : await deleteMemory(userKey, m[1]);
+    if (!deleted) return [404, { error: "Memory not found" }];
     log("INFO", "memory.deleted", { userId: account.user.id, companyId: account.company.id });
     return [200, { ok: true }];
   }
