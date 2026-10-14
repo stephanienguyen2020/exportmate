@@ -6,7 +6,7 @@ import { db, inventory, sources, impacts, scans, companySources, locks, list } f
 import { fetchFeed } from "./feeds.js";
 import { runScan } from "./scan.js";
 import { runAgent, audits, clearCaches } from "./agent.js";
-import { indexDocs, toDoc, kb } from "./rag.js";
+import { indexDocs, removeDocs, toDoc } from "./rag.js";
 import { log } from "./log.js";
 import { ANONYMOUS, auditVisible, isShared, presentSources, publicAudit, publicStep, sourceVisible, visibleItems } from "./access.js";
 import { readJson, scanBlocked } from "./limits.js";
@@ -390,7 +390,7 @@ async function route(method, path, body, req, query) {
     if (method === "DELETE") {
       if (source.builtIn) return [400, { error: "Built-in sources can be turned off, not deleted." }];
       if (isShared(source)) return [400, { error: "This source is shared by every workspace. Switch it off instead." }];
-      await Promise.all([sources.doc(m[1]).delete(), kb.doc(`source:${m[1]}`).delete()]);
+      await Promise.all([sources.doc(m[1]).delete(), removeDocs([`source:${m[1]}`])]);
       clearCaches();
       log("INFO", "source.deleted", { sourceId: m[1], userId: editor.userId, companyId: editor.companyId });
       return [200, { ok: true }];
