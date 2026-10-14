@@ -1447,6 +1447,7 @@ function App() {
                   <TradeMapPage
                     key={route}
                     live={live}
+                    editable={editable}
                     focus={route.slice(4)}
                     toneOf={(o) =>
                       o.risk ? "red" : isClear(o) ? "green" : "amber"

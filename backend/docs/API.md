@@ -53,6 +53,12 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
 | `DELETE /playbook/rules/{id}` | editor | Playbook: delete |
 | `GET /trade-map` | viewer | Trade map; `ai/server` chat (`query_orders`) |
 | `GET /trade-map/compare` | viewer | Trade map: "What if" panel |
+| `POST /suppliers` | editor | Trade map: "Add supplier" / "Add a supplier record" |
+| `PATCH /suppliers/{id}` | editor | Trade map: "Edit supplier" |
+| `DELETE /suppliers/{id}` | editor | Trade map: "Delete supplier" |
+| `POST /sites` | editor | Trade map: "Add site" |
+| `PATCH /sites/{id}` | editor | Trade map: "Edit site" |
+| `DELETE /sites/{id}` | editor | Trade map: "Delete site" |
 | `POST /regulation-documents` | editor | Regulation library: add regulation / version |
 | `GET /regulation-documents/{id}` | viewer | Regulation library |
 | `GET /regulation-documents/{id}/file` | viewer | Regulation library |
@@ -241,6 +247,9 @@ Everything the map draws, in one call when the page opens:
 | `sites[]` | Factories, ports, warehouses. `isRouteOrigin` marks the company's route start |
 | `observations[]` | Satellite samples (`isSample: true`) with a GeoJSON `extent` and `nearby` suppliers/sites within `checkRadiusKm` (default 25). Order statuses never change because of them |
 | `documentKinds`, `homeCountryIds`, `checkRadiusKm` | Labels, the countries to highlight, the flood check radius |
+| `countries` | `code` (alpha-2), `numericCode` (world-atlas id), `name`: the countries a supplier or site can be in. Includes sourcing countries outside any market (Laos, Cambodia, Thailand, …) |
+| `suppliers[].country`, `sites[].country` | An alpha-2 code from `countries`, or `null` |
+| `sites[].id`, `sites[].key` | `id` is for `PATCH`/`DELETE /sites/{id}`; `key` is made from the name, never changes, and is what observations' `nearby[].ref` uses |
 
 `nearby[].distanceKm` estimates distance to the mapped polygon (including holes) using a local equirectangular projection. The proximity threshold is applied before rounding up to whole kilometres; zero means on or inside the extent. It is a screening estimate, not a survey measurement. The dashed overview circle is an approximate search-area illustration.
 
@@ -271,6 +280,34 @@ One what-if at a time. Send exactly one of `market`, `shipDate`, or `via`.
 Checklists are scoped by HS prefix: wood lines (chapters 44 and furniture 9401/9403), food (chapters 01–23), textiles (50–63), and listed electronics headings. A prefix-less line, such as proof of origin or ISPM 15 packaging, still applies across those products. Each line still cites an official text.
 
 Called from the order's "What if" panel each time the market, date, or route changes. A new call cancels the previous one.
+
+### Suppliers and sites (editor)
+Editors enter them in the map's side panel; viewers don't see the controls. The location comes from a click on the 2D map (which also suggests the country) or from typed `latitude, longitude`. After a save or delete the page reloads `GET /trade-map`, so order checks and flood proximity are recomputed. Each change writes an audit event (`supplier.created|updated|deleted`, `company_site.created|updated|deleted`).
+
+`POST /suppliers` → `201`:
+```json
+{"name": "Dong Nai Veneer", "place": "Bien Hoa, Dong Nai", "country": "VN",
+ "location": {"latitude": 10.95, "longitude": 106.82}, "supplies": "Acacia veneer",
+ "documents": [{"kind": "formaldehyde", "detail": "Test report, May 2026", "standards": ["EN 717-1"]}]}
+```
+Only `name` (1–300) is required. `place` ≤200, `supplies` ≤1000 (blank is stored as `null`), `country` an alpha-2 code from `countries` (`UK` is read as `GB`), `location` −90..90 / −180..180, up to 20 `documents`, one per `kind` from `documentKinds` (`detail` 1–500, up to 10 `standards`). Returns the supplier with `id` and labelled `documents`.
+- `409 supplier_exists`: the company has a supplier with the same name, ignoring case and spacing. Orders match suppliers on that key, so a renamed supplier stops matching orders written with the old name.
+- `422 invalid_input` with `fieldErrors.country` / `fieldErrors.documents` for an unknown country or document kind.
+
+`PATCH /suppliers/{id}` changes only the fields sent; `null` clears `place`, `country`, `location`, `supplies`. `documents` replaces the whole list (send `[]` to clear it). `name` and `documents` can't be `null`. Same errors as `POST`.
+
+`DELETE /suppliers/{id}` → `{"deleted": true}`. Its documents go with it; its orders stay, named on the order without a record (supplier checks become `unknown`).
+
+`POST /sites` → `201`:
+```json
+{"kind": "warehouse", "name": "Da Nang warehouse", "shortName": "Da Nang", "place": "Tien Sa port, Da Nang",
+ "country": "VN", "location": {"latitude": 16.12, "longitude": 108.21}, "note": "", "isRouteOrigin": false}
+```
+`kind` (`factory` / `port` / `warehouse`), `name` and `place` (1–200) and `location` are required. `shortName` (≤60, the map label) defaults to the name; `note` ≤1000. The `key` is made from the name (`da-nang-warehouse`, then `-2`, …) and never changes. At most one site is the route origin: `isRouteOrigin: true` moves it from any other site. Returns the site in the `sites[]` shape.
+
+`PATCH /sites/{id}` changes only the fields sent; only `country` can be `null`. `DELETE /sites/{id}` → `{"deleted": true}`; deleting the route origin leaves the map to start routes from the company profile's origin.
+
+Both: `404` for another company's supplier or site.
 
 ## Regulations
 

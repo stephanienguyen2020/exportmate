@@ -159,6 +159,7 @@ export type MapSupplier = {
   id: string | null;
   name: string;
   place: string | null;
+  country: string | null;
   location: GeoPoint | null;
   supplies: string | null;
   documents:
@@ -167,11 +168,13 @@ export type MapSupplier = {
   orderIds: string[];
 };
 export type MapSite = {
+  id: string;
   key: string;
   kind: "factory" | "port" | "warehouse";
   name: string;
   shortName: string;
   place: string;
+  country: string | null;
   location: GeoPoint;
   note: string;
   isRouteOrigin: boolean;
@@ -206,8 +209,36 @@ export type TradeMap = {
   sites: MapSite[];
   observations: SatelliteObservation[];
   documentKinds: { kind: string; label: string }[];
+  countries: { code: string; numericCode: string; name: string }[];
   homeCountryIds: string[];
   checkRadiusKm: number;
+};
+export type SupplierDocumentInput = {
+  kind: string;
+  detail: string;
+  standards: string[];
+};
+export type SupplierInput = {
+  name: string;
+  place: string | null;
+  country: string | null;
+  location: GeoPoint | null;
+  supplies: string | null;
+  documents: SupplierDocumentInput[];
+};
+export type SupplierRecord = Omit<SupplierInput, "documents"> & {
+  id: string;
+  documents: NonNullable<MapSupplier["documents"]>;
+};
+export type SiteInput = {
+  kind: MapSite["kind"];
+  name: string;
+  shortName: string;
+  place: string;
+  country: string | null;
+  location: GeoPoint;
+  note: string;
+  isRouteOrigin: boolean;
 };
 export type ComparisonItem = {
   title: string;
@@ -515,6 +546,31 @@ export const api = {
   },
   tradeMap: (signal?: AbortSignal) =>
     request<TradeMap>("/trade-map", { signal }).then((r) => r.data),
+  createSupplier: (supplier: SupplierInput) =>
+    request<SupplierRecord>("/suppliers", {
+      method: "POST",
+      body: JSON.stringify(supplier),
+    }).then((r) => r.data),
+  // Sends every field: null clears place, country, location and supplies.
+  updateSupplier: (id: string, supplier: SupplierInput) =>
+    request<SupplierRecord>(`/suppliers/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(supplier),
+    }).then((r) => r.data),
+  deleteSupplier: (id: string) =>
+    request(`/suppliers/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  createSite: (site: SiteInput) =>
+    request<MapSite>("/sites", {
+      method: "POST",
+      body: JSON.stringify(site),
+    }).then((r) => r.data),
+  updateSite: (id: string, site: SiteInput) =>
+    request<MapSite>(`/sites/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(site),
+    }).then((r) => r.data),
+  deleteSite: (id: string) =>
+    request(`/sites/${encodeURIComponent(id)}`, { method: "DELETE" }),
   compareMarkets: (orderId: string, market: string, signal?: AbortSignal) =>
     request<MarketComparison>(
       `/trade-map/compare?${new URLSearchParams({ orderId, market })}`,

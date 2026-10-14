@@ -211,7 +211,7 @@ A map of the company's own export activity: its suppliers, sites and markets, an
 - Selecting a market shows its orders, changes to check (orders needing action, tariff checks, news items naming the market) and missing supplier documents.
 - "What if this order went to another market?": documents that can be reused, requirements to re-evaluate (new or changed), and what the data can't conclude. Paperwork only; the customer, contract and sales case still decide.
 - Satellite observations (e.g. flood extents) are extra evidence: suppliers and sites within 25 km get a check-in prompt. Order statuses never change because of them. Observations are samples until a real source is connected.
-- Suppliers, their documents and sites belong to the company; orders match suppliers by name. Today they come from the demo seed; entering them in the app is not built.
+- Suppliers, their documents and sites belong to the company; orders match suppliers by name (ignoring case and spacing). Owners and editors add, edit and delete them on the map: a location is a click on the map or typed coordinates; a supplier records which documents it has on file. The demo seed fills them for the demo company.
 
 ### 4.10 Contact form
 **Status: phase 3.** Validates name, email and message; rate limited; sends to a team inbox.
