@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import {
   defaultProfile,
+  forgetAccountProfile,
   getProfile,
   putProfile,
   startSession,
@@ -44,10 +45,37 @@ import {
   resetEmail,
   resetPassword,
   signOutAccount,
+  signInWithGoogle,
+  preloadAuth,
+  googleAuthAvailable,
   errorMessage,
   authConfigured,
   devAuth,
 } from "./auth";
+
+// Google's "G" mark, as its sign-in branding guidelines ask.
+function GoogleMark() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+      <path
+        fill="#EA4335"
+        d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
+      />
+      <path
+        fill="#4285F4"
+        d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
+      />
+      <path
+        fill="#34A853"
+        d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
+      />
+    </svg>
+  );
+}
 function PasswordField({
   label = "Password",
   value,
@@ -283,13 +311,18 @@ export function AccountSettings({
             <label className="ac-field">
               Email
               <input type="email" value={p.email} readOnly />
-              <small>Email changes require backend verification.</small>
+              <small>
+                {live
+                  ? "Your sign-in email. It can't be changed here yet."
+                  : "The demo's sample email."}
+              </small>
             </label>
           </section>
           <section className="panel">
             <h2>Notifications</h2>
             <p className="ac-muted">
-              Delivery starts when channels are connected.
+              ExportMate doesn't send emails or messages yet. Your choices are
+              saved for when it does.
             </p>
             {[
               ["alerts", "Order alerts", "When an order needs attention."],
@@ -514,6 +547,8 @@ export default function AccountPage({ route }: { route: string }) {
       // The conversation may mention this company; the next account starts fresh.
       clearChat();
       if (live) {
+        // So the next person on this browser, or the demo, doesn't see this account's details.
+        forgetAccountProfile();
         setBusy(true);
         api
           .logout()
@@ -529,6 +564,7 @@ export default function AccountPage({ route }: { route: string }) {
           );
       }
     }
+    if (route === "login" || route === "signup") preloadAuth();
   }, [route]);
   async function run(action: () => Promise<void>) {
     if (busy) return;
@@ -553,6 +589,8 @@ export default function AccountPage({ route }: { route: string }) {
   }
   const completeSignIn = () =>
     run(async () => {
+      // Leave the demo first, so the account's details are cached as the account's.
+      endSession();
       const verified = await signIn(email.trim(), password);
       setPassword("");
       if (!verified) {
@@ -562,6 +600,30 @@ export default function AccountPage({ route }: { route: string }) {
       }
       await enterWorkspace();
     });
+  const googleSignIn = () =>
+    run(async () => {
+      endSession();
+      const google = await signInWithGoogle();
+      if (!google) return; // the Google window was closed
+      if (!google.verified) {
+        // A Google account can use an address Google hasn't confirmed.
+        putProfile({ ...getProfile(), email: google.email });
+        navigate("verify-email");
+        return;
+      }
+      await enterWorkspace();
+    });
+  const googleButton = googleAuthAvailable && (
+    <button
+      className="ac-secondary ac-google"
+      type="button"
+      onClick={googleSignIn}
+      disabled={busy}
+    >
+      <GoogleMark />
+      Continue with Google
+    </button>
+  );
   const signup = (e: React.FormEvent) => {
     e.preventDefault();
     void run(async () => {
@@ -653,6 +715,7 @@ export default function AccountPage({ route }: { route: string }) {
                 <div className="ac-divider">
                   <span>or</span>
                 </div>
+                {googleButton}
                 <button className="ac-secondary" onClick={openDemo}>
                   Explore the demo
                   <ArrowRight size={16} />
@@ -714,6 +777,27 @@ export default function AccountPage({ route }: { route: string }) {
                     <ArrowRight size={18} />
                   </button>
                 </form>
+                {googleButton && (
+                  <>
+                    <div className="ac-divider">
+                      <span>or</span>
+                    </div>
+                    {googleButton}
+                    <p className="ac-consent">
+                      <span>
+                        By continuing with Google you agree to the{" "}
+                        <a href="#/terms" target="_blank" rel="noopener">
+                          terms
+                        </a>{" "}
+                        and{" "}
+                        <a href="#/privacy" target="_blank" rel="noopener">
+                          privacy details
+                        </a>
+                        .
+                      </span>
+                    </p>
+                  </>
+                )}
                 <p className="ac-switch">
                   Already here? <a href="#/login">Sign in</a>
                 </p>

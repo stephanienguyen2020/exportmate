@@ -38,5 +38,22 @@ test("summarises outcomes, latency, tools and guard activity", () => {
   assert.deepEqual(s.tools.get_alerts, { calls: 1, errors: 1, retried: 1, errorKinds: { timeout: 1 } });
   assert.equal(s.withheldPassages, 1);
   assert.deepEqual(s.policyVersions, { p1: 1, p2: 1 });
+  assert.deepEqual(s.tiers, { unrouted: 2 });
+  assert.equal(s.cacheHitRate, 0);
   assert.equal(summarizeAudits([]).passRate, 0);
+});
+
+test("reports routing and cache hits, counting a cached answer's steps once", () => {
+  const step = { kind: "tool", name: "query_inventory" };
+  const s = summarizeAudits([
+    { status: "ok", route: { tier: "simple" }, steps: [step] },
+    { status: "ok", route: { tier: "simple", escalated: true }, steps: [step, { kind: "review" }] },
+    { status: "ok", route: { tier: "complex" }, steps: [step] },
+    { status: "ok", route: { tier: "simple" }, cache: { auditId: "a1" }, steps: [{ kind: "cache" }, step] },
+  ]);
+  assert.deepEqual(s.tiers, { simple: 2, complex: 1 });
+  assert.equal(s.escalationRate, 0.5);
+  assert.equal(s.cacheHitRate, 0.25);
+  assert.equal(s.tools.query_inventory.calls, 3);
+  assert.equal(s.revisionRate, 0.333);
 });

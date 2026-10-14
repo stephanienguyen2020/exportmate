@@ -832,6 +832,185 @@ button.tm-callout.tm-callout-row {
   margin: -12px 0 24px;
 }
 
+/* Adding and editing suppliers and sites */
+.tm-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.tm-section-head h3 {
+  font-size: 15px;
+  letter-spacing: -0.2px;
+}
+.tm-section-head .text-link,
+.tm-edit,
+.tm-plain .text-link {
+  gap: 6px;
+  color: #527443;
+}
+.tm-edit {
+  margin: -6px 0 14px;
+}
+.tm-form label:not(.tm-check) {
+  display: block;
+  font-size: 11px;
+  margin: 14px 0 6px;
+  color: #7d8c70;
+}
+.tm-form input:not([type="checkbox"]),
+.tm-form select,
+.tm-form textarea {
+  width: 100%;
+  border: 1px solid #d1d8c9;
+  border-radius: 2px;
+  padding: 10px 12px;
+  background: #fafbf5;
+  color: var(--green);
+  font-size: 12px;
+}
+.tm-form textarea {
+  min-height: 72px;
+  line-height: 1.6;
+  resize: vertical;
+}
+.tm-form input[aria-invalid="true"] {
+  border-color: var(--red);
+}
+.tm-form small {
+  display: block;
+  margin-top: 6px;
+  font-size: 10px;
+  line-height: 1.6;
+  color: #89927e;
+}
+.tm-form .tm-field-error,
+.tm-form p.tm-field-error {
+  color: var(--red);
+  font-size: 11px;
+  line-height: 1.6;
+  margin-top: 12px;
+}
+.tm-form small.tm-field-error {
+  margin-top: 6px;
+}
+.tm-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  font-size: 12px;
+  color: var(--green);
+  cursor: pointer;
+}
+.tm-check input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--green);
+}
+.tm-doc-fields {
+  border: 0;
+  margin: 22px 0 0;
+  padding: 0;
+  min-width: 0;
+}
+.tm-doc-fields legend {
+  padding: 0;
+  font-size: 15px;
+  letter-spacing: -0.2px;
+  font-weight: 600;
+}
+.tm-doc-fields > small {
+  margin-bottom: 4px;
+}
+.tm-doc-field {
+  display: grid;
+  gap: 6px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.tm-doc-field .tm-check {
+  margin-top: 0;
+}
+.tm-form .tm-doc-field input:not([type="checkbox"]) {
+  padding: 8px 10px;
+}
+.tm-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  margin-top: 20px;
+}
+.tm-form-actions .btn {
+  gap: 8px;
+}
+.tm-delete {
+  margin-top: 22px;
+  gap: 6px;
+  color: #7d8773;
+}
+.tm-delete:hover {
+  color: var(--red);
+}
+.tm-confirm {
+  margin-top: 22px;
+  padding: 14px 16px;
+  background: #f6ece8;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.tm-confirm .tm-form-actions {
+  margin-top: 10px;
+}
+.btn.tm-danger {
+  background: var(--red);
+}
+.tm-canvas.picking {
+  cursor: crosshair;
+}
+.tm-canvas.picking .tm-marker {
+  pointer-events: none;
+}
+.tm-pin {
+  position: absolute;
+  z-index: 5;
+  transform: translate(-50%, -100%);
+  color: var(--red);
+  pointer-events: none;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.25));
+}
+.tm-canvas .tm-pin svg {
+  position: static;
+  display: block;
+  width: 24px;
+  height: 24px;
+  fill: #fffffc;
+}
+.tm-canvas .tm-pick-note svg {
+  position: static;
+  width: 13px;
+  height: 13px;
+  flex: none;
+}
+.tm-pick-note {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  background: #fffffc;
+  font-size: 11px;
+  color: var(--green);
+  pointer-events: none;
+}
+
 @media (max-width: 1200px) {
   .tm-layout {
     grid-template-columns: 1fr;

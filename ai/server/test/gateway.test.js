@@ -70,6 +70,7 @@ test("withRetry retries transient errors with backoff and gives up on others", a
 const registry = {
   search: { scope: "public", declaration: { name: "search", parameters: schema }, run: async (args) => ({ output: { got: args.query }, audit: { count: 1 } }) },
   profile: { scope: "company", declaration: { name: "profile" }, run: async () => ({ output: {}, audit: {} }) },
+  orders: { scope: "orders", declaration: { name: "orders" }, run: async (_args, ctx) => ({ output: await ctx.orders(), audit: {} }) },
   flaky: {
     scope: "public",
     declaration: { name: "flaky" },
@@ -94,6 +95,17 @@ test("gateway offers and allows company tools only in a company session", async 
   const company = toolGateway(registry, { company: { company: { id: "c1" } } }, { sleep });
   assert.ok(company.declarations().some((d) => d.name === "profile"));
   assert.equal((await company.call("profile", {})).ok, true);
+});
+
+test("gateway offers order tools to any session that can read orders, demo included", async () => {
+  const none = toolGateway(registry, { company: null }, { sleep });
+  const refused = await none.call("orders", {});
+  assert.equal(refused.errorKind, "denied");
+  assert.match(refused.error, /a workspace with orders/);
+  const demo = toolGateway(registry, { company: null, orders: async () => ["PO-2291"] }, { sleep });
+  assert.ok(demo.declarations().some((d) => d.name === "orders"));
+  assert.ok(!demo.declarations().some((d) => d.name === "profile"));
+  assert.deepEqual((await demo.call("orders", {})).output, ["PO-2291"]);
 });
 
 test("gateway validates arguments before running the tool", async () => {

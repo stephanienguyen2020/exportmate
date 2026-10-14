@@ -12,5 +12,7 @@ export const scans = db.collection("scans");
 export const companySources = db.collection("companySources");
 // One document per lock; "scan" stops two scans running at once across instances.
 export const locks = db.collection("locks");
+// Answers already given ({ auditId, expireAt }), keyed by answer-cache.js answerKey.
+export const answerCache = db.collection("answer_cache");
 
 export const list = async (query) => (await query.get()).docs.map((d) => ({ id: d.id, ...d.data() }));

@@ -1,7 +1,7 @@
 import uuid
 from collections.abc import Iterable
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -26,6 +26,10 @@ def list_markets(db: Session) -> list[Market]:
 
 def get_market(db: Session, code: str) -> Market | None:
     return db.get(Market, code)
+
+
+def get_country(db: Session, alpha2: str) -> Country | None:
+    return db.get(Country, alpha2)
 
 
 def list_countries(db: Session) -> list[Country]:
@@ -90,6 +94,63 @@ def list_supplier_documents(
             .order_by(SupplierDocument.supplier_id, SupplierDocument.kind)
         )
     )
+
+
+def get_company_supplier(
+    db: Session, company_id: uuid.UUID, supplier_id: uuid.UUID
+) -> Supplier | None:
+    return db.scalar(
+        select(Supplier).where(Supplier.id == supplier_id, Supplier.company_id == company_id)
+    )
+
+
+def add_supplier(db: Session, supplier: Supplier) -> Supplier:
+    db.add(supplier)
+    db.flush()
+    return supplier
+
+
+def replace_supplier_documents(
+    db: Session, supplier_id: uuid.UUID, documents: list[SupplierDocument]
+) -> None:
+    db.execute(delete(SupplierDocument).where(SupplierDocument.supplier_id == supplier_id))
+    db.add_all(documents)
+    db.flush()
+
+
+def delete_supplier(db: Session, supplier: Supplier) -> None:
+    """Its documents go with it. Orders keep the supplier's name as text."""
+    db.delete(supplier)
+    db.flush()
+
+
+def get_company_site(db: Session, company_id: uuid.UUID, site_id: uuid.UUID) -> CompanySite | None:
+    return db.scalar(
+        select(CompanySite).where(CompanySite.id == site_id, CompanySite.company_id == company_id)
+    )
+
+
+def list_company_site_keys(db: Session, company_id: uuid.UUID) -> set[str]:
+    return set(db.scalars(select(CompanySite.site_key).where(CompanySite.company_id == company_id)))
+
+
+def add_company_site(db: Session, site: CompanySite) -> CompanySite:
+    db.add(site)
+    db.flush()
+    return site
+
+
+def clear_route_origin(db: Session, company_id: uuid.UUID) -> None:
+    db.execute(
+        update(CompanySite)
+        .where(CompanySite.company_id == company_id, CompanySite.is_route_origin.is_(True))
+        .values(is_route_origin=False)
+    )
+
+
+def delete_company_site(db: Session, site: CompanySite) -> None:
+    db.delete(site)
+    db.flush()
 
 
 def list_company_sites(db: Session, company_id: uuid.UUID) -> list[CompanySite]:

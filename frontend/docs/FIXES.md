@@ -152,7 +152,7 @@ Ký hiệu: `[x]` là đã sửa, `[ ]` là chưa làm. **P0** = lỗi rõ ràng
 
 Các mục dưới đây cần quyết định, hạ tầng mới, hoặc là tính năng mới, không phải lỗi:
 
-- [ ] **Commit `.github/` và các thay đổi.** Bạn cần tự commit; mình không commit thay.
+- [x] **Commit `.github/` và các thay đổi.** Đã commit trong `5c9a187` và push lên `main`.
 - [ ] **API mời thành viên / đổi role.** Đây là tính năng mới. Hiện production chỉ có role owner.
 - [ ] **Lưu file CSV trên Cloud Storage** thay vì Postgres. Cần thêm hạ tầng (kế hoạch Phase 2). Trước mắt đã có lệnh dọn import cũ.
 - [ ] **Chạy scan nền thay vì trong một request.** Trên Cloud Run, CPU bị giới hạn sau khi đã trả response, nên cần Cloud Tasks, Cloud Run Jobs, hoặc bật "CPU always allocated".

@@ -41,6 +41,7 @@ from app.schemas.orders import OrderOut
 from app.schemas.trade_map import (
     CheckStatus,
     ComparisonItemOut,
+    CountryOut,
     DocumentKindOut,
     GeoPoint,
     MapOrderOut,
@@ -242,7 +243,9 @@ def compare_requirements(
                     + (
                         f"Also listed in the {current} checklist; validity and shipment scope still need review."
                         if prior
-                        else f"On file, though {current or 'the current market'} doesn't ask for it."
+                        else f"{to_market.name} asks for it; "
+                        + (f"the {current} checklist" if current else "the current market")
+                        + " doesn't. Check it covers this shipment."
                     ),
                 )
             )
@@ -404,7 +407,7 @@ def _requirements_by_market(db: Session) -> dict[str, list[MarketRequirement]]:
     return grouped
 
 
-def _requirement_sources(
+def load_requirement_sources(
     db: Session, requirements: dict[str, list[MarketRequirement]]
 ) -> dict[uuid.UUID, RequirementSourceOut]:
     document_ids = list({r.regulation_document_id for reqs in requirements.values() for r in reqs})
@@ -438,12 +441,38 @@ def _point(latitude: float | None, longitude: float | None) -> GeoPoint | None:
     return GeoPoint(latitude=latitude, longitude=longitude)
 
 
+def site_out(site: CompanySite) -> SiteOut:
+    return SiteOut(
+        id=site.id,
+        key=site.site_key,
+        kind=site.kind,
+        name=site.name,
+        short_name=site.short_name,
+        place=site.place,
+        country=site.country_alpha2,
+        location=GeoPoint(latitude=site.latitude, longitude=site.longitude),
+        note=site.note,
+        is_route_origin=site.is_route_origin,
+    )
+
+
+def supplier_documents_out(
+    documents: list[SupplierDocument], kinds: dict[str, str]
+) -> list[SupplierDocumentOut]:
+    return [
+        SupplierDocumentOut(
+            kind=d.kind, label=kinds.get(d.kind, d.kind), detail=d.detail, standards=d.standards
+        )
+        for d in documents
+    ]
+
+
 def build_trade_map(db: Session, ctx: CompanyContext) -> TradeMapOut:
     started = time.perf_counter()
     radius = get_settings().flood_check_radius_km
     gazetteer = _load_gazetteer(db)
     requirements = _requirements_by_market(db)
-    sources = _requirement_sources(db, requirements)
+    sources = load_requirement_sources(db, requirements)
     kinds = {k.kind: k.label for k in map_queries.list_document_kinds(db)}
     orders = order_queries.list_company_orders(db, ctx.company_id)
     suppliers = map_queries.list_company_suppliers(db, ctx.company_id)
@@ -484,17 +513,10 @@ def build_trade_map(db: Session, ctx: CompanyContext) -> TradeMapOut:
             id=s.id,
             name=s.name,
             place=s.place,
+            country=s.country_alpha2,
             location=_point(s.latitude, s.longitude),
             supplies=s.supplies,
-            documents=[
-                SupplierDocumentOut(
-                    kind=d.kind,
-                    label=kinds.get(d.kind, d.kind),
-                    detail=d.detail,
-                    standards=d.standards,
-                )
-                for d in documents[s.id].values()
-            ],
+            documents=supplier_documents_out(list(documents[s.id].values()), kinds),
             order_ids=order_ids.get(s.name_key, []),
         )
         for s in suppliers
@@ -505,6 +527,7 @@ def build_trade_map(db: Session, ctx: CompanyContext) -> TradeMapOut:
             id=None,
             name=names_on_orders[key],
             place=None,
+            country=None,
             location=None,
             supplies=None,
             documents=None,
@@ -571,21 +594,16 @@ def build_trade_map(db: Session, ctx: CompanyContext) -> TradeMapOut:
         ],
         orders=map_orders,
         suppliers=map_suppliers,
-        sites=[
-            SiteOut(
-                key=s.site_key,
-                kind=s.kind,
-                name=s.name,
-                short_name=s.short_name,
-                place=s.place,
-                location=GeoPoint(latitude=s.latitude, longitude=s.longitude),
-                note=s.note,
-                is_route_origin=s.is_route_origin,
-            )
-            for s in sites
-        ],
+        sites=[site_out(s) for s in sites],
         observations=map_observations,
         document_kinds=[DocumentKindOut(kind=k, label=label) for k, label in kinds.items()],
+        countries=sorted(
+            (
+                CountryOut(code=c.alpha2, numeric_code=c.numeric_code, name=c.name)
+                for c in gazetteer.countries.values()
+            ),
+            key=lambda c: c.name,
+        ),
         home_country_ids=sorted(
             gazetteer.countries[c].numeric_code for c in home if c in gazetteer.countries
         ),
@@ -598,6 +616,32 @@ def _load_order(db: Session, ctx: CompanyContext, order_id: str) -> Order:
     if not order:
         raise not_found_error("Order")
     return order
+
+
+def build_order_checklist(
+    db: Session, ctx: CompanyContext, order: Order
+) -> tuple[MapOrderOut, Market | None]:
+    """One order's placement and document checks, exactly as the trade map shows them, and the
+    market it ships to (None when the destination isn't in a market on the map)."""
+    gazetteer = _load_gazetteer(db)
+    placement = locate_destination(order.destination, gazetteer)
+    market = gazetteer.markets.get(placement.market) if placement.market else None
+    checks: list[RequirementCheckOut] = []
+    if market:
+        requirements = {market.code: _requirements_by_market(db).get(market.code, [])}
+        checks = check_order(
+            order,
+            requirements[market.code],
+            _supplier_documents(db, ctx, order),
+            load_requirement_sources(db, requirements),
+        )
+    checked = MapOrderOut(
+        order=OrderOut.from_order(order),
+        placement=placement,
+        checks=checks,
+        gap_count=sum(c.status in _GAP_STATUSES for c in checks),
+    )
+    return checked, market
 
 
 def _supplier_documents(db: Session, ctx: CompanyContext, order: Order) -> SupplierDocs | None:

@@ -45,3 +45,19 @@ def test_json_lines_carry_severity_request_id_and_fields():
     assert line["message"] == "trade_map.built"
     assert line["requestId"] == "abc"
     assert line["orders"] == 3
+
+
+def test_uvicorn_colour_copy_of_the_message_is_dropped():
+    record = logging.makeLogRecord(
+        {
+            "name": "uvicorn.error",
+            "levelname": "INFO",
+            "msg": "Started server process [%d]",
+            "args": (42,),
+            "color_message": "Started server process [\x1b[36m%d\x1b[0m]",
+        }
+    )
+    record.request_id = "-"
+    line = json.loads(JsonFormatter().format(record))
+    assert line["message"] == "Started server process [42]"
+    assert "color_message" not in line

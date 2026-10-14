@@ -27,11 +27,12 @@ test('forwards bearer auth, query, JSON and multipart bodies to the fixed backen
   };
   const json = JSON.stringify({ text: 'Do not lose this rule', category: 'Policy' });
   let response = await originalFetch(origin + '/api/backend?path=playbook/rules&q=wood&cursor=a%2Bb', {
-    method: 'POST', headers: { Authorization: 'Bearer test-token', 'Content-Type': 'application/json' }, body: json,
+    method: 'POST', headers: { Authorization: 'Bearer test-token', 'Content-Type': 'application/json', 'Idempotency-Key': 'k-1' }, body: json,
   });
   assert.equal(response.status, 201);
   assert.equal(calls[0].url, 'https://backend.example/api/v1/playbook/rules?q=wood&cursor=a%2Bb');
   assert.equal(calls[0].options.headers.get('authorization'), 'Bearer test-token');
+  assert.equal(calls[0].options.headers.get('idempotency-key'), 'k-1');
   assert.equal(calls[0].options.body.toString(), json);
   const form = new FormData();
   form.append('file', new Blob(['id,hsCode\nTEST,0401.10']), 'test.csv');

@@ -9,4 +9,6 @@ tmp/
 .vercel/
 
 test-results/
+.venv/
+ai/server/eval/results/
 playwright-report/

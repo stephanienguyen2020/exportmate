@@ -45,12 +45,24 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
 | `POST /imports` | editor | Upload screen |
 | `GET /imports/{id}` | viewer | Upload screen (preview) |
 | `POST /imports/{id}/commit` | editor | Upload screen ("Import") |
-| `GET /playbook/rules` | viewer | Every workspace load |
+| `GET /playbook/rules` | viewer | Every workspace load; `ai/server` chat (`get_playbook`) |
 | `POST /playbook/rules` | editor | Playbook: add rule |
 | `PATCH /playbook/rules/{id}` | editor | Playbook: on/off toggle |
 | `DELETE /playbook/rules/{id}` | editor | Playbook: delete |
-| `GET /trade-map` | viewer | Trade map |
+| `GET /trade-map` | viewer | Trade map; `ai/server` chat (`query_orders`) |
 | `GET /trade-map/compare` | viewer | Trade map: "What if" panel |
+| `POST /suppliers` | editor | Trade map: "Add supplier" / "Add a supplier record" |
+| `PATCH /suppliers/{id}` | editor | Trade map: "Edit supplier" |
+| `DELETE /suppliers/{id}` | editor | Trade map: "Delete supplier" |
+| `POST /sites` | editor | Trade map: "Add site" |
+| `PATCH /sites/{id}` | editor | Trade map: "Edit site" |
+| `DELETE /sites/{id}` | editor | Trade map: "Delete site" |
+| `POST /report-drafts` | viewer | Order detail: "Prepare report"; Reports: "Generate company report" |
+| `GET /report-drafts` | viewer | Reports: your reports |
+| `GET /report-drafts/{id}` | viewer (author) | Report editor |
+| `PATCH /report-drafts/{id}` | viewer (author) | Report editor: save (also before preview, download, email) |
+| `GET /report-drafts/{id}/pdf` | viewer (author) | Report editor: "Preview PDF", "Download PDF" |
+| `POST /report-drafts/{id}/email` | editor (author) | Report editor: "Email report" |
 | `POST /regulation-documents` | editor | Regulation library: add regulation / version |
 | `GET /regulation-documents/{id}` | viewer | Regulation library |
 | `GET /regulation-documents/{id}/file` | viewer | Regulation library |
@@ -222,10 +234,15 @@ Everything the map draws, in one call when the page opens:
 | `sites[]` | Factories, ports, warehouses. `isRouteOrigin` marks the company's route start |
 | `observations[]` | Satellite samples (`isSample: true`) with a GeoJSON `extent` and `nearby` suppliers/sites within `checkRadiusKm` (default 25). Order statuses never change because of them |
 | `documentKinds`, `homeCountryIds`, `checkRadiusKm` | Labels, the countries to highlight, the flood check radius |
+| `countries` | `code` (alpha-2), `numericCode` (world-atlas id), `name`: the countries a supplier or site can be in. Includes sourcing countries outside any market (Laos, Cambodia, Thailand, …) |
+| `suppliers[].country`, `sites[].country` | An alpha-2 code from `countries`, or `null` |
+| `sites[].id`, `sites[].key` | `id` is for `PATCH`/`DELETE /sites/{id}`; `key` is made from the name, never changes, and is what observations' `nearby[].ref` uses |
 
 `nearby[].distanceKm` estimates distance to the mapped polygon (including holes) using a local equirectangular projection. The proximity threshold is applied before rounding up to whole kilometres; zero means on or inside the extent. It is a screening estimate, not a survey measurement. The dashed overview circle is an approximate search-area illustration.
 
 `gapCount` counts the checks that are `missing` or `mismatch`. The market panel ("changes to check") is built in the frontend from these checks.
+
+The assistant's `query_orders` tool (`ai/server/orders.js`) also reads this route, with the chatting user's own token, to answer questions about the company's orders and their checklists.
 
 ### `GET /trade-map/compare` (viewer)
 One what-if at a time. Send exactly one of `market`, `shipDate`, or `via`.
@@ -250,6 +267,34 @@ One what-if at a time. Send exactly one of `market`, `shipDate`, or `via`.
 Checklists are scoped by HS prefix: wood lines (chapters 44 and furniture 9401/9403), food (chapters 01–23), textiles (50–63), and listed electronics headings. A prefix-less line, such as proof of origin or ISPM 15 packaging, still applies across those products. Each line still cites an official text.
 
 Called from the order's "What if" panel each time the market, date, or route changes. A new call cancels the previous one.
+
+### Suppliers and sites (editor)
+Editors enter them in the map's side panel; viewers don't see the controls. The location comes from a click on the 2D map (which also suggests the country) or from typed `latitude, longitude`. After a save or delete the page reloads `GET /trade-map`, so order checks and flood proximity are recomputed. Each change writes an audit event (`supplier.created|updated|deleted`, `company_site.created|updated|deleted`).
+
+`POST /suppliers` → `201`:
+```json
+{"name": "Dong Nai Veneer", "place": "Bien Hoa, Dong Nai", "country": "VN",
+ "location": {"latitude": 10.95, "longitude": 106.82}, "supplies": "Acacia veneer",
+ "documents": [{"kind": "formaldehyde", "detail": "Test report, May 2026", "standards": ["EN 717-1"]}]}
+```
+Only `name` (1–300) is required. `place` ≤200, `supplies` ≤1000 (blank is stored as `null`), `country` an alpha-2 code from `countries` (`UK` is read as `GB`), `location` −90..90 / −180..180, up to 20 `documents`, one per `kind` from `documentKinds` (`detail` 1–500, up to 10 `standards`). Returns the supplier with `id` and labelled `documents`.
+- `409 supplier_exists`: the company has a supplier with the same name, ignoring case and spacing. Orders match suppliers on that key, so a renamed supplier stops matching orders written with the old name.
+- `422 invalid_input` with `fieldErrors.country` / `fieldErrors.documents` for an unknown country or document kind.
+
+`PATCH /suppliers/{id}` changes only the fields sent; `null` clears `place`, `country`, `location`, `supplies`. `documents` replaces the whole list (send `[]` to clear it). `name` and `documents` can't be `null`. Same errors as `POST`.
+
+`DELETE /suppliers/{id}` → `{"deleted": true}`. Its documents go with it; its orders stay, named on the order without a record (supplier checks become `unknown`).
+
+`POST /sites` → `201`:
+```json
+{"kind": "warehouse", "name": "Da Nang warehouse", "shortName": "Da Nang", "place": "Tien Sa port, Da Nang",
+ "country": "VN", "location": {"latitude": 16.12, "longitude": 108.21}, "note": "", "isRouteOrigin": false}
+```
+`kind` (`factory` / `port` / `warehouse`), `name` and `place` (1–200) and `location` are required. `shortName` (≤60, the map label) defaults to the name; `note` ≤1000. The `key` is made from the name (`da-nang-warehouse`, then `-2`, …) and never changes. At most one site is the route origin: `isRouteOrigin: true` moves it from any other site. Returns the site in the `sites[]` shape.
+
+`PATCH /sites/{id}` changes only the fields sent; only `country` can be `null`. `DELETE /sites/{id}` → `{"deleted": true}`; deleting the route origin leaves the map to start routes from the company profile's origin.
+
+Both: `404` for another company's supplier or site.
 
 ## Regulations
 
@@ -286,6 +331,49 @@ Every regulation, oldest first, with `versionCount` and `latestVersion`. With `o
 The regulation plus `versions[]`, newest first.
 
 ---
+
+## Reports
+
+A report is generated into a draft that only its author sees (`report_drafts`). The draft keeps the generated report (`original`) and an editable copy (`content`). Everything in `content` can be edited, but the PDF shades every line that differs from `original`, notes per section what was changed, added or left out and by whom, and says "contains edits by <name>" in the footer. Sending locks the draft. These are not the phase 2 analysis reports (`GET /reports/{id}`, planned below).
+
+Content shape (camelCase): `{title, subtitle, summary, sections: [{id, layout: "facts"|"table"|"sources", heading, note, empty, columns, widths, toneColumn, included, rows: [{id, cells: [..one per column..], tone: "gap"|"warn"|null, included}]}]}`. A cell whose last line is only a URL renders as a link (`Publisher\nhttps://…`).
+
+### `POST /report-drafts` (viewer)
+`{"kind": "order", "orderId": "PO-2291"}` or `{"kind": "company", "days": 30}` (7–180). `201` with the draft:
+```json
+{"data": {"id": "…", "kind": "company", "title": "What's happening and what it affects", "scope": {"days": 30},
+  "createdAt": "…", "updatedAt": "…", "sentAt": null, "sentTo": null,
+  "companyName": "Binh Duong Wood Co.", "preparedBy": "Lan",
+  "content": {…}, "original": {…},
+  "edits": {"header": false, "sections": 0, "rowsEdited": 0, "rowsAdded": 0, "rowsRemoved": 0}}}
+```
+- Order: order facts, the document checklist exactly as `GET /trade-map` checks it, cited sources with quotes, the CSV row. `404` for another company's order.
+- Company: at a glance; checklist lines in the markets the company ships to that take effect or change in the next `days`, with the open orders shipping on or after that date; News watch alerts (high and medium, last `days`), read from the AI service's `GET /api/impacts` with the caller's token (`AI_SERVICE_URL`; if it can't be reached the section says so); floods within the check radius of suppliers and sites (last `days`); regulation versions added in the last `days` and the open orders whose checklists cite that regulation; open orders with document gaps; suppliers to follow up; sources.
+
+### `GET /report-drafts` (viewer)
+The caller's 30 most recently updated reports (summary fields only).
+
+### `GET /report-drafts/{id}` (viewer, author only)
+Another member's draft is `404`.
+
+### `PATCH /report-drafts/{id}` (viewer, author only)
+`{"content": {…}}` replaces the content. Sections can't be added, removed or reordered, and their `layout`, `widths`, `toneColumn` and column count can't change (`422 invalid_report`); generated lines are left out with `included: false`, not deleted. New lines need a new `id`. `409 report_already_sent` once sent.
+
+### `GET /report-drafts/{id}/pdf` (viewer, author only)
+The PDF of the saved content, `inline` for the preview; `?download=true` makes it an attachment.
+
+### `POST /report-drafts/{id}/email` (editor, author only, rate limited)
+```json
+{"to": ["buyer@example.com"], "message": "Optional note, ≤1000 chars"}
+```
+```json
+{"data": {"recipients": ["buyer@example.com"], "sandbox": false, "sentAt": "2026-10-15T09:12:00Z"}}
+```
+- `to`: 1–5 plain addresses (no display names), trimmed and de-duplicated. Replies go to the sender's own email. Subject: `<company>: <title>`.
+- Optional `Idempotency-Key` header (the frontend sends a new one per dialog): Resend sends once per key for 24 hours. The draft is locked (`SELECT … FOR UPDATE`) while sending; a second send is `409 report_already_sent`.
+- `sandbox: true` means `RESEND_API_KEY` isn't set: built and audited, not delivered.
+- Writes a `report.emailed` audit event with the recipients, note and edit counts (logs only carry counts).
+- `422 invalid_input` (bad addresses), `422 email_rejected`, `429 rate_limited` (`REPORT_EMAILS_PER_HOUR`, default 20 per user), `502 email_failed`, `503 email_unavailable`.
 
 ## Planned
 

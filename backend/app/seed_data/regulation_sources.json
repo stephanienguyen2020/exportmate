@@ -255,8 +255,8 @@
           "key": "textile-labelling-1007-2011",
           "title": "Regulation (EU) No 1007/2011",
           "download": "http://publications.europa.eu/resource/celex/32011R1007",
-          "accept": "application/pdf",
-          "filename": "textile-labelling-1007-2011.pdf",
+          "accept": "application/xhtml+xml",
+          "filename": "textile-labelling-1007-2011.html",
           "sourceUrl": "https://eur-lex.europa.eu/eli/reg/2011/1007/oj"
         }
       ]
@@ -269,8 +269,8 @@
           "key": "rohs-2011-65",
           "title": "Directive 2011/65/EU",
           "download": "http://publications.europa.eu/resource/celex/32011L0065",
-          "accept": "application/pdf",
-          "filename": "rohs-2011-65.pdf",
+          "accept": "application/xhtml+xml",
+          "filename": "rohs-2011-65.html",
           "sourceUrl": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32011L0065"
         }
       ]

@@ -14,6 +14,13 @@
 .lp-heading-area .lp-cta {
   margin-top: 1.5vw;
 }
+.lp-main > .lp-explainer {
+  width: 30%;
+  margin: -0.6vw 0 1.6vw auto;
+  font-size: clamp(12px, 0.85vw, 15px);
+  line-height: 1.45;
+  opacity: 0.75;
+}
 .lp-scroll-cue {
   max-width: 1800px;
   margin: 25px auto 75px;
@@ -704,6 +711,11 @@
   .lp-heading-area .lp-description {
     font-size: 13px;
     line-height: 1.6;
+  }
+  .lp-main > .lp-explainer {
+    width: 100%;
+    margin: -8px 0 22px;
+    font-size: 12px;
   }
   .lp-heading-area .lp-cta {
     margin: 0;

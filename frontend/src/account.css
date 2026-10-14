@@ -634,3 +634,8 @@
     grid-template-columns: 1fr;
   }
 }
+.ac-google {
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}

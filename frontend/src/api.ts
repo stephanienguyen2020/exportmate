@@ -53,6 +53,58 @@ export type OrderDetail = {
   } | null;
   exposures: unknown[];
 };
+export type ReportEmail = {
+  recipients: string[];
+  sandbox: boolean;
+  sentAt: string;
+};
+export type ReportRow = {
+  id: string;
+  cells: string[];
+  tone: "gap" | "warn" | null;
+  included: boolean;
+};
+export type ReportSection = {
+  id: string;
+  layout: "facts" | "table" | "sources";
+  heading: string;
+  note: string;
+  empty: string;
+  columns: string[];
+  widths: number[];
+  toneColumn: number | null;
+  rows: ReportRow[];
+  included: boolean;
+};
+export type ReportContent = {
+  title: string;
+  subtitle: string;
+  summary: string;
+  sections: ReportSection[];
+};
+export type ReportSummary = {
+  id: string;
+  kind: "order" | "company";
+  title: string;
+  scope: { orderId?: string; days?: number };
+  createdAt: string;
+  updatedAt: string;
+  sentAt: string | null;
+  sentTo: string[] | null;
+};
+export type ReportDraft = ReportSummary & {
+  companyName: string;
+  preparedBy: string;
+  content: ReportContent;
+  original: ReportContent;
+  edits: {
+    header: boolean;
+    sections: number;
+    rowsEdited: number;
+    rowsAdded: number;
+    rowsRemoved: number;
+  };
+};
 export type ImportPreview = {
   id: string;
   filename: string;
@@ -107,6 +159,7 @@ export type MapSupplier = {
   id: string | null;
   name: string;
   place: string | null;
+  country: string | null;
   location: GeoPoint | null;
   supplies: string | null;
   documents:
@@ -115,11 +168,13 @@ export type MapSupplier = {
   orderIds: string[];
 };
 export type MapSite = {
+  id: string;
   key: string;
   kind: "factory" | "port" | "warehouse";
   name: string;
   shortName: string;
   place: string;
+  country: string | null;
   location: GeoPoint;
   note: string;
   isRouteOrigin: boolean;
@@ -154,8 +209,36 @@ export type TradeMap = {
   sites: MapSite[];
   observations: SatelliteObservation[];
   documentKinds: { kind: string; label: string }[];
+  countries: { code: string; numericCode: string; name: string }[];
   homeCountryIds: string[];
   checkRadiusKm: number;
+};
+export type SupplierDocumentInput = {
+  kind: string;
+  detail: string;
+  standards: string[];
+};
+export type SupplierInput = {
+  name: string;
+  place: string | null;
+  country: string | null;
+  location: GeoPoint | null;
+  supplies: string | null;
+  documents: SupplierDocumentInput[];
+};
+export type SupplierRecord = Omit<SupplierInput, "documents"> & {
+  id: string;
+  documents: NonNullable<MapSupplier["documents"]>;
+};
+export type SiteInput = {
+  kind: MapSite["kind"];
+  name: string;
+  shortName: string;
+  place: string;
+  country: string | null;
+  location: GeoPoint;
+  note: string;
+  isRouteOrigin: boolean;
 };
 export type ComparisonItem = {
   title: string;
@@ -351,6 +434,58 @@ export const api = {
     request<OrderDetail>(`/orders/${encodeURIComponent(id)}`).then(
       (r) => r.data,
     ),
+  reports: (signal?: AbortSignal) =>
+    request<ReportSummary[]>("/report-drafts", { signal }).then((r) => r.data),
+  report: (id: string, signal?: AbortSignal) =>
+    request<ReportDraft>(`/report-drafts/${encodeURIComponent(id)}`, { signal }).then(
+      (r) => r.data,
+    ),
+  createReport: (
+    body: { kind: "order"; orderId: string } | { kind: "company"; days: number },
+  ) =>
+    request<ReportDraft>("/report-drafts", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }).then((r) => r.data),
+  updateReport: (id: string, content: ReportContent) =>
+    request<ReportDraft>(`/report-drafts/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ content }),
+    }).then((r) => r.data),
+  async reportPdf(id: string): Promise<Blob> {
+    const response = await authenticatedResponse(
+      `/report-drafts/${encodeURIComponent(id)}/pdf`,
+    );
+    return response.blob();
+  },
+  async downloadReport(id: string) {
+    const response = await authenticatedResponse(
+      `/report-drafts/${encodeURIComponent(id)}/pdf?download=true`,
+    );
+    const filename =
+      /filename="([^"]+)"/.exec(
+        response.headers.get("content-disposition") || "",
+      )?.[1] || "exportmate-report.pdf";
+    const url = URL.createObjectURL(await response.blob());
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  },
+  // One key per dialog: a double click or a retry sends one email.
+  emailReport: (
+    id: string,
+    body: { to: string[]; message: string },
+    idempotencyKey: string,
+  ) =>
+    request<ReportEmail>(`/report-drafts/${encodeURIComponent(id)}/email`, {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify(body),
+    }).then((r) => r.data),
   rules: (signal?: AbortSignal) =>
     request<Rule[]>("/playbook/rules", { signal }).then((r) => r.data),
   addRule: (rule: Omit<Rule, "id">) =>
@@ -411,6 +546,31 @@ export const api = {
   },
   tradeMap: (signal?: AbortSignal) =>
     request<TradeMap>("/trade-map", { signal }).then((r) => r.data),
+  createSupplier: (supplier: SupplierInput) =>
+    request<SupplierRecord>("/suppliers", {
+      method: "POST",
+      body: JSON.stringify(supplier),
+    }).then((r) => r.data),
+  // Sends every field: null clears place, country, location and supplies.
+  updateSupplier: (id: string, supplier: SupplierInput) =>
+    request<SupplierRecord>(`/suppliers/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(supplier),
+    }).then((r) => r.data),
+  deleteSupplier: (id: string) =>
+    request(`/suppliers/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  createSite: (site: SiteInput) =>
+    request<MapSite>("/sites", {
+      method: "POST",
+      body: JSON.stringify(site),
+    }).then((r) => r.data),
+  updateSite: (id: string, site: SiteInput) =>
+    request<MapSite>(`/sites/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(site),
+    }).then((r) => r.data),
+  deleteSite: (id: string) =>
+    request(`/sites/${encodeURIComponent(id)}`, { method: "DELETE" }),
   compareMarkets: (orderId: string, market: string, signal?: AbortSignal) =>
     request<MarketComparison>(
       `/trade-map/compare?${new URLSearchParams({ orderId, market })}`,

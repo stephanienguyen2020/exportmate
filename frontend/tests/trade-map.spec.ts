@@ -78,6 +78,7 @@ const mapData: TradeMap = {
       id: "supplier-1",
       name: "Sample supplier",
       place: "Vietnam",
+      country: "VN",
       location: { latitude: 11.54, longitude: 106.9 },
       supplies: "Sample goods",
       documents: [],
@@ -86,11 +87,13 @@ const mapData: TradeMap = {
   ],
   sites: [
     {
+      id: "site-1",
       key: "factory",
       kind: "factory",
       name: "Sample factory",
       shortName: "Factory",
       place: "Vietnam",
+      country: "VN",
       location: { latitude: 10.8, longitude: 106.7 },
       note: "Synthetic test location",
       isRouteOrigin: true,
@@ -133,7 +136,11 @@ const mapData: TradeMap = {
       ],
     },
   ],
-  documentKinds: [],
+  documentKinds: [{ kind: "legality", label: "Timber legality evidence" }],
+  countries: [
+    { code: "KH", numericCode: "116", name: "Cambodia" },
+    { code: "VN", numericCode: "704", name: "Vietnam" },
+  ],
   homeCountryIds: ["704"],
   checkRadiusKm: 25,
 };
@@ -144,9 +151,13 @@ async function openMap(
     fail?: boolean;
     hash?: string;
     origin?: string;
+    role?: "owner" | "viewer";
+    writes?: { method: string; path: string; body: any }[];
   } = {},
 ) {
   const comparisons: URL[] = [];
+  // Saved suppliers and sites show up when the map reloads.
+  const current: TradeMap = structuredClone(mapData);
   await page.route("**/api/impacts**", (r) =>
     r.fulfill({ json: { impacts: [], scan: null } }),
   );
@@ -157,6 +168,7 @@ async function openMap(
     if (path === "/me")
       data = {
         ...account,
+        role: options.role ?? account.role,
         company: {
           ...account.company,
           origin: options.origin ?? account.company.origin,
@@ -183,7 +195,21 @@ async function openMap(
           status: 503,
           json: { error: { message: "Map service unavailable" } },
         });
-      data = { ...mapData, sites: options.noOrigin ? [] : mapData.sites };
+      data = { ...current, sites: options.noOrigin ? [] : current.sites };
+    } else if (path === "/suppliers" || path.startsWith("/sites/")) {
+      const method = route.request().method();
+      const body = route.request().postDataJSON();
+      options.writes?.push({ method, path, body });
+      if (path === "/suppliers") {
+        data = { id: "supplier-2", ...body, documents: [] };
+        current.suppliers.push({
+          ...(data as TradeMap["suppliers"][number]),
+          orderIds: [],
+        });
+      } else {
+        data = { ...current.sites[0], ...body };
+        current.sites[0] = data as TradeMap["sites"][number];
+      }
     } else if (path === "/trade-map/compare") {
       comparisons.push(url);
       if (url.searchParams.get("shipDate")) {
@@ -450,4 +476,97 @@ test("failed map reads never show sample data", async ({ page }) => {
   await openMap(page, { fail: true });
   await expect(page.getByText("Map service unavailable")).toBeVisible();
   await expect(page.locator(".tm-globe")).toHaveCount(0);
+});
+
+test("editors add a supplier from a map click or typed coordinates", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 1050 });
+  const writes: { method: string; path: string; body: any }[] = [];
+  await openMap(page, { writes });
+  await page.getByRole("button", { name: "Add supplier" }).click();
+  const form = page.locator(".tm-panel form");
+  await expect(form.locator("h2")).toHaveText("Add a supplier.");
+  // The form switches to the 2D map of the company's own area.
+  const canvas = page.getByRole("group", { name: "Trade map, Production" });
+  await expect(canvas).toBeVisible();
+  await canvas.click({ position: { x: 300, y: 200 } });
+  await expect(page.locator(".tm-pin")).toBeVisible();
+  await expect(form.getByLabel("Location (optional)")).toHaveValue(
+    /^-?\d+(\.\d+)?, -?\d+(\.\d+)?$/,
+  );
+
+  await form.getByLabel("Name").fill("Kampot Timber");
+  await form.getByLabel("Location (optional)").fill("abc");
+  await expect(form.getByText("Write latitude, then longitude")).toBeVisible();
+  await form.getByLabel("Location (optional)").fill("10.61, 104.18");
+  await form.getByLabel("Country").selectOption("KH");
+  await form.getByLabel("Timber legality evidence").check();
+  await form
+    .getByLabel("Timber legality evidence: what's on file")
+    .fill("Legality dossier");
+  await form.getByRole("button", { name: "Add supplier" }).click();
+
+  await expect(page.locator(".tm-panel h2")).toHaveText("Kampot Timber.");
+  expect(writes).toEqual([
+    {
+      method: "POST",
+      path: "/suppliers",
+      body: {
+        name: "Kampot Timber",
+        place: null,
+        country: "KH",
+        location: { latitude: 10.61, longitude: 104.18 },
+        supplies: null,
+        documents: [
+          { kind: "legality", detail: "Legality dossier", standards: [] },
+        ],
+      },
+    },
+  ]);
+});
+
+test("editors edit a site and viewers see no edit controls", async ({
+  page,
+}) => {
+  const writes: { method: string; path: string; body: any }[] = [];
+  await openMap(page, { writes });
+  await page.getByRole("button", { name: /Sample factory/ }).click();
+  await page.getByRole("button", { name: "Edit site" }).click();
+  const form = page.locator(".tm-panel form");
+  await expect(form.getByLabel("Location")).toHaveValue("10.8, 106.7");
+  await expect(form.getByLabel("Order routes start here")).toBeChecked();
+  await form.getByLabel("Name").fill("Binh Duong factory");
+  await form.getByRole("button", { name: "Save site" }).click();
+  await expect(page.locator(".tm-panel h2")).toHaveText("Binh Duong factory.");
+  expect(writes).toEqual([
+    {
+      method: "PATCH",
+      path: "/sites/site-1",
+      body: expect.objectContaining({
+        name: "Binh Duong factory",
+        shortName: "Factory",
+        location: { latitude: 10.8, longitude: 106.7 },
+        isRouteOrigin: true,
+      }),
+    },
+  ]);
+
+  await page.getByRole("button", { name: "Edit site" }).click();
+  await page.getByRole("button", { name: "Delete site" }).click();
+  await expect(page.locator(".tm-confirm")).toContainText(
+    "Routes start here",
+  );
+  await page.getByRole("button", { name: "Keep it" }).click();
+  await expect(page.locator(".tm-confirm")).toHaveCount(0);
+});
+
+test("viewers can't add or edit places", async ({ page }) => {
+  await openMap(page, { role: "viewer" });
+  await expect(page.locator(".tm-panel h2")).toHaveText("Pick a place.");
+  await expect(page.getByRole("button", { name: "Add supplier" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Add site" })).toHaveCount(0);
+  await page.getByRole("button", { name: /Sample factory/ }).click();
+  await expect(page.locator(".tm-panel h2")).toHaveText("Sample factory.");
+  await expect(page.getByRole("button", { name: "Edit site" })).toHaveCount(0);
 });

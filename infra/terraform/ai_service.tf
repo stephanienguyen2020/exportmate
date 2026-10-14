@@ -1,7 +1,8 @@
 # The AI service (ai/server) in the same project as the backend: Firestore with its
-# vector indexes, a Cloud Run service and job, the daily news-scan schedule and
-# log-based metrics. Terraform creates the service and job with a placeholder image;
-# ai/server/deploy.sh builds the real one on Cloud Build and rolls it out.
+# vector indexes, a Cloud Run service and job, the daily news-scan schedule, the
+# Model Armor template that screens news articles and log-based metrics. Terraform
+# creates the service and job with a placeholder image; ai/server/deploy.sh builds
+# the real one on Cloud Build and rolls it out.
 
 data "google_project" "this" {}
 
@@ -14,16 +15,20 @@ locals {
     GOOGLE_CLOUD_PROJECT  = var.project_id
     GOOGLE_CLOUD_LOCATION = "global" # Vertex AI endpoint for Gemini and the embedding model
     GEMINI_MODEL          = var.gemini_model
+    GEMINI_MODEL_SIMPLE   = var.gemini_model_simple
+    GEMINI_MODEL_COMPLEX  = var.gemini_model_complex
     ALLOWED_ORIGINS       = var.allowed_origins
     BACKEND_URL           = google_cloud_run_v2_service.backend.uri
     SCHEDULER_SA          = google_service_account.scheduler.email
     SCAN_AUDIENCE         = local.ai_url
+    MODEL_ARMOR_TEMPLATE  = "projects/${var.project_id}/locations/${google_model_armor_template.untrusted_text.location}/templates/${google_model_armor_template.untrusted_text.template_id}"
   }
 
   ai_logs = "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"exportmate-ai\""
 }
 
-# Stock, news sources, articles, alerts, scans, the vector index (kb), audits and eval runs.
+# Stock, news sources, articles, alerts, scans, the vector index (kb), audits, the answer
+# cache and eval runs.
 resource "google_firestore_database" "default" {
   name        = "(default)"
   location_id = var.region
@@ -78,7 +83,48 @@ resource "google_firestore_index" "kb_type_embedding" {
   }
 }
 
-# Least privilege: read/write Firestore documents and call Gemini on Vertex AI, nothing else.
+# Answers already given (ai/server/answer-cache.js) are deleted once expireAt passes. Keys
+# carry the date, so an entry stops matching after a day anyway; this only cleans up.
+resource "google_firestore_field" "answer_cache_ttl" {
+  database   = google_firestore_database.default.name
+  collection = "answer_cache"
+  field      = "expireAt"
+
+  ttl_config {}
+  # Single-field indexes on this field aren't needed.
+  index_config {}
+}
+
+# Screens each new news article before Gemini or the vector index sees it (ai/server/armor.js,
+# called by scan.js): prompt injection and jailbreaks, and links to known-malicious sites.
+# Medium confidence and above; a withheld article is recorded with what matched.
+resource "google_model_armor_template" "untrusted_text" {
+  location    = var.region
+  template_id = "exportmate-untrusted-text"
+
+  filter_config {
+    pi_and_jailbreak_filter_settings {
+      filter_enforcement = "ENABLED"
+      confidence_level   = "MEDIUM_AND_ABOVE"
+    }
+
+    malicious_uri_filter_settings {
+      filter_enforcement = "ENABLED"
+    }
+  }
+
+  template_metadata {
+    # Not every feed is in English.
+    multi_language_detection {
+      enable_multi_language_detection = true
+    }
+  }
+
+  depends_on = [google_project_service.apis]
+}
+
+# Least privilege: read/write Firestore documents, call Gemini on Vertex AI and screen text
+# with Model Armor, nothing else.
 resource "google_service_account" "ai" {
   account_id   = "exportmate-ai"
   display_name = "ExportMate AI service (Cloud Run)"
@@ -95,6 +141,12 @@ resource "google_project_iam_member" "ai_firestore" {
 resource "google_project_iam_member" "ai_vertex" {
   project = var.project_id
   role    = "roles/aiplatform.user"
+  member  = "serviceAccount:${google_service_account.ai.email}"
+}
+
+resource "google_project_iam_member" "ai_modelarmor" {
+  project = var.project_id
+  role    = "roles/modelarmor.user"
   member  = "serviceAccount:${google_service_account.ai.email}"
 }
 
@@ -156,6 +208,7 @@ resource "google_cloud_run_v2_service" "ai" {
     google_firestore_database.default,
     google_project_iam_member.ai_firestore,
     google_project_iam_member.ai_vertex,
+    google_project_iam_member.ai_modelarmor,
   ]
 }
 
@@ -220,6 +273,7 @@ resource "google_cloud_run_v2_job" "ai_task" {
     google_firestore_database.default,
     google_project_iam_member.ai_firestore,
     google_project_iam_member.ai_vertex,
+    google_project_iam_member.ai_modelarmor,
   ]
 }
 
@@ -301,6 +355,19 @@ resource "google_logging_metric" "guard_withheld" {
   name        = "exportmate_ai/guard_withheld"
   description = "Answers where the guard withheld third-party text addressed to the assistant (possible prompt injection)."
   filter      = "${local.ai_logs} AND jsonPayload.message=\"chat.completed\" AND jsonPayload.withheld>0"
+
+  metric_descriptor {
+    metric_kind = "DELTA"
+    value_type  = "INT64"
+  }
+
+  depends_on = [google_project_service.apis]
+}
+
+resource "google_logging_metric" "armor_failures" {
+  name        = "exportmate_ai/armor_failures"
+  description = "News scans where Model Armor could not screen some articles (they wait for the next scan)."
+  filter      = "${local.ai_logs} AND jsonPayload.message=\"scan.armor_failed\""
 
   metric_descriptor {
     metric_kind = "DELTA"
