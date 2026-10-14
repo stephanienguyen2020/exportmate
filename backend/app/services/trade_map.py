@@ -219,7 +219,7 @@ def compare_requirements(
                     title=req.title,
                     note=f"{note}. "
                     + (
-                        f"Already used for {current}."
+                        f"Also listed in the {current} checklist; validity and shipment scope still need review."
                         if prior
                         else f"On file, though {current or 'the current market'} doesn't ask for it."
                     ),
@@ -237,9 +237,12 @@ def compare_requirements(
             )
         elif status == "prepare":
             if prior and prior.form == req.form:
-                reuse.append(
+                reevaluate.append(
                     ComparisonItemOut(
-                        title=req.title, note="Same requirement; no change for this market."
+                        title=req.title,
+                        note="Same requirement, but shipment-specific evidence still needs to be "
+                        "prepared and checked for this order.",
+                        tag="Prepare",
                     )
                 )
             else:
@@ -299,15 +302,52 @@ def distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
         math.sin((lat2 - lat1) * rad / 2) ** 2
         + math.cos(lat1 * rad) * math.cos(lat2 * rad) * math.sin((lon2 - lon1) * rad / 2) ** 2
     )
-    return EARTH_RADIUS_KM * 2 * math.asin(math.sqrt(a))
+    return EARTH_RADIUS_KM * 2 * math.asin(math.sqrt(min(1.0, max(0.0, a))))
 
 
-def km_from_extent(observation: SatelliteObservation, latitude: float, longitude: float) -> int:
-    """Distance to the edge of the observed extent; 0 means inside it."""
-    centre = distance_km(
-        observation.center_latitude, observation.center_longitude, latitude, longitude
-    )
-    return max(0, round(centre - observation.radius_km))
+def km_from_extent(observation: SatelliteObservation, latitude: float, longitude: float) -> float:
+    """Estimate distance to the mapped polygon, not its bounding circle.
+
+    These local flood extents use a query-centred equirectangular plane. Distances
+    are screening estimates, not survey measurements. Polygon holes are excluded.
+    Longitudes are unwrapped at the observation centre for antimeridian extents.
+    """
+    rad = math.pi / 180
+    anchor = observation.center_longitude
+
+    def unwrap(lon: float) -> float:
+        return (lon - anchor + 180) % 360 - 180
+
+    query_lon = unwrap(longitude)
+
+    def project(coordinate: list[float]) -> tuple[float, float]:
+        lon, lat = coordinate[:2]
+        return (
+            (unwrap(lon) - query_lon) * rad * EARTH_RADIUS_KM * math.cos(latitude * rad),
+            (lat - latitude) * rad * EARTH_RADIUS_KM,
+        )
+
+    rings = [[project(p) for p in ring] for ring in observation.extent["coordinates"]]
+
+    def contains(ring: list[tuple[float, float]]) -> bool:
+        inside = False
+        for (ax, ay), (bx, by) in zip(ring, ring[1:] + ring[:1]):
+            if (ay > 0) != (by > 0) and 0 < ax + (bx - ax) * (-ay) / (by - ay):
+                inside = not inside
+        return inside
+
+    if contains(rings[0]) and not any(contains(ring) for ring in rings[1:]):
+        return 0.0
+    nearest = math.inf
+    for ring in rings:
+        for (ax, ay), (bx, by) in zip(ring, ring[1:] + ring[:1]):
+            dx, dy = bx - ax, by - ay
+            length_squared = dx * dx + dy * dy
+            fraction = (
+                max(0.0, min(1.0, -(ax * dx + ay * dy) / length_squared)) if length_squared else 0.0
+            )
+            nearest = min(nearest, math.hypot(ax + fraction * dx, ay + fraction * dy))
+    return nearest
 
 
 def nearby_places(
@@ -325,7 +365,8 @@ def nearby_places(
     for kind, ref, name, lat, lon in places:
         km = km_from_extent(observation, lat, lon)
         if km <= radius_km:
-            nearby.append(NearbyPlaceOut(type=kind, ref=ref, name=name, distance_km=km))
+            # Apply the threshold before rounding; zero must mean on/inside the polygon.
+            nearby.append(NearbyPlaceOut(type=kind, ref=ref, name=name, distance_km=math.ceil(km)))
     return sorted(nearby, key=lambda p: (p.distance_km, p.name))
 
 

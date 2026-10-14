@@ -1350,6 +1350,7 @@ function App() {
                     renderStatus={status}
                     onNavigate={go}
                     signature={`${profile.name} · ${profile.company || "Your company"}`}
+                    companyOrigin={profile.origin}
                   />
                 </Suspense>
               )}
