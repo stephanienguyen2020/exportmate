@@ -1,4 +1,5 @@
-# Firebase Auth (email + password) and a web app whose config the frontend uses.
+# Firebase Auth (email + password, and Google once an OAuth client is set) and a web app whose
+# config the frontend uses.
 
 resource "google_firebase_project" "default" {
   provider = google-beta
@@ -26,6 +27,20 @@ resource "google_identity_platform_config" "auth" {
   }
 
   depends_on = [google_firebase_project.default]
+}
+
+# "Continue with Google". Terraform can't create the OAuth client; see README.md.
+resource "google_identity_platform_default_supported_idp_config" "google" {
+  count    = var.google_oauth_client_id == "" ? 0 : 1
+  provider = google-beta
+  project  = var.project_id
+
+  idp_id        = "google.com"
+  client_id     = var.google_oauth_client_id
+  client_secret = var.google_oauth_client_secret
+  enabled       = true
+
+  depends_on = [google_identity_platform_config.auth]
 }
 
 resource "google_firebase_web_app" "frontend" {

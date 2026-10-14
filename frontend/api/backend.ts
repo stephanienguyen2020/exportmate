@@ -56,7 +56,8 @@ export default async function handler(
       "/api/v1/" + path.split("/").map(encodeURIComponent).join("/");
     base.search = incoming.searchParams.toString();
     const headers = new Headers();
-    for (const name of ["authorization", "content-type"]) {
+    // idempotency-key: a retried "Email report" sends one email.
+    for (const name of ["authorization", "content-type", "idempotency-key"]) {
       const value = req.headers[name];
       if (typeof value === "string") headers.set(name, value);
     }

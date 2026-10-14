@@ -17,6 +17,8 @@ All settings come from `backend/.env` (app, Alembic, seed and tests), whichever 
 
 Uploaded documents always go to the Cloud Storage bucket `REGULATION_DOCUMENT_BUCKET`, also when running locally: run `gcloud auth application-default login` once. Without it, uploads and downloads return `503 storage_not_configured`. Tests use an in-memory fake.
 
+Order reports are emailed through Resend when `RESEND_API_KEY` is set (sender `REPORT_EMAIL_FROM`, whose domain must be verified in Resend). Without a key they run in sandbox mode: the PDF is built and the send is audited, but nothing is delivered, and the API answers `sandbox: true`. Tests always use the sandbox.
+
 API docs: http://127.0.0.1:8000/api/v1/docs
 
 With `AUTH_MODE=dev`, any `Bearer dev:<email>` token signs you in as a verified user:

@@ -4,22 +4,23 @@ Creates everything ExportMate runs on Google Cloud (backend and AI service) in o
 
 | Resource | Name |
 | --- | --- |
-| APIs | Cloud Run, Cloud SQL Admin, Secret Manager, Artifact Registry, Firebase, Identity Toolkit, Firestore, Vertex AI, Cloud Scheduler, Cloud Build, … |
+| APIs | Cloud Run, Cloud SQL Admin, Secret Manager, Artifact Registry, Firebase, Identity Toolkit, Firestore, Vertex AI, Model Armor, Cloud Scheduler, Cloud Build, … |
 | Postgres 16 (Cloud SQL, `db-f1-micro`, ~USD 10/month) | `exportmate-db`, database + user `exportmate` |
 | Secret | `backend-database-url` |
 | Service account | `exportmate-backend` (Cloud SQL client, Firebase Auth admin, reads the secret, creates, reads and deletes regulation documents) |
 | Image registry | `<region>-docker.pkg.dev/<project>/exportmate` |
 | Cloud Run service (public) | `exportmate-backend` |
 | Cloud Run job (same image, one command) | `exportmate-backend-task` |
-| Firebase Auth (email + password) + web app | config printed as `firebase_web_config` |
+| Firebase Auth (email + password; Google when `google_oauth_client_id` is set) + web app | config printed as `firebase_web_config` |
 | Bucket (private, versioned) | `exportmate-regulation-documents-dev`: company uploads under `companies/`, shared official texts under `shared/`; the backend can create, read and delete objects (`objectUser`, `regulation_documents.tf`) |
 | **AI service** (`ai_service.tf`) | |
 | Firestore | `(default)`, native, asia-southeast1, with the two `kb` vector indexes (768-d) |
-| Service accounts | `exportmate-ai` (Firestore user, Vertex AI user), `exportmate-scheduler` (signs the scan's OIDC token, no roles) |
+| Service accounts | `exportmate-ai` (Firestore user, Vertex AI user, Model Armor user), `exportmate-scheduler` (signs the scan's OIDC token, no roles) |
 | Cloud Run service (public) | `exportmate-ai`, URL printed as `ai_url` |
 | Cloud Run job (same image, one command) | `exportmate-ai-task` |
+| Model Armor template | `exportmate-untrusted-text` (prompt injection and jailbreak at medium confidence and above, malicious links), screens each new news article; set on the service as `MODEL_ARMOR_TEMPLATE` |
 | Cloud Scheduler | `exportmate-daily-news-scan`, 07:00 Asia/Ho_Chi_Minh, `POST <ai_url>/api/scan` |
-| Log-based metrics | `exportmate_ai/chat_answers` (by status, policy version), `chat_latency`, `guard_withheld`, `scan_failures` |
+| Log-based metrics | `exportmate_ai/chat_answers` (by status, policy version), `chat_latency`, `guard_withheld`, `armor_failures`, `scan_failures` |
 | **Builds** (`build.tf`) | |
 | Service account | `exportmate-builder` (pushes to the image registry, writes build logs) |
 | Bucket | `<project>-builds`, uploaded build sources, deleted after 30 days |
@@ -79,6 +80,20 @@ curl -s "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?k
 
 If the project already has Firebase (added in the console), import it before the first apply:
 `terraform import google_firebase_project.default projects/$PROJECT_ID`.
+
+## Google sign-in
+
+"Continue with Google" on the sign-in and sign-up pages needs the Google provider, which needs an OAuth client that Terraform can't create.
+
+On `skilful-scarab-511320-q9` it was turned on in the Firebase console (Authentication › Sign-in method › Add new provider › Google; public-facing name ExportMate). That created the OAuth client ("Web client (auto created by Google Service)") and the consent screen, so `google_oauth_client_id` stays empty there and Terraform leaves the provider alone. The support email shown in Google's popup can be changed in Cloud console › Google Auth Platform › Branding.
+
+On a new project, do the same in the console, or create the client yourself and let Terraform enable the provider:
+
+1. Cloud console › Google Auth Platform › Branding: set up the consent screen (External, app name ExportMate, support email, the `exportmate.vercel.app` home page and the privacy and terms pages). Under Audience, publish the app; while it is in testing, only listed test users can sign in.
+2. Clients › Create client › Web application. Authorized JavaScript origins: `https://exportmate.vercel.app`, `http://localhost:5173`, `http://127.0.0.1:5173`. Authorized redirect URI: `https://$PROJECT_ID.firebaseapp.com/__/auth/handler`.
+3. Put the client ID and secret in `terraform.tfvars` (`google_oauth_client_id`, `google_oauth_client_secret`) and `terraform apply`. If the provider was already turned on in the console, import it first: `terraform import 'google_identity_platform_default_supported_idp_config.google[0]' projects/$PROJECT_ID/defaultSupportedIdpConfigs/google.com`.
+
+The button shows whenever Firebase is configured and `VITE_AUTH_MODE` isn't `dev`. Until the provider is on, it answers "Google sign-in isn't turned on yet". Someone who already has a password for the same email is asked to sign in with it (one account per email); a Gmail address is the exception, since Google vouches for it and Firebase links it to the existing account.
 
 ## Every code change
 

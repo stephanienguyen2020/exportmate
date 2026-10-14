@@ -36,6 +36,30 @@ function firebase() {
   loading.catch(() => (loading = null)); // a failed download can be retried
   return loading;
 }
+// Google sign-in goes through Firebase, so local dev tokens can't stand in for it.
+export const googleAuthAvailable = firebaseConfigured && !devAuth;
+// Browsers block a popup opened long after the click, so the sign-in pages load the SDK early.
+export function preloadAuth() {
+  if (googleAuthAvailable) firebase().catch(() => {});
+}
+/** Returns null when the person closes the Google window. */
+export async function signInWithGoogle() {
+  const { auth, sdk } = await firebase();
+  const provider = new sdk.GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: "select_account" });
+  try {
+    const { user } = await sdk.signInWithPopup(auth, provider);
+    return { email: user.email || "", verified: user.emailVerified };
+  } catch (error) {
+    const code = (error as { code?: unknown } | null)?.code;
+    if (
+      code === "auth/popup-closed-by-user" ||
+      code === "auth/cancelled-popup-request"
+    )
+      return null;
+    throw error;
+  }
+}
 export async function signIn(email: string, password: string) {
   if (devAuth) {
     sessionStorage.setItem("em-dev-email", email);
@@ -129,6 +153,14 @@ const FIREBASE_MESSAGES: Record<string, string> = {
   "auth/invalid-action-code":
     "This link is invalid or was already used. Request a new one.",
   "auth/requires-recent-login": "Sign in again to continue.",
+  "auth/popup-blocked":
+    "Your browser blocked the Google window. Allow pop-ups for this site, then try again.",
+  "auth/account-exists-with-different-credential":
+    "This email already has an ExportMate password. Sign in with your email and password.",
+  "auth/operation-not-allowed":
+    "Google sign-in isn't turned on yet. Use your email and password.",
+  "auth/unauthorized-domain":
+    "Google sign-in isn't set up for this address yet. Use your email and password.",
 };
 export function errorMessage(error: unknown) {
   const code = (error as { code?: unknown } | null)?.code;

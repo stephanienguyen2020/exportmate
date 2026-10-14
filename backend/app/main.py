@@ -6,7 +6,18 @@ from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.engine import make_url
 
-from app.api import account, health, imports, orders, playbook, regulations, trade_map
+from app.api import (
+    account,
+    company_sites,
+    health,
+    imports,
+    orders,
+    playbook,
+    regulations,
+    reports,
+    suppliers,
+    trade_map,
+)
 from app.core.config import get_settings
 from app.core.errors import register_error_handlers
 from app.core.logging import configure_logging
@@ -44,7 +55,7 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=settings.origins,
         allow_methods=["GET", "POST", "PATCH", "DELETE"],
-        allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
+        allow_headers=["Authorization", "Content-Type", "X-Request-ID", "Idempotency-Key"],
         expose_headers=["X-Request-ID"],
     )
 
@@ -90,7 +101,18 @@ def create_app() -> FastAPI:
     register_error_handlers(app)
 
     api = APIRouter(prefix=API_PREFIX)
-    for module in (health, account, orders, imports, playbook, trade_map, regulations):
+    for module in (
+        health,
+        account,
+        orders,
+        imports,
+        playbook,
+        trade_map,
+        suppliers,
+        company_sites,
+        regulations,
+        reports,
+    ):
         api.include_router(module.router)
     app.include_router(api)
     return app

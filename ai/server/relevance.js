@@ -12,3 +12,21 @@ export function aboutWoodGoods({ title = "", snippet = "" }) {
   const text = `${title} ${snippet}`;
   return WOOD.test(text) || !OTHER_COMMODITY.test(text);
 }
+
+/**
+ * The scan's verdict on one article, from Gemini's assessment `r` of it (article number `n`
+ * in its batch). SKUs the model named that are not in stock are dropped; an article is
+ * relevant only if the model said so, at least one real SKU is affected, it is not a repeat
+ * of another article in the batch and it passes aboutWoodGoods. Shared by the scan and its eval.
+ */
+export function decide(article, r, n, bySku) {
+  const affected = (r.affected || [])
+    .filter((x) => bySku.has(x.sku))
+    .map((x) => {
+      const it = bySku.get(x.sku);
+      return { sku: x.sku, name: it.name, reason: x.reason, stockValueUsd: Math.round(it.qtyOnHand * it.unitCostUsd) };
+    });
+  const duplicate = Number.isInteger(r.sameAs) && r.sameAs !== n;
+  const otherCommodity = Boolean(r.relevant) && !aboutWoodGoods(article);
+  return { relevant: Boolean(r.relevant && affected.length && !duplicate && !otherCommodity), affected, duplicate, otherCommodity };
+}

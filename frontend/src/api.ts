@@ -53,6 +53,58 @@ export type OrderDetail = {
   } | null;
   exposures: unknown[];
 };
+export type ReportEmail = {
+  recipients: string[];
+  sandbox: boolean;
+  sentAt: string;
+};
+export type ReportRow = {
+  id: string;
+  cells: string[];
+  tone: "gap" | "warn" | null;
+  included: boolean;
+};
+export type ReportSection = {
+  id: string;
+  layout: "facts" | "table" | "sources";
+  heading: string;
+  note: string;
+  empty: string;
+  columns: string[];
+  widths: number[];
+  toneColumn: number | null;
+  rows: ReportRow[];
+  included: boolean;
+};
+export type ReportContent = {
+  title: string;
+  subtitle: string;
+  summary: string;
+  sections: ReportSection[];
+};
+export type ReportSummary = {
+  id: string;
+  kind: "order" | "company";
+  title: string;
+  scope: { orderId?: string; days?: number };
+  createdAt: string;
+  updatedAt: string;
+  sentAt: string | null;
+  sentTo: string[] | null;
+};
+export type ReportDraft = ReportSummary & {
+  companyName: string;
+  preparedBy: string;
+  content: ReportContent;
+  original: ReportContent;
+  edits: {
+    header: boolean;
+    sections: number;
+    rowsEdited: number;
+    rowsAdded: number;
+    rowsRemoved: number;
+  };
+};
 export type ImportPreview = {
   id: string;
   filename: string;
@@ -350,6 +402,58 @@ export const api = {
     request<OrderDetail>(`/orders/${encodeURIComponent(id)}`).then(
       (r) => r.data,
     ),
+  reports: (signal?: AbortSignal) =>
+    request<ReportSummary[]>("/reports", { signal }).then((r) => r.data),
+  report: (id: string, signal?: AbortSignal) =>
+    request<ReportDraft>(`/reports/${encodeURIComponent(id)}`, { signal }).then(
+      (r) => r.data,
+    ),
+  createReport: (
+    body: { kind: "order"; orderId: string } | { kind: "company"; days: number },
+  ) =>
+    request<ReportDraft>("/reports", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }).then((r) => r.data),
+  updateReport: (id: string, content: ReportContent) =>
+    request<ReportDraft>(`/reports/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ content }),
+    }).then((r) => r.data),
+  async reportPdf(id: string): Promise<Blob> {
+    const response = await authenticatedResponse(
+      `/reports/${encodeURIComponent(id)}/pdf`,
+    );
+    return response.blob();
+  },
+  async downloadReport(id: string) {
+    const response = await authenticatedResponse(
+      `/reports/${encodeURIComponent(id)}/pdf?download=true`,
+    );
+    const filename =
+      /filename="([^"]+)"/.exec(
+        response.headers.get("content-disposition") || "",
+      )?.[1] || "exportmate-report.pdf";
+    const url = URL.createObjectURL(await response.blob());
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  },
+  // One key per dialog: a double click or a retry sends one email.
+  emailReport: (
+    id: string,
+    body: { to: string[]; message: string },
+    idempotencyKey: string,
+  ) =>
+    request<ReportEmail>(`/reports/${encodeURIComponent(id)}/email`, {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify(body),
+    }).then((r) => r.data),
   rules: (signal?: AbortSignal) =>
     request<Rule[]>("/playbook/rules", { signal }).then((r) => r.data),
   addRule: (rule: Omit<Rule, "id">) =>

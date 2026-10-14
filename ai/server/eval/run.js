@@ -2,13 +2,16 @@
 // Usage: npm run eval                       all cases
 //        npm run eval -- --only=latest-scan,unknown-sku
 //        npm run eval -- --judge            also grade answers with an LLM judge
+//        npm run eval -- --tier=complex     every case on one model tier instead of the router's choice
 // On GCP: gcloud run jobs execute exportmate-ai-task --args="node eval/run.js --judge" --wait
 // Each run is stored in the Firestore `eval_runs` collection and compared with the
 // previous run; it exits 1 if a case that passed now fails (a regression). Run it
-// after every change to the prompt, model, embeddings, retrieval or tools.
+// after every change to the prompt, model, router, embeddings, retrieval or tools.
+// The answer cache is off for evals: every case is answered by the model.
 import { GoogleGenAI, Type } from "@google/genai";
 import { runAgent } from "../agent.js";
 import { PROJECT, db, inventory, list } from "../db.js";
+import { SCAN_MODEL, TIERS } from "../models.js";
 import { summarizeAudits } from "../metrics.js";
 import { POLICY_VERSION, RULES } from "../policy.js";
 import { goldenCases } from "./golden.js";
@@ -18,7 +21,9 @@ const evalRuns = db.collection("eval_runs");
 const arg = (name) => process.argv.find((a) => a.startsWith(`--${name}`))?.split("=")[1] ?? (process.argv.includes(`--${name}`) ? "" : undefined);
 const only = arg("only")?.split(",").filter(Boolean);
 const useJudge = arg("judge") !== undefined;
-const JUDGE_MODEL = process.env.JUDGE_MODEL || process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const tier = arg("tier") || undefined;
+if (tier && !TIERS[tier]) throw new Error(`--tier must be one of ${Object.keys(TIERS).join(", ")}`);
+const JUDGE_MODEL = process.env.JUDGE_MODEL || SCAN_MODEL;
 const ai = new GoogleGenAI({ vertexai: true, project: PROJECT, location: process.env.GOOGLE_CLOUD_LOCATION || "global" });
 
 const VERDICT = {
@@ -57,19 +62,19 @@ ${testCase.rubric ? `RUBRIC: ${testCase.rubric}` : "RUBRIC: none (return rubric 
 const items = await list(inventory);
 const cases = goldenCases(items, { rules: RULES }).filter((c) => !only || only.includes(c.id));
 const sessionId = `eval-${Date.now().toString(36)}`;
-console.log(`Eval ${sessionId}: ${cases.length} cases, policy ${POLICY_VERSION}${useJudge ? `, judge ${JUDGE_MODEL}` : ""}`);
+console.log(`Eval ${sessionId}: ${cases.length} cases, policy ${POLICY_VERSION}${tier ? `, all on ${tier} (${TIERS[tier].model})` : ""}${useJudge ? `, judge ${JUDGE_MODEL}` : ""}`);
 
 const scored = [];
 const results = [];
 for (const c of cases) {
-  const result = await runAgent({ messages: c.messages, sessionId, channel: "eval", withEvidence: true });
+  const result = await runAgent({ messages: c.messages, sessionId, channel: "eval", withEvidence: true, tier });
   const verdict = useJudge ? await judge(c, result).catch((e) => ({ faithfulness: null, relevance: null, reason: `judge failed: ${e.message}` })) : null;
   const s = scoreCase(c, result, verdict);
   results.push(result);
   scored.push(s);
   const failed = s.checks.filter((x) => !x.ok);
   console.log(
-    `${s.pass ? "PASS" : "FAIL"} ${c.id.padEnd(24)} ${(s.metrics.latencyMs / 1000).toFixed(1)}s ${s.metrics.toolCalls} tools${s.metrics.revised ? ", revised" : ""}` +
+    `${s.pass ? "PASS" : "FAIL"} ${c.id.padEnd(24)} ${(s.metrics.latencyMs / 1000).toFixed(1)}s ${s.metrics.toolCalls} tools, ${result.route.tier}${result.route.escalated ? "→complex" : ""}${s.metrics.revised ? ", revised" : ""}` +
       (failed.length ? `\n     ${failed.map((x) => `${x.name}: ${x.detail}`).join("\n     ")}` : ""),
   );
 }
@@ -81,7 +86,8 @@ const diff = compareRuns(previous, scored);
 const saved = await evalRuns.add({
   runAt: new Date().toISOString(),
   sessionId,
-  model: results[0]?.model,
+  models: { simple: TIERS.simple.model, complex: TIERS.complex.model },
+  tier: tier || "routed",
   policyVersion: POLICY_VERSION,
   judge: useJudge ? JUDGE_MODEL : null,
   only: only || null,

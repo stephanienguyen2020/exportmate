@@ -29,7 +29,8 @@ export type GuardFlag = { where: string; match: string };
 
 export type AuditStep = {
   at: number;
-  kind: "plan" | "tool" | "draft" | "review" | "answer";
+  // cache: the answer was reused from an earlier audit (auditId, answeredAt); its steps follow.
+  kind: "plan" | "tool" | "draft" | "review" | "answer" | "cache";
   latencyMs?: number;
   note?: string;
   calls?: { name: string; args: Record<string, unknown> }[];
@@ -50,6 +51,10 @@ export type AuditStep = {
   problems?: string[];
   excerpt?: string;
   finishReason?: string;
+  // The model that made this call (plan, draft, answer); the router picks it per question.
+  model?: string;
+  auditId?: string;
+  answeredAt?: string;
 };
 
 export type Audit = {
@@ -72,6 +77,11 @@ export type Audit = {
   policyVersion?: string;
   requestId?: string;
   flags?: GuardFlag[];
+  // The router's choice: simple (small fast model) or complex, the signals behind it, and
+  // whether a simple-tier draft the auditor sent back was revised on the complex tier.
+  route?: { tier: "simple" | "complex"; reasons: string[]; escalated?: boolean };
+  // Present when the answer was reused from an earlier audit against the same data.
+  cache?: { auditId: string; answeredAt: string };
 };
 
 export type Message = { role: "user" | "model"; text: string; citations?: Citation[]; audit?: Audit };
