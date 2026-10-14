@@ -327,7 +327,7 @@ wheels = [
 ]
 
 [[package]]
-name = "exportmate-vertex-eval"
+name = "exportmate-agent-platform"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

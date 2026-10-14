@@ -10,6 +10,7 @@ import { indexDocs, toDoc, kb } from "./rag.js";
 import { log } from "./log.js";
 import { ANONYMOUS, auditVisible, isShared, presentSources, publicAudit, publicStep, sourceVisible, visibleItems } from "./access.js";
 import { readJson, scanBlocked } from "./limits.js";
+import { deleteMemory, listMemories, remembers, userKeyFor } from "./agents/platform.js";
 import { demoMapOrders, demoPlaybook } from "./orders.js";
 import { SCAN_MODEL, TIERS } from "./models.js";
 
@@ -224,11 +225,14 @@ async function streamChat(req, res, body, origin, requestId) {
   try {
     const company = await companyKnowledge(req.headers.authorization);
     const access = company ? { companyId: company.company.id, disabled: await disabledSources(company.company.id) } : ANONYMOUS;
+    // The signed-in user: their Agent Platform session and Memory Bank memories are their own.
+    const user = company ? (await callerAccount(req.headers.authorization)).body.data?.user ?? null : null;
     const result = await runAgent({
       messages,
       sessionId: body.sessionId,
       company,
       access,
+      user: user && { id: user.id },
       requestId,
       // The company's orders and playbook are read with the caller's own token (query_orders, get_playbook).
       backend: company ? (path) => backendGet(path, req.headers.authorization) : null,
@@ -393,6 +397,26 @@ async function route(method, path, body, req, query) {
     }
     if (typeof body.enabled !== "boolean") return [400, { error: "Expected { enabled: boolean }" }];
     await setSourceEnabled(source, body.enabled, editor);
+    return [200, { ok: true }];
+  }
+  // What Memory Bank remembers about the signed-in user (Account › What the assistant remembers).
+  if (path === "/api/memories" || path.startsWith("/api/memories/")) return memoryRoute(method, path, req);
+  return [404, { error: "Not found" }];
+}
+
+// Only signed-in company users have memories; anyone else gets 401. A memory id that isn't the
+// caller's answers like a missing one.
+async function memoryRoute(method, path, req) {
+  const { status, body } = await callerAccount(req.headers.authorization);
+  const account = body.data;
+  if (status !== 200 || !account?.company || !account.user) return [401, { error: "Sign in to a company workspace to see what the assistant remembers." }];
+  const userKey = userKeyFor({ company: { company: account.company }, user: account.user });
+  if (!remembers(userKey)) return [200, { memories: [], enabled: false }];
+  if (method === "GET" && path === "/api/memories") return [200, { memories: await listMemories(userKey), enabled: true }];
+  const m = path.match(/^\/api\/memories\/(\d{1,30})$/);
+  if (method === "DELETE" && m) {
+    if (!(await deleteMemory(userKey, m[1]))) return [404, { error: "Memory not found" }];
+    log("INFO", "memory.deleted", { userId: account.user.id, companyId: account.company.id });
     return [200, { ok: true }];
   }
   return [404, { error: "Not found" }];

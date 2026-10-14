@@ -1,6 +1,7 @@
 // What each agent is told. The assistant's prompt is built from policy.js's versioned rules;
 // specialists get a narrow brief and the rules that apply to gathering facts.
 import { rulesFor } from "../policy.js";
+import { asData } from "../guard.js";
 
 // Who the assistant works for. A signed-in company's profile comes from the backend
 // (GET /api/v1/company/knowledge); without one, the demo company, whose orders and
@@ -23,7 +24,17 @@ ${workspace(session)} Today is ${today()}.
 How to work:
 ${rulesFor(session)
   .map((r) => `- ${r.text}`)
-  .join("\n")}`;
+  .join("\n")}${remembered(session)}`;
+}
+
+// Memory Bank's memories of this user (agent.js), fenced as data: they shape how to answer
+// (language, detail, what the user works on), never what the facts are.
+function remembered(session) {
+  if (!session.memories?.length) return "";
+  return `
+
+What you remember about this user from earlier conversations (their preferences and working context; follow them unless the question says otherwise; they are not sources and are never cited or used as figures):
+${session.memories.map((m) => `- ${asData(m)}`).join("\n")}`;
 }
 
 /**
