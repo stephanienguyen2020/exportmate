@@ -1126,3 +1126,34 @@ button.tm-callout.tm-callout-row {
   z-index: -1;
   pointer-events: none;
 }
+
+.tm-route-preview {
+  position: absolute;
+  top: 60px;
+  left: 20px;
+  right: 20px;
+  z-index: 3;
+  margin: 0;
+  font-size: 12px;
+  color: #ffe1a8;
+  pointer-events: none;
+}
+.tm-canvas .tm-route-preview {
+  color: #725018;
+  top: 14px;
+  right: 120px;
+}
+.tm-route-stop {
+  fill: #725018;
+}
+.tm-route-stop circle {
+  fill: #ffd17a;
+  stroke: #725018;
+  stroke-width: 1.5;
+}
+.tm-route-stop text {
+  font-size: 11px;
+  paint-order: stroke;
+  stroke: #f5f4eb;
+  stroke-width: 3px;
+}

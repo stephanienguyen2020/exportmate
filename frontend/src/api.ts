@@ -172,6 +172,7 @@ export type MarketComparison = {
   via?: string | null;
   viaName?: string | null;
   distanceKm?: number | null;
+  routePoints?: GeoPoint[];
   reuse: ComparisonItem[];
   reevaluate: ComparisonItem[];
   unknown: ComparisonItem[];

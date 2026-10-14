@@ -220,6 +220,17 @@ async function openMap(
           via: url.searchParams.get("via"),
           viaName: "Singapore",
           distanceKm: 10800,
+          routePoints:
+            url.searchParams.get("via") === "direct"
+              ? [
+                  mapData.sites[0].location,
+                  mapData.orders[0].placement.location,
+                ]
+              : [
+                  mapData.sites[0].location,
+                  { latitude: 1.26, longitude: 103.84 },
+                  mapData.orders[0].placement.location,
+                ],
           reuse: [],
           reevaluate: [
             {
@@ -228,30 +239,28 @@ async function openMap(
               tag: "Changes",
             },
           ],
-          unknown: [
-            { title: "Freight cost", note: "No rate card is stored." },
-          ],
+          unknown: [{ title: "Freight cost", note: "No rate card is stored." }],
           dropped: [],
           assumptions: [
             "About 10800 km is the great-circle length via Singapore. It is not a voyage and not a freight quote.",
           ],
         };
       } else
-      data = {
-        orderId: order.id,
-        fromMarket: "EU",
-        toMarket: url.searchParams.get("market"),
-        reuse: [],
-        reevaluate: [
-          {
-            title: "Shipment declaration",
-            note: "Prepare evidence for this shipment",
-            tag: "Prepare",
-          },
-        ],
-        unknown: [],
-        dropped: ["Old market checklist item"],
-      };
+        data = {
+          orderId: order.id,
+          fromMarket: "EU",
+          toMarket: url.searchParams.get("market"),
+          reuse: [],
+          reevaluate: [
+            {
+              title: "Shipment declaration",
+              note: "Prepare evidence for this shipment",
+              tag: "Prepare",
+            },
+          ],
+          unknown: [],
+          dropped: ["Old market checklist item"],
+        };
     } else
       return route.fulfill({ status: 404, json: { error: { message: path } } });
     await route.fulfill({ json: { data, meta: {} } });
@@ -342,6 +351,34 @@ test("comparison preserves IDs containing delimiters and route visibility in bot
   await page.getByRole("button", { name: "Singapore", exact: true }).click();
   await expect(page.getByText(/not a freight quote/)).toBeVisible();
   expect(comparisons.at(-1)?.searchParams.get("via")).toBe("SG");
+  await expect(
+    page.getByText("Proposed route · Production → Singapore → Rotterdam"),
+  ).toBeVisible();
+  await expect(page.locator(".tm-arc.scenario.target")).toHaveCount(2);
+  await expect(page.locator(".tm-route-stop text")).toHaveText([
+    "Singapore",
+    "Rotterdam",
+  ]);
+  await page.getByRole("button", { name: "3D globe ↗" }).click();
+  await expect(globe.getByText("2 TRADE CONNECTIONS")).toBeVisible();
+  await expect(
+    globe.getByRole("button", { name: "Proposed stop: Singapore" }),
+  ).toBeAttached();
+  await page.getByRole("button", { name: "Routes", exact: true }).click();
+  await expect(page.getByText(/Proposed route ·/)).toHaveCount(0);
+  await expect(
+    globe.getByRole("button", { name: "Proposed stop: Singapore" }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Routes", exact: true }).click();
+  await page.getByRole("button", { name: "Direct", exact: true }).click();
+  await expect(
+    page.getByText("Proposed route · Production → Rotterdam"),
+  ).toBeVisible();
+  await expect(
+    globe.getByRole("button", { name: "Proposed stop: Singapore" }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Ship date", exact: true }).click();
+  await expect(page.getByText(/Proposed route ·/)).toHaveCount(0);
 });
 
 test("sample flood drafts remain explicitly fictional when copied out of the map", async ({

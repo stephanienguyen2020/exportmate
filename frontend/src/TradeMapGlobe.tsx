@@ -26,6 +26,7 @@ export type GlobePoint = {
 };
 export type GlobeRoute = {
   key: string;
+  connectionKey?: string;
   from: [number, number];
   to: [number, number];
   tone: string;
@@ -39,6 +40,7 @@ type Props = {
   routes: GlobeRoute[];
   extents: Polygon[];
   originApproximate?: boolean;
+  routeLabel?: string | null;
   onSelect: (key: string) => void;
   onFallback: () => void;
 };
@@ -513,6 +515,9 @@ export default function TradeMapGlobe(props: Props) {
     state.controls.update();
     state.invalidate();
   };
+  const connectionCount = new Set(
+    props.routes.map((r) => r.connectionKey ?? r.key),
+  ).size;
   return (
     <div
       className="tm-globe"
@@ -525,6 +530,11 @@ export default function TradeMapGlobe(props: Props) {
         <span>YOUR WORLD OF TRADE</span>
         <small>Drag to explore · Scroll to zoom</small>
       </div>
+      {props.routeLabel && (
+        <p className="tm-route-preview" role="status">
+          Proposed route · {props.routeLabel}
+        </p>
+      )}
       <div className="tm-globe-labels">
         {props.points.map((point) => (
           <button
@@ -589,9 +599,9 @@ export default function TradeMapGlobe(props: Props) {
       <div className="tm-globe-foot">
         <span>
           <i />{" "}
-          {props.routes.length === 1
+          {connectionCount === 1
             ? "1 TRADE CONNECTION"
-            : `${props.routes.length} TRADE CONNECTIONS`}
+            : `${connectionCount} TRADE CONNECTIONS`}
         </span>
         <small>
           {props.originApproximate
