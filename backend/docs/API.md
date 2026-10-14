@@ -223,6 +223,8 @@ Everything the map draws, in one call when the page opens:
 | `observations[]` | Satellite samples (`isSample: true`) with a GeoJSON `extent` and `nearby` suppliers/sites within `checkRadiusKm` (default 25). Order statuses never change because of them |
 | `documentKinds`, `homeCountryIds`, `checkRadiusKm` | Labels, the countries to highlight, the flood check radius |
 
+`nearby[].distanceKm` estimates distance to the mapped polygon (including holes) using a local equirectangular projection. The proximity threshold is applied before rounding up to whole kilometres; zero means on or inside the extent. It is a screening estimate, not a survey measurement. The dashed overview circle is an approximate search-area illustration.
+
 `gapCount` counts the checks that are `missing` or `mismatch`. The market panel ("changes to check") is built in the frontend from these checks.
 
 ### `GET /trade-map/compare?orderId=PO-2291&market=US` (viewer)
@@ -234,6 +236,8 @@ Everything the map draws, in one call when the page opens:
   "unknown":    [{"title": "Buyer requirements", "note": "…"}],
   "dropped":    ["EUDR due-diligence statement"]}}
 ```
+`reuse` means matching supplier records are on file for review; it does not establish validity or shipment coverage. Shipment requirements always stay in `reevaluate`, even when the form is unchanged (`tag: "Prepare"`). Other tags are `New` and `Changes`. `dropped` means absent from the target checklist, not legally unnecessary.
+
 - `422 unknown_market`, `422 same_market` (the order already goes there), `404` for an unknown order.
 
 Called from the order's "What if" panel each time the target market changes. A new call cancels the previous one.

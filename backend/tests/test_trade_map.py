@@ -2,13 +2,13 @@ import pytest
 from conftest import import_orders, onboard
 from sqlalchemy import func, select
 
-from app.database.models import MarketRequirement
+from app.database.models import MarketRequirement, SatelliteObservation, Supplier
 from app.database.queries import trade_map as map_queries
 from app.database.queries import users as user_queries
 from app.database.session import open_session
 from app.seed_demo_data import seed_company_map_data
 from app.seed_reference_data import seed_reference_data
-from app.services.trade_map import parse_destination
+from app.services.trade_map import km_from_extent, nearby_places, parse_destination
 
 MAP_CSV = (
     "id,product,supplier,destination,value,shipDate,hsCode\n"
@@ -137,7 +137,7 @@ def test_suppliers_sites_and_observations(client, reference):
             "name": "Quy Nhon Forest Products",
             "distanceKm": 1,
         },
-        {"type": "site", "ref": "quy-nhon", "name": "Quy Nhon warehouse", "distanceKm": 16},
+        {"type": "site", "ref": "quy-nhon", "name": "Quy Nhon warehouse", "distanceKm": 14},
     ]
     extent = data["observations"][0]["extent"]
     assert extent["type"] == "Polygon"
@@ -172,13 +172,13 @@ def test_compare_markets(client, reference):
     assert [i["title"] for i in result["reuse"]] == [
         "Timber legality evidence",
         "Species & harvest-country declaration",
-        "ISPM 15 wood packaging",
     ]
     assert [(i["title"], i["tag"]) for i in result["reevaluate"]] == [
         ("Lacey Act declaration", "New"),
         ("Formaldehyde emission test", "Changes"),
         ("Core-veneer origin certification", "New"),
         ("Anti-dumping and countervailing duties on plywood", "New"),
+        ("ISPM 15 wood packaging", "Prepare"),
     ]
     assert [i["title"] for i in result["unknown"]] == ["Buyer and contract terms", "Import duty"]
     assert result["dropped"] == [
@@ -237,3 +237,49 @@ def test_checklist_lines_removed_from_the_seed_are_deleted(reference):
             if r.market_code == "SG"
         ]
         assert sg == [origin.requirement_key]
+
+
+def test_flood_distance_uses_polygon_and_excludes_holes():
+    observation = SatelliteObservation(
+        center_longitude=0,
+        center_latitude=0,
+        radius_km=100,
+        extent={
+            "type": "Polygon",
+            "coordinates": [
+                [[-0.1, -0.1], [0.1, -0.1], [0.1, 0.1], [-0.1, 0.1], [-0.1, -0.1]],
+                [[-0.01, -0.01], [0.01, -0.01], [0.01, 0.01], [-0.01, 0.01], [-0.01, -0.01]],
+            ],
+        },
+    )
+    # Inside the 100-km circle, but 11 km outside the actual mapped polygon.
+    assert km_from_extent(observation, 0, 0.2) == pytest.approx(11.1195, abs=0.01)
+    assert km_from_extent(observation, 0.05, 0.05) == 0
+    assert km_from_extent(observation, 0, 0) == pytest.approx(1.11195, abs=0.01)
+    # A point 25.3 km away must not enter the 25-km list due to integer rounding.
+    far = Supplier(name="Beyond threshold", latitude=0, longitude=0.3275)
+    near = Supplier(name="Just outside", latitude=0, longitude=0.1001)
+    places = nearby_places(observation, [far, near], [], 25)
+    assert [(p.name, p.distance_km) for p in places] == [("Just outside", 1)]
+
+
+def test_flood_polygon_crosses_antimeridian():
+    observation = SatelliteObservation(
+        center_longitude=180,
+        center_latitude=0,
+        radius_km=100,
+        extent={
+            "type": "Polygon",
+            "coordinates": [
+                [
+                    [179.9, -0.1],
+                    [-179.9, -0.1],
+                    [-179.9, 0.1],
+                    [179.9, 0.1],
+                    [179.9, -0.1],
+                ]
+            ],
+        },
+    )
+    assert km_from_extent(observation, 0, -179.95) == 0
+    assert km_from_extent(observation, 0, 179.8) == pytest.approx(11.1195, abs=0.01)

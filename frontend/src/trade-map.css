@@ -121,6 +121,19 @@
 .tm-arc.dim {
   opacity: 0.14;
 }
+@media (prefers-reduced-motion: no-preference) {
+  .tm-arc {
+    animation: tm-flow 1.8s linear infinite;
+  }
+  .tm-arc:not(.dashed):not(.scenario):not(.approximate) {
+    stroke-dasharray: 9 14;
+  }
+}
+@keyframes tm-flow {
+  to {
+    stroke-dashoffset: -46;
+  }
+}
 .tm-arc.scenario {
   stroke-width: 2.5px;
   opacity: 1;
@@ -291,6 +304,13 @@
   bottom: 10px;
   font-size: 10px;
   color: #7d8773;
+}
+.tm-origin-note {
+  bottom: auto;
+  top: 46px;
+  max-width: 280px;
+  line-height: 1.4;
+  color: #31483c;
 }
 
 .tm-legend {
@@ -846,4 +866,263 @@ button.tm-callout.tm-callout-row {
 }
 .tm-gate .btn {
   gap: 10px;
+}
+
+/* The overview is a real, interactive globe; regional tabs retain precise 2D detail. */
+.tm-globe-wrap {
+  position: relative;
+}
+.tm-globe {
+  position: relative;
+  height: clamp(460px, 48vw, 650px);
+  overflow: hidden;
+  background: radial-gradient(
+    ellipse at 46% 47%,
+    #244c3d 0%,
+    #102d26 46%,
+    #081e19 85%
+  );
+  color: #e9f0d9;
+}
+.tm-globe::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.2;
+  background-image: radial-gradient(#aac7a2 0.7px, transparent 0.7px);
+  background-size: 37px 37px;
+}
+.tm-globe-webgl {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: none;
+}
+.tm-globe-webgl:active {
+  cursor: grabbing;
+}
+.tm-globe-caption {
+  position: absolute;
+  top: 23px;
+  left: 23px;
+  pointer-events: none;
+  display: grid;
+  gap: 8px;
+}
+.tm-globe-caption span,
+.tm-globe-foot > span {
+  font:
+    10px "DM Mono",
+    monospace;
+  letter-spacing: 0.13em;
+}
+.tm-globe-caption small {
+  color: #9fb6a6;
+  font-size: 11px;
+}
+.tm-projection {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  z-index: 5;
+  border: 1px solid #8baf9460;
+  color: #dfebcf;
+  background: #15382b;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+.tm-projection.flat {
+  background: #fffdf4;
+  color: #274c3c;
+}
+.tm-globe-labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.tm-globe-marker {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 26px;
+  height: 26px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  pointer-events: auto;
+  visibility: hidden;
+  color: var(--marker-color);
+}
+.tm-globe-dot {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--marker-color);
+  background: #16392ee8;
+  color: var(--marker-color);
+  font:
+    11px "DM Mono",
+    monospace;
+  box-shadow: 0 0 16px #cced9330;
+}
+.tm-globe-marker.origin .tm-globe-dot {
+  border-radius: 5px;
+  background: #d6e9b6;
+  color: #17392c;
+}
+.tm-globe-marker.approximate .tm-globe-dot {
+  border-style: dashed;
+  background: #16392ee8;
+  color: #d6e9b6;
+}
+.tm-globe-marker.selected .tm-globe-dot,
+.tm-globe-marker:focus-visible .tm-globe-dot {
+  box-shadow: 0 0 0 4px #e3f4bd50;
+}
+.tm-globe-marker.dim {
+  opacity: 0.4;
+}
+.tm-globe-label {
+  position: absolute;
+  left: 35px;
+  top: 50%;
+  transform: translateY(-50%);
+  white-space: nowrap;
+  background: #09261edb;
+  border: 1px solid #9bb38940;
+  border-radius: 3px;
+  padding: 4px 7px;
+  font:
+    11px "DM Mono",
+    monospace;
+  color: #eff6de;
+  pointer-events: none;
+}
+.tm-globe-marker[data-side="left"] .tm-globe-label {
+  left: auto;
+  right: 35px;
+}
+.tm-globe-marker[data-label="false"] .tm-globe-label {
+  opacity: 0;
+}
+.tm-globe-marker:hover,
+.tm-globe-marker:focus-visible {
+  z-index: 4;
+  opacity: 1;
+}
+.tm-globe-marker:hover .tm-globe-label,
+.tm-globe-marker:focus-visible .tm-globe-label {
+  opacity: 1;
+}
+.tm-globe-controls {
+  position: absolute;
+  bottom: 62px;
+  right: 18px;
+  display: grid;
+  gap: 5px;
+}
+.tm-globe-controls button {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #a6c39450;
+  background: #15382bed;
+  border-radius: 4px;
+  color: #e2edcf;
+}
+.tm-globe-controls button:hover,
+.tm-projection:hover {
+  background: #315742;
+}
+.tm-globe-controls button:focus-visible,
+.tm-projection:focus-visible {
+  outline: 2px solid #d4ed9d;
+  outline-offset: 3px;
+}
+.tm-globe-foot {
+  position: absolute;
+  inset: auto 22px 20px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  pointer-events: none;
+}
+.tm-globe-foot i {
+  display: inline-block;
+  height: 5px;
+  width: 5px;
+  border-radius: 50%;
+  background: #c5e991;
+  margin-right: 6px;
+}
+.tm-globe-foot small {
+  font-size: 10px;
+  color: #9fb6a6;
+}
+.tm-globe-loading {
+  position: absolute;
+  top: 65px;
+  left: 23px;
+  color: #e2edcf;
+  font-size: 11px;
+  pointer-events: none;
+}
+@media (max-width: 600px) {
+  .tm-globe {
+    height: 470px;
+  }
+  .tm-globe-caption {
+    left: 14px;
+    top: 20px;
+  }
+  .tm-globe-caption span {
+    font-size: 9px;
+  }
+  .tm-globe-caption small {
+    font-size: 10px;
+  }
+  .tm-projection {
+    right: 12px;
+  }
+  .tm-globe-foot {
+    left: 14px;
+    right: 14px;
+  }
+}
+.tm-globe-empty {
+  position: absolute;
+  top: 75px;
+  left: 23px;
+  right: 23px;
+  margin: 0;
+  color: #b8cbb0;
+  font-size: 11px;
+  max-width: 400px;
+  pointer-events: none;
+}
+.tm-globe-marker.observation .tm-globe-dot {
+  width: 18px;
+  height: 18px;
+  margin: 4px;
+  font-size: 14px;
+}
+.tm-globe-leader {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  height: 1px;
+  width: var(--leader-length, 0);
+  background: var(--marker-color);
+  opacity: 0.65;
+  transform-origin: 0 50%;
+  transform: rotate(var(--leader-angle, 0rad));
+  z-index: -1;
+  pointer-events: none;
 }
