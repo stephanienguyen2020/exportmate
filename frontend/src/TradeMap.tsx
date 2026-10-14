@@ -553,6 +553,18 @@ function TradeMapView({
   const [scenario, setScenario] = useState<Scenario | null>(
     initial.scenario ?? null,
   );
+  const [comparisonResult, setComparisonResult] = useState<{
+    key: string;
+    comparison: MarketComparison;
+  } | null>(null);
+  const comparisonKey = scenario?.target
+    ? JSON.stringify([scenario.orderId, scenario.mode, scenario.target])
+    : "";
+  const routeComparison =
+    comparisonResult?.key === comparisonKey &&
+    comparisonResult.comparison.kind === "route"
+      ? comparisonResult.comparison
+      : undefined;
   const [showRoutes, setShowRoutes] = useState(true);
   const [showSatellite, setShowSatellite] = useState(true);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -688,6 +700,7 @@ function TradeMapView({
       scenario={scenario}
       renderStatus={renderStatus}
       onChange={setScenario}
+      onComparison={setComparisonResult}
       onClose={() => setScenario(null)}
       onOpenOrder={openOrder}
     />
@@ -851,6 +864,7 @@ function TradeMapView({
             marketByCode={marketByCode}
             scenario={scenario}
             scenarioRow={scenarioRow}
+            routeComparison={routeComparison}
             selectionMarket={
               selection?.kind === "market" ? selection.code : null
             }
@@ -884,9 +898,14 @@ function TradeMapView({
                 {allSample ? " · sample" : ""} · {check} km proximity check
               </li>
             )}
-            {scenario && (
+            {scenario?.mode === "market" && (
               <li>
                 <i className="tm-key alt" /> Market being compared
+              </li>
+            )}
+            {showRoutes && !!routeComparison?.routePoints?.length && (
+              <li>
+                <i className="tm-key alt" /> Proposed route
               </li>
             )}
           </ul>
@@ -908,6 +927,7 @@ function MapCanvas({
   marketByCode,
   scenario,
   scenarioRow,
+  routeComparison,
   selectionMarket,
   showRoutes,
   showSatellite,
@@ -925,6 +945,7 @@ function MapCanvas({
   marketByCode: Map<string, MapMarket>;
   scenario: Scenario | null;
   scenarioRow?: Row;
+  routeComparison?: MarketComparison;
   selectionMarket: string | null;
   showRoutes: boolean;
   showSatellite: boolean;
@@ -1004,7 +1025,16 @@ function MapCanvas({
   const target = new Set(countriesOf(marketTarget));
 
   const originSite = data.sites.find((s) => s.isRouteOrigin);
-  const start = routeStart(data.sites, companyOrigin);
+  const profileStart = routeStart(data.sites, companyOrigin);
+  const routePoints = routeComparison?.routePoints ?? [];
+  const start =
+    profileStart && routePoints.length
+      ? { ...profileStart, at: lonLat(routePoints[0]) }
+      : profileStart;
+  const routeLabel =
+    routePoints.length > 1
+      ? `${start?.approximate ? companyOrigin : "Production"} → ${routePoints.length > 2 ? `${routeComparison!.viaName} → ` : ""}${scenarioRow?.placement.city ?? "Destination"}`
+      : null;
   if (start?.approximate && PROFILE_HOME_ID[companyOrigin])
     home.add(PROFILE_HOME_ID[companyOrigin]);
   const markers: Marker[] = [];
@@ -1199,7 +1229,7 @@ function MapCanvas({
           d: arcPath(origin, [m.x, m.y]),
           tone: m.tone as Tone,
           width: 2.2 + Math.sqrt(m.count),
-          dim: !isRelated(m),
+          dim: routePoints.length > 1 || !isRelated(m),
           dashed: start?.approximate,
         });
   if (showRoutes && (view.id === "production" || view.id === "focus")) {
@@ -1218,14 +1248,19 @@ function MapCanvas({
   }
   let scenarioArcs: { key: string; d: string; kind: "current" | "target" }[] =
     [];
-  if (showRoutes && scenario && scenarioRow && origin && showOrigin) {
+  if (
+    showRoutes &&
+    scenario?.mode === "market" &&
+    scenarioRow &&
+    origin &&
+    showOrigin
+  ) {
     const current = markers.find(
       (m) =>
         !!scenarioRow.placement.market &&
         m.market === scenarioRow.placement.market,
     );
-    const next =
-      marketTarget && markers.find((m) => m.market === marketTarget);
+    const next = marketTarget && markers.find((m) => m.market === marketTarget);
     scenarioArcs = [
       current && {
         key: "current",
@@ -1238,6 +1273,19 @@ function MapCanvas({
         kind: "target" as const,
       },
     ].filter(Boolean) as typeof scenarioArcs;
+  }
+
+  if (showRoutes && routePoints.length > 1) {
+    for (let i = 1; i < routePoints.length; i++) {
+      const from = project(lonLat(routePoints[i - 1]));
+      const to = project(lonLat(routePoints[i]));
+      if (from && to)
+        scenarioArcs.push({
+          key: `via-${i}`,
+          d: arcPath(from, to),
+          kind: "target",
+        });
+    }
   }
 
   const floodShapes = useMemo(
@@ -1318,11 +1366,41 @@ function MapCanvas({
               key: p.key,
               from: start.at,
               to: p.at,
-              tone: p.tone,
-              dim: !p.related,
+              tone: routePoints.length > 1 ? "neutral" : p.tone,
+              dim: routePoints.length > 1 || !p.related,
               approximate: start.approximate,
             }))
         : [];
+    if (showRoutes && routePoints.length > 1) {
+      // The API supplies the same ordered points used to calculate the distance.
+      // Use the order's destination port, not the market's display hub.
+      for (let i = 1; i < routePoints.length; i++) {
+        const last = i === routePoints.length - 1;
+        points.push({
+          key: `route-stop-${i}`,
+          at: lonLat(routePoints[i]),
+          label: last
+            ? (scenarioRow?.placement.city ?? "Destination")
+            : routeComparison!.viaName!,
+          aria: last
+            ? `Proposed route destination: ${scenarioRow?.placement.city}`
+            : `Proposed stop: ${routeComparison!.viaName}`,
+          tone: "target",
+          count: 0,
+          selected: true,
+          related: true,
+        });
+        routes.push({
+          key: `route-leg-${i}`,
+          connectionKey: "route-comparison",
+          from: lonLat(routePoints[i - 1]),
+          to: lonLat(routePoints[i]),
+          tone: "target",
+          dim: false,
+          approximate: start?.approximate,
+        });
+      }
+    }
     const countryColors = new Map(
       countries.map((c) => {
         const id = String(c.id);
@@ -1349,6 +1427,7 @@ function MapCanvas({
           countryColors={countryColors}
           extents={showSatellite ? data.observations.map((o) => o.extent) : []}
           originApproximate={!!start?.approximate}
+          routeLabel={showRoutes ? routeLabel : null}
           onSelect={(key) => {
             const marker = globeMarkers.find((m) => m.key === key);
             if (marker) onMarker(marker);
@@ -1405,6 +1484,11 @@ function MapCanvas({
         <p className="tm-map-note tm-origin-note" role="status">
           Lines run from {companyOrigin} on your company profile. This is not a
           recorded production site.
+        </p>
+      )}
+      {showRoutes && routeLabel && (
+        <p className="tm-route-preview" role="status">
+          Proposed route · {routeLabel}
         </p>
       )}
       <svg
@@ -1471,6 +1555,25 @@ function MapCanvas({
         {scenarioArcs.map((a) => (
           <path key={a.key} d={a.d} className={`tm-arc scenario ${a.kind}`} />
         ))}
+        {showRoutes &&
+          routePoints.slice(1).map((point, i) => {
+            const at = project(lonLat(point));
+            if (!at) return null;
+            return (
+              <g
+                key={`route-stop-${i}`}
+                className="tm-route-stop"
+                transform={`translate(${at[0]},${at[1]})`}
+              >
+                <circle r="5" />
+                <text x="9" y="-8">
+                  {i === routePoints.length - 2
+                    ? scenarioRow?.placement.city
+                    : routeComparison?.viaName}
+                </text>
+              </g>
+            );
+          })}
       </svg>
       {markers.map((m) => {
         const selected = isSelected(m);
@@ -2507,6 +2610,7 @@ function ScenarioPanel({
   scenario,
   renderStatus,
   onChange,
+  onComparison,
   onClose,
   onOpenOrder,
 }: {
@@ -2515,6 +2619,9 @@ function ScenarioPanel({
   scenario: Scenario;
   renderStatus: (order: Order) => React.ReactNode;
   onChange: (scenario: Scenario) => void;
+  onComparison: (
+    result: { key: string; comparison: MarketComparison } | null,
+  ) => void;
   onClose: () => void;
   onOpenOrder: (id: string) => void;
 }) {
@@ -2529,6 +2636,7 @@ function ScenarioPanel({
       ? JSON.stringify([row.order.id, scenario.mode, scenario.target])
       : "";
   useEffect(() => {
+    onComparison(null);
     if (!requestKey) return;
     const [orderId, mode, target] = JSON.parse(requestKey) as [
       string,
@@ -2544,15 +2652,17 @@ function ScenarioPanel({
           : api.compareMarkets(orderId, target, controller.signal);
     call
       .then((comparison) => {
-        if (!controller.signal.aborted)
+        if (!controller.signal.aborted) {
           setResult({ key: requestKey, comparison });
+          onComparison({ key: requestKey, comparison });
+        }
       })
       .catch((e) => {
         if (!controller.signal.aborted)
           setResult({ key: requestKey, error: errorMessage(e) });
       });
     return () => controller.abort();
-  }, [requestKey]);
+  }, [requestKey, onComparison]);
   if (!row) return null;
   const from = row.placement.market;
   const nameOf = (code: string | null) =>

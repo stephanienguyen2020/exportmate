@@ -241,7 +241,21 @@ def test_compare_route_names_what_to_recheck_and_not_a_freight_quote(client, ref
     assert result["kind"] == "route"
     assert (result["via"], result["viaName"]) == ("SG", "Singapore")
     assert result["distanceKm"] > 0
-    assert [item["title"] for item in result["reevaluate"]] == ["Proof of origin"]
+    review = {item["title"]: item for item in result["reevaluate"]}
+    assert review["Proof of origin"]["tag"] == "Changes"
+    assert "Plot-level geolocation" in review  # still missing, despite unchanged market
+    assert review["Due diligence data for the EU importer"]["tag"] == "Prepare"
+    assert {item["title"] for item in result["reuse"]} == {
+        "Timber legality evidence",
+        "Formaldehyde emission test",
+    }
+    points = result["routePoints"]
+    assert len(points) == 3
+    assert points[0] == next(
+        s["location"] for s in get_map(client, headers)["sites"] if s["isRouteOrigin"]
+    )
+    assert points[1] == {"latitude": 1.26, "longitude": 103.84}
+    assert points[2] == {"latitude": 51.92, "longitude": 4.4}
     assert any("not a voyage" in line for line in result["assumptions"])
     assert {item["title"] for item in result["unknown"]} >= {
         "Freight cost",
@@ -251,11 +265,46 @@ def test_compare_route_names_what_to_recheck_and_not_a_freight_quote(client, ref
 
     direct = client.get("/api/v1/trade-map/compare?orderId=PO-1&via=direct", headers=headers)
     assert direct.status_code == 200, direct.text
-    assert direct.json()["data"]["reevaluate"] == []
-    assert any(item["title"] == "Proof of origin" for item in direct.json()["data"]["reuse"])
+    direct_data = direct.json()["data"]
+    assert len(direct_data["routePoints"]) == 2
+    assert direct_data["distanceKm"] <= result["distanceKm"]
+    assert not any(item["title"] == "Proof of origin" for item in direct_data["reuse"])
+    assert any(
+        item["title"] == "Proof of origin" and item["tag"] == "Prepare"
+        for item in direct_data["reevaluate"]
+    )
+    uppercase = client.get("/api/v1/trade-map/compare?orderId=PO-1&via=DIRECT", headers=headers)
+    assert uppercase.status_code == 200
+    assert uppercase.json()["data"]["via"] == "direct"
     unknown = client.get("/api/v1/trade-map/compare?orderId=PO-1&via=XX", headers=headers)
     assert unknown.status_code == 422
     assert unknown.json()["error"]["code"] == "unknown_route"
+
+
+@pytest.mark.parametrize("query", ["via=direct", "shipDate=2027-01-15"])
+def test_unchanged_requirements_do_not_invent_supplier_evidence(client, reference, query):
+    headers = onboard(client, "no-docs@example.com")
+    import_orders(client, headers, MAP_CSV)
+    response = client.get(f"/api/v1/trade-map/compare?orderId=PO-1&{query}", headers=headers)
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["reuse"] == []
+    assert any(item["title"] == "Timber legality evidence" for item in data["unknown"])
+    assert any(
+        item["title"] == "Proof of origin" and item["tag"] == "Prepare"
+        for item in data["reevaluate"]
+    )
+
+
+def test_route_without_known_destination_has_no_invented_geometry(client, reference):
+    headers = onboard(client, "unknown-place@example.com")
+    import_orders(client, headers, MAP_CSV.replace("Rotterdam, NL", "Unmapped destination"))
+    response = client.get("/api/v1/trade-map/compare?orderId=PO-1&via=SG", headers=headers)
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["routePoints"] == []
+    assert data["distanceKm"] is None
+    assert any(item["title"] == "Distance" for item in data["unknown"])
 
 
 def test_checklists_follow_the_product_not_only_wood(client, reference):
