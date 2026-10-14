@@ -66,34 +66,37 @@ ${testCase.rubric ? `RUBRIC: ${testCase.rubric}` : "RUBRIC: none (return rubric 
   return JSON.parse(res.text || "{}");
 }
 
-// One golden case as Agent Platform agent data (types.evals.AgentData): the agent's config and the
-// conversation as ADK-style events, rebuilt from the audit steps and the tool results.
-const AGENT = "exportmate_assistant";
+// One golden case as Agent Platform agent data (types.evals.AgentData): every agent's config and
+// the conversation as ADK-style events, each attributed to the agent that made it, rebuilt from the
+// audit steps, the tool results and the specialists' reports.
 const text = (role, author, t) => ({ author, content: { role, parts: [{ text: t }] } });
 function vertexCase(c, r, s) {
   const outputs = [...r.trace.toolResults];
+  const reports = [...r.trace.reports];
+  const answering = r.route.agent;
   const turns = [];
   const history = c.messages.slice(0, -1);
   for (let i = 0; i < history.length; i += 2)
-    turns.push({ turn_index: turns.length, events: history.slice(i, i + 2).map((m) => (m.role === "user" ? text("user", "user", m.text) : text("model", AGENT, m.text))) });
+    turns.push({ turn_index: turns.length, events: history.slice(i, i + 2).map((m) => (m.role === "user" ? text("user", "user", m.text) : text("model", answering, m.text))) });
   const events = [text("user", "user", c.messages.at(-1).text)];
   for (const step of r.steps) {
+    const author = step.agent || answering;
     if (step.kind === "plan")
-      events.push({ author: AGENT, content: { role: "model", parts: [...(step.note ? [{ text: step.note }] : []), ...step.calls.map((x) => ({ function_call: { name: x.name, args: x.args } }))] } });
-    else if (step.kind === "tool") events.push({ author: AGENT, content: { role: "user", parts: [{ function_response: { name: step.name, response: outputs.shift() } }] } });
-    else if (step.kind === "draft") events.push(text("model", AGENT, step.excerpt));
+      events.push({ author, content: { role: "model", parts: [...(step.note ? [{ text: step.note }] : []), ...step.calls.map((x) => ({ function_call: { name: x.name, args: x.args } }))] } });
+    else if (step.kind === "tool") events.push({ author, content: { role: "user", parts: [{ function_response: { name: step.name, response: outputs.shift() } }] } });
+    else if (step.kind === "delegate") {
+      const { report } = reports.shift();
+      events.push({ author: "analyst", content: { role: "user", parts: [{ function_response: { name: step.agent, response: typeof report === "string" ? { result: report } : report } }] } });
+    } else if (step.kind === "draft") events.push(text("model", author, step.excerpt));
     else if (step.kind === "review") events.push(text("user", "auditor", `Auditor review of your draft: ${step.problems.join(" ")}`));
   }
-  if (r.answer) events.push(text("model", AGENT, r.answer));
+  if (r.answer) events.push(text("model", r.route.answeredBy || answering, r.answer));
   turns.push({ turn_index: turns.length, events });
   return {
     id: c.id,
     category: c.category,
     prompt: c.messages.at(-1).text,
-    agent_data: {
-      agents: { [AGENT]: { agent_id: AGENT, agent_type: "LlmAgent", description: "ExportMate trade-compliance assistant", instruction: r.trace.instruction, tools: [{ function_declarations: r.trace.tools }] } },
-      turns,
-    },
+    agent_data: { agents: r.trace.agents, turns },
     golden_pass: s.pass,
     auditor_pass: r.status === "ok" && r.checks.every((x) => x.ok),
     tier: r.route.tier,
@@ -101,6 +104,11 @@ function vertexCase(c, r, s) {
     latency_s: r.latencyMs / 1000,
   };
 }
+
+const delegations = (r) => {
+  const used = [...new Set(r.steps.filter((x) => x.kind === "delegate").map((x) => x.agent.replace("_specialist", "")))];
+  return used.length ? ` (${used.join(", ")})` : "";
+};
 
 const items = await list(inventory);
 const cases = goldenCases(items, { rules: RULES }).filter((c) => !only || only.includes(c.id));
@@ -117,7 +125,7 @@ for (const c of cases) {
   scored.push(s);
   const failed = s.checks.filter((x) => !x.ok);
   console.log(
-    `${s.pass ? "PASS" : "FAIL"} ${c.id.padEnd(24)} ${(s.metrics.latencyMs / 1000).toFixed(1)}s ${s.metrics.toolCalls} tools, ${result.route.tier}${result.route.escalated ? "→complex" : ""}${s.metrics.revised ? ", revised" : ""}` +
+    `${s.pass ? "PASS" : "FAIL"} ${c.id.padEnd(24)} ${(s.metrics.latencyMs / 1000).toFixed(1)}s ${s.metrics.toolCalls} tools, ${result.route.agent}${result.route.escalated ? "→analyst" : ""}${delegations(result)}${s.metrics.revised ? ", revised" : ""}` +
       (failed.length ? `\n     ${failed.map((x) => `${x.name}: ${x.detail}`).join("\n     ")}` : ""),
   );
 }
