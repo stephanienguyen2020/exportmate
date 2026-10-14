@@ -18,6 +18,7 @@ import { pathToFileURL } from "node:url";
 import { runAgent } from "./agent.js";
 import { ANONYMOUS, publicAudit, publicStep } from "./access.js";
 import { deleteMemory, listMemories } from "./agents/platform.js";
+import { startTracing } from "./agents/telemetry.js";
 import { readJson } from "./limits.js";
 import { log } from "./log.js";
 
@@ -117,5 +118,7 @@ export const server = http.createServer(async (req, res) => {
   return send(res, 404, { error: "Not found" });
 });
 
-if (process.env.SERVE === "runtime" || (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href))
-  server.listen(PORT, "0.0.0.0", () => log("INFO", `ExportMate agents listening on :${PORT} (Agent Runtime contract)`));
+if (process.env.SERVE === "runtime" || (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)) {
+  const tracing = startTracing();
+  server.listen(PORT, "0.0.0.0", () => log("INFO", `ExportMate agents listening on :${PORT} (Agent Runtime contract)`, { tracing }));
+}
