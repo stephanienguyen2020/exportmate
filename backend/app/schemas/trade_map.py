@@ -2,6 +2,8 @@ import uuid
 from datetime import date
 from typing import Literal
 
+from pydantic import Field
+
 from app.database.models import ObservationConfidence, RequirementLevel, SiteKind
 from app.schemas.common import CamelCaseModel
 from app.schemas.orders import OrderOut
@@ -151,4 +153,4 @@ class MarketComparisonOut(CamelCaseModel):
     reevaluate: list[ComparisonItemOut]
     unknown: list[ComparisonItemOut]
     dropped: list[str]
-    assumptions: list[str] = []
+    assumptions: list[str] = Field(default_factory=list)
