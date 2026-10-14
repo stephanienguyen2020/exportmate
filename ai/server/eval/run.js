@@ -18,7 +18,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { runAgent } from "../agent.js";
 import { demoMapOrders, demoPlaybook } from "../orders.js";
 import { PROJECT, db, inventory, list } from "../db.js";
-import { SCAN_MODEL, TIERS } from "../models.js";
+import { GEMINI_LOCATION, SCAN_MODEL, TIERS } from "../models.js";
 import { summarizeAudits } from "../metrics.js";
 import { POLICY_VERSION, RULES } from "../policy.js";
 import { goldenCases } from "./golden.js";
@@ -32,7 +32,7 @@ const tier = arg("tier") || undefined;
 const toVertex = arg("vertex") !== undefined;
 if (tier && !TIERS[tier]) throw new Error(`--tier must be one of ${Object.keys(TIERS).join(", ")}`);
 const JUDGE_MODEL = process.env.JUDGE_MODEL || SCAN_MODEL;
-const ai = new GoogleGenAI({ vertexai: true, project: PROJECT, location: process.env.GOOGLE_CLOUD_LOCATION || "global" });
+const ai = new GoogleGenAI({ vertexai: true, project: PROJECT, location: GEMINI_LOCATION });
 
 const VERDICT = {
   type: Type.OBJECT,

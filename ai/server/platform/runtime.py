@@ -79,7 +79,7 @@ def find(client, name):
     return None
 
 
-def config(name, image=None):
+def config(name, image=None, resource=None, identity="agent"):
     base = dict(
         display_name=name,
         description="ExportMate trade-compliance assistant (ADK, multi-agent)",
@@ -88,15 +88,18 @@ def config(name, image=None):
     )
     if not image:
         return types.AgentRuntimeConfig(**base)
-    env = {k: v for k, v in os.environ.items() if k.startswith(("GEMINI_", "EMBED_", "RAG_", "BACKEND_URL", "MODEL_ARMOR_", "SCAN_SCHEDULE", "GOOGLE_CLOUD_LOCATION"))}
+    # GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION are set by Agent Runtime (reserved names).
+    env = {k: v for k, v in os.environ.items() if k.startswith(("GEMINI_", "RAG_", "BACKEND_URL", "MODEL_ARMOR_", "SCAN_SCHEDULE"))}
     return types.AgentRuntimeConfig(
         **base,
         container_spec=types.ReasoningEngineSpecContainerSpec(image_uri=image, port=8080),
         class_methods=CLASS_METHODS,
         # The agent runs as its own Agent Identity (no service-account keys); IAM and Agent Gateway
         # policies are granted to it by infra/agent-platform/govern.sh.
-        identity_type=types.IdentityType.AGENT_IDENTITY,
-        env_vars={"GOOGLE_CLOUD_PROJECT": PROJECT, **env},
+        **({"identity_type": types.IdentityType.AGENT_IDENTITY} if identity == "agent" else {}),
+        # SERVE picks runtime.js (main.js); AGENT_RUNTIME is the instance's own name, which its
+        # Sessions and Memory Bank use (a new instance gets it on the update that follows).
+        env_vars={"SERVE": "runtime", "PROJECT_ID": PROJECT, "GEMINI_LOCATION": "global", **({"AGENT_RUNTIME": resource} if resource else {}), **env},
         min_instances=int(os.environ.get("AGENT_MIN_INSTANCES", "1")),
         max_instances=int(os.environ.get("AGENT_MAX_INSTANCES", "3")),
     )
@@ -107,6 +110,7 @@ def main():
     parser.add_argument("command", choices=["create", "deploy", "show", "delete"])
     parser.add_argument("--name", default="exportmate-agents")
     parser.add_argument("--image")
+    parser.add_argument("--identity", choices=["agent", "default"], default="agent", help="agent: its own Agent Identity; default: the Agent Platform service agent")
     args = parser.parse_args()
     client = agentplatform.Client(project=PROJECT, location=LOCATION)
     existing = find(client, args.name)
@@ -124,10 +128,9 @@ def main():
     else:
         if not args.image:
             sys.exit("deploy needs --image")
-        if existing:
-            runtime = client.runtimes.update(name=existing.api_resource.name, config=config(args.name, args.image))
-        else:
-            runtime = client.runtimes.create(config=config(args.name, args.image))
+        if not existing:
+            existing = client.runtimes.create(config=config(args.name, args.image, identity=args.identity))
+        runtime = client.runtimes.update(name=existing.api_resource.name, config=config(args.name, args.image, existing.api_resource.name, args.identity))
         print(runtime.api_resource.name)
 
 
