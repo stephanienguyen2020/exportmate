@@ -34,6 +34,29 @@ const MARKETS = ["EU", "UK", "US", "CA", "JP", "KR", "AU", "Raw material"];
 // Document types whose text comes from third parties (news feeds, or alerts written from them).
 const UNTRUSTED_TYPES = new Set(["article", "alert", "source"]);
 
+// Where query_orders and get_playbook read from: the company backend with the caller's own
+// token, or the orders and playbook the browser demo sent (orders.js checked them).
+export function workspaceReaders(backend, demo) {
+  if (backend) {
+    const read = async (path, what) => {
+      const { status, body } = await backend(path);
+      if (status !== 200)
+        throw status === 0 || status >= 500
+          ? Object.assign(new Error(`The company's ${what} can't be read right now.`), { status: 503 })
+          : new ToolError("denied", `This account can't read the company's ${what}.`);
+      return body.data;
+    };
+    return {
+      orders: async () => (await read("/api/v1/trade-map", "orders")).orders,
+      playbook: async () => (await read("/api/v1/playbook/rules", "playbook")).filter((r) => r.enabled),
+    };
+  }
+  return {
+    orders: demo?.orders ? async () => demo.orders : null,
+    playbook: demo?.playbook ? async () => demo.playbook : null,
+  };
+}
+
 function citeAlert(refs, a) {
   return refs.cite(`alert:${a.id}`, {
     type: "alert",
@@ -151,7 +174,7 @@ export const REGISTRY = {
           timberOrigin: { type: Type.STRING, description: "Country the timber comes from" },
           supplier: { type: Type.STRING },
           certification: { type: Type.STRING, description: "e.g. FSC, VNTLAS, PEFC" },
-          geolocationOnFile: { type: Type.BOOLEAN },
+          geolocationOnFile: { type: Type.BOOLEAN, description: "false: only items with no geolocation data on file (what EUDR needs for EU sales); true: only items with it. Filter here rather than reading each item." },
           sortBy: { type: Type.STRING, enum: ["stockValue", "quantity", "sku"] },
           limit: { type: Type.INTEGER, description: "Items to return, default 20, max 40" },
         },
@@ -434,13 +457,13 @@ export const REGISTRY = {
   },
 
   query_orders: {
-    scope: "company",
-    // Read live from Postgres, outside the answer cache's data fingerprint.
+    scope: "orders",
+    // Read live (Postgres, or the browser demo's own orders), outside the answer cache's data fingerprint.
     live: true,
     declaration: {
       name: "query_orders",
       description:
-        "The signed-in company's own orders (the Orders page), read live from its account: order id (e.g. PO-2291), product, supplier, destination and market, value and currency, ship date, HS code, status (exposed is shown as \"Action needed\") and each order's market document checklist: every line's status (on_file, missing, mismatch, prepare, check, unknown), a note and the official text it comes from. Also returns the count and total value per currency of all matches. Filters combine with AND; with none, every order. Only available in a company workspace.",
+        "The company's own orders (the Orders page), read live: order id (e.g. PO-2291), product, supplier, destination and market, value and currency, ship date, HS code, status (exposed is shown as \"Action needed\") and each order's document checklist: every line's status (on_file, missing, mismatch, prepare, check, unknown), a note and the official text it comes from (the browser demo has one sample check per order it covers, with no official text). Also returns the count and total value per currency of all matches. Filters combine with AND; with none, every order.",
       parameters: {
         type: Type.OBJECT,
         properties: {
@@ -451,14 +474,8 @@ export const REGISTRY = {
         },
       },
     },
-    async run(args, { refs, backend }) {
-      if (!backend) throw new ToolError("unavailable", "Orders can't be read in this session.");
-      const { status, body } = await backend("/api/v1/trade-map");
-      if (status !== 200)
-        throw status === 0 || status >= 500
-          ? Object.assign(new Error("The company's orders can't be read right now."), { status: 503 })
-          : new ToolError("denied", "This account can't read the company's orders.");
-      const matching = matchOrders(body.data.orders, args);
+    async run(args, { refs, orders: readOrders }) {
+      const matching = matchOrders(await readOrders(), args);
       const totals = totalsByCurrency(matching);
       const filters = describe(args, ["limit"]);
       const totalText = Object.entries(totals).map(([c, v]) => `${c} ${v.toLocaleString("en-US")}`).join(" + ") || "no value";
@@ -478,6 +495,33 @@ export const REGISTRY = {
             ...orders.map((o) => ({ ref: o.ref, type: "order", title: `${o.id} · ${o.product} · ${o.statusLabel}` })),
           ],
         },
+      };
+    },
+  },
+
+  get_playbook: {
+    scope: "playbook",
+    // The company's own rules, read live (Postgres, or the browser demo's), so never fingerprinted.
+    live: true,
+    declaration: {
+      name: "get_playbook",
+      description:
+        "The company's playbook (the Playbook page): the trading rules it wrote itself and switched on, each with its category (Policy, Threshold, Supplier, Watchlist) and text. Its preferences for how to judge orders, suppliers and news, not regulations.",
+    },
+    async run(_args, { refs, playbook }) {
+      const rules = (await playbook()).map((r) => ({
+        ref: refs.cite(`playbook:${r.id}`, {
+          type: "playbook",
+          id: String(r.id),
+          title: `Playbook · ${r.category}: ${r.text.length > 80 ? `${r.text.slice(0, 80)}…` : r.text}`,
+          url: "#/workspace/playbook",
+        }),
+        category: r.category,
+        text: r.text,
+      }));
+      return {
+        output: { count: rules.length, rules },
+        audit: { count: rules.length, results: rules.map((r) => ({ ref: r.ref, type: "playbook", title: `${r.category}: ${r.text}` })) },
       };
     },
   },

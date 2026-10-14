@@ -139,3 +139,115 @@ test("signing out forgets the chat; sign-in pages have no chat button", async ({
     0,
   );
 });
+
+test("an imported order is checked against the sample rule change", async ({
+  page,
+}) => {
+  await openDemo(page, "#/workspace/data");
+  const csv = [
+    "id,product,supplier,destination,value,shipDate,hsCode,currency",
+    'PO-9001,Acacia plywood 18mm,Binh Phu Wood,"Rotterdam, NL",30000,2026-11-20,4412.33,USD',
+    'PO-9003,Rubberwood chairs,Unknown Mill,"Los Angeles, US",8000,2026-11-25,9401.61,USD',
+  ].join("\n");
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "orders.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from(csv),
+  });
+  await page.getByRole("button", { name: "Import 2 orders" }).click();
+  await expect(
+    page.getByText(
+      "2 orders imported. 1 order needs action under the sample rule change.",
+    ),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Action needed", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "PO-9001", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "PO-9003", exact: true }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "PO-9001", exact: true }).click();
+  await expect(
+    page.getByText("Binh Phu Wood has no geolocation record for this lot."),
+  ).toBeVisible();
+  // Three orders now need action: the walkthrough and the overview both count them.
+  await page.goto("/#/workspace");
+  await expect(page.locator(".metric-value.danger")).toContainText("03");
+  await expect(page.getByText(/Binh Phu Wood must provide/)).toContainText(
+    "3 EU-bound orders",
+  );
+});
+
+test("the overview's figures come from the orders and today's date", async ({
+  page,
+}) => {
+  await openDemo(page);
+  const today = await page.evaluate(() =>
+    new Date()
+      .toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+      .toUpperCase(),
+  );
+  await expect(page.locator(".greeting")).toContainText(today);
+  // The seed's first affected order ships 12 days from today.
+  const next = page.locator(".metrics > div").nth(3);
+  await expect(next.locator(".metric-value")).toContainText("12");
+  await expect(next.locator(".metric-note")).toContainText(
+    "Rotterdam, Netherlands · PO-2291",
+  );
+  const risk = page.locator(".metrics > div").nth(2);
+  await expect(risk.locator(".metric-value")).toHaveText("$2,400USD");
+  await page.getByRole("button", { name: "Buyer", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Buyer", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  // The amount already names its currency, so it isn't repeated.
+  await expect(risk.locator(".metric-value")).toHaveText("SGD 14,800");
+});
+
+test("the demo never shows a signed-in account's profile", async ({ page }) => {
+  await page.goto("/");
+  await page.evaluate(() =>
+    localStorage.setItem(
+      "em-profile",
+      JSON.stringify({ name: "Real Person", email: "real@company.com", company: "Real Co" }),
+    ),
+  );
+  await openDemo(page, "#/workspace/account");
+  await expect(page.getByLabel("Name", { exact: true })).toHaveValue("Ms. Lan");
+  await expect(page.getByText("Real Co")).toHaveCount(0);
+});
+
+test("the assistant gets the demo's orders and playbook, and shows code", async ({
+  page,
+}) => {
+  let sent: any = null;
+  await page.route("**/api/chat", async (route) => {
+    sent = route.request().postDataJSON();
+    await route.fulfill({
+      contentType: "application/x-ndjson",
+      body:
+        JSON.stringify({
+          type: "done",
+          reply: "Add an `hsCode` column.",
+          citations: [],
+          audit: null,
+        }) + "\n",
+    });
+  });
+  await openDemo(page, "#/workspace/orders");
+  await page.getByRole("button", { name: "Open assistant" }).click();
+  await page.getByLabel("Message").fill("Why does PO-2291 need action?");
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".chat-msg.model code")).toHaveText("hsCode");
+  const po2291 = sent.demo.orders.find((o: any) => o.id === "PO-2291");
+  expect(po2291).toMatchObject({ status: "exposed", market: "EU", check: { status: "missing" } });
+  expect(sent.demo.orders[0].status).toBe("exposed");
+  expect(sent.demo.rules.map((r: any) => r.category)).toEqual([
+    "Threshold",
+    "Policy",
+    "Supplier",
+    "Watchlist",
+  ]);
+});

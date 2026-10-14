@@ -200,6 +200,11 @@ export default function Landing({ section = "" }: { section?: string }) {
               </button>
             </div>
           </div>
+          {/* In the flow below the headline: the intro beside it is pinned to its bottom. */}
+          <p className="lp-explainer">
+            ExportMate checks your export orders against changing trade rules
+            and flags the shipments that need documents.
+          </p>
           <div className="lp-photo-wrap">
             <div
               className="lp-photo"

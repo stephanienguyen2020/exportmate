@@ -91,9 +91,28 @@ export const defaultProfile: Profile = {
   digest: true,
   onboarded: false,
 };
+// The demo keeps its own profile, so an account's name, email and company (cached in
+// em-profile from GET /me, or typed at sign-up) never show in the anonymous demo.
+const ACCOUNT_PROFILE = "em-profile";
+const DEMO_PROFILE = "em-demo-profile";
+function profileKey() {
+  try {
+    return sessionStorage.getItem("em-session") === "demo"
+      ? DEMO_PROFILE
+      : ACCOUNT_PROFILE;
+  } catch {
+    return ACCOUNT_PROFILE;
+  }
+}
+/** Forgets the account's cached profile, e.g. on sign-out; the demo's own profile stays. */
+export function forgetAccountProfile() {
+  try {
+    localStorage.removeItem(ACCOUNT_PROFILE);
+  } catch {}
+}
 export function getProfile(): Profile {
   try {
-    const p = JSON.parse(localStorage.getItem("em-profile") || "null");
+    const p = JSON.parse(localStorage.getItem(profileKey()) || "null");
     // Fields added later may be missing from a saved profile; present ones must match.
     if (
       p &&
@@ -112,7 +131,7 @@ export function getProfile(): Profile {
 }
 export function putProfile(p: Profile) {
   try {
-    localStorage.setItem("em-profile", JSON.stringify(p));
+    localStorage.setItem(profileKey(), JSON.stringify(p));
     return true;
   } catch {
     return false;

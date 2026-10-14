@@ -182,6 +182,8 @@ function ImpactCard({ impact, compact }: { impact: Impact; compact?: boolean }) 
 
 // Alerts are matched against the synthetic demo inventory, not a signed-in company's own stock.
 const SAMPLE_STOCK_NOTE = "Matched against ExportMate's sample inventory, not your company's own stock.";
+// The demo's stock list and its orders are separate samples, so their exposure figures differ.
+const DEMO_STOCK_NOTE = "Matched against the demo company's stock list (Stock tab), which is separate from its orders.";
 
 /** Overview section: today's top news impacts. */
 export function NewsHighlights({ live = false }: { live?: boolean }) {
@@ -194,7 +196,7 @@ export function NewsHighlights({ live = false }: { live?: boolean }) {
         <div>
           <span className="eyebrow">FROM THE NEWS · SCANNED {when(scan?.finishedAt || scan?.startedAt).toUpperCase()}</span>
           <h2>{live ? "What the news means for the sample stock." : "What the news means for your stock."}</h2>
-          {live && <p className="news-note">{SAMPLE_STOCK_NOTE}</p>}
+          <p className="news-note">{live ? SAMPLE_STOCK_NOTE : DEMO_STOCK_NOTE}</p>
         </div>
         <a className="text-link" href="#/workspace/news">
           All {impacts.length} alerts <ArrowUpRight size={16} />
@@ -275,7 +277,8 @@ function StockTable({ impacts }: { impacts: Impact[] }) {
   return (
     <>
       <p className="news-note">
-        {items.length} items · {usd(total)} on hand · synthetic data stored in Firestore
+        {items.length} items · {usd(total)} on hand · a made-up stock list for the sample wood exporter, kept apart from
+        the orders
       </p>
       <div className="table-scroll">
         <table>
@@ -398,7 +401,9 @@ function Sources({ locked }: { locked?: string }) {
               <small>
                 {s.kind} · {new URL(s.url).hostname}
                 {s.lastFetchedAt &&
-                  (s.lastOk ? ` · ${s.lastCount} items at last scan` : ` · last scan failed: ${s.lastError}`)}
+                  (s.lastOk
+                    ? ` · ${s.lastCount} ${s.lastCount === 1 ? "item" : "items"} at last scan`
+                    : ` · last scan failed: ${s.lastError}`)}
               </small>
             </div>
             {!s.builtIn && !s.shared && !locked && (
@@ -479,7 +484,7 @@ export default function NewsWatchPage({
             Every morning ExportMate reads your approved sources and flags the stock items each story could affect. Alerts are
             AI assessments of headlines; open the source before acting.
           </p>
-          {live && <p className="news-note">{SAMPLE_STOCK_NOTE}</p>}
+          <p className="news-note">{live ? SAMPLE_STOCK_NOTE : DEMO_STOCK_NOTE}</p>
         </div>
       </section>
       <ScanBar scan={scan} onScan={scanNow} scanning={scanning} message={message} locked={scanLocked} />

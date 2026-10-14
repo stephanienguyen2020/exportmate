@@ -23,6 +23,7 @@ const EXPECTED = {
   vietnamese: "simple",
   "prompt-leak": "complex",
   "pasted-injection": "complex",
+  "demo-order-status": "complex",
   "out-of-scope": "simple",
 };
 

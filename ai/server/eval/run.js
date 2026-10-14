@@ -16,6 +16,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { GoogleGenAI, Type } from "@google/genai";
 import { runAgent } from "../agent.js";
+import { demoMapOrders, demoPlaybook } from "../orders.js";
 import { PROJECT, db, inventory, list } from "../db.js";
 import { SCAN_MODEL, TIERS } from "../models.js";
 import { summarizeAudits } from "../metrics.js";
@@ -118,7 +119,9 @@ console.log(`Eval ${sessionId}: ${cases.length} cases, policy ${POLICY_VERSION}$
 const scored = [];
 const results = [];
 for (const c of cases) {
-  const result = await runAgent({ messages: c.messages, sessionId, channel: "eval", withEvidence: true, tier });
+  // A demo case's orders and playbook go through the same checks as a demo chat's (index.js).
+  const demo = c.demo ? { orders: demoMapOrders(c.demo.orders), playbook: demoPlaybook(c.demo.rules) } : null;
+  const result = await runAgent({ messages: c.messages, sessionId, channel: "eval", withEvidence: true, tier, demo });
   const verdict = useJudge ? await judge(c, result).catch((e) => ({ faithfulness: null, relevance: null, reason: `judge failed: ${e.message}` })) : null;
   const s = scoreCase(c, result, verdict);
   results.push(result);

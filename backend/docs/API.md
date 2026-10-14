@@ -47,7 +47,7 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
 | `POST /imports` | editor | Upload screen |
 | `GET /imports/{id}` | viewer | Upload screen (preview) |
 | `POST /imports/{id}/commit` | editor | Upload screen ("Import") |
-| `GET /playbook/rules` | viewer | Every workspace load |
+| `GET /playbook/rules` | viewer | Every workspace load; `ai/server` chat (`get_playbook`) |
 | `POST /playbook/rules` | editor | Playbook: add rule |
 | `PATCH /playbook/rules/{id}` | editor | Playbook: on/off toggle |
 | `DELETE /playbook/rules/{id}` | editor | Playbook: delete |

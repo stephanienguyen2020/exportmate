@@ -42,7 +42,8 @@ export function presentOrder(m, cite) {
     type: "order",
     id: o.id,
     title: `${o.id} · ${o.product}`,
-    url: `#/workspace/map/order/${encodeURIComponent(o.id)}`,
+    // The browser demo has no map, so its orders link to their Orders page instead.
+    url: m.url || `#/workspace/map/order/${encodeURIComponent(o.id)}`,
   });
   return {
     ref,
@@ -77,4 +78,57 @@ export function presentOrder(m, cite) {
       },
     })),
   };
+}
+
+// The browser demo keeps its orders and playbook in the visitor's browser, so the chat
+// request carries them (frontend/ai/chat/agent-client.ts). They come from the client, so
+// they are checked and trimmed here; anything malformed is dropped, never trusted.
+export const MAX_DEMO_ORDERS = 200;
+export const MAX_DEMO_RULES = 50;
+const DEMO_STATUSES = new Set(["exposed", "clear"]);
+const CHECK_STATUSES = new Set(["missing", "on_file"]);
+const text = (value, max) => (typeof value === "string" && value.trim() ? value.trim().slice(0, max) : null);
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Demo orders in GET /trade-map's shape, or null when there are none to read. */
+export function demoMapOrders(raw) {
+  if (!Array.isArray(raw)) return null;
+  const orders = [];
+  for (const o of raw.slice(0, MAX_DEMO_ORDERS)) {
+    if (!o || typeof o !== "object") continue;
+    const id = text(o.id, 100);
+    const value = Number(o.value);
+    if (!id || !Number.isFinite(value) || value <= 0 || value >= 1e12 || !DAY.test(o.shipDate) || !DEMO_STATUSES.has(o.status)) continue;
+    const check = o.check && CHECK_STATUSES.has(o.check.status) && text(o.check.title, 200) ? o.check : null;
+    const checks = check ? [{ requirementKey: "sample", title: text(check.title, 200), level: "supplier", status: check.status, note: text(check.note, 300) || "" }] : [];
+    orders.push({
+      order: {
+        id,
+        product: text(o.product, 300) || "",
+        supplier: text(o.supplier, 300) || "",
+        destination: text(o.destination, 200) || "",
+        valueMinor: Math.round(value * 100),
+        currency: /^[A-Z]{3}$/.test(o.currency) ? o.currency : "USD",
+        shipDate: o.shipDate,
+        hsCode: text(o.hsCode, 20) || "",
+        status: o.status,
+      },
+      placement: { market: typeof o.market === "string" && /^[A-Z]{2}$/.test(o.market) ? o.market : null },
+      checks,
+      gapCount: checks.filter((c) => GAPS.has(c.status)).length,
+      url: `#/workspace/orders/${encodeURIComponent(id)}`,
+    });
+  }
+  return orders.length ? orders : null;
+}
+
+/** The demo's playbook rules that are switched on, or null when there are none. */
+export function demoPlaybook(raw) {
+  if (!Array.isArray(raw)) return null;
+  const rules = raw
+    .slice(0, MAX_DEMO_RULES)
+    .filter((r) => r && typeof r === "object" && r.enabled !== false)
+    .map((r, i) => ({ id: text(r.id, 40) || String(i + 1), category: text(r.category, 40) || "Policy", text: text(r.text, 500), enabled: true }))
+    .filter((r) => r.text);
+  return rules.length ? rules : null;
 }

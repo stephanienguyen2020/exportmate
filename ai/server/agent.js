@@ -22,7 +22,7 @@ import { TIERS, thinkingFor } from "./models.js";
 import { routeQuestion } from "./router.js";
 import { answerKey, cacheable, cachedAudit, fingerprint, CACHE_TTL_MS } from "./answer-cache.js";
 import { GUIDES } from "./seed/guides.js";
-import { LIVE_TOOLS, REGISTRY, UnknownToolPlugin, cached, clearCaches, lastDoneScan, makeRefs } from "./agents/tools.js";
+import { LIVE_TOOLS, REGISTRY, UnknownToolPlugin, cached, clearCaches, lastDoneScan, makeRefs, workspaceReaders } from "./agents/tools.js";
 import { ANSWERING, buildAssistant } from "./agents/assistant.js";
 
 export { clearCaches };
@@ -53,7 +53,7 @@ let scanSeen;
 // Everything the tools read for this caller, as one hash: stock, the sources as this company
 // sees them (with their last fetch), the latest finished scan (its articles and alerts), the
 // company profile and the guides. A cached answer is only reused while this is unchanged.
-async function dataVersion(company, access) {
+async function dataVersion(company, access, session) {
   const scan = await lastDoneScan();
   // A scan on another instance: drop this instance's copies so tools and the key agree.
   if (scan?.id !== scanSeen) {
@@ -61,7 +61,9 @@ async function dataVersion(company, access) {
     scanSeen = scan?.id;
   }
   const [items, stored] = await Promise.all([cached("inventory", () => list(inventory)), cached("sources", () => list(sources))]);
-  return fingerprint({ items, sources: presentSources(stored, access), scan: scan?.id ?? null, company, guides: GUIDES_VERSION });
+  // Which order and playbook tools were offered: they change the prompt, though what they read is live.
+  const tools = { orders: Boolean(session.orders), playbook: Boolean(session.playbook) };
+  return fingerprint({ items, sources: presentSources(stored, access), scan: scan?.id ?? null, company, tools, guides: GUIDES_VERSION });
 }
 
 // The audit that answered this key before, if it is still there and still fit to reuse.
@@ -95,10 +97,15 @@ export async function runAgent({
   useCache = channel === "chat",
   // GETs a company backend path with the caller's own token ({ status, body }); company chats only.
   backend = null,
+  // The browser demo's own orders and playbook ({ orders, playbook }, from orders.js); demo chats only.
+  demo = null,
   onStep = () => {},
 }) {
   const started = Date.now();
   const companyId = company?.company.id;
+  const readers = workspaceReaders(backend, company ? null : demo);
+  // What this turn's tools and rules may use (gateway.js scopes, policy.js `when`).
+  const session = { company, orders: readers.orders, playbook: readers.playbook };
 
   // Asked and answered before, against the same data today: reuse that answer.
   let key = null;
@@ -108,7 +115,7 @@ export async function runAgent({
         messages,
         companyId,
         disabled: access.disabled,
-        dataVersion: await dataVersion(company, access),
+        dataVersion: await dataVersion(company, access, session),
         policyVersion: POLICY_VERSION,
         models: MODELS,
         day: new Date(started).toISOString().slice(0, 10),
@@ -132,7 +139,7 @@ export async function runAgent({
   // analyst on the complex tier.
   let current = route.tier;
   const refs = makeRefs();
-  const gateway = toolGateway(REGISTRY, { refs, company, access, backend }, { maxCalls: TOOL_BUDGET });
+  const gateway = toolGateway(REGISTRY, { refs, access, ...session }, { maxCalls: TOOL_BUDGET });
   const audit = {
     sessionId,
     requestId,
@@ -261,7 +268,7 @@ export async function runAgent({
   };
 
   const plugins = [new UnknownToolPlugin(runTool)];
-  const { root, agents } = buildAssistant({ company, declarations: gateway.declarations(), runTool, plugins, hooks, onReport, routeTo: () => current });
+  const { root, agents } = buildAssistant({ session, declarations: gateway.declarations(), runTool, plugins, hooks, onReport, routeTo: () => current });
   const sessions = new InMemorySessionService();
   const runner = new Runner({ appName: APP, agent: root, sessionService: sessions, plugins });
   const userId = company?.company.id || "demo";
