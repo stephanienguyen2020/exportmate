@@ -31,6 +31,18 @@ export async function callAgents(method, input) {
   return data.output;
 }
 
+/** The same, always on the Agent Runtime instance AGENT_RUNTIME (eval/run.js --engine). */
+export async function callRuntime(method, input) {
+  if (!runtime) throw new Error("AGENT_RUNTIME is not set");
+  const res = await fetch(`https://${runtime.location}-aiplatform.googleapis.com/v1/${runtime.name}:query`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${await auth.getAccessToken()}` },
+    body: JSON.stringify({ class_method: method, input }),
+  });
+  if (!res.ok) throw new Error(`Agent Runtime answered ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  return (await res.json()).output;
+}
+
 /** Streams a chat turn's events ({ type: "step" | "done" | "error", … }) as they arrive. */
 export async function* streamTurn(input, signal) {
   const res = await post(true, { class_method: "stream_query", input }, signal);

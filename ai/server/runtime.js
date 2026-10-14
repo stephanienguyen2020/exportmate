@@ -51,12 +51,17 @@ export function chatInput(input = {}) {
     demo: input.demo ?? null,
     requestId: input.requestId || randomUUID(),
     backend: input.company && input.backendToken ? backendReader(input.backendToken) : null,
+    // The golden set run against this runtime (eval/run.js --engine): no cache, no memories,
+    // and the evidence and trace come back with the result.
+    ...(input.channel === "eval" ? { channel: "eval", withEvidence: true, tier: input.tier } : {}),
   };
 }
 
 const METHODS = {
   async query(input) {
-    const result = await runAgent(chatInput(input));
+    const turn = chatInput(input);
+    const result = await runAgent(turn);
+    if (turn.channel === "eval") return { result: { ...publicAudit(result), evidence: result.evidence, trace: result.trace } };
     return { reply: result.answer, citations: result.citations, audit: publicAudit(result), status: result.status };
   },
   async list_memories({ userKey }) {

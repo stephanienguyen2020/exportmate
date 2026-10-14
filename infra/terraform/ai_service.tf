@@ -1,8 +1,11 @@
-# The AI service (ai/server) in the same project as the backend: Firestore with its
-# vector indexes, a Cloud Run service and job, the daily news-scan schedule, the
-# Model Armor template that screens news articles and log-based metrics. Terraform
-# creates the service and job with a placeholder image; ai/server/deploy.sh builds
-# the real one on Cloud Build and rolls it out.
+# The AI service (ai/server) in the same project as the backend: Firestore, the Cloud
+# Storage bucket RAG Engine imports from, a Cloud Run service (the API in front of the
+# agents) and job, the daily news-scan schedule, the Model Armor template that screens news
+# articles and log-based metrics. Terraform creates the service and job with a placeholder
+# image; ai/server/deploy.sh builds the real one and rolls it out. The agents themselves run on
+# Agent Platform: ai/server/platform/runtime.py creates the Agent Runtime instance (Sessions,
+# Memory Bank) and infra/agent-platform/govern.sh sets up Agent Identity, Agent Registry, the
+# egress policies and Agent Gateway; set var.agent_runtime to the instance afterwards.
 
 data "google_project" "this" {}
 
@@ -13,6 +16,7 @@ locals {
 
   ai_env = {
     GOOGLE_CLOUD_PROJECT  = var.project_id
+    PROJECT_ID            = var.project_id
     GOOGLE_CLOUD_LOCATION = "global" # Vertex AI endpoint for Gemini and the embedding model
     GEMINI_MODEL          = var.gemini_model
     GEMINI_MODEL_SIMPLE   = var.gemini_model_simple
@@ -22,13 +26,17 @@ locals {
     SCHEDULER_SA          = google_service_account.scheduler.email
     SCAN_AUDIENCE         = local.ai_url
     MODEL_ARMOR_TEMPLATE  = "projects/${var.project_id}/locations/${google_model_armor_template.untrusted_text.location}/templates/${google_model_armor_template.untrusted_text.template_id}"
+    RAG_BUCKET            = google_storage_bucket.kb.name
+    # Chats go to the agents on Agent Runtime once the instance exists (empty: in-process).
+    AGENT_RUNTIME = var.agent_runtime
+    AGENTS_AT     = var.agent_runtime == "" ? "" : "runtime"
   }
 
   ai_logs = "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"exportmate-ai\""
 }
 
-# Stock, news sources, articles, alerts, scans, the vector index (kb), audits, the answer
-# cache and eval runs.
+# Stock, news sources, articles, alerts, scans, RAG file records, audits, the answer cache,
+# chat session map and eval runs.
 resource "google_firestore_database" "default" {
   name        = "(default)"
   location_id = var.region
@@ -40,47 +48,48 @@ resource "google_firestore_database" "default" {
   depends_on = [google_project_service.apis]
 }
 
-# Vector indexes for search_knowledge (ai/server/rag.js): all of kb, and kb filtered by type.
-# 768 dimensions must match DIMENSIONS in rag.js.
-resource "google_firestore_index" "kb_embedding" {
-  database   = google_firestore_database.default.name
-  collection = "kb"
+# Search runs on RAG Engine (ai/server/rag.js): every searchable record is a text file in this
+# bucket, imported into one RAG corpus per type. RAG Engine reads it as its own service agent.
+resource "google_storage_bucket" "kb" {
+  name                        = "${var.project_id}-kb"
+  location                    = var.region
+  uniform_bucket_level_access = true
+  public_access_prevention    = "enforced"
 
-  fields {
-    field_path = "__name__"
-    order      = "ASCENDING"
-  }
-
-  fields {
-    field_path = "embedding"
-    vector_config {
-      dimension = 768
-      flat {}
-    }
-  }
+  depends_on = [google_project_service.apis]
 }
 
-resource "google_firestore_index" "kb_type_embedding" {
+resource "google_storage_bucket_iam_member" "kb_rag_reader" {
+  bucket = google_storage_bucket.kb.name
+  role   = "roles/storage.objectViewer"
+  # Created when RAG Engine is first used in the project (the first `npm run index`).
+  member = "serviceAccount:service-${data.google_project.this.number}@gcp-sa-vertex-rag.iam.gserviceaccount.com"
+}
+
+# The scan and `npm run index` (Cloud Run job) write the files RAG Engine imports.
+resource "google_storage_bucket_iam_member" "kb_ai_writer" {
+  bucket = google_storage_bucket.kb.name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.ai.email}"
+}
+
+# Agent Runtime pulls the agents' container image (the same image as the Cloud Run service).
+resource "google_artifact_registry_repository_iam_member" "agent_runtime_pull" {
+  location   = google_artifact_registry_repository.images.location
+  repository = google_artifact_registry_repository.images.name
+  role       = "roles/artifactregistry.reader"
+  member     = "serviceAccount:service-${data.google_project.this.number}@gcp-sa-aiplatform-re.iam.gserviceaccount.com"
+}
+
+# Browser session → Agent Platform session map (ai/server/agents/platform.js), cleaned up a
+# month after the session's last use.
+resource "google_firestore_field" "chat_sessions_ttl" {
   database   = google_firestore_database.default.name
-  collection = "kb"
+  collection = "chat_sessions"
+  field      = "expireAt"
 
-  fields {
-    field_path = "type"
-    order      = "ASCENDING"
-  }
-
-  fields {
-    field_path = "__name__"
-    order      = "ASCENDING"
-  }
-
-  fields {
-    field_path = "embedding"
-    vector_config {
-      dimension = 768
-      flat {}
-    }
-  }
+  ttl_config {}
+  index_config {}
 }
 
 # Answers already given (ai/server/answer-cache.js) are deleted once expireAt passes. Keys
@@ -95,9 +104,10 @@ resource "google_firestore_field" "answer_cache_ttl" {
   index_config {}
 }
 
-# Screens each new news article before Gemini or the vector index sees it (ai/server/armor.js,
-# called by scan.js): prompt injection and jailbreaks, and links to known-malicious sites.
-# Medium confidence and above; a withheld article is recorded with what matched.
+# Screens each new news article before Gemini or the search index sees it (ai/server/armor.js,
+# called by scan.js): prompt injection and jailbreaks, at medium confidence and above; a withheld
+# article is recorded with what matched. (The malicious-URL filter isn't offered in
+# asia-southeast1, so links are checked by guard.js only.)
 resource "google_model_armor_template" "untrusted_text" {
   location    = var.region
   template_id = "exportmate-untrusted-text"
@@ -106,10 +116,6 @@ resource "google_model_armor_template" "untrusted_text" {
     pi_and_jailbreak_filter_settings {
       filter_enforcement = "ENABLED"
       confidence_level   = "MEDIUM_AND_ABOVE"
-    }
-
-    malicious_uri_filter_settings {
-      filter_enforcement = "ENABLED"
     }
   }
 

@@ -3,6 +3,8 @@
 //        npm run eval -- --only=latest-scan,unknown-sku
 //        npm run eval -- --judge            also grade answers with an LLM judge
 //        npm run eval -- --tier=complex     every case on one model tier instead of the router's choice
+//        npm run eval -- --engine           ask the deployed agents on Agent Runtime (AGENT_RUNTIME) instead
+//                                           of running them in this process
 //        npm run eval -- --vertex           also create an evaluation run on Agent Platform (Gen AI evaluation:
 //                                           tool use, hallucination, response quality, safety; platform/evaluate.py, needs uv)
 // On GCP: gcloud run jobs execute exportmate-ai-task --args="node eval/run.js --judge" --wait
@@ -16,6 +18,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { GoogleGenAI, Type } from "@google/genai";
 import { runAgent } from "../agent.js";
+import { runtime } from "../agents/platform.js";
+import { callRuntime } from "../agents/remote.js";
 import { demoMapOrders, demoPlaybook } from "../orders.js";
 import { PROJECT, db, inventory, list } from "../db.js";
 import { GEMINI_LOCATION, SCAN_MODEL, TIERS } from "../models.js";
@@ -30,6 +34,8 @@ const only = arg("only")?.split(",").filter(Boolean);
 const useJudge = arg("judge") !== undefined;
 const tier = arg("tier") || undefined;
 const toVertex = arg("vertex") !== undefined;
+const onEngine = arg("engine") !== undefined;
+if (onEngine && !runtime) throw new Error("--engine needs AGENT_RUNTIME (the deployed instance)");
 if (tier && !TIERS[tier]) throw new Error(`--tier must be one of ${Object.keys(TIERS).join(", ")}`);
 const JUDGE_MODEL = process.env.JUDGE_MODEL || SCAN_MODEL;
 const ai = new GoogleGenAI({ vertexai: true, project: PROJECT, location: GEMINI_LOCATION });
@@ -114,14 +120,16 @@ const delegations = (r) => {
 const items = await list(inventory);
 const cases = goldenCases(items, { rules: RULES }).filter((c) => !only || only.includes(c.id));
 const sessionId = `eval-${Date.now().toString(36)}`;
-console.log(`Eval ${sessionId}: ${cases.length} cases, policy ${POLICY_VERSION}${tier ? `, all on ${tier} (${TIERS[tier].model})` : ""}${useJudge ? `, judge ${JUDGE_MODEL}` : ""}`);
+console.log(`Eval ${sessionId}${onEngine ? ` on ${runtime.name}` : ""}: ${cases.length} cases, policy ${POLICY_VERSION}${tier ? `, all on ${tier} (${TIERS[tier].model})` : ""}${useJudge ? `, judge ${JUDGE_MODEL}` : ""}`);
 
 const scored = [];
 const results = [];
 for (const c of cases) {
   // A demo case's orders and playbook go through the same checks as a demo chat's (index.js).
   const demo = c.demo ? { orders: demoMapOrders(c.demo.orders), playbook: demoPlaybook(c.demo.rules) } : null;
-  const result = await runAgent({ messages: c.messages, sessionId, channel: "eval", withEvidence: true, tier, demo });
+  const result = onEngine
+    ? (await callRuntime("query", { messages: c.messages, sessionId, channel: "eval", tier, demo })).result
+    : await runAgent({ messages: c.messages, sessionId, channel: "eval", withEvidence: true, tier, demo });
   const verdict = useJudge ? await judge(c, result).catch((e) => ({ faithfulness: null, relevance: null, reason: `judge failed: ${e.message}` })) : null;
   const s = scoreCase(c, result, verdict);
   results.push(result);
