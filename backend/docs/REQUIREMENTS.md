@@ -28,6 +28,7 @@ Example end-to-end:
 | CSV import: upload → validate → preview → commit | Built |
 | Playbook rules: list, add, toggle, delete | Built (stored only) |
 | Trade map: orders, suppliers and sites on a map; document checks per market; "what if another market" | Built |
+| Order compliance report: PDF of an order's document checklist with cited official texts; editors email it to up to five addresses (Resend, sandbox without a key) | Built |
 | Rule library: shared official texts and the company's own uploads, with versions | Built (no screen yet) |
 | Rule extraction and analysis: match rules to orders, compute cost, report with citations, block reports that fail checks | Phase 2 |
 | Actions: draft message → approve → send once (sandbox email) | Phase 3 |
@@ -246,8 +247,8 @@ Each phase ends with: tests green, deployed, frontend working against it.
 | 3 | Do we need BOM / materials / supplier lots in v1? | Real matching needs them; the CSV has only the HS code. v1 could match on HS code + destination only. |
 | 4 | Do playbook rules affect analysis in v1? | e.g. "margin below 8%" needs margin data we don't have. Store-only for v1? |
 | 5 | Where do cost assumptions come from? | e.g. USD 200/day delay, USD 400 paperwork. A company setting? Entered per order? |
-| 6 | Agent framework | Google ADK vs plain Gemini SDK calls (simpler, like `ai/server/agent.js`). |
-| 7 | Email provider for messages and the contact form | e.g. Resend, SendGrid, Gmail API. (Auth emails are Firebase's.) |
+| 6 | ~~Agent framework~~ | **Decided:** Google ADK. The assistant in `ai/server/agent.js` is an ADK `LlmAgent` (JS); the harness (gateway, guard, auditor, audits) plugs into ADK's tools and callbacks. |
+| 7 | ~~Email provider for messages and the contact form~~ | **Decided:** Resend (`core/email.py`), first used for emailed order reports; sandbox without `RESEND_API_KEY`. (Auth emails are Firebase's.) |
 | 8 | Several companies per user? | v1 is one company per user. Needed for consultants or a buyer working with several suppliers? |
 | 9 | Buyer (Singapore) tenant | In v1 or later? The UI's maker/buyer switch is a fake today. |
 | 10 | Who reviews extracted requirements? | An operator role (24), or the company owner for their own uploads? |

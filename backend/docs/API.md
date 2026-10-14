@@ -42,6 +42,8 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
 | `GET /overview` | viewer | Dashboard |
 | `GET /orders` | viewer | Every workspace load |
 | `GET /orders/{id}` | viewer | Order detail page |
+| `GET /orders/{id}/report.pdf` | viewer | Order detail: "Download PDF" |
+| `POST /orders/{id}/report/email` | editor | Order detail: "Email report" |
 | `POST /imports` | editor | Upload screen |
 | `GET /imports/{id}` | viewer | Upload screen (preview) |
 | `POST /imports/{id}/commit` | editor | Upload screen ("Import") |
@@ -49,7 +51,7 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
 | `POST /playbook/rules` | editor | Playbook: add rule |
 | `PATCH /playbook/rules/{id}` | editor | Playbook: on/off toggle |
 | `DELETE /playbook/rules/{id}` | editor | Playbook: delete |
-| `GET /trade-map` | viewer | Trade map |
+| `GET /trade-map` | viewer | Trade map; `ai/server` chat (`query_orders`) |
 | `GET /trade-map/compare` | viewer | Trade map: "What if" panel |
 | `POST /regulation-documents` | editor | Regulation library: add regulation / version |
 | `GET /regulation-documents/{id}` | viewer | Regulation library |
@@ -159,6 +161,23 @@ On every workspace load, `api.orders()` reads every page (`limit=200`) until `ne
 `source` is the CSV row the order came from, or `null` for seeded orders. `exposures` stays empty until analysis exists (phase 2).
 Opening `#/workspace/orders/<id>` in a live session.
 
+### `GET /orders/{id}/report.pdf` (viewer)
+The order compliance report as a PDF attachment (`exportmate-<id>-report.pdf`): the order, the document checklist for its market exactly as `GET /trade-map` checks it, each cited official text (title, version, URL, quote), and the CSV row it came from. A destination outside the map's markets gives a report with no checklist. This is not the phase 2 exposure report (`GET /reports/{id}` below).
+`api.downloadOrderReport()`, "Download PDF" on the order detail page.
+
+### `POST /orders/{id}/report/email` (editor, rate limited)
+Emails the same PDF. Optional `Idempotency-Key` header (the frontend sends a new one per dialog): Resend sends once per key for 24 hours.
+```json
+{"to": ["buyer@example.com"], "message": "Optional note, ≤1000 chars"}
+```
+```json
+{"data": {"recipients": ["buyer@example.com"], "sandbox": false, "sentAt": "2026-10-14T09:12:00Z"}}
+```
+- `to`: 1–5 plain addresses (no display names), trimmed and de-duplicated. Replies go to the sender's own email (`reply_to`).
+- `sandbox: true` means `RESEND_API_KEY` isn't set: the email was built and audited but not delivered.
+- Each send writes an `order_report.emailed` audit event with the recipients and note (logs only carry the count).
+- `422 invalid_input` (bad addresses), `422 email_rejected` (Resend refused it), `429 rate_limited` (`REPORT_EMAILS_PER_HOUR`, default 20 per user), `502 email_failed`, `503 email_unavailable`.
+
 ## CSV import
 
 Upload screen, live session: choose file → `POST /imports` → `GET /imports/{id}` → show errors and preview → "Import" → `POST /imports/{id}/commit` → toast "N orders imported. Awaiting analysis." → workspace reload. The demo session parses the file in the browser instead (PapaParse, `frontend/src/order-csv.ts`, with the same checks).
@@ -226,6 +245,8 @@ Everything the map draws, in one call when the page opens:
 `nearby[].distanceKm` estimates distance to the mapped polygon (including holes) using a local equirectangular projection. The proximity threshold is applied before rounding up to whole kilometres; zero means on or inside the extent. It is a screening estimate, not a survey measurement. The dashed overview circle is an approximate search-area illustration.
 
 `gapCount` counts the checks that are `missing` or `mismatch`. The market panel ("changes to check") is built in the frontend from these checks.
+
+The assistant's `query_orders` tool (`ai/server/orders.js`) also reads this route, with the chatting user's own token, to answer questions about the company's orders and their checklists.
 
 ### `GET /trade-map/compare` (viewer)
 One what-if at a time. Send exactly one of `market`, `shipDate`, or `via`.

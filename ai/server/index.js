@@ -10,9 +10,10 @@ import { indexDocs, toDoc, kb } from "./rag.js";
 import { log } from "./log.js";
 import { ANONYMOUS, auditVisible, isShared, presentSources, publicAudit, publicStep, sourceVisible, visibleItems } from "./access.js";
 import { readJson, scanBlocked } from "./limits.js";
+import { SCAN_MODEL, TIERS } from "./models.js";
 
 const PORT = Number(process.env.PORT || 8080);
-const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const MODELS = { simple: TIERS.simple.model, complex: TIERS.complex.model, scan: SCAN_MODEL };
 const ALLOWED_ORIGINS = (
   process.env.ALLOWED_ORIGINS ||
   "https://exportmate.vercel.app,http://127.0.0.1:5173,http://localhost:5173"
@@ -185,6 +186,9 @@ function logChat(result, trace) {
     status: result.status,
     policyVersion: result.policyVersion,
     model: result.model,
+    tier: result.route?.tier,
+    escalated: Boolean(result.route?.escalated),
+    cached: Boolean(result.cache),
     latencyMs: result.latencyMs,
     modelCalls: result.usage.modelCalls,
     promptTokens: result.usage.promptTokens,
@@ -225,6 +229,8 @@ async function streamChat(req, res, body, origin, requestId) {
       company,
       access,
       requestId,
+      // The company's orders are read with the caller's own token (query_orders).
+      backend: company ? (path) => backendGet(path, req.headers.authorization) : null,
       onStep: (step) => write({ type: "step", step: publicStep(step) }),
     });
     logChat(result, trace);
@@ -406,7 +412,7 @@ http
       return res.end();
     }
     if (req.method === "GET" && (path === "/" || path === "/healthz"))
-      return send(res, 200, { ok: true, model: MODEL }, origin);
+      return send(res, 200, { ok: true, models: MODELS }, origin);
 
     let body = {};
     if (req.method === "POST" || req.method === "PATCH") {
@@ -426,4 +432,4 @@ http
       send(res, 502, { error: "The service is unavailable right now." }, origin);
     }
   })
-  .listen(PORT, () => log("INFO", `ExportMate AI listening on :${PORT}`, { model: MODEL }));
+  .listen(PORT, () => log("INFO", `ExportMate AI listening on :${PORT}`, { models: MODELS }));

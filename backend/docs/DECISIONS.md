@@ -68,7 +68,7 @@ Infra is Terraform (`infra/terraform/`), one GCP project, all resources "dev" ti
 
 Firebase stores passwords and sends verification and reset emails; we write none of that.
 
-1. The frontend signs in with the Firebase JS SDK (loaded on first use) → ID token.
+1. The frontend signs in with the Firebase JS SDK (loaded on first use), by email and password or with Google (a popup) → ID token. Google tokens arrive with the email verified; the backend treats both the same.
 2. Every API call sends `Authorization: Bearer <token>`.
 3. The backend verifies it with `firebase-admin` → `uid`, `email`, `email_verified`. Unverified emails get 403. The revocation check is cached for 60 s per instance.
 4. The backend looks up `users.firebase_uid` → membership → company and role.

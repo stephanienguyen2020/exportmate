@@ -11,8 +11,14 @@ from datetime import UTC, datetime
 
 from app.core.request_context import current_request_id, current_trace
 
-# Attributes every LogRecord has; anything else came in through `extra`.
-_STANDARD_ATTRS = set(vars(logging.makeLogRecord({}))) | {"message", "asctime", "request_id"}
+# Attributes every LogRecord has; anything else came in through `extra`. Uvicorn also
+# passes `color_message`, a copy of the message with terminal colour codes.
+_STANDARD_ATTRS = set(vars(logging.makeLogRecord({}))) | {
+    "message",
+    "asctime",
+    "request_id",
+    "color_message",
+}
 
 
 def _extra_fields(record: logging.LogRecord) -> dict:

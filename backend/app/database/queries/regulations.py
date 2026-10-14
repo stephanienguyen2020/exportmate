@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.dialects.postgresql import distinct_on
@@ -149,3 +150,17 @@ def get_regulation_document_by_checksum(
             RegulationDocument.checksum == checksum,
         )
     )
+
+
+def list_documents_added_since(
+    db: Session, company_id: uuid.UUID, since: datetime
+) -> list[tuple[RegulationDocument, Regulation]]:
+    """Versions added on or after `since` that this company can read, newest first."""
+    rows = db.execute(
+        select(RegulationDocument, Regulation)
+        .join(Regulation, RegulationDocument.regulation_id == Regulation.id)
+        .where(_is_shared_or_owned_by_company(company_id), RegulationDocument.created_at >= since)
+        .order_by(RegulationDocument.created_at.desc())
+        .limit(100)
+    ).all()
+    return [(document, regulation) for document, regulation in rows]

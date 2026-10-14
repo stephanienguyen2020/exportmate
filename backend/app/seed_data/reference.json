@@ -445,6 +445,51 @@
       "name": "Laos"
     },
     {
+      "alpha2": "KH",
+      "numeric": "116",
+      "name": "Cambodia"
+    },
+    {
+      "alpha2": "TH",
+      "numeric": "764",
+      "name": "Thailand"
+    },
+    {
+      "alpha2": "ID",
+      "numeric": "360",
+      "name": "Indonesia"
+    },
+    {
+      "alpha2": "MM",
+      "numeric": "104",
+      "name": "Myanmar"
+    },
+    {
+      "alpha2": "PH",
+      "numeric": "608",
+      "name": "Philippines"
+    },
+    {
+      "alpha2": "CN",
+      "numeric": "156",
+      "name": "China"
+    },
+    {
+      "alpha2": "IN",
+      "numeric": "356",
+      "name": "India"
+    },
+    {
+      "alpha2": "NZ",
+      "numeric": "554",
+      "name": "New Zealand"
+    },
+    {
+      "alpha2": "BR",
+      "numeric": "076",
+      "name": "Brazil"
+    },
+    {
       "alpha2": "MY",
       "numeric": "458",
       "name": "Malaysia",

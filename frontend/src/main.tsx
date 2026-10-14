@@ -36,6 +36,7 @@ import {
   LogOut,
   Newspaper,
   Map as MapIcon,
+  ClipboardList,
 } from "lucide-react";
 import {
   initialOrders,
@@ -75,6 +76,7 @@ import ErrorBoundary from "./ErrorBoundary";
 import { MAX_UPLOAD_MB, validateOrderCsv } from "./order-csv";
 const RegulationsPage = lazy(() => import("./Regulations"));
 const TradeMapPage = lazy(() => import("./TradeMap"));
+const ReportsPage = lazy(() => import("./Reports"));
 const nav = [
   ["", "Overview"],
   ["orders", "Orders"],
@@ -82,6 +84,7 @@ const nav = [
   ["news", "News watch"],
   ["rules", "Rule watch"],
   ["regulations", "Regulations"],
+  ["reports", "Reports"],
   ["data", "Data room"],
   ["playbook", "Playbook"],
   ["account", "Account"],
@@ -410,6 +413,11 @@ function App() {
     );
     setModal("message");
   };
+  const prepareOrderReport = (orderId: string) =>
+    mutate(async () => {
+      const draft = await api.createReport({ kind: "order", orderId });
+      go("reports/" + encodeURIComponent(draft.id));
+    });
   const download = (name: string, content: string, type = "text/csv") => {
     const url = URL.createObjectURL(new Blob([content], { type }));
     const a = document.createElement("a");
@@ -610,6 +618,7 @@ function App() {
               Newspaper,
               ShieldCheck,
               FileText,
+              ClipboardList,
               Upload,
               Settings2,
               UserRound,
@@ -781,6 +790,14 @@ function App() {
                     </div>
                     <div className="hero-copy">
                       <p>Order risks. Clear next steps.</p>
+                      {live && (
+                        <button
+                          className="text-link"
+                          onClick={() => go("reports")}
+                        >
+                          Company report <ArrowUpRight size={18} />
+                        </button>
+                      )}
                       <button className="text-link" onClick={startDemo}>
                         Run demo <ArrowUpRight size={18} />
                       </button>
@@ -1156,6 +1173,28 @@ function App() {
                       <ArrowUpRight size={15} />
                     </button>
                   )}
+                  {live && (
+                    <section className="panel report-actions">
+                      <div>
+                        <h2>Compliance report</h2>
+                        <p>
+                          This order, the document checklist for its market
+                          with the official text behind each line, and the CSV
+                          row it came from. Preview and edit it before you
+                          download or email the PDF.
+                        </p>
+                      </div>
+                      <div className="report-buttons">
+                        <Button
+                          disabled={busy}
+                          onClick={() => void prepareOrderReport(detail.id)}
+                        >
+                          <ClipboardList size={16} />
+                          Prepare report
+                        </Button>
+                      </div>
+                    </section>
+                  )}
                   {live ? (
                     <section className="panel">
                       <h2>Source and analysis</h2>
@@ -1351,6 +1390,17 @@ function App() {
                     onNavigate={go}
                     signature={`${profile.name} · ${profile.company || "Your company"}`}
                     companyOrigin={profile.origin}
+                  />
+                </Suspense>
+              )}
+              {route.split("/")[0] === "reports" && (
+                <Suspense fallback={<section className="panel" role="status">Loading reports…</section>}>
+                  <ReportsPage
+                    key={route.split("/")[1] || ""}
+                    live={live}
+                    editable={editable}
+                    path={route.slice("reports".length)}
+                    notify={setToast}
                   />
                 </Suspense>
               )}
@@ -1904,6 +1954,7 @@ function App() {
                 !nav.some(([p]) => p === route) &&
                 route.split("/")[0] !== "map" &&
                 route.split("/")[0] !== "regulations" &&
+                route.split("/")[0] !== "reports" &&
                 !detail && (
                   <section className="empty">
                     <h2>We couldn’t find that page.</h2>
@@ -2184,7 +2235,7 @@ function Root() {
   const workspace =
     path === "workspace" ||
     path.startsWith("workspace/") ||
-    /^(orders|map|news|rules|regulations|data|playbook)(\/|$)/.test(path);
+    /^(orders|map|news|rules|regulations|reports|data|playbook)(\/|$)/.test(path);
   useEffect(() => {
     const update = () => {
       const value = location.hash.replace(/^#\/?/, "");

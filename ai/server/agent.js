@@ -1,26 +1,54 @@
-// The ExportMate assistant: a Gemini (Vertex AI) agent in a ReAct loop (plan, call
-// tools, observe, repeat) wrapped in a harness:
+// The ExportMate assistant: a Google ADK LlmAgent on Gemini (Vertex AI). ADK runs the
+// ReAct loop (plan, call tools, observe, repeat) and holds the conversation in a
+// session; the harness plugs into it:
 // - policy.js: the prompt's rules, each tied to the failure it prevents (versioned);
 // - gateway.js: every tool call is validated, scoped, budgeted, timed out and retried;
 // - guard.js: third-party text in tool results is treated as data (injection removed);
-// - review.js: an auditor checks the draft (citations, figures, links) and sends it back once.
+// - review.js: an auditor checks the draft (citations, figures, links) and sends it back once;
+// - router.js: each question goes to a small fast model or the bigger one (models.js);
+// - answer-cache.js: a question already answered against the same data isn't answered again.
 // Every step is streamed and stored in an audit document (`audits` collection).
-import { GoogleGenAI, Type, FunctionCallingConfigMode } from "@google/genai";
-import { db, PROJECT, inventory, impacts, scans, sources, list } from "./db.js";
+import { FieldValue } from "@google-cloud/firestore";
+import { BasePlugin, BaseTool, Gemini, InMemorySessionService, LlmAgent, Runner, createEvent, isToolNotFound, LogLevel, setLogger } from "@google/adk";
+import { Type, FunctionCallingConfigMode } from "@google/genai";
+import { db, PROJECT, inventory, impacts, scans, sources, answerCache, list } from "./db.js";
 import { search, EMBED_MODEL, TYPES } from "./rag.js";
 import { evaluate } from "./calc.js";
-import { toolGateway, withRetry } from "./gateway.js";
+import { ToolError, toolGateway, withRetry } from "./gateway.js";
+import { ORDER_STATUSES, matchOrders, presentOrder, totalsByCurrency } from "./orders.js";
 import { createGuard } from "./guard.js";
 import { POLICY_VERSION, rulesFor } from "./policy.js";
 import { review, stripRefs, toEvidence } from "./review.js";
 import { log } from "./log.js";
 import { ANONYMOUS, itemVisible, presentSources, visibleItems } from "./access.js";
+import { TIERS, thinkingFor } from "./models.js";
+import { routeQuestion } from "./router.js";
+import { answerKey, cacheable, cachedAudit, fingerprint, CACHE_TTL_MS } from "./answer-cache.js";
+import { GUIDES } from "./seed/guides.js";
 
 export const audits = db.collection("audits");
-const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 const MAX_STEPS = 6;
 const TOOL_BUDGET = 16;
-const ai = new GoogleGenAI({
+const APP = "exportmate";
+const AGENT = "exportmate_assistant";
+
+// ADK's Gemini model, with transient errors (429, 503, timeouts) retried with backoff.
+// The attempt count rides on the response so the audit can show retried steps.
+class RetryingGemini extends Gemini {
+  async *generateContentAsync(request, stream, abortSignal) {
+    let attempts = 0;
+    const responses = await withRetry(async () => {
+      attempts++;
+      const out = [];
+      for await (const r of super.generateContentAsync(request, stream, abortSignal)) out.push(r);
+      return out;
+    });
+    for (const r of responses) yield { ...r, customMetadata: { ...r.customMetadata, attempts } };
+  }
+}
+// One client for both tiers: each call names its model (beforeModelCallback in runAgent).
+const gemini = new RetryingGemini({
+  model: TIERS.simple.model,
   vertexai: true,
   project: PROJECT,
   location: process.env.GOOGLE_CLOUD_LOCATION || "global",
@@ -55,7 +83,7 @@ function workspace(company) {
   if (!company)
     return "The workspace belongs to Binh Duong Wood Co., a Vietnamese wood-products and furniture exporter. Its stock data is synthetic demo data; its news articles are real, from approved sources.";
   const c = company.company;
-  return `You are working for ${c.name} (${c.businessRole}, based in ${c.origin}, primary market ${c.destination}). Its own company profile (what it does and makes, materials, certifications, sites, size, website) comes from get_company_profile. The stock items and news alerts in the other tools are synthetic demo data for a sample wood exporter, not ${c.name}'s own records: say so when you use them. News articles are real, from approved sources.`;
+  return `You are working for ${c.name} (${c.businessRole}, based in ${c.origin}, primary market ${c.destination}). Its own company profile (what it does and makes, materials, certifications, sites, size, website) comes from get_company_profile, and its own orders (order ids such as PO-2291, values, ship dates, statuses and each order's document checklist) from query_orders. The stock items and news alerts in the other tools are synthetic demo data for a sample wood exporter, not ${c.name}'s own records: say so when you use them. News articles are real, from approved sources.`;
 }
 
 function system(company) {
@@ -466,7 +494,59 @@ const REGISTRY = {
       };
     },
   },
+
+  query_orders: {
+    scope: "company",
+    // Read live from Postgres, outside the answer cache's data fingerprint.
+    live: true,
+    declaration: {
+      name: "query_orders",
+      description:
+        "The signed-in company's own orders (the Orders page), read live from its account: order id (e.g. PO-2291), product, supplier, destination and market, value and currency, ship date, HS code, status (exposed is shown as \"Action needed\") and each order's market document checklist: every line's status (on_file, missing, mismatch, prepare, check, unknown), a note and the official text it comes from. Also returns the count and total value per currency of all matches. Filters combine with AND; with none, every order. Only available in a company workspace.",
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          ids: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Order ids, e.g. PO-2291" },
+          query: { type: Type.STRING, description: "Text in the order id, product, supplier, destination or HS code" },
+          status: { type: Type.STRING, enum: ORDER_STATUSES },
+          limit: { type: Type.INTEGER, description: "Orders to return, default 10, max 30 (count and totals cover every match)" },
+        },
+      },
+    },
+    async run(args, { refs, backend }) {
+      if (!backend) throw new ToolError("unavailable", "Orders can't be read in this session.");
+      const { status, body } = await backend("/api/v1/trade-map");
+      if (status !== 200)
+        throw status === 0 || status >= 500
+          ? Object.assign(new Error("The company's orders can't be read right now."), { status: 503 })
+          : new ToolError("denied", "This account can't read the company's orders.");
+      const matching = matchOrders(body.data.orders, args);
+      const totals = totalsByCurrency(matching);
+      const filters = describe(args, ["limit"]);
+      const totalText = Object.entries(totals).map(([c, v]) => `${c} ${v.toLocaleString("en-US")}`).join(" + ") || "no value";
+      const ref = refs.cite(`orders:${filters}`, {
+        type: "query",
+        id: filters || "all",
+        title: `Order query${filters ? ` (${filters})` : ""}: ${matching.length} orders, ${totalText}`,
+        url: "#/workspace/orders",
+      });
+      const orders = matching.slice(0, clamp(args.limit, 1, 30, 10)).map((m) => presentOrder(m, refs.cite));
+      return {
+        output: { ref, matching: matching.length, totalValueByCurrency: totals, orders },
+        audit: {
+          count: matching.length,
+          results: [
+            { ref, type: "query", title: `${matching.length} matching orders, ${totalText}` },
+            ...orders.map((o) => ({ ref: o.ref, type: "order", title: `${o.id} · ${o.product} · ${o.statusLabel}` })),
+          ],
+        },
+      };
+    },
+  },
 };
+
+// Tools that read data outside the answer cache's fingerprint (answer-cache.js).
+const LIVE_TOOLS = new Set(Object.keys(REGISTRY).filter((name) => REGISTRY[name].live));
 
 function makeRefs() {
   const byKey = new Map();
@@ -479,11 +559,82 @@ function makeRefs() {
   };
 }
 
+// A registry tool as an ADK tool. ADK decides when to call it; the gateway still runs it.
+class GatewayTool extends BaseTool {
+  constructor(declaration, run) {
+    super({ name: declaration.name, description: declaration.description });
+    this.declaration = declaration;
+    this.run = run;
+  }
+  _getDeclaration() {
+    return this.declaration;
+  }
+  runAsync({ args }) {
+    return this.run(this.name, args);
+  }
+}
+
+// ADK answers calls to tools it wasn't given (made-up names, company tools outside a
+// company workspace) itself; this sends them through the gateway so the refusal is audited.
+class UnknownToolPlugin extends BasePlugin {
+  constructor(run) {
+    super("unknown_tool_gateway");
+    this.run = run;
+  }
+  async onToolErrorCallback({ tool, toolArgs }) {
+    return isToolNotFound(tool) ? this.run(tool.name, toolArgs) : undefined;
+  }
+}
+
+// ADK's own log lines go through log.js (JSON on Cloud Run); its per-request info lines are dropped.
+const adkLog = (severity) => (...args) => log(severity, `adk.${severity.toLowerCase()}`, { detail: args.join(" ").slice(0, 500) });
+const adkWarn = adkLog("WARNING");
+const adkError = adkLog("ERROR");
+setLogger({
+  log: (level, ...args) => (level >= LogLevel.ERROR ? adkError(...args) : level >= LogLevel.WARN ? adkWarn(...args) : undefined),
+  debug: () => {},
+  info: () => {},
+  warn: adkWarn,
+  error: adkError,
+  setLogLevel: () => {},
+});
+
+// Answer cache (answer-cache.js). Help guides change only with a deploy, so their hash is fixed.
+const GUIDES_VERSION = fingerprint(GUIDES);
+const MODELS = { simple: TIERS.simple.model, complex: TIERS.complex.model };
+let scanSeen;
+
+// Everything the tools read for this caller, as one hash: stock, the sources as this company
+// sees them (with their last fetch), the latest finished scan (its articles and alerts), the
+// company profile and the guides. A cached answer is only reused while this is unchanged.
+async function dataVersion(company, access) {
+  const scan = await lastDoneScan();
+  // A scan on another instance: drop this instance's copies so tools and the key agree.
+  if (scan?.id !== scanSeen) {
+    clearCaches();
+    scanSeen = scan?.id;
+  }
+  const [items, stored] = await Promise.all([cached("inventory", () => list(inventory)), cached("sources", () => list(sources))]);
+  return fingerprint({ items, sources: presentSources(stored, access), scan: scan?.id ?? null, company, guides: GUIDES_VERSION });
+}
+
+// The audit that answered this key before, if it is still there and still fit to reuse.
+async function cachedAnswer(key, companyId = null) {
+  const entry = await answerCache.doc(key).get();
+  if (!entry.exists || entry.get("expireAt")?.toMillis() < Date.now()) return null;
+  const doc = await audits.doc(entry.get("auditId")).get();
+  if (!doc.exists) return null;
+  const original = { id: doc.id, ...doc.data() };
+  // The key already names the company; checked again so an entry can never cross companies.
+  return (original.companyId ?? null) === companyId && cacheable(original, LIVE_TOOLS) ? original : null;
+}
+
 /**
  * Runs one agent turn. `messages` is the conversation ({role: "user"|"model", text}),
  * ending with the user's question. `onStep` receives audit steps as they happen.
  * `channel` says where the turn came from ("chat" or "eval"); `withEvidence` also
- * returns the tool-result text the answer was checked against (not stored).
+ * returns the tool-result text the answer was checked against (not stored). `tier` forces
+ * a model tier (router.js); `useCache` reuses and stores answers (answer-cache.js).
  */
 export async function runAgent({
   messages,
@@ -494,31 +645,56 @@ export async function runAgent({
   requestId,
   channel = "chat",
   withEvidence = false,
+  tier,
+  useCache = channel === "chat",
+  // GETs a company backend path with the caller's own token ({ status, body }); company chats only.
+  backend = null,
   onStep = () => {},
 }) {
   const started = Date.now();
+  const companyId = company?.company.id;
+
+  // Asked and answered before, against the same data today: reuse that answer.
+  let key = null;
+  if (useCache) {
+    try {
+      key = answerKey({
+        messages,
+        companyId,
+        disabled: access.disabled,
+        dataVersion: await dataVersion(company, access),
+        policyVersion: POLICY_VERSION,
+        models: MODELS,
+        day: new Date(started).toISOString().slice(0, 10),
+      });
+      const original = await cachedAnswer(key, companyId);
+      if (original) {
+        const audit = cachedAudit(original, { sessionId, requestId, channel, companyId, question: messages.at(-1).text, startedAt: started, latencyMs: Date.now() - started });
+        onStep(audit.steps[0]);
+        const ref = audits.doc();
+        await ref.set(audit).catch((e) => log("ERROR", "audit.write_failed", { requestId, error: String(e?.message || e) }));
+        answerCache.doc(key).update({ hits: FieldValue.increment(1), lastHitAt: new Date().toISOString() }).catch(() => {});
+        return { id: ref.id, ...audit };
+      }
+    } catch (e) {
+      log("WARNING", "answer_cache.read_failed", { requestId, error: String(e?.message || e) });
+    }
+  }
+
+  const route = routeQuestion(messages, { force: tier });
+  let current = route.tier; // a simple-tier draft the auditor sends back is revised on the complex tier
+  let callModel = TIERS[current].model;
   const refs = makeRefs();
-  const gateway = toolGateway(REGISTRY, { refs, company, access }, { maxCalls: TOOL_BUDGET });
-  // Earlier answers lose their [n] markers (refs restart each turn) but keep the titles they cited.
-  const contents = messages.map((m) => ({
-    role: m.role,
-    parts: [
-      {
-        text:
-          m.role === "model"
-            ? stripRefs(m.text) + (m.sources?.length ? `\n(Sources cited: ${m.sources.join("; ")})` : "")
-            : m.text,
-      },
-    ],
-  }));
+  const gateway = toolGateway(REGISTRY, { refs, company, access, backend }, { maxCalls: TOOL_BUDGET });
   const audit = {
     sessionId,
     requestId,
     channel,
-    companyId: company?.company.id,
+    companyId,
     createdAt: new Date(started).toISOString(),
     question: messages.at(-1).text,
-    model: MODEL,
+    model: TIERS[current].model,
+    route: { tier: route.tier, reasons: route.reasons },
     embeddingModel: EMBED_MODEL,
     policyVersion: POLICY_VERSION,
     steps: [],
@@ -532,93 +708,129 @@ export async function runAgent({
   };
   let answer = "";
   let revised = false;
+  let revision = null; // the auditor's findings, sent back as the next message
+  let step = -1;
+  let stepStarted = started;
   // Normalised text the figures check accepts: the user's own messages and this turn's tool results.
   // Earlier model turns come from the client, so they can't vouch for a figure.
   let evidence = toEvidence(messages.filter((m) => m.role === "user").map((m) => m.text).join(" "));
 
-  try {
-    for (let step = 0; step <= MAX_STEPS; step++) {
-      const final = step === MAX_STEPS;
-      const t0 = Date.now();
-      let attempts = 0;
-      // Transient model errors (429, 503, timeouts) are retried with backoff; others end the turn.
-      const res = await withRetry(() => {
-        attempts++;
-        return ai.models.generateContent({
-          model: MODEL,
-          contents,
-          config: {
-            systemInstruction: system(company),
-            tools: [{ functionDeclarations: gateway.declarations() }],
-            toolConfig: final ? { functionCallingConfig: { mode: FunctionCallingConfigMode.NONE } } : undefined,
-            temperature: 0.2,
-            maxOutputTokens: 4096,
-            thinkingConfig: { thinkingBudget: 512, includeThoughts: true },
-          },
-        });
-      });
-      const u = res.usageMetadata || {};
-      audit.usage.promptTokens += u.promptTokenCount || 0;
-      audit.usage.outputTokens += u.candidatesTokenCount || 0;
-      audit.usage.thinkingTokens += u.thoughtsTokenCount || 0;
-      audit.usage.modelCalls += 1;
-      const content = res.candidates?.[0]?.content || { role: "model", parts: [] };
-      const parts = content.parts || [];
-      const thought = parts.filter((p) => p.thought && p.text).map((p) => p.text).join("\n").trim() || undefined;
-      const text = parts.filter((p) => p.text && !p.thought).map((p) => p.text).join("").trim();
-      const calls = parts.filter((p) => p.functionCall).map((p) => p.functionCall);
-      const tokens = { prompt: u.promptTokenCount, output: u.candidatesTokenCount, thinking: u.thoughtsTokenCount };
-      const retried = attempts > 1 ? { attempts } : {};
+  // Every tool call, offered or not, runs through the gateway and is recorded.
+  async function runTool(name, args = {}) {
+    const r = await gateway.call(name, args);
+    if (r.ok) evidence += " " + toEvidence(JSON.stringify(r.output));
+    push({
+      kind: "tool",
+      name,
+      args,
+      latencyMs: r.latencyMs,
+      ...(r.attempts > 1 ? { attempts: r.attempts } : {}),
+      ...(r.ok ? r.details : { error: r.error, errorKind: r.errorKind }),
+    });
+    return r.ok ? { output: r.output } : { error: r.error };
+  }
 
-      if (!calls.length) {
-        const usedTools = audit.steps.some((s) => s.kind === "tool");
-        const { problems } = review({ answer: text, retrieved: refs.all(), evidence, usedTools });
-        if (problems.length && !revised && !final) {
-          // One revision round: the auditor sends the draft back with its findings.
-          revised = true;
-          push({ kind: "draft", latencyMs: Date.now() - t0, thought, tokens, ...retried, excerpt: text.slice(0, 800) });
-          push({ kind: "review", problems });
-          contents.push(content, {
-            role: "user",
-            parts: [
-              {
-                text: `Auditor review of your draft: ${problems.join(" ")} Verify with tools (for totals, call query_inventory with the skus) or remove what you cannot support, then give the corrected final answer.`,
-              },
-            ],
-          });
-          continue;
-        }
-        answer = text;
-        push({ kind: "answer", latencyMs: Date.now() - t0, thought, tokens, ...retried, finishReason: res.candidates?.[0]?.finishReason });
-        if (final) audit.status = "max_steps";
-        break;
+  // Records each model response as a plan, draft or answer step. A final answer that
+  // fails the auditor goes back once (not on the last step).
+  function observe(res) {
+    const u = res.usageMetadata || {};
+    audit.usage.promptTokens += u.promptTokenCount || 0;
+    audit.usage.outputTokens += u.candidatesTokenCount || 0;
+    audit.usage.thinkingTokens += u.thoughtsTokenCount || 0;
+    audit.usage.modelCalls += 1;
+    const parts = res.content?.parts || [];
+    const thought = parts.filter((p) => p.thought && p.text).map((p) => p.text).join("\n").trim() || undefined;
+    const text = parts.filter((p) => p.text && !p.thought).map((p) => p.text).join("").trim();
+    const calls = parts.filter((p) => p.functionCall).map((p) => p.functionCall);
+    const tokens = { prompt: u.promptTokenCount, output: u.candidatesTokenCount, thinking: u.thoughtsTokenCount };
+    const attempts = res.customMetadata?.attempts;
+    const meta = { model: callModel, ...(attempts > 1 ? { attempts } : {}) };
+    const latencyMs = Date.now() - stepStarted;
+    const final = step >= MAX_STEPS;
+
+    if (calls.length) {
+      push({ kind: "plan", latencyMs, thought, note: text || undefined, calls: calls.map((c) => ({ name: c.name, args: c.args || {} })), tokens, ...meta });
+      return;
+    }
+    const usedTools = audit.steps.some((s) => s.kind === "tool");
+    const { problems } = review({ answer: text, retrieved: refs.all(), evidence, usedTools });
+    if (problems.length && !revised && !final) {
+      revised = true;
+      push({ kind: "draft", latencyMs, thought, tokens, ...meta, excerpt: text.slice(0, 800) });
+      push({ kind: "review", problems });
+      if (current === "simple") {
+        current = "complex";
+        audit.route.escalated = true;
       }
-      push({
-        kind: "plan",
-        latencyMs: Date.now() - t0,
-        thought,
-        note: text || undefined,
-        calls: calls.map((c) => ({ name: c.name, args: c.args || {} })),
-        tokens,
-        ...retried,
+      revision = `Auditor review of your draft: ${problems.join(" ")} Verify with tools (for totals, call query_inventory with the skus) or remove what you cannot support, then give the corrected final answer.`;
+      return;
+    }
+    answer = text;
+    audit.model = callModel;
+    push({ kind: "answer", latencyMs, thought, tokens, ...meta, finishReason: res.finishReason });
+    if (final) audit.status = "max_steps";
+  }
+
+  // Built per turn: the prompt names this company and the tools close over this turn's gateway.
+  const agent = new LlmAgent({
+    name: AGENT,
+    description: "Answers trade-compliance questions about the workspace's stock, news alerts, company profile and orders, with citations.",
+    model: gemini,
+    // A function, not a string, so ADK doesn't read {braces} in the policy as state placeholders.
+    instruction: () => system(company),
+    // A single agent: no transfers, which also keeps ADK's identity preamble out of the versioned prompt.
+    disallowTransferToParent: true,
+    disallowTransferToPeers: true,
+    tools: gateway.declarations().map((d) => new GatewayTool(d, runTool)),
+    generateContentConfig: {
+      temperature: 0.2,
+      maxOutputTokens: 4096,
+    },
+    beforeModelCallback: ({ request }) => {
+      step++;
+      stepStarted = Date.now();
+      // Past the last step (the model called a tool anyway): end the turn without an answer.
+      if (step > MAX_STEPS) {
+        audit.status = "max_steps";
+        return { content: { role: "model", parts: [{ text: "" }] } };
+      }
+      // The routed tier's model and thinking level for this call.
+      callModel = TIERS[current].model;
+      request.model = callModel;
+      request.config = { ...request.config, thinkingConfig: thinkingFor(current) };
+      // The last step has to answer: tools are switched off.
+      if (step === MAX_STEPS) request.config.toolConfig = { functionCallingConfig: { mode: FunctionCallingConfigMode.NONE } };
+      return undefined;
+    },
+    afterModelCallback: ({ response }) => {
+      observe(response);
+      return undefined;
+    },
+  });
+  const sessions = new InMemorySessionService();
+  const runner = new Runner({ appName: APP, agent, sessionService: sessions, plugins: [new UnknownToolPlugin(runTool)] });
+  const userId = company?.company.id || "demo";
+
+  try {
+    // The conversation so far comes from the client. Earlier answers lose their [n] markers
+    // (refs restart each turn) but keep the titles they cited.
+    const session = await sessions.createSession({ appName: APP, userId });
+    for (const m of messages.slice(0, -1)) {
+      const text = m.role === "model" ? stripRefs(m.text) + (m.sources?.length ? `\n(Sources cited: ${m.sources.join("; ")})` : "") : m.text;
+      await sessions.appendEvent({
+        session,
+        event: createEvent({ author: m.role === "model" ? AGENT : "user", content: { role: m.role, parts: [{ text }] } }),
       });
-      contents.push(content);
-      const responses = await Promise.all(
-        calls.map(async (c) => {
-          const r = await gateway.call(c.name, c.args || {});
-          if (r.ok) evidence += " " + toEvidence(JSON.stringify(r.output));
-          push({
-            kind: "tool",
-            name: c.name,
-            args: c.args || {},
-            latencyMs: r.latencyMs,
-            ...(r.attempts > 1 ? { attempts: r.attempts } : {}),
-            ...(r.ok ? r.details : { error: r.error, errorKind: r.errorKind }),
-          });
-          return { functionResponse: { id: c.id, name: c.name, response: r.ok ? { output: r.output } : { error: r.error } } };
-        }),
-      );
-      contents.push({ role: "user", parts: responses });
+    }
+    // The question, then the auditor's findings if the draft is sent back.
+    let message = messages.at(-1).text;
+    while (message) {
+      const newMessage = { role: "user", parts: [{ text: message }] };
+      for await (const event of runner.runAsync({ userId, sessionId: session.id, newMessage })) {
+        // ADK turns a model error (after our retries) into an event; it ends the turn.
+        if (event.errorCode) throw Object.assign(new Error(event.errorMessage || event.errorCode), { status: Number(event.errorCode) || undefined });
+      }
+      [message, revision] = [revision, null];
     }
   } catch (e) {
     log("ERROR", "agent.failed", { requestId, error: String(e?.message || e), status: e?.status });
@@ -640,6 +852,14 @@ export async function runAgent({
     latencyMs: Date.now() - started,
   });
   const ref = audits.doc();
-  await ref.set(audit).catch((e) => log("ERROR", "audit.write_failed", { requestId, error: String(e?.message || e) }));
+  const stored = await ref.set(audit).then(
+    () => true,
+    (e) => log("ERROR", "audit.write_failed", { requestId, error: String(e?.message || e) }),
+  );
+  if (stored && key && cacheable(audit, LIVE_TOOLS))
+    await answerCache
+      .doc(key)
+      .set({ auditId: ref.id, companyId: companyId ?? null, createdAt: audit.createdAt, expireAt: new Date(started + CACHE_TTL_MS), hits: 0 })
+      .catch((e) => log("WARNING", "answer_cache.write_failed", { requestId, error: String(e?.message || e) }));
   return { id: ref.id, ...audit, ...(withEvidence ? { evidence } : {}) };
 }
