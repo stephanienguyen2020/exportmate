@@ -14,6 +14,7 @@ import uuid
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date
+from itertools import pairwise
 
 from sqlalchemy.orm import Session
 
@@ -298,7 +299,7 @@ def compare_requirements(
             "origin preference used.",
         ),
     ]
-    if len(to_requirements) <= 2:
+    if len(after) <= 2:
         unknown.append(
             ComparisonItemOut(
                 title="A short checklist",
@@ -687,6 +688,35 @@ def _log_comparison(
     )
 
 
+def _classify_unchanged(
+    req: MarketRequirement,
+    order: Order,
+    documents: SupplierDocs | None,
+    reuse: list[ComparisonItemOut],
+    reevaluate: list[ComparisonItemOut],
+    unknown: list[ComparisonItemOut],
+) -> None:
+    """An unchanged requirement is not evidence that its document is on file."""
+    status, note = _check_requirement(req, order.supplier, documents)
+    if status == "on_file":
+        reuse.append(
+            ComparisonItemOut(
+                title=req.title,
+                note=f"{note}. On file; validity and shipment scope still need review.",
+            )
+        )
+    elif status == "unknown":
+        unknown.append(ComparisonItemOut(title=req.title, note=note))
+    else:
+        reevaluate.append(
+            ComparisonItemOut(
+                title=req.title,
+                note=note,
+                tag="Prepare" if status == "prepare" else None,
+            )
+        )
+
+
 def compare_ship_date(
     db: Session, ctx: CompanyContext, order_id: str, proposed: date
 ) -> MarketComparisonOut:
@@ -705,7 +735,8 @@ def compare_ship_date(
     gazetteer = _load_gazetteer(db)
     placement = locate_destination(order.destination, gazetteer)
     requirements = _requirements_by_market(db).get(placement.market, []) if placement.market else []
-    current, reuse, reevaluate = order.ship_date, [], []
+    current, reuse, reevaluate, evidence_unknown = order.ship_date, [], [], []
+    documents = _supplier_documents(db, ctx, order)
     for req in requirements:
         if not applies_to(req, order.hs_code):
             continue
@@ -735,12 +766,7 @@ def compare_ship_date(
                 )
             )
         elif now:
-            reuse.append(
-                ComparisonItemOut(
-                    title=req.title,
-                    note="Still listed on both dates. The documents on file do not change because the date moved.",
-                )
-            )
+            _classify_unchanged(req, order, documents, reuse, reevaluate, evidence_unknown)
     market = placement.market or ""
     result = MarketComparisonOut(
         order_id=order.external_id,
@@ -751,7 +777,8 @@ def compare_ship_date(
         to_ship_date=proposed,
         reuse=reuse,
         reevaluate=reevaluate,
-        unknown=[
+        unknown=evidence_unknown
+        + [
             ComparisonItemOut(
                 title="Buyer delivery window",
                 note="The contract date the buyer will accept is not in this dataset.",
@@ -786,7 +813,7 @@ def compare_route(db: Session, ctx: CompanyContext, order_id: str, via: str) -> 
     Freight, sailing time and congestion are not in the dataset and stay unknown.
     """
     code = via.strip()
-    code = code if code.casefold() == "direct" else code.upper()
+    code = "direct" if code.casefold() == "direct" else code.upper()
     if code not in ROUTE_HUBS:
         raise AppError(422, "unknown_route", f"Unknown route: {via}.", {"via": "Unknown route"})
     order = _load_order(db, ctx, order_id)
@@ -801,7 +828,8 @@ def compare_route(db: Session, ctx: CompanyContext, order_id: str, via: str) -> 
             {"via": "Pick a stop that is not the destination"},
         )
     requirements = _requirements_by_market(db).get(placement.market, []) if placement.market else []
-    reuse, reevaluate = [], []
+    reuse, reevaluate, evidence_unknown = [], [], []
+    documents = _supplier_documents(db, ctx, order)
     hub_name = "Direct" if hub is None else hub[0]
     for req in requirements:
         if not applies_to(req, order.hs_code) or not applies_on(req, order.ship_date):
@@ -815,22 +843,20 @@ def compare_route(db: Session, ctx: CompanyContext, order_id: str, via: str) -> 
                     tag="Changes",
                 )
             )
-        elif req.route_sensitive:
-            reuse.append(
-                ComparisonItemOut(
-                    title=req.title,
-                    note="Direct routing. Prepare the destination market's proof; a later stop would need it rechecked.",
-                )
-            )
         else:
-            reuse.append(
-                ComparisonItemOut(
-                    title=req.title,
-                    note="The destination market is unchanged, so this checklist line stays.",
-                )
+            _classify_unchanged(req, order, documents, reuse, reevaluate, evidence_unknown)
+    points = _route_points(db, ctx, gazetteer, placement, hub)
+    distance = (
+        round(
+            sum(
+                distance_km(a.latitude, a.longitude, b.latitude, b.longitude)
+                for a, b in pairwise(points)
             )
-    distance = _route_distance(db, ctx, gazetteer, placement, hub)
-    unknown = [
+        )
+        if points
+        else None
+    )
+    unknown = evidence_unknown + [
         ComparisonItemOut(
             title="Freight cost",
             note="No rate card is stored, so this does not estimate a price.",
@@ -852,7 +878,7 @@ def compare_route(db: Session, ctx: CompanyContext, order_id: str, via: str) -> 
         unknown.append(
             ComparisonItemOut(
                 title="Distance",
-                note="No origin coordinates are recorded, so the great-circle distance is not estimated.",
+                note="The origin, stop or destination could not be located, so no route is estimated.",
             )
         )
     else:
@@ -870,6 +896,7 @@ def compare_route(db: Session, ctx: CompanyContext, order_id: str, via: str) -> 
         via=code,
         via_name=hub_name,
         distance_km=distance,
+        route_points=points,
         reuse=reuse,
         reevaluate=reevaluate,
         unknown=unknown,
@@ -880,24 +907,23 @@ def compare_route(db: Session, ctx: CompanyContext, order_id: str, via: str) -> 
     return result
 
 
-def _route_distance(
+def _route_points(
     db: Session,
     ctx: CompanyContext,
     gazetteer: Gazetteer,
     placement: OrderPlacementOut,
     hub: tuple[str, str] | None,
-) -> int | None:
+) -> list[GeoPoint]:
     origin = _origin_point(db, ctx, gazetteer)
     if origin is None or placement.location is None:
-        return None
-    dest = (placement.location.latitude, placement.location.longitude)
-    if hub is None:
-        return round(distance_km(*origin, *dest))
-    port = gazetteer.ports.get((hub[0].lower(), hub[1]))
-    if port is None:
-        return None
-    via = (port.latitude, port.longitude)
-    return round(distance_km(*origin, *via) + distance_km(*via, *dest))
+        return []
+    points = [GeoPoint(latitude=origin[0], longitude=origin[1])]
+    if hub:
+        port = gazetteer.ports.get((hub[0].lower(), hub[1]))
+        if port is None:
+            return []
+        points.append(GeoPoint(latitude=port.latitude, longitude=port.longitude))
+    return [*points, placement.location]
 
 
 def compare_order_markets(

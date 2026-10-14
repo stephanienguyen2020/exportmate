@@ -1,4 +1,4 @@
-# Trade map review — 13 October 2026
+# Trade map review — 14 October 2026
 
 ## Delivered
 
@@ -17,7 +17,10 @@ Animation can be paused, stops on direct interaction, respects reduced-motion pr
 - Scenario arcs previously stayed visible in 2D after Routes was disabled. Both projections now respect the toggle.
 - Order IDs containing `|` could be split incorrectly when requesting comparisons. The request identity now uses a JSON tuple.
 - Malformed URL encoding no longer crashes map initialization; cancelled map/comparison responses cannot replace the current result.
-- The route origin must now be a site explicitly marked `isRouteOrigin`; the UI does not choose an arbitrary warehouse when that designation is missing.
+- A recorded site marked `isRouteOrigin` takes precedence. If none exists, the company profile's supported origin country supplies an approximate start, labelled as not a recorded site.
+- Route comparison now draws the API's ordered origin → optional transshipment port → order destination on both globe and 2D views. These are the same coordinates used for the distance. Changing scenario or hiding routes removes that overlay. Two legs count as one proposed connection.
+- Ship-date and route comparisons previously placed every unchanged requirement under “On file for review”, including missing documents and shipment forms. They now check the supplier's actual evidence; missing, mismatched and shipment-specific records remain actionable, and absent supplier records remain unknown.
+- Checklist coverage warnings now count the requirements applicable to the order, rather than all industries in the destination market.
 
 ## Existing strengths
 
@@ -25,9 +28,9 @@ Company orders, suppliers, documents and sites are scoped by the authenticated b
 
 ## Remaining limits
 
-1. The supplied deployed sample account has 12 orders but no company sites or located supplier records. It therefore has market markers but no genuine route origin. Populate the company's sites/suppliers (the existing `seed_company_map_data` helper can populate the designated demo company) before expecting connections. No remote company data was changed during this task.
+1. The supplied deployed sample account has 12 orders but no company sites or located supplier records. Its profile origin can supply illustrative connections, but precise site and supplier coordinates are still absent. No remote company data was changed during this task.
 2. The current map has read/compare APIs. It does not yet provide a user flow for maintaining supplier coordinates or company sites.
-3. Reference checklists are curated seed data and primarily illustrate wood-product scenarios. Applicability uses HS prefixes, not a comprehensive engine for effective dates, product composition, origin preferences or all industries.
+3. Reference checklists now cover selected wood, food, textile and electronics HS prefixes, with effective/change dates and route-sensitive origin proofs. Coverage remains curated and incomplete; shipment dates do not establish arrival/import dates, and this is not a comprehensive legal engine.
 4. A supplier document record has no expiry/verification/lot-coverage model. “On file” is not a compliance clearance.
 5. Observations are sample records, not an automated satellite feed. The globe's moving points are illustrative trade connections, not AIS positions or vessel ETAs.
 6. Company order status, checklist gaps and AI news assessments remain separate signals. The globe does not infer financial losses or change statuses from those signals.
@@ -35,10 +38,6 @@ Company orders, suppliers, documents and sites are scoped by the authenticated b
 
 ## Configuration and validation
 
-- Firebase login with the supplied sample account succeeds against the supplied Cloud Run backend.
-- Vercel Production settings match all five supplied backend/Firebase values; Production and Preview already have those keys. No credentials were committed and no password was saved.
-- The local development `.env.local` uses the supplied deployment. Changes in this review have not been deployed to Cloud Run or Vercel.
-- Frontend production build passes (the existing Three.js chunk-size warning remains).
-- Frontend suite: 4 proxy tests and 30 browser tests passed; the opt-in real-local-backend browser test was skipped.
-- Backend: Ruff passes; 91 tests passed against local test Postgres, including polygon distance, holes, antimeridian handling, threshold rounding, comparison and tenant-isolation checks.
-- Browser checks include real Firebase/backend read access plus a separate synthetic preview for route animation and source/satellite interactions. That synthetic preview is not used by the shipped app.
+Firebase/backend access and Vercel settings were verified in the preceding review. No credentials or remote company records are changed by this update. The API's new `routePoints` field requires the matching backend release; an older backend still loads the map but cannot provide the proposed route geometry.
+
+Regression coverage includes supplier evidence classification for unchanged date/route requirements, direct and intermediate routing, unmapped destinations, both map projections, route toggle, switching scenarios and existing tenant isolation tests. See the pull request checks for the latest complete test results. The Three.js chunk-size warning remains.

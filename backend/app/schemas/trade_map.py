@@ -164,6 +164,8 @@ class MarketComparisonOut(CamelCaseModel):
     via_name: str | None = None
     # Great-circle kilometres for a route. Not a voyage and not a freight quote.
     distance_km: int | None = None
+    # Ordered origin, optional stop, destination. Empty when either endpoint is unknown.
+    route_points: list[GeoPoint] = Field(default_factory=list)
     reuse: list[ComparisonItemOut]
     reevaluate: list[ComparisonItemOut]
     unknown: list[ComparisonItemOut]
