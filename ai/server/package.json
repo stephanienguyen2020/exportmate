@@ -15,6 +15,7 @@
     "index": "node rag.js",
     "test": "node --test test/*.test.js",
     "eval": "node eval/run.js",
+    "eval:vertex": "node eval/run.js --vertex",
     "eval:scan": "node eval/scan-run.js",
     "ops": "node ops.js"
   },
