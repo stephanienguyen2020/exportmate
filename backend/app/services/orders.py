@@ -6,12 +6,14 @@ from datetime import UTC, date, datetime
 
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.context import CompanyContext
 from app.core.errors import AppError, not_found_error
 from app.database.models import (
     Order,
     OrderStatus,
     OrderStatusChange,
+    OrderStatusDefinition,
     StatusChangeSource,
     User,
 )
@@ -20,6 +22,8 @@ from app.database.queries import orders as order_queries
 from app.schemas.analysis import OrderDetailOut
 from app.schemas.orders import (
     OrderOut,
+    OrderStatusBulkChangeIn,
+    OrderStatusBulkChangeOut,
     OrderStatusChangeIn,
     OrderStatusChangeOut,
     OrderStatusOut,
@@ -103,6 +107,44 @@ def list_order_statuses(db: Session) -> list[OrderStatusOut]:
     return [OrderStatusOut.from_definition(d) for d in order_queries.list_order_statuses(db)]
 
 
+def _manual_status_definition(db: Session, status: OrderStatus) -> OrderStatusDefinition:
+    definition = order_queries.get_order_status_definition(db, status)
+    if definition is None or not definition.manual:
+        raise AppError(
+            422,
+            "status_not_settable",
+            "This status can't be set by hand.",
+            {"status": "Choose one of the statuses from GET /order-statuses"},
+        )
+    return definition
+
+
+def _manual_change(
+    db: Session, ctx: CompanyContext, order: Order, status: OrderStatus, note: str
+) -> OrderStatusChange:
+    """Set the status and audit it; returns the history entry for the caller to add."""
+    previous = order.status
+    order.status = status
+    audit_queries.record_audit_event(
+        db,
+        company_id=ctx.company_id,
+        user_id=ctx.user.id,
+        action="order.status_changed",
+        object_type="order",
+        object_id=order.external_id,
+        data={"from": previous.value, "to": status.value, "note": note},
+    )
+    return OrderStatusChange(
+        company_id=ctx.company_id,
+        order_id=order.id,
+        from_status=previous,
+        to_status=status,
+        source=StatusChangeSource.manual,
+        note=note,
+        changed_by=ctx.user.id,
+    )
+
+
 def change_order_status(
     db: Session, ctx: CompanyContext, external_id: str, payload: OrderStatusChangeIn
 ) -> OrderDetailOut:
@@ -112,14 +154,7 @@ def change_order_status(
     order = order_queries.get_order_by_external_id(db, ctx.company_id, external_id, lock=True)
     if not order:
         raise not_found_error("Order")
-    definition = order_queries.get_order_status_definition(db, payload.status)
-    if definition is None or not definition.manual:
-        raise AppError(
-            422,
-            "status_not_settable",
-            "This status can't be set by hand.",
-            {"status": "Choose one of the statuses from GET /order-statuses"},
-        )
+    definition = _manual_status_definition(db, payload.status)
     if order.status == payload.status:
         raise AppError(
             409,
@@ -127,42 +162,75 @@ def change_order_status(
             f"The order is already “{definition.label}”.",
             {"status": "Choose a different status"},
         )
-    previous = order.status
-    order.status = payload.status
-    order_queries.add_status_changes(
-        db,
-        [
-            OrderStatusChange(
-                company_id=ctx.company_id,
-                order_id=order.id,
-                from_status=previous,
-                to_status=payload.status,
-                source=StatusChangeSource.manual,
-                note=payload.note,
-                changed_by=ctx.user.id,
-            )
-        ],
-    )
-    audit_queries.record_audit_event(
-        db,
-        company_id=ctx.company_id,
-        user_id=ctx.user.id,
-        action="order.status_changed",
-        object_type="order",
-        object_id=order.external_id,
-        data={"from": previous.value, "to": payload.status.value, "note": payload.note},
-    )
+    change = _manual_change(db, ctx, order, payload.status, payload.note)
+    order_queries.add_status_changes(db, [change])
     db.commit()
     log.info(
         "order.status_changed",
         extra={
             "company_id": str(ctx.company_id),
             "order_id": str(order.id),
-            "from_status": previous.value,
+            "from_status": change.from_status.value,
             "to_status": payload.status.value,
         },
     )
     return get_order_detail(db, ctx, external_id)
+
+
+def change_order_statuses(
+    db: Session, ctx: CompanyContext, payload: OrderStatusBulkChangeIn
+) -> OrderStatusBulkChangeOut:
+    """Set several orders' status by hand with one note: all of them or none. Each order gets
+    its own history entry and audit event, as if changed one at a time; orders that already
+    have the status are left alone and listed as unchanged."""
+    external_ids = list(dict.fromkeys(payload.order_ids))
+    most = get_settings().max_status_change_orders
+    if len(external_ids) > most:
+        raise AppError(
+            422,
+            "too_many_orders",
+            f"Change at most {most} orders at a time.",
+            {"orderIds": f"Choose {most} orders or fewer"},
+        )
+    definition = _manual_status_definition(db, payload.status)
+    found = {
+        order.external_id: order
+        for order in order_queries.lock_orders_by_external_ids(db, ctx.company_id, external_ids)
+    }
+    missing = [i for i in external_ids if i not in found]
+    if missing:
+        raise AppError(
+            404,
+            "not_found",
+            "Some of these orders were not found.",
+            {"orderIds": "Not found: " + ", ".join(missing)},
+        )
+    orders = [found[i] for i in external_ids]
+    to_change = [o for o in orders if o.status != payload.status]
+    unchanged = [o.external_id for o in orders if o.status == payload.status]
+    if not to_change:
+        raise AppError(
+            409,
+            "status_unchanged",
+            f"These orders are already “{definition.label}”.",
+            {"status": "Choose a different status"},
+        )
+    order_queries.add_status_changes(
+        db, [_manual_change(db, ctx, o, payload.status, payload.note) for o in to_change]
+    )
+    db.commit()
+    log.info(
+        "order.statuses_changed",
+        extra={
+            "company_id": str(ctx.company_id),
+            "changed": len(to_change),
+            "unchanged": len(unchanged),
+            "to_status": payload.status.value,
+        },
+    )
+    return OrderStatusBulkChangeOut(
+        changed=[OrderOut.from_order(o) for o in to_change], unchanged=unchanged
+    )
 
 
 def build_overview(db: Session, ctx: CompanyContext) -> OverviewOut:

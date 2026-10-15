@@ -2,7 +2,7 @@ import uuid
 from datetime import date, datetime
 from typing import Annotated, Literal
 
-from pydantic import StringConstraints
+from pydantic import Field, StringConstraints
 
 from app.database.models import Order, OrderStatus, OrderStatusDefinition
 from app.schemas.common import CamelCaseModel
@@ -65,6 +65,20 @@ class OrderStatusChangeIn(CamelCaseModel):
     status: OrderStatus
     # Why the status is changed by hand; kept on the order's history and in the audit log.
     note: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)]
+
+
+class OrderStatusBulkChangeIn(CamelCaseModel):
+    # The company's own order ids, e.g. "PO-2291"; the most allowed is a setting.
+    order_ids: list[Annotated[str, StringConstraints(min_length=1, max_length=100)]] = Field(
+        min_length=1
+    )
+    status: OrderStatus
+    note: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)]
+
+
+class OrderStatusBulkChangeOut(CamelCaseModel):
+    changed: list[OrderOut]  # in the order they were asked for
+    unchanged: list[str]  # ids of orders that already had the status
 
 
 class StatusChangerOut(CamelCaseModel):

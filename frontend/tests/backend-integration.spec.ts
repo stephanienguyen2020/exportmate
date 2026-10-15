@@ -351,6 +351,7 @@ async function fixture(
     failOrders?: boolean;
     viewer?: boolean;
     onboarding?: boolean;
+    twoOrders?: boolean; // IMPORTED-1 is listed without an import first
   } = {},
 ) {
   const requests: {
@@ -408,6 +409,7 @@ async function fixture(
   ];
   let requirements: any[] = [];
   let serverStatus = order.status;
+  let uploadedStatus = uploaded.status;
   const statusChanges: any[] = [];
   let me = structuredClone(account);
   if (options.viewer) me.role = "viewer";
@@ -460,8 +462,8 @@ async function fixture(
         return;
       }
       data = url.searchParams.has("cursor")
-        ? committed
-          ? [uploaded]
+        ? committed || options.twoOrders
+          ? [{ ...uploaded, status: uploadedStatus }]
           : []
         : [{ ...order, status: serverStatus }];
       meta = url.searchParams.has("cursor") ? {} : { nextCursor: "page-two" };
@@ -479,6 +481,36 @@ async function fixture(
         sourcesCheckedAt: null,
       };
     else if (path === "/order-statuses") data = orderStatuses;
+    else if (path === "/orders/status" && method === "PATCH") {
+      const statuses: Record<string, string> = {
+        "SERVER-1": serverStatus,
+        "IMPORTED-1": uploadedStatus,
+      };
+      const ids: string[] = body.orderIds;
+      const changed = ids.filter((id) => statuses[id] !== body.status);
+      if (!changed.length) {
+        const label = orderStatuses.find((o) => o.code === body.status)?.label;
+        await route.fulfill({
+          status: 409,
+          json: {
+            error: {
+              code: "status_unchanged",
+              message: `These orders are already “${label}”.`,
+            },
+          },
+        });
+        return;
+      }
+      if (changed.includes("SERVER-1")) serverStatus = body.status;
+      if (changed.includes("IMPORTED-1")) uploadedStatus = body.status;
+      data = {
+        changed: changed.map((id) => ({
+          ...(id === "SERVER-1" ? order : uploaded),
+          status: body.status,
+        })),
+        unchanged: ids.filter((id) => !changed.includes(id)),
+      };
+    }
     else if (path === "/orders/SERVER-1/status" && method === "PATCH") {
       if (!String(body.note || "").trim()) {
         await route.fulfill({
@@ -1133,6 +1165,9 @@ test("API errors never fall back to sample orders; viewer mutations are disabled
   ).toBeDisabled();
   await page.goto("/#/workspace/data");
   await expect(page.locator('input[type="file"]')).toBeDisabled();
+  await page.goto("/#/workspace/orders");
+  await expect(page.getByRole("button", { name: "SERVER-1", exact: true })).toBeVisible();
+  await expect(page.getByRole("checkbox")).toHaveCount(0);
   await page.goto("/#/workspace/orders/SERVER-1");
   await page.getByRole("button", { name: "Prepare report" }).click();
   await expect(page.getByRole("button", { name: "Preview PDF" })).toBeEnabled();
@@ -1694,6 +1729,69 @@ test("owners change an order's status with a note; the labels come from the back
     page.getByRole("table").getByText("Cleared to ship", { exact: true }),
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "SERVER-1", exact: true })).toBeVisible();
+});
+
+test("owners tick several orders and change their status with one note", async ({ page }) => {
+  const requests = await fixture(page, { twoOrders: true });
+  await login(page);
+  await page.goto("/#/workspace/orders");
+  const table = page.getByRole("table");
+  await expect(table.getByRole("button", { name: "IMPORTED-1", exact: true })).toBeVisible();
+  const bar = page.getByRole("form", { name: "Change the status of the selected orders" });
+  await expect(bar).toHaveCount(0);
+
+  await page.getByLabel("Select every order shown").check();
+  await expect(bar.getByText("2 orders selected")).toBeVisible();
+  // Only the statuses the backend allows by hand.
+  await expect(bar.getByLabel("Change the status to").locator("option")).toHaveText([
+    "Choose a status…",
+    "Awaiting analysis",
+    "Cleared to ship",
+    "Action needed",
+  ]);
+  await bar.getByLabel("Change the status to").selectOption({ label: "Cleared to ship" });
+  const save = bar.getByRole("button", { name: "Change 2 orders" });
+  await expect(save).toBeDisabled();
+  await bar.getByLabel("Note: why (required)").fill("Buyer confirmed both by email.");
+  await save.click();
+  await expect(page.getByText("2 orders are now “Cleared to ship”.")).toBeVisible();
+  const patch = requests.find((r) => r.method === "PATCH" && r.path === "/orders/status");
+  expect(patch?.body.status).toBe("clear");
+  expect(patch?.body.note).toBe("Buyer confirmed both by email.");
+  expect([...patch?.body.orderIds].sort()).toEqual(["IMPORTED-1", "SERVER-1"]);
+  expect(patch?.auth).toBe("Bearer dev:owner@example.com");
+  await expect(bar).toHaveCount(0);
+  await expect(page.getByRole("checkbox", { checked: true })).toHaveCount(0);
+  await expect(table.getByText("Cleared to ship", { exact: true })).toHaveCount(2);
+
+  // A ticked order the search hides isn't changed.
+  await page.getByLabel("Select SERVER-1").check();
+  await page.getByLabel("Search orders").fill("IMPORTED");
+  await expect(bar).toHaveCount(0);
+  await page.getByLabel("Search orders").fill("");
+  await expect(bar.getByText("1 order selected")).toBeVisible();
+  await bar.getByLabel("Change the status to").selectOption({ label: "Action needed" });
+  await bar.getByLabel("Note: why (required)").fill("Plot geolocation is missing.");
+  await bar.getByRole("button", { name: "Change 1 order" }).click();
+  await expect(page.getByText("1 order is now “Action needed”.")).toBeVisible();
+  expect(requests.filter((r) => r.path === "/orders/status").at(-1)?.body.orderIds).toEqual([
+    "SERVER-1",
+  ]);
+
+  // SERVER-1 already has the status: the backend leaves it alone and says so.
+  await page.getByLabel("Select every order shown").check();
+  await bar.getByLabel("Change the status to").selectOption({ label: "Action needed" });
+  await bar.getByLabel("Note: why (required)").fill("Still missing.");
+  await bar.getByRole("button", { name: "Change 2 orders" }).click();
+  await expect(page.getByText("1 order is now “Action needed”. 1 already was.")).toBeVisible();
+
+  // Both already have it: the backend refuses and the selection stays for another try.
+  await page.getByLabel("Select every order shown").check();
+  await bar.getByLabel("Change the status to").selectOption({ label: "Action needed" });
+  await bar.getByLabel("Note: why (required)").fill("Again.");
+  await bar.getByRole("button", { name: "Change 2 orders" }).click();
+  await expect(page.getByText("These orders are already “Action needed”.")).toBeVisible();
+  await expect(bar.getByText("2 orders selected")).toBeVisible();
 });
 
 test("problems get AI solutions; expired ones are for reference and get analysed again", async ({
