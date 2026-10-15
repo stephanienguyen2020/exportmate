@@ -6,7 +6,9 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app.database.models import (
+    CompanyCostSetting,
     CompanySite,
+    CostDefault,
     Country,
     DocumentKind,
     Market,
@@ -201,6 +203,32 @@ def replace_market_requirements(db: Session, market_code: str, rows: list[dict])
     )
 
 
+def upsert_cost_defaults(db: Session, rows: list[dict]) -> None:
+    _upsert(db, CostDefault, rows, ["key"])
+
+
+def list_cost_defaults(db: Session) -> list[CostDefault]:
+    return list(db.scalars(select(CostDefault).order_by(CostDefault.sort_order)))
+
+
+def list_company_cost_settings(db: Session, company_id: uuid.UUID) -> list[CompanyCostSetting]:
+    return list(
+        db.scalars(select(CompanyCostSetting).where(CompanyCostSetting.company_id == company_id))
+    )
+
+
+def upsert_company_cost_setting(db: Session, row: dict) -> None:
+    _upsert(db, CompanyCostSetting, [row], ["company_id", "key"])
+
+
+def delete_company_cost_setting(db: Session, company_id: uuid.UUID, key: str) -> None:
+    db.execute(
+        delete(CompanyCostSetting).where(
+            CompanyCostSetting.company_id == company_id, CompanyCostSetting.key == key
+        )
+    )
+
+
 def upsert_satellite_observations(db: Session, rows: list[dict]) -> None:
     _upsert(db, SatelliteObservation, rows, ["source_ref"])
 
@@ -210,6 +238,14 @@ def upsert_supplier(db: Session, row: dict) -> uuid.UUID:
     updates = {c: stmt.excluded[c] for c in row if c not in ("company_id", "name_key", "id")}
     stmt = stmt.on_conflict_do_update(index_elements=["company_id", "name_key"], set_=updates)
     return db.scalar(stmt.returning(Supplier.id))
+
+
+def upsert_supplier_document(db: Session, row: dict) -> uuid.UUID:
+    """A supplier has one document per kind: a newer one replaces it."""
+    stmt = insert(SupplierDocument).values(row)
+    updates = {c: stmt.excluded[c] for c in row if c not in ("supplier_id", "kind", "id")}
+    stmt = stmt.on_conflict_do_update(index_elements=["supplier_id", "kind"], set_=updates)
+    return db.scalar(stmt.returning(SupplierDocument.id))
 
 
 def upsert_supplier_documents(db: Session, rows: list[dict]) -> None:

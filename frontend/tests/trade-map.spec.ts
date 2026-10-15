@@ -519,7 +519,14 @@ test("editors add a supplier from a map click or typed coordinates", async ({
         location: { latitude: 10.61, longitude: 104.18 },
         supplies: null,
         documents: [
-          { kind: "legality", detail: "Legality dossier", standards: [] },
+          {
+            kind: "legality",
+            detail: "Legality dossier",
+            standards: [],
+            documentNumber: null,
+            issuer: null,
+            expiresOn: null,
+          },
         ],
       },
     },

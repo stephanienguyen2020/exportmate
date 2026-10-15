@@ -2,7 +2,8 @@
 
 Two kinds, generated from the same data as the trade map (services/trade_map.py):
 - order: one order, its market's document checklist with the official text behind each line,
-  and the CSV row it came from.
+  what its latest analysis found (costs, playbook rules, next step; services/analysis.py), and
+  the CSV row it came from.
 - company: what is happening (checklist changes, new regulation versions, floods near suppliers
   and sites, news alerts) and what it affects (orders with document gaps, suppliers).
 
@@ -10,7 +11,8 @@ Generating stores a draft with the report twice: `original` and an editable `con
 part of `content` can be edited, but the PDF shades each line that differs from `original`,
 and says what was changed, added or removed and by whom. Sending locks the draft.
 
-Neither is the phase 2 exposure report (docs/REQUIREMENTS.md §4.6), which prices exposures.
+The order report is the shareable copy of the order's analysis: analysis (GET /reports/{id})
+decides statuses and costs, and this report repeats them for a reader outside the app.
 """
 
 import html
@@ -30,11 +32,13 @@ from app.core.email import EmailAttachment, OutgoingEmail, get_email_sender
 from app.core.errors import AppError, not_found_error
 from app.core.news_alerts import fetch_news_alerts
 from app.database.models import ReportDraft, ReportKind
+from app.database.queries import analysis as analysis_queries
 from app.database.queries import audit as audit_queries
 from app.database.queries import orders as order_queries
 from app.database.queries import regulations as regulation_queries
 from app.database.queries import reports as report_queries
 from app.database.queries import trade_map as map_queries
+from app.schemas.analysis import ReportContentOut as AnalysisContent
 from app.schemas.orders import OrderOut
 from app.schemas.reports import (
     ReportContent,
@@ -186,6 +190,101 @@ def _check_rows(checklist: MapOrderOut, citations: _Citations) -> list[ReportRow
     ]
 
 
+def money_text(amount_minor: int, currency: str) -> str:
+    return f"{currency} {amount_minor / 100:,.2f}"
+
+
+def _analysis_sections(db: Session, order, checklist: MapOrderOut) -> list[ReportSection]:
+    """What the order's latest analysis found. Analysis is started by an editor (POST /runs),
+    never by preparing a report, since it changes order statuses."""
+    report = analysis_queries.get_latest_order_report(db, order.id)
+    analysis = AnalysisContent.model_validate(report.content) if report else None
+    rows: list[ReportRow] = []
+    note = "Not analysed yet: run an analysis to see costs and the next step."
+    if analysis:
+        note = f"From the analysis of {format_day(report.created_at.date())}."
+        then = {f.requirement_key: f.status for f in analysis.findings}
+        now = {c.requirement_key: c.status for c in checklist.checks}
+        if then != now:
+            note += " The checklist has changed since; run the analysis again."
+        totals = ", ".join(money_text(v, c) for c, v in sorted(analysis.cost_totals.items()))
+        rows = [
+            ReportRow(id="analysis-next", cells=["Next step", analysis.suggested_action.text]),
+            ReportRow(id="analysis-cost", cells=["Estimated cost", totals or "None"]),
+            ReportRow(
+                id="analysis-state",
+                cells=["Review", report.state.value.replace("_", " ")],
+                tone="warn" if report.state.value != "pass" else None,
+            ),
+            *[
+                ReportRow(
+                    id=f"analysis-rule-{i}",
+                    cells=[
+                        "Playbook rule",
+                        f"{r.text} ({r.action.replace('_', ' ')})"
+                        + (f": {r.note}" if r.note else ""),
+                    ],
+                )
+                for i, r in enumerate(analysis.rules_fired)
+            ],
+            *[
+                ReportRow(id=f"analysis-missing-{i}", cells=["Missing data", text], tone="warn")
+                for i, text in enumerate(analysis.missing_data)
+            ],
+        ]
+    cost_rows = (
+        [
+            ReportRow(
+                id=f"cost-{i}",
+                cells=[
+                    line.label,
+                    line.formula,
+                    money_text(line.amount_minor, line.currency),
+                    ", ".join(b.label for b in line.basis),
+                ],
+            )
+            for i, line in enumerate(analysis.cost_lines)
+        ]
+        + [
+            ReportRow(
+                id=f"unpriced-{i}",
+                cells=[cost.label, cost.reason, "Not priced", cost.source.regulation_title],
+                tone="warn",
+            )
+            for i, cost in enumerate(analysis.unpriced_costs)
+        ]
+        if analysis
+        else []
+    )
+    return [
+        ReportSection(
+            id="analysis",
+            layout="facts",
+            heading="Analysis",
+            note=note,
+            empty="No analysis for this order yet.",
+            columns=["Item", "Detail"],
+            widths=[32, 68],
+            tone_column=1,
+            rows=rows,
+        ),
+        ReportSection(
+            id="costs",
+            layout="table",
+            heading="Estimated costs",
+            note="Each amount names where its number came from: the regulation, the company's "
+            "own setting, or the default.",
+            empty="No costs: nothing missing, and no duty applies."
+            if analysis
+            else "No analysis for this order yet.",
+            columns=["Cost", "How", "Amount", "Based on"],
+            widths=[30, 28, 16, 26],
+            tone_column=2,
+            rows=cost_rows,
+        ),
+    ]
+
+
 def build_order_report_content(db: Session, ctx: CompanyContext, order_id: str) -> ReportContent:
     order = order_queries.get_order_by_external_id(db, ctx.company_id, order_id)
     if not order:
@@ -255,6 +354,7 @@ def build_order_report_content(db: Session, ctx: CompanyContext, order_id: str) 
                 tone_column=1,
                 rows=check_rows,
             ),
+            *_analysis_sections(db, order, checklist),
             citations.section(),
             ReportSection(
                 id="origin",

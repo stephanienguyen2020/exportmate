@@ -109,7 +109,14 @@ def test_order_report_lists_checks_sources_and_csv_row(client, lan):
         "rowsAdded": 0,
         "rowsRemoved": 0,
     }
-    assert [s["id"] for s in content["sections"]] == ["order", "checklist", "sources", "origin"]
+    assert [s["id"] for s in content["sections"]] == [
+        "order",
+        "checklist",
+        "analysis",
+        "costs",
+        "sources",
+        "origin",
+    ]
     checklist = section(content, "checklist")["rows"]
     geolocation = next(r for r in checklist if r["id"] == "check-geolocation")
     assert geolocation["cells"][1] == "Missing" and geolocation["tone"] == "gap"

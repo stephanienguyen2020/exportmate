@@ -163,7 +163,16 @@ export type MapSupplier = {
   location: GeoPoint | null;
   supplies: string | null;
   documents:
-    | { kind: string; label: string; detail: string; standards: string[] }[]
+    | {
+        kind: string;
+        label: string;
+        detail: string;
+        standards: string[];
+        documentNumber?: string | null;
+        issuer?: string | null;
+        expiresOn?: string | null;
+        fromUpload?: boolean;
+      }[]
     | null;
   orderIds: string[];
 };
@@ -217,6 +226,9 @@ export type SupplierDocumentInput = {
   kind: string;
   detail: string;
   standards: string[];
+  documentNumber: string | null;
+  issuer: string | null;
+  expiresOn: string | null; // YYYY-MM-DD; before an order's ship date it is a mismatch
 };
 export type SupplierInput = {
   name: string;

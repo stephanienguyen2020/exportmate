@@ -937,6 +937,12 @@ button.tm-callout.tm-callout-row {
 .tm-form .tm-doc-field input:not([type="checkbox"]) {
   padding: 8px 10px;
 }
+.tm-doc-expiry {
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--muted, #6b7466);
+}
 .tm-form-actions {
   display: flex;
   flex-wrap: wrap;

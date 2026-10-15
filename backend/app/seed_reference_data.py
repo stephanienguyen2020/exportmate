@@ -1,7 +1,7 @@
 """Load the shared trade-map reference data into Postgres.
 
-Markets, countries, ports, document kinds, per-market requirement checklists and sample
-satellite observations, from the JSON files in app/seed_data/. Each market requirement cites
+Markets, countries, ports, document kinds, per-market requirement checklists, cost defaults
+and sample satellite observations, from the JSON files in app/seed_data/. Each market requirement cites
 an official text (regulation_sources.json): the seed downloads each text once into a shared
 regulation document. A market requirement whose text can't be downloaded is left out until
 the next run.
@@ -185,6 +185,7 @@ def seed_reference_data(db: Session) -> dict[str, int]:
                 "route_sensitive": r.get("routeSensitive", False),
                 "regulation_document_id": document_ids[r["source"]],
                 "source_quote": r["quote"],
+                "duty_rate_percent": r.get("dutyRatePercent"),
                 "sort_order": i,
             }
             for i, r in enumerate(items)
@@ -192,6 +193,20 @@ def seed_reference_data(db: Session) -> dict[str, int]:
         ]
         map_queries.replace_market_requirements(db, market_code, rows)
         requirement_count += len(rows)
+
+    map_queries.upsert_cost_defaults(
+        db,
+        [
+            {
+                "key": c["key"],
+                "label": c["label"],
+                "unit": c["unit"],
+                "value": c["value"],
+                "sort_order": i,
+            }
+            for i, c in enumerate(reference["costDefaults"])
+        ],
+    )
 
     observations = load_seed_file("satellite_observations.json")["observations"]
     map_queries.upsert_satellite_observations(
@@ -226,6 +241,7 @@ def seed_reference_data(db: Session) -> dict[str, int]:
         "countries": len(reference["countries"]),
         "ports": len(reference["ports"]),
         "requirements": requirement_count,
+        "cost_defaults": len(reference["costDefaults"]),
         "observations": len(observations),
     }
     log.info("seed.reference_loaded", extra=counts)

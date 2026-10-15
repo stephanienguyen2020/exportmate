@@ -9,8 +9,10 @@ from app.core.context import CompanyContext
 from app.core.errors import AppError, not_found_error
 from app.database.models import Order, OrderStatus
 from app.database.queries import orders as order_queries
-from app.schemas.orders import OrderDetailOut, OrderOut, SourceRowOut
+from app.schemas.analysis import OrderDetailOut
+from app.schemas.orders import OrderOut, SourceRowOut
 from app.schemas.overview import OverviewOut
+from app.services import analysis as analysis_service
 
 
 def encode_order_cursor(order: Order) -> str:
@@ -54,7 +56,11 @@ def get_order_detail(db: Session, ctx: CompanyContext, external_id: str) -> Orde
         source = SourceRowOut(
             import_id=row.import_id, row_number=row.row_number, raw=row.raw, row_hash=row.row_hash
         )
-    return OrderDetailOut(order=OrderOut.from_order(order), source=source)
+    return OrderDetailOut(
+        order=OrderOut.from_order(order),
+        source=source,
+        exposures=analysis_service.latest_exposures(db, order),
+    )
 
 
 def build_overview(db: Session, ctx: CompanyContext) -> OverviewOut:

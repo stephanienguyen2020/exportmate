@@ -123,3 +123,28 @@ def find_nearest_ship_date(
             Order.ship_date >= on_or_after,
         )
     )
+
+
+def list_orders_by_external_ids(
+    db: Session, company_id: uuid.UUID, external_ids: Iterable[str]
+) -> list[Order]:
+    return list(
+        db.scalars(
+            select(Order)
+            .where(Order.company_id == company_id, Order.external_id.in_(list(external_ids)))
+            .order_by(Order.ship_date, Order.external_id)
+        )
+    )
+
+
+def list_import_row_positions(
+    db: Session, row_ids: Iterable[uuid.UUID]
+) -> dict[uuid.UUID, tuple[uuid.UUID, int]]:
+    """{import row id: (import id, row number)}, so reports can cite "import X, row N"."""
+    ids = list(row_ids)
+    if not ids:
+        return {}
+    rows = db.execute(
+        select(ImportRow.id, ImportRow.import_id, ImportRow.row_number).where(ImportRow.id.in_(ids))
+    ).all()
+    return {row_id: (import_id, row_number) for row_id, import_id, row_number in rows}
