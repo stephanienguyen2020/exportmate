@@ -206,17 +206,6 @@
   font-size: 11px;
   color: #7b8479;
 }
-.chat-foot button {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  border: 0;
-  background: none;
-  color: #243c32;
-  font: inherit;
-  cursor: pointer;
-  white-space: nowrap;
-}
 .chat-page {
   min-height: 100dvh;
   max-width: 1320px;
@@ -244,6 +233,22 @@
   display: grid;
   place-items: center;
   cursor: pointer;
+}
+.chat-page > header .chat-new {
+  width: auto;
+  margin-left: auto;
+  padding: 0 16px;
+  border-radius: 19px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.chat-page > header .chat-new:hover {
+  background: #f1f4ec;
 }
 .chat-page h1 {
   margin: 0;

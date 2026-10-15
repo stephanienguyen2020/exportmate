@@ -10,7 +10,7 @@
   "scripts": {
     "start": "node main.js",
     "runtime": "node runtime.js",
-    "dev": "node --watch index.js",
+    "dev": "node --watch --env-file-if-exists=.env index.js",
     "seed": "node seed.js",
     "scan": "node scan.js",
     "index": "node rag.js",

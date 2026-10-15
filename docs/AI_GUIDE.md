@@ -18,7 +18,7 @@ Alerts and answers are AI assessments, not legal advice. Legal and regulatory co
 
 **Follow up.** You can say "those items" or "that alert" and the assistant works out what you mean. It looks the facts up again each time instead of trusting its earlier answers. It replies in the language you write in.
 
-**Start over.** "New chat" under the input starts a new conversation. Your browser tab keeps the conversation you see, and the assistant keeps the same conversation as an Agent Platform session; both start over when you close the tab, sign in or sign out. In a company workspace the assistant can still remember your preferences from earlier conversations (see below).
+**Start over.** "New chat" (the pencil icon in the chat's header, or the button at the top of the full-screen view) starts a new conversation at any time, also while an answer is still coming; the full-screen audit trail then starts empty. Your browser tab keeps the conversation you see, and the assistant keeps the same conversation as an Agent Platform session; both start over when you close the tab, sign in or sign out. In a company workspace the assistant can still remember your preferences from earlier conversations (see below).
 
 ### What you can ask
 
@@ -259,7 +259,7 @@ The full list, with reasons, is in [AGENT_HARNESS.md](AGENT_HARNESS.md#not-done-
 
 ```sh
 cd ai/server
-npm run dev        # the service on :8080 (needs gcloud auth application-default login)
+npm run dev        # the service on :8080 (needs gcloud auth application-default login; reads ai/server/.env if present)
 npm test           # unit tests, no GCP needed
 npm run runtime    # the agents behind Agent Runtime's contract; AGENTS_AT=http://127.0.0.1:8080 on the API uses them
 npm run eval       # golden set against live Gemini + Firestore; saved to eval_runs (--engine: the deployed agents)
@@ -268,6 +268,8 @@ npm run eval:scan  # news scan relevance on labeled articles
 npm run ops        # health of recent chats
 gcloud run jobs execute exportmate-ai-task --region asia-southeast1 --wait --args="node eval/run.js"   # any of these, on GCP
 ```
+
+Locally (`./dev.sh` from the repository root runs everything), the assistant and News watch read the AI service's Firestore and RAG Engine and call Gemini in its project. The backend's AI steps (document reading, requirement drafts, HS code and what-if suggestions, suggested solutions, supplier messages) need `GOOGLE_CLOUD_PROJECT` in `backend/.env`. The assistant remembers people locally only when `AGENT_RUNTIME` in `ai/server/.env` names a development Agent Runtime instance (`exportmate-agents-dev`; see `ai/server/.env.example`); without it, chat sessions are kept in memory and nothing is remembered.
 
 When you change the AI:
 
