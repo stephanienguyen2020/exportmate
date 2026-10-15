@@ -63,7 +63,7 @@ export default function DataRoom({
   const commit = () =>
     ws.mutate(async () => {
       if (!checked || checked.status !== "validated") return;
-      const { created, added } = await ws.commitImport(checked);
+      const { created, added, run } = await ws.commitImport(checked);
       setChecked(null);
       setFileName("");
       if (added) {
@@ -71,8 +71,19 @@ export default function DataRoom({
         notify(
           `${plural(added.length, "order")} imported. ${flagged ? `${plural(flagged, "order")} need${flagged === 1 ? "s" : ""} action under the sample rule change.` : "None is affected by the sample rule change."}`,
         );
+      } else if (run) {
+        const counts = new Map<string, number>();
+        for (const r of run.reports)
+          counts.set(r.orderStatus, (counts.get(r.orderStatus) || 0) + 1);
+        const summary = [...counts]
+          .map(([code, n]) => `${ws.statusOption(code)?.label || code}: ${n}`)
+          .join(" · ");
+        notify(`${plural(created, "order")} imported and analysed. ${summary}.`);
       } else
-        notify(`${created} orders imported. Analyse them from the Orders page.`);
+        notify(
+          `${plural(created, "order")} imported, but the analysis didn't finish. Run it from the Orders page.`,
+          true,
+        );
       go("orders");
     });
   return (

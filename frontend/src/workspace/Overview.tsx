@@ -144,7 +144,9 @@ export default function Overview({
           </div>
           <div className="metric-note">
             {live
-              ? `${overview?.countsByStatus.needs_data || 0} orders need more data`
+              ? exposed.length
+                ? "Each one's next step is on its page."
+                : "You’re all clear for now."
               : exposed.length
                 ? `Missing ${sampleObligation.requirement} records. A clear next step.`
                 : "You’re all clear for now."}
