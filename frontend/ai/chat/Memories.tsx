@@ -2,9 +2,9 @@
 // which they can delete. Shown in company workspaces only (the demo has no memory).
 import { useEffect, useState } from "react";
 import { Bookmark, Trash2 } from "lucide-react";
-import { deleteMemory, listMemories, type Memory } from "./agent-client";
+import { deleteMemory, listMemories, type Memory, type MemoryList } from "./agent-client";
 
-type State = { status: "loading" } | { status: "error"; message: string } | { status: "ready"; memories: Memory[]; enabled: boolean };
+type State = { status: "loading" } | { status: "error"; message: string } | ({ status: "ready" } & MemoryList);
 
 const day = (iso?: string) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "");
 
@@ -42,7 +42,8 @@ export function AssistantMemories() {
     <section className="panel ac-memories" aria-labelledby="assistant-memories">
       <h2 id="assistant-memories">What the assistant remembers</h2>
       <p className="ac-muted">
-        From your own chats, the assistant keeps your preferences and what you work on, for 180 days, so it doesn't have to ask again. Only you
+        From your own chats, the assistant keeps your preferences and what you work on
+        {state.status === "ready" && state.keepDays ? `, for ${state.keepDays} days` : ""}, so it doesn't have to ask again. Only you
         see them; colleagues have their own. They shape how it answers, never the figures.
       </p>
       {state.status === "loading" && <p className="ac-muted">Loading…</p>}
