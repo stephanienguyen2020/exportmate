@@ -5,7 +5,7 @@ Creates everything ExportMate runs on Google Cloud (backend and AI service) in o
 | Resource | Name |
 | --- | --- |
 | APIs | Cloud Run, Cloud SQL Admin, Secret Manager, Artifact Registry, Firebase, Identity Toolkit, Firestore, Vertex AI, Model Armor, Cloud Scheduler, Cloud Build, … |
-| Postgres 16 (Cloud SQL, `db-f1-micro`, ~USD 10/month) | `exportmate-db`, database + user `exportmate` |
+| Postgres 16 (Cloud SQL, `db-f1-micro`, ~USD 10/month) | `exportmate-db`, database + user `exportmate`; extensions `vector` and `pg_trgm` (created by the backend's migration) |
 | Secret | `backend-database-url` |
 | Service account | `exportmate-backend` (Cloud SQL client, Firebase Auth admin, reads the secret, creates, reads and deletes regulation and supplier documents, calls Gemini on Vertex AI) |
 | Image registry | `<region>-docker.pkg.dev/<project>/exportmate` |

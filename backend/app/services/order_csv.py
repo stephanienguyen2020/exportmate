@@ -16,6 +16,9 @@ from decimal import Decimal, InvalidOperation
 from app.core.currencies import is_currency
 
 REQUIRED_COLUMNS = ["id", "product", "supplier", "destination", "value", "shipDate", "hsCode"]
+# The hsCode column must be there, but a cell may be empty: the order is then `needs_data` and
+# AI can suggest a code (docs/REQUIREMENTS.md §8.4).
+OPTIONAL_VALUES = {"hsCode"}
 MAX_LENGTHS = {"id": 100, "product": 300, "supplier": 300, "destination": 200}
 MAX_VALUE = Decimal(1000000000000)  # 1 trillion; anything above is a typo
 
@@ -91,7 +94,7 @@ def _validate_row(
         errors.append(CsvError(row_number, column, f"Row {row_number}: {message}"))
 
     for column in REQUIRED_COLUMNS:
-        if not cells.get(column):
+        if column not in OPTIONAL_VALUES and not cells.get(column):
             fail(column, f"{column} is required.")
     for column, limit in MAX_LENGTHS.items():
         if len(cells.get(column, "")) > limit:

@@ -3,7 +3,10 @@
 Never point TEST_DATABASE_URL at a database you care about: its schema is dropped each run.
 """
 
+import hashlib
+import math
 import os
+import re
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -21,6 +24,7 @@ from app.database.models import Base, Role
 from app.database.queries import users as user_queries
 from app.database.session import get_engine, open_session
 from app.main import create_app
+from app.services import market_requirements as requirement_service
 from app.services import regulations as regulation_service
 from app.services import supplier_documents as supplier_document_service
 
@@ -77,7 +81,7 @@ class InMemoryFileStorage:
 
 
 # Every module that saves or reads files in Cloud Storage.
-FILE_STORAGE_USERS = [regulation_service, supplier_document_service]
+FILE_STORAGE_USERS = [regulation_service, requirement_service, supplier_document_service]
 
 
 @pytest.fixture(autouse=True)
@@ -99,13 +103,34 @@ def official_texts(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(seed_reference_data, "fetch_official_text", fake_official_text)
 
 
+def word_vector(text: str) -> list[float]:
+    """A stand-in embedding: each word (and its 4-letter stem) bumps one of 768 dimensions, so
+    texts that share words point the same way. Good enough to test nearest-neighbour search."""
+    vector = [0.0] * gemini.EMBEDDING_DIMENSIONS
+    for word in re.findall(r"[a-z]{3,}", text.lower()):
+        for token in {word, word[:4]}:
+            index = int(hashlib.md5(token.encode()).hexdigest(), 16) % len(vector)
+            vector[index] += 1.0
+    norm = math.sqrt(sum(x * x for x in vector)) or 1.0
+    return [x / norm for x in vector]
+
+
 class FakeGemini:
     """Stands in for Gemini. Tests set `answers[task]` to a function of (prompt, file) that
-    returns the schema's object; a task with no answer fails like an unreachable model."""
+    returns the schema's object; a task with no answer fails like an unreachable model.
+    Embeddings are word vectors unless `embeddings_fail` is set."""
 
     def __init__(self):
         self.answers: dict = {}
         self.calls: list[dict] = []
+        self.embedded: list[str] = []
+        self.embeddings_fail = False
+
+    def embed_texts(self, texts, task_type):
+        if self.embeddings_fail:
+            raise AppError(503, "ai_unavailable", "The AI step failed. Try again in a minute.")
+        self.embedded += texts
+        return [word_vector(t) for t in texts]
 
     def generate_json(self, task, prompt, schema, file=None):
         self.calls.append({"task": task, "prompt": prompt, "file": file})
@@ -118,6 +143,7 @@ class FakeGemini:
 def fake_gemini(monkeypatch: pytest.MonkeyPatch) -> FakeGemini:
     fake = FakeGemini()
     monkeypatch.setattr(gemini, "generate_json", fake.generate_json)
+    monkeypatch.setattr(gemini, "embed_texts", fake.embed_texts)
     return fake
 
 

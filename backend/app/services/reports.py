@@ -392,6 +392,7 @@ class _CompanyFacts:
 
 def _change_section(
     db: Session,
+    ctx: CompanyContext,
     open_orders: list[MapOrderOut],
     market_names: dict[str, str],
     today: date,
@@ -402,7 +403,7 @@ def _change_section(
     shipped_to = {m.placement.market for m in open_orders if m.placement.market}
     changing = [
         (day, kind, req)
-        for req in map_queries.list_market_requirements(db)
+        for req in map_queries.list_requirements_in_force(db, ctx.company_id)
         if req.market_code in shipped_to
         for day, kind in ((req.effective_on, "effective"), (req.changes_on, "changes"))
         if day and today <= day <= until
@@ -523,7 +524,7 @@ def build_company_report_content(
     citations = _Citations()
     facts = _CompanyFacts(open_orders=len(open_orders))
 
-    changes = _change_section(db, open_orders, market_names, today, until, citations, facts)
+    changes = _change_section(db, ctx, open_orders, market_names, today, until, citations, facts)
     news = _news_section(fetch_news_alerts(authorization), since, facts)
 
     # Floods near the company's suppliers and sites.

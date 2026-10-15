@@ -11,6 +11,8 @@ export const REQUIRED_COLUMNS = [
   "shipDate",
   "hsCode",
 ];
+// The hsCode column must be there, but a cell may be empty (the order then needs data).
+const OPTIONAL_VALUES = new Set(["hsCode"]);
 const MAX_LENGTHS: Record<string, number> = {
   id: 100,
   product: 300,
@@ -76,7 +78,8 @@ export function validateOrderCsv(
     const before = errors.length;
     const fail = (message: string) => errors.push(`Row ${line}: ${message}`);
     for (const column of REQUIRED_COLUMNS)
-      if (!cell(column)) fail(`${column} is required.`);
+      if (!OPTIONAL_VALUES.has(column) && !cell(column))
+        fail(`${column} is required.`);
     for (const [column, limit] of Object.entries(MAX_LENGTHS))
       if (cell(column).length > limit)
         fail(`${column} is longer than ${limit} characters.`);
