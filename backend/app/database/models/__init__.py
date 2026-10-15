@@ -1,6 +1,6 @@
 """All ORM tables. Import from here so Alembic sees every model."""
 
-from app.database.models.account import Company, Membership, Role, User
+from app.database.models.account import Company, CompanyInvite, Membership, Role, User
 from app.database.models.analysis import (
     AnalysisReport,
     AnalysisRun,
@@ -63,6 +63,7 @@ __all__ = [
     "Base",
     "Company",
     "CompanyCostSetting",
+    "CompanyInvite",
     "CompanySite",
     "CostDefault",
     "Country",

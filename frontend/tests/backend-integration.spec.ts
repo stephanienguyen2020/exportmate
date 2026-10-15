@@ -568,6 +568,18 @@ async function fixture(
         ]),
       };
     } else if (path === "/playbook/fields") data = ruleFields;
+    else if (path === "/company/members")
+      data = [
+        {
+          userId: "user-1",
+          name: "Test Owner",
+          email: "owner@example.com",
+          role: me.role,
+          joinedAt: "2026-10-01T09:00:00Z",
+          you: true,
+        },
+      ];
+    else if (path === "/company/invites" || path === "/me/invites") data = [];
     else if (path === "/company/cost-settings") {
       if (method === "PATCH")
         settings = settings.map((s) => {

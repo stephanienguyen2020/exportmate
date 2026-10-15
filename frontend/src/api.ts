@@ -606,6 +606,34 @@ export type NewsMatch = {
     reviewedAt: string;
   } | null;
 };
+export type Role = "owner" | "editor" | "viewer";
+// GET /company/members: everyone in the company. Owners change roles and remove people.
+export type Member = {
+  userId: string;
+  name: string;
+  email: string;
+  role: Role;
+  joinedAt: string;
+  you: boolean;
+};
+// GET /company/invites (owners): addresses invited to join, until they accept or it expires.
+export type Invite = {
+  id: string;
+  email: string;
+  role: Role;
+  invitedBy: { id: string; name: string } | null;
+  createdAt: string;
+  expiresAt: string;
+  expired: boolean;
+};
+// GET /me/invites: invitations to the signed-in person's own address.
+export type ReceivedInvite = {
+  id: string;
+  companyName: string;
+  role: Role;
+  invitedBy: { id: string; name: string } | null;
+  expiresAt: string;
+};
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -1073,6 +1101,35 @@ export const api = {
       `/news-matches/${encodeURIComponent(impactId)}/orders/${encodeURIComponent(orderId)}`,
       { method: "DELETE" },
     ),
+  members: (signal?: AbortSignal) =>
+    request<Member[]>("/company/members", { signal }).then((r) => r.data),
+  changeMemberRole: (userId: string, role: Role) =>
+    request<Member>(`/company/members/${encodeURIComponent(userId)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ role }),
+    }).then((r) => r.data),
+  // An owner removing someone, or anyone leaving (their own user ID).
+  removeMember: (userId: string) =>
+    request(`/company/members/${encodeURIComponent(userId)}`, {
+      method: "DELETE",
+    }),
+  invites: (signal?: AbortSignal) =>
+    request<Invite[]>("/company/invites", { signal }).then((r) => r.data),
+  inviteMember: (email: string, role: Role) =>
+    request<Invite & { sandbox: boolean }>("/company/invites", {
+      method: "POST",
+      body: JSON.stringify({ email, role }),
+    }).then((r) => r.data),
+  revokeInvite: (id: string) =>
+    request(`/company/invites/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  receivedInvites: (signal?: AbortSignal) =>
+    request<ReceivedInvite[]>("/me/invites", { signal }).then((r) => r.data),
+  acceptInvite: (id: string) =>
+    request<Account>(`/me/invites/${encodeURIComponent(id)}/accept`, {
+      method: "POST",
+    }).then((r) => r.data),
+  declineInvite: (id: string) =>
+    request(`/me/invites/${encodeURIComponent(id)}`, { method: "DELETE" }),
 };
 
 // The public contact form: no sign-in, so no token.

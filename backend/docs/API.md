@@ -13,7 +13,7 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
   ```
 - Every response has an `X-Request-ID` header (sent by the client or generated). Search logs with it.
 
-**Roles**: `viewer` reads. `editor` also uploads and edits. `owner` also edits the company.
+**Roles**: `viewer` reads (and prepares reports). `editor` also uploads and edits. `owner` also edits the company, approves and sends, and manages the team. Each route below names the lowest role it accepts; the role comes from the caller's membership, checked on every request (`core/auth.py`), so a role change or removal applies at once. People join a company by onboarding it (they become its owner) or by accepting an owner's invitation (see Team).
 
 **Errors any company route can return**
 
@@ -26,7 +26,7 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
 | 403 | `forbidden` | The caller's role is too low |
 | 404 | `not_found` | Missing, or it belongs to another company |
 | 422 | `invalid_input` | Validation failed. `fieldErrors` holds one message per field |
-| 429 | `rate_limited` | Hourly limit reached, counted per instance: uploads 60 per user (per upload type), analysis runs 60, report emails 20, HS suggestions 60, requirement drafts 20, supplier message drafts 30; contact form 5 per visitor IP |
+| 429 | `rate_limited` | Hourly limit reached, counted per instance: uploads 60 per user (per upload type), analysis runs 60, report emails 20, team invitations 30, HS suggestions 60, requirement drafts 20, supplier message drafts 30; contact form 5 per visitor IP |
 | 503 | `ai_unavailable` / `ai_not_configured` | An AI step (Gemini) failed or isn't set up (`GOOGLE_CLOUD_PROJECT`). Nothing was saved; try again |
 
 ## Index
@@ -41,6 +41,16 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
 | `POST /onboarding` | signed in, no company | Onboarding wizard |
 | `PATCH /company` | owner | Account settings (About company) |
 | `GET /company/knowledge` | viewer | `ai/server` chat only |
+| **Team** | | |
+| `GET /company/members` | viewer | Account: Team |
+| `PATCH /company/members/{userId}` | owner | Account: Team, role menu |
+| `DELETE /company/members/{userId}` | owner, or the member themselves | Account: Team, "Remove" / "Leave company" |
+| `GET /company/invites` | owner | Account: Team, open invitations |
+| `POST /company/invites` | owner | Account: Team, "Send invitation" / "Send again" |
+| `DELETE /company/invites/{id}` | owner | Account: Team, "Withdraw" |
+| `GET /me/invites` | signed in | Onboarding: "You're invited" |
+| `POST /me/invites/{id}/accept` | signed in, no company | Onboarding: "Join …" |
+| `DELETE /me/invites/{id}` | signed in | Onboarding: "Decline" |
 | **Orders and import** | | |
 | `GET /overview` | viewer | Dashboard |
 | `GET /orders` | viewer | Every workspace load |
@@ -173,6 +183,38 @@ Account settings → About company. The frontend sends every field, with empty o
 `{"company": {…same as GET /me…}, "sites": [{"name": "Cat Lai bonded warehouse", "kind": "warehouse", "place": "…"}]}`
 
 Not called by the frontend. When a signed-in user chats, `ai/server` calls it with the user's token (`BACKEND_URL`) and gives the profile to the agent's `get_company_profile` tool. If it fails, the chat falls back to the anonymous demo.
+
+## Team
+
+Who belongs to the company and with which role (`services/members.py`). A company always keeps at least one owner. v1 is one company per user: someone already in a company must leave it before accepting another invitation. Every change is audited (`member.invited`, `member.invite_revoked`, `member.invite_declined`, `member.joined`, `member.role_changed`, `member.removed`, `member.left`; object types `member` and `invite`); logs carry IDs and roles, never addresses.
+
+### `GET /company/members` (viewer)
+`[{"userId": "…", "name": "Lan", "email": "lan@example.com", "role": "owner", "joinedAt": "…", "you": true}]`, oldest member first.
+
+### `PATCH /company/members/{userId}` (owner)
+`{"role": "editor"}` → the member. `409 last_owner` when it would leave the company without an owner (an owner can step down once someone else is one). `404 member_not_found` for anyone outside the company. Memberships are locked while this runs, so two owners demoting each other at once can't both succeed.
+
+### `DELETE /company/members/{userId}` (owner, or the member themselves)
+Removes the membership → `{"deleted": true}`. Anyone may remove themselves (leave); removing someone else needs `owner` (`403 forbidden`). `409 last_owner` for the only owner. The person keeps their sign-in; their next request gets `403 onboarding_required`, so they can onboard a company or accept another invitation. Their report drafts and audit entries stay.
+
+### `GET /company/invites` (owner)
+`[{"id": "…", "email": "minh@example.com", "role": "editor", "invitedBy": {"id": "…", "name": "Lan"}, "createdAt": "…", "expiresAt": "…", "expired": false}]`, newest first, expired ones included.
+
+### `POST /company/invites` (owner, rate limited)
+`{"email": "Minh@Example.com", "role": "editor"}` → `201`, the invitation plus `"sandbox": true|false`. The address is trimmed and lower-cased. Emails the address a link to `#/login` (`APP_URL`) through Resend, with the owner as reply-to; `sandbox: true` means nothing was sent (no `RESEND_API_KEY`) and the owner has to tell the person. Valid for `MEMBER_INVITE_DAYS` (14). Inviting the same address again renews it (new role, new expiry, email again). If the email fails, nothing is saved.
+- `409 already_member` (already in this company), `409 too_many_invites` (50 open), `422` for anything that isn't one address. 30 per owner per hour (`MEMBER_INVITES_PER_HOUR`).
+
+### `DELETE /company/invites/{id}` (owner)
+Withdraws it → `{"deleted": true}`.
+
+### `GET /me/invites` (signed in)
+Invitations to the caller's verified email address that haven't expired: `[{"id": "…", "companyName": "Binh Duong Wood Co.", "role": "editor", "invitedBy": {"id": "…", "name": "Lan"}, "expiresAt": "…"}]`. Works before onboarding. Firebase has verified the address, so matching on it is what proves the invitation is theirs.
+
+### `POST /me/invites/{id}/accept` (signed in, no company)
+Joins with the invitation's role and deletes it → the same body as `GET /me`. `409 already_in_company` if the caller already belongs to one; `404 invite_not_found` if it expired, was withdrawn, or is for another address. Locks the user row like onboarding, so accepting and onboarding at once can't both succeed.
+
+### `DELETE /me/invites/{id}` (signed in)
+Declines it → `{"deleted": true}`.
 
 ## Orders
 
