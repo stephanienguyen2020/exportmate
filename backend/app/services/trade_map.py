@@ -473,6 +473,7 @@ def supplier_documents_out(
             document_number=d.document_number,
             issuer=d.issuer,
             expires_on=d.expires_on,
+            from_upload=d.upload_id is not None,
         )
         for d in documents
     ]
@@ -710,7 +711,7 @@ def _classify_unchanged(
     unknown: list[ComparisonItemOut],
 ) -> None:
     """An unchanged requirement is not evidence that its document is on file."""
-    status, note = _check_requirement(req, order.supplier, documents)
+    status, note = _check_requirement(req, order, documents)
     if status == "on_file":
         reuse.append(
             ComparisonItemOut(

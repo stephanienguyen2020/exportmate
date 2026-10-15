@@ -54,6 +54,7 @@ from app.schemas.analysis import (
     RunOut,
     RunStepOut,
     SuggestedActionOut,
+    UnpricedCostOut,
 )
 from app.schemas.cost_settings import CostSettingOut
 from app.schemas.orders import OrderOut
@@ -143,7 +144,7 @@ def price_problems(
             )
         )
     for req, check in checked:
-        if req.duty_rate_percent is None:
+        if req.duty_rate_percent is None or rate_changes_by(req, order.ship_date):
             continue
         amount = duty_amount(order.value_minor, req.duty_rate_percent)
         lines.append(
@@ -163,6 +164,29 @@ def price_problems(
             )
         )
     return lines
+
+
+def rate_changes_by(requirement: MarketRequirement, ship_date: date) -> bool:
+    """The stated rate changes on or before the ship date, so the rate we have may be wrong."""
+    return requirement.changes_on is not None and ship_date >= requirement.changes_on
+
+
+def unpriced_duties(
+    order: Order, checked: list[tuple[MarketRequirement, RequirementCheckOut]]
+) -> list[UnpricedCostOut]:
+    """Duties whose rate changes by the ship date: named, with no amount."""
+    return [
+        UnpricedCostOut(
+            kind="duty",
+            label=req.title,
+            requirement_key=req.requirement_key,
+            reason=f"The rate changes on {req.changes_on.isoformat()}, on or before the ship "
+            f"date: recheck it.{' ' + req.change_note if req.change_note else ''}",
+            source=check.source,
+        )
+        for req, check in checked
+        if req.duty_rate_percent is not None and rate_changes_by(req, order.ship_date)
+    ]
 
 
 def problem_lines(lines: list[CostLineOut]) -> list[CostLineOut]:
@@ -200,6 +224,7 @@ def suggest_action(
     missing_data: list[str],
     gaps: list[RequirementCheckOut],
     lines: list[CostLineOut],
+    unpriced: list[UnpricedCostOut],
     lead_days: int,
     today: date,
 ) -> SuggestedActionOut:
@@ -222,13 +247,13 @@ def suggest_action(
             text=f"Ask {order.supplier} for: {titles}, by {request_by.isoformat()}.",
             request_by=request_by,
         )
-    duties = [line for line in lines if line.kind == "duty"]
+    duties = [
+        f"{d.label} adds {money(d.amount_minor, d.currency)}" for d in lines if d.kind == "duty"
+    ]
+    duties += [f"{u.label}: {u.reason}" for u in unpriced]
     if duties:
         return SuggestedActionOut(
-            kind="recheck_landed_cost",
-            text="Recheck the landed cost: "
-            + "; ".join(f"{d.label} adds {money(d.amount_minor, d.currency)}" for d in duties)
-            + ".",
+            kind="recheck_landed_cost", text="Recheck the landed cost: " + "; ".join(duties)
         )
     return SuggestedActionOut(kind="none", text="Nothing to do for this order.")
 
@@ -301,6 +326,7 @@ def analyse_order(
 
     days_until_ship = (order.ship_date - today).days
     lines = price_problems(order, checked, settings, days_until_ship)
+    unpriced = unpriced_duties(order, checked)
     totals = total_by_currency(lines)
     problem_totals = total_by_currency(problem_lines(lines))
     gaps = [f for f in findings if f.status in GAP_STATUSES]
@@ -321,7 +347,7 @@ def analyse_order(
     }
     fired, not_checked = apply_rules(rules, facts)
     action = suggest_action(
-        order, missing_data, gaps, lines, settings["supplier_lead_days"].value, today
+        order, missing_data, gaps, lines, unpriced, settings["supplier_lead_days"].value, today
     )
     content = ReportContentOut(
         order=OrderOut.from_order(order),
@@ -333,6 +359,7 @@ def analyse_order(
         cost_lines=lines,
         cost_totals=totals,
         problem_cost_totals=problem_totals,
+        unpriced_costs=unpriced,
         rules_fired=fired,
         rules_not_checked=not_checked,
         suggested_action=action,
