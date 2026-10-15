@@ -21,12 +21,48 @@ export function OrderStatus({ order, ws }: { order: Order; ws: Workspace }) {
   );
 }
 
-export function OrderTable({ items, ws }: { items: Order[]; ws: Workspace }) {
+// With `onPick`, each row gets a tick and the header ticks every order listed; `picked` are
+// the ticked order ids.
+export function OrderTable({
+  items,
+  ws,
+  picked = [],
+  onPick,
+}: {
+  items: Order[];
+  ws: Workspace;
+  picked?: string[];
+  onPick?: (ids: string[]) => void;
+}) {
+  const all = items.length > 0 && items.every((o) => picked.includes(o.id));
+  const some = items.some((o) => picked.includes(o.id));
   return (
     <div className="table-scroll">
-      <table className="orders-table">
+      <table className={"orders-table" + (onPick ? " pickable" : "")}>
         <thead>
           <tr>
+            {onPick && (
+              <th className="order-pick">
+                {/* Phones hide the header row but keep this cell, labelled, above the cards. */}
+                <input
+                  type="checkbox"
+                  aria-label="Select every order shown"
+                  checked={all}
+                  ref={(box) => {
+                    if (box) box.indeterminate = some && !all;
+                  }}
+                  onChange={(e) => {
+                    const ids = items.map((o) => o.id);
+                    onPick(
+                      e.target.checked
+                        ? [...new Set([...picked, ...ids])]
+                        : picked.filter((id) => !ids.includes(id)),
+                    );
+                  }}
+                />
+                <span aria-hidden="true">Select all shown</span>
+              </th>
+            )}
             <th>Order / product</th>
             <th>Supplier</th>
             <th>Destination</th>
@@ -41,6 +77,22 @@ export function OrderTable({ items, ws }: { items: Order[]; ws: Workspace }) {
         <tbody>
           {items.map((o) => (
             <tr key={o.id}>
+              {onPick && (
+                <td className="order-pick">
+                  <input
+                    type="checkbox"
+                    aria-label={`Select ${o.id}`}
+                    checked={picked.includes(o.id)}
+                    onChange={(e) =>
+                      onPick(
+                        e.target.checked
+                          ? [...picked, o.id]
+                          : picked.filter((id) => id !== o.id),
+                      )
+                    }
+                  />
+                </td>
+              )}
               <td>
                 <button className="order-link" onClick={() => go(orderPath(o.id))}>
                   {o.id}

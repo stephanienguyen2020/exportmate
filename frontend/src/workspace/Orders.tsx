@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useState } from "react";
 import { Plus, Search } from "lucide-react";
 import { OrderTable } from "./OrderTable";
 import { valueAtRisk, type Workspace } from "./store";
@@ -6,6 +6,9 @@ import { Button, PageHeading, go, type Notify } from "./ui";
 
 const RunPanel = lazy(() =>
   import("../Analysis").then((m) => ({ default: m.RunPanel })),
+);
+const BulkStatusBar = lazy(() =>
+  import("../OrderStatus").then((m) => ({ default: m.BulkStatusBar })),
 );
 
 // Filter and search are kept by the shell, so they survive a visit to an order.
@@ -26,6 +29,10 @@ export default function Orders({
 }) {
   const { live, orders, exposed, statusOptions } = ws;
   const { filter, search } = view;
+  // Orders ticked for one status change (owners and editors of a signed-in company); only
+  // the ticked ones the filter and search still show are changed.
+  const [picked, setPicked] = useState<string[]>([]);
+  const canPick = live && ws.editable && statusOptions.some((s) => s.manual);
   const matches = orders.filter(
     (o) =>
       (filter === "All orders" ||
@@ -42,6 +49,9 @@ export default function Orders({
         .toLowerCase()
         .includes(search.toLowerCase()),
   );
+  const pickedShown = matches
+    .filter((o) => picked.includes(o.id))
+    .map((o) => o.id);
   return (
     <>
       <PageHeading
@@ -109,7 +119,26 @@ export default function Orders({
           />
         </label>
       </div>
-      <OrderTable items={matches} ws={ws} />
+      {canPick && pickedShown.length > 0 && (
+        <Suspense fallback={null}>
+          <BulkStatusBar
+            ids={pickedShown}
+            options={statusOptions}
+            notify={notify}
+            onChanged={async () => {
+              setPicked([]);
+              await ws.refreshOrders();
+            }}
+            onClear={() => setPicked([])}
+          />
+        </Suspense>
+      )}
+      <OrderTable
+        items={matches}
+        ws={ws}
+        picked={picked}
+        onPick={canPick ? setPicked : undefined}
+      />
     </>
   );
 }
