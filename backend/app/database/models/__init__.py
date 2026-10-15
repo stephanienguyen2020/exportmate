@@ -1,6 +1,6 @@
 """All ORM tables. Import from here so Alembic sees every model."""
 
-from app.database.models.account import Company, Membership, Role, User
+from app.database.models.account import Company, CompanyInvite, Membership, Role, User
 from app.database.models.analysis import (
     AnalysisReport,
     AnalysisRun,
@@ -15,10 +15,22 @@ from app.database.models.hs_code import (
     HsHeading,
     HsSuggestionStatus,
 )
-from app.database.models.order import Import, ImportRow, ImportStatus, Order, OrderStatus
+from app.database.models.news import NewsOrderReview, NewsVerdict
+from app.database.models.order import (
+    Import,
+    ImportRow,
+    ImportStatus,
+    Order,
+    OrderStatus,
+    OrderStatusChange,
+    OrderStatusDefinition,
+    StatusChangeSource,
+)
 from app.database.models.playbook import PlaybookRevision, PlaybookRule
 from app.database.models.regulation import Regulation, RegulationDocument
 from app.database.models.report import ReportDraft, ReportKind
+from app.database.models.scenario import OrderScenario, ScenarioKind
+from app.database.models.solution import Solution, SolutionNote, SolutionStatus, SolutionUse
 from app.database.models.supplier_message import (
     ReportFeedback,
     SupplierMessage,
@@ -53,6 +65,7 @@ __all__ = [
     "Base",
     "Company",
     "CompanyCostSetting",
+    "CompanyInvite",
     "CompanySite",
     "CostDefault",
     "Country",
@@ -66,10 +79,15 @@ __all__ = [
     "Market",
     "MarketRequirement",
     "Membership",
+    "NewsOrderReview",
+    "NewsVerdict",
     "ObservationConfidence",
     "ObservationKind",
     "Order",
+    "OrderScenario",
     "OrderStatus",
+    "OrderStatusChange",
+    "OrderStatusDefinition",
     "PlaybookRevision",
     "PlaybookRule",
     "Port",
@@ -84,7 +102,13 @@ __all__ = [
     "Role",
     "RunStatus",
     "SatelliteObservation",
+    "ScenarioKind",
     "SiteKind",
+    "Solution",
+    "SolutionNote",
+    "SolutionStatus",
+    "SolutionUse",
+    "StatusChangeSource",
     "Supplier",
     "SupplierDocument",
     "SupplierDocumentUpload",

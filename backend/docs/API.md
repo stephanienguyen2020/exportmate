@@ -13,7 +13,7 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
   ```
 - Every response has an `X-Request-ID` header (sent by the client or generated). Search logs with it.
 
-**Roles**: `viewer` reads. `editor` also uploads and edits. `owner` also edits the company.
+**Roles**: `viewer` reads (and prepares reports). `editor` also uploads and edits. `owner` also edits the company, approves and sends, and manages the team. Each route below names the lowest role it accepts; the role comes from the caller's membership, checked on every request (`core/auth.py`), so a role change or removal applies at once. People join a company by onboarding it (they become its owner) or by accepting an owner's invitation (see Team).
 
 **Errors any company route can return**
 
@@ -26,7 +26,7 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
 | 403 | `forbidden` | The caller's role is too low |
 | 404 | `not_found` | Missing, or it belongs to another company |
 | 422 | `invalid_input` | Validation failed. `fieldErrors` holds one message per field |
-| 429 | `rate_limited` | Hourly limit reached, counted per instance: uploads 60 per user (per upload type), analysis runs 60, report emails 20, HS suggestions 60, requirement drafts 20, supplier message drafts 30; contact form 5 per visitor IP |
+| 429 | `rate_limited` | Hourly limit reached, counted per instance: uploads 60 per user (per upload type), analysis runs 60, report emails 20, team invitations 30, HS suggestions 60, requirement drafts 20, supplier message drafts 30; contact form 5 per visitor IP |
 | 503 | `ai_unavailable` / `ai_not_configured` | An AI step (Gemini) failed or isn't set up (`GOOGLE_CLOUD_PROJECT`). Nothing was saved; try again |
 
 ## Index
@@ -41,27 +41,45 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
 | `POST /onboarding` | signed in, no company | Onboarding wizard |
 | `PATCH /company` | owner | Account settings (About company) |
 | `GET /company/knowledge` | viewer | `ai/server` chat only |
+| **Team** | | |
+| `GET /company/members` | viewer | Account: Team |
+| `PATCH /company/members/{userId}` | owner | Account: Team, role menu |
+| `DELETE /company/members/{userId}` | owner, or the member themselves | Account: Team, "Remove" / "Leave company" |
+| `GET /company/invites` | owner | Account: Team, open invitations |
+| `POST /company/invites` | owner | Account: Team, "Send invitation" / "Send again" |
+| `DELETE /company/invites/{id}` | owner | Account: Team, "Withdraw" |
+| `GET /me/invites` | signed in | Onboarding: "You're invited" |
+| `POST /me/invites/{id}/accept` | signed in, no company | Onboarding: "Join …" |
+| `DELETE /me/invites/{id}` | signed in | Onboarding: "Decline" |
 | **Orders and import** | | |
 | `GET /overview` | viewer | Dashboard |
 | `GET /orders` | viewer | Every workspace load |
 | `GET /orders/{id}` | viewer | Order detail page |
+| `PATCH /orders/{id}/status` | editor | Order page: Status panel, "Change status" |
+| `GET /order-statuses` | viewer | Every workspace load (badges, Orders filter tabs, Status panel) |
 | `POST /imports` | editor | Upload screen |
 | `GET /imports/{id}` | viewer | Upload screen (preview) |
 | `POST /imports/{id}/commit` | editor | Upload screen ("Import") |
 | **Playbook** | | |
 | `GET /playbook/rules` | viewer | Every workspace load; `ai/server` chat (`get_playbook`) |
 | `POST /playbook/rules` | editor | Playbook: add rule |
-| `PATCH /playbook/rules/{id}` | editor | Playbook: on/off toggle |
+| `PATCH /playbook/rules/{id}` | editor | Playbook: on/off toggle, "Save conditions" |
 | `DELETE /playbook/rules/{id}` | editor | Playbook: delete |
-| `GET /playbook/fields` | viewer | Not yet (playbook rule form) |
+| `GET /playbook/fields` | viewer | Playbook: WHEN/THEN builder (add rule, "Add conditions") |
 | **Trade map, suppliers and sites** | | |
 | `GET /trade-map` | viewer | Trade map; `ai/server` chat (`query_orders`) |
 | `GET /trade-map/compare` | viewer | Trade map: "What if" panel |
+| `GET /trade-map/changes` | viewer | Rules & news › Rule watch: "Coming up" |
+| `GET /trade-map/scenarios` | viewer | Trade map: "What if" panel, "Saved what-ifs" |
+| `POST /trade-map/scenarios` | editor | Trade map: "What if" panel, "Save what-if" / "Update" |
+| `POST /trade-map/scenarios/suggest` | editor | Trade map: "What if" panel, "Suggest a note with AI" |
+| `PATCH /trade-map/scenarios/{id}` | editor | (not yet: the panel re-saves through `POST`) |
+| `DELETE /trade-map/scenarios/{id}` | editor | Trade map: "Saved what-ifs", delete |
 | `POST /suppliers` | editor | Trade map: "Add supplier" / "Add a supplier record" |
 | `PATCH /suppliers/{id}` | editor | Trade map: "Edit supplier" |
 | `DELETE /suppliers/{id}` | editor | Trade map: "Delete supplier" |
-| `POST /suppliers/{id}/documents` | editor | Not yet (supplier panel) |
-| `POST /supplier-documents/{id}/confirm` | editor | Not yet (supplier panel) |
+| `POST /suppliers/{id}/documents` | editor | Trade map supplier panel: "Upload certificate" |
+| `POST /supplier-documents/{id}/confirm` | editor | Trade map supplier panel: "Confirm certificate" |
 | `POST /sites` | editor | Trade map: "Add site" |
 | `PATCH /sites/{id}` | editor | Trade map: "Edit site" |
 | `DELETE /sites/{id}` | editor | Trade map: "Delete site" |
@@ -71,18 +89,18 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
 | `GET /regulation-documents/{id}/file` | viewer | Regulation library |
 | `GET /regulations` | viewer | Regulation library |
 | `GET /regulations/{id}` | viewer | Regulation library |
-| `POST /regulation-documents/{id}/requirements` | editor | Not yet (requirement review) |
-| `GET /regulations/{id}/requirements` | viewer | Not yet (requirement review, regulation page) |
-| `PATCH /market-requirements/{id}` | owner | Not yet (requirement review) |
+| `POST /regulation-documents/{id}/requirements` | editor | Regulation page: "Draft requirements" (company regulations) |
+| `GET /regulations/{id}/requirements` | viewer | Regulation page: market requirements of a version |
+| `PATCH /market-requirements/{id}` | owner | Regulation page: requirement Edit, Approve, Reject |
 | **Analysis** | | |
-| `GET /company/cost-settings` | viewer | Not yet (settings, report cost lines) |
-| `PATCH /company/cost-settings` | owner | Not yet (settings) |
-| `POST /runs` | editor | Not yet ("Analyse", replacing the simulated five-agent review) |
-| `GET /runs/{id}` | viewer | Not yet (run panel) |
-| `GET /reports/{id}` | viewer | Not yet (report view) |
-| `GET /orders/{id}/hs-suggestions` | viewer | Not yet (order detail, `needs_data`) |
-| `POST /orders/{id}/hs-suggestions` | editor | Not yet (order detail) |
-| `POST /hs-suggestions/{id}/accept`, `/reject` | editor | Not yet (order detail) |
+| `GET /company/cost-settings` | viewer | Account: cost settings |
+| `PATCH /company/cost-settings` | owner | Account: "Save cost settings", "Reset to default" |
+| `POST /runs` | editor | Orders: "Analyse orders"; order page: "Analyse this order" / "Analyse again" |
+| `GET /runs/{id}` | viewer | Not used: `POST /runs` returns the finished run |
+| `GET /reports/{id}` | viewer | Order page: analysis report (`latestReportId`) |
+| `GET /orders/{id}/hs-suggestions` | viewer | Order page of an order without an HS code |
+| `POST /orders/{id}/hs-suggestions` | editor | Order page: "Suggest HS code" |
+| `POST /hs-suggestions/{id}/accept`, `/reject` | editor | Order page: "Accept", "Reject" |
 | **Shareable reports** | | |
 | `POST /report-drafts` | viewer | Order detail: "Prepare report"; Reports: "Generate company report" |
 | `GET /report-drafts` | viewer | Reports: your reports |
@@ -90,21 +108,33 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
 | `PATCH /report-drafts/{id}` | viewer (author) | Report editor: save (also before preview, download, email) |
 | `GET /report-drafts/{id}/pdf` | viewer (author) | Report editor: "Preview PDF", "Download PDF" |
 | `POST /report-drafts/{id}/email` | editor (author) | Report editor: "Email report" |
+| **News watch and orders** | | |
+| `GET /news-matches` | viewer | News watch, Alerts tab: "Orders this may affect" on each alert, and the "Orders" filter |
+| `PUT /news-matches/{impactId}/orders/{orderId}` | editor | News watch alert: "Affects this order" / "Not relevant", "Link order" |
+| `DELETE /news-matches/{impactId}/orders/{orderId}` | editor | News watch alert: "Undo" |
 | **Supplier messages and report actions** | | |
-| `POST /reports/{id}/review` | owner | Not yet (report view: "Reviewed: OK to contact the supplier") |
-| `POST /reports/{id}/feedback` | viewer | Not yet (report view) |
-| `POST /supplier-messages` | editor | Not yet (order detail: "Draft email to supplier") |
-| `GET /orders/{id}/supplier-messages` | viewer | Not yet (order detail) |
-| `GET /supplier-messages/{id}` | viewer | Not yet (message editor) |
-| `PATCH /supplier-messages/{id}` | editor | Not yet (message editor) |
-| `POST /supplier-messages/{id}/approve` | owner | Not yet (message editor: "Approve") |
-| `POST /supplier-messages/{id}/send` | owner | Not yet (message editor: "Send") |
+| `POST /reports/{id}/review` | owner | Order page: "Reviewed: OK to contact the supplier" |
+| `POST /reports/{id}/feedback` | viewer | Order page: "Useful" / "Not useful" |
+| `POST /supplier-messages` | editor | Order page: "Draft email to supplier" |
+| `GET /orders/{id}/supplier-messages` | viewer | Order page: supplier messages |
+| `GET /supplier-messages/{id}` | viewer | Not used: the order's list has every message |
+| `PATCH /supplier-messages/{id}` | editor | Order page message: "Save changes" |
+| `POST /supplier-messages/{id}/approve` | owner | Order page message: "Approve" |
+| `POST /supplier-messages/{id}/send` | owner | Order page message: "Send" (one `Idempotency-Key` per message) |
+| **Suggested solutions** | | |
+| `GET /solutions` | viewer | Rules & news › Knowledge base |
+| `GET /reports/{id}/solutions` | viewer | Order page: "Suggested solutions" |
+| `POST /reports/{id}/solutions` | editor | Order page: "Suggest a solution", "Analyse again", "Ask AI for another" |
+| `POST /solutions/{id}/use` | editor | Order page solution: "Use for <order>" |
+| `POST /solutions/{id}/notes` | editor | Order page and Knowledge base solution: "Add note" |
+| `POST /solutions/{id}/review` | editor | Order page and Knowledge base solution: "Adopt for this problem", "Reject" |
 | **Audit log and contact** | | |
-| `GET /audit-events` | owner | Not yet (audit log screen) |
-| `POST /contact` | none (rate limited) | Not yet (landing page "Get in touch" saves to the browser only) |
+| `GET /audit-events` | owner | Account: activity log (filters, latest 10) |
+| `GET /audit-events/export` | owner | Account: activity log "Download CSV" |
+| `POST /contact` | none (rate limited) | Landing page "Get in touch" (no token) |
 | [Planned](#planned) | | Later and phase 4 |
 
-"Every workspace load" means `refreshWorkspace()` in `frontend/src/main.tsx`. It runs on entering the workspace, after a commit, and on "Retry". It calls `GET /me`, then `GET /orders`, `GET /playbook/rules` and `GET /overview` in parallel. The browser-only demo session calls none of these: it uses localStorage.
+"Every workspace load" means `refreshWorkspace()` in `frontend/src/main.tsx`. It runs on entering the workspace, after a commit, and on "Retry". It calls `GET /me`, then `GET /orders`, `GET /playbook/rules`, `GET /overview` and `GET /order-statuses` in parallel (if the last fails, the workspace keeps its built-in labels). The browser-only demo session calls none of these: it uses localStorage.
 
 ---
 
@@ -168,6 +198,38 @@ Account settings → About company. The frontend sends every field, with empty o
 
 Not called by the frontend. When a signed-in user chats, `ai/server` calls it with the user's token (`BACKEND_URL`) and gives the profile to the agent's `get_company_profile` tool. If it fails, the chat falls back to the anonymous demo.
 
+## Team
+
+Who belongs to the company and with which role (`services/members.py`). A company always keeps at least one owner. v1 is one company per user: someone already in a company must leave it before accepting another invitation. Every change is audited (`member.invited`, `member.invite_revoked`, `member.invite_declined`, `member.joined`, `member.role_changed`, `member.removed`, `member.left`; object types `member` and `invite`); logs carry IDs and roles, never addresses.
+
+### `GET /company/members` (viewer)
+`[{"userId": "…", "name": "Lan", "email": "lan@example.com", "role": "owner", "joinedAt": "…", "you": true}]`, oldest member first.
+
+### `PATCH /company/members/{userId}` (owner)
+`{"role": "editor"}` → the member. `409 last_owner` when it would leave the company without an owner (an owner can step down once someone else is one). `404 member_not_found` for anyone outside the company. Memberships are locked while this runs, so two owners demoting each other at once can't both succeed.
+
+### `DELETE /company/members/{userId}` (owner, or the member themselves)
+Removes the membership → `{"deleted": true}`. Anyone may remove themselves (leave); removing someone else needs `owner` (`403 forbidden`). `409 last_owner` for the only owner. The person keeps their sign-in; their next request gets `403 onboarding_required`, so they can onboard a company or accept another invitation. Their report drafts and audit entries stay.
+
+### `GET /company/invites` (owner)
+`[{"id": "…", "email": "minh@example.com", "role": "editor", "invitedBy": {"id": "…", "name": "Lan"}, "createdAt": "…", "expiresAt": "…", "expired": false}]`, newest first, expired ones included.
+
+### `POST /company/invites` (owner, rate limited)
+`{"email": "Minh@Example.com", "role": "editor"}` → `201`, the invitation plus `"sandbox": true|false`. The address is trimmed and lower-cased. Emails the address a link to `#/login` (`APP_URL`) through Resend, with the owner as reply-to; `sandbox: true` means nothing was sent (no `RESEND_API_KEY`) and the owner has to tell the person. Valid for `MEMBER_INVITE_DAYS` (14). Inviting the same address again renews it (new role, new expiry, email again). If the email fails, nothing is saved.
+- `409 already_member` (already in this company), `409 too_many_invites` (50 open), `422` for anything that isn't one address. 30 per owner per hour (`MEMBER_INVITES_PER_HOUR`).
+
+### `DELETE /company/invites/{id}` (owner)
+Withdraws it → `{"deleted": true}`.
+
+### `GET /me/invites` (signed in)
+Invitations to the caller's verified email address that haven't expired: `[{"id": "…", "companyName": "Binh Duong Wood Co.", "role": "editor", "invitedBy": {"id": "…", "name": "Lan"}, "expiresAt": "…"}]`. Works before onboarding. Firebase has verified the address, so matching on it is what proves the invitation is theirs.
+
+### `POST /me/invites/{id}/accept` (signed in, no company)
+Joins with the invitation's role and deletes it → the same body as `GET /me`. `409 already_in_company` if the caller already belongs to one; `404 invite_not_found` if it expired, was withdrawn, or is for another address. Locks the user row like onboarding, so accepting and onboarding at once can't both succeed.
+
+### `DELETE /me/invites/{id}` (signed in)
+Declines it → `{"deleted": true}`.
+
 ## Orders
 
 ### `GET /overview` (viewer)
@@ -201,10 +263,28 @@ On every workspace load, `api.orders()` reads every page (`limit=200`) until `ne
   "source": {"importId": "…", "rowNumber": 2, "rowHash": "…",
              "raw": {"id": "PO-2291", "product": "…", "value": "24000", "…": "…"}},
   "exposures": [{"reportId": "…", "requirementKey": "geolocation", "title": "Plot-level geolocation",
-                  "status": "missing", "note": "Not on file from Binh Phu Wood.", "source": {…}}]}}
+                  "status": "missing", "note": "Not on file from Binh Phu Wood.", "source": {…}}],
+  "latestReportId": "…",
+  "statusChanges": [{"id": "…", "fromStatus": "exposed", "toStatus": "clear", "source": "manual",
+                     "note": "Buyer confirmed the plot geolocation by email.", "runId": null,
+                     "changedBy": {"id": "…", "name": "Lan"}, "changedAt": "…"}]}}
 ```
-`source` is the CSV row the order came from, or `null` for seeded orders. `exposures` are the `missing` and `mismatch` findings of the order's latest report (`GET /reports/{id}`); empty before its first run.
+`statusChanges` is the order's status history, newest first: changes by hand (`source: "manual"`, always with a `note`) and by analysis runs (`"analysis"`, with the `runId`; `changedBy` started the run). A run that leaves a status as it was adds nothing. Orders keep no entry for their first status (from the import or the seed).
+`source` is the CSV row the order came from, or `null` for seeded orders. `exposures` are the `missing` and `mismatch` findings of the order's latest report (`GET /reports/{id}`); empty before its first run. `latestReportId` is that report (also for an order in the clear, which has no exposures), or `null` before its first run.
 Opening `#/workspace/orders/<id>` in a live session.
+
+### `PATCH /orders/{id}/status` (editor)
+```json
+{"status": "clear", "note": "Buyer confirmed the plot geolocation by email."}
+```
+Sets the status by hand. `note` is required (1–1000 characters after trimming). Returns the order as `GET /orders/{id}` does, with the new entry first in `statusChanges`. The change is saved in `order_status_changes` and audited as `order.status_changed` (`{"from", "to", "note"}`). Errors: 422 for a missing note or a status whose `manual` is false (`status_not_settable`), 409 `status_unchanged` when the order already has that status, 404 for another company's order. The next analysis of the order sets its status again and records that change too.
+The Status panel on an order's page (owners and editors).
+
+### `GET /order-statuses` (viewer)
+```json
+{"data": [{"code": "exposed", "label": "Action needed", "description": "A document is missing or a rule changes before it ships.", "tone": "red", "manual": true}, …]}
+```
+Every order status from the `order_statuses` table, in display order: its label, a one-line description, its colour (`green`, `amber`, `red`) and whether a person may set it by hand. Loaded from `seed_data/reference.json` (`orderStatuses`) by `seed_reference_data`. The live workspace uses these labels for status badges, the Orders filter tabs and the Status panel; the browser demo keeps its own.
 
 ## CSV import
 
@@ -322,6 +402,37 @@ One what-if at a time. Send exactly one of `market`, `shipDate`, or `via`.
 Checklists are scoped by HS prefix: wood lines (chapters 44 and furniture 9401/9403), food (chapters 01–23), textiles (50–63), and listed electronics headings. A prefix-less line, such as proof of origin or ISPM 15 packaging, still applies across those products. Each line still cites an official text.
 
 Called from the order's "What if" panel each time the market, date, or route changes. A new call cancels the previous one.
+
+### Saved what-ifs: `/trade-map/scenarios`
+A what-if from the compare panel kept on record with a note: a proposal, not a change. Saving changes nothing on the order (status, ship date, destination, reports); nothing else reads it yet. Audited as `scenario.saved` / `scenario.deleted` (object: the order).
+
+`POST` (editor) `{"orderId": "PO-2291", "kind": "route", "target": "SG", "note": "Buyer prefers Singapore."}`. `kind` is `market`, `ship_date` or `route`; `target` is a market code, an ISO date, or a `via` code as in `/trade-map/compare`. The comparison is worked out again on the server (same errors as `/trade-map/compare`: `422 unknown_market`, `same_market`, `same_date`, `unknown_route`, `same_route`, `invalid_input` for a bad date, `404` for an unknown order) and stored as it stood. Saving the same order, kind and target again replaces the note and the stored comparison. Note: up to 2,000 characters; blank is `null`.
+```json
+{"data": {"id": "…", "orderId": "PO-2291", "kind": "route", "target": "SG",
+  "label": "Route via Singapore", "note": "Buyer prefers Singapore.",
+  "comparison": {"kind": "route", "via": "SG", "reevaluate": […], "unknown": […], "…": "…"},
+  "createdBy": {"id": "…", "name": "Lan"}, "updatedBy": {"id": "…", "name": "Lan"},
+  "createdAt": "…", "updatedAt": "…"}}
+```
+`GET` (viewer) lists them, newest change first; `?orderId=` for one order (`404` for an unknown order). `PATCH /{id}` (editor) `{"note": "…"}` edits the note only. `DELETE /{id}` (editor). Another company's ID is `404`.
+
+`POST /suggest` (editor, `SCENARIO_SUGGESTIONS_PER_HOUR`, default 30 per user) `{"orderId", "kind", "target"}`: Gemini (`scenario_note`) reads that comparison and returns a summary, up to 4 `nextSteps` and up to 3 `questions` for the buyer or supplier, each with the comparison line titles (`items`) it rests on, plus `note`, all of it as plain text. Code drops a point whose `items` name no line of the comparison, or that has a link or a figure not in the order or comparison; a summary that fails those checks is `503 ai_unavailable`. Nothing is saved.
+```json
+{"data": {"summary": "A stop in Singapore asks for a fresh look at origin proof.",
+  "nextSteps": [{"text": "Ask the forwarder how the goods stay unaltered.", "items": ["Proof of origin"]}],
+  "questions": [{"text": "Who pays any extra freight?", "items": ["Freight cost"]}],
+  "note": "A stop in Singapore …\n\nNext steps:\n- …\n\nTo ask:\n- …"}}
+```
+
+### `GET /trade-map/changes` (viewer)
+`?days=` (optional, 1–365; default the `RULE_WATCH_DAYS` setting, 90). Checklist lines in force in the markets of the company's open orders (ship date today or later) that take effect (`effectiveOn`) or change (`changesOn`) between today and `until`, oldest first, each with the open orders to that market and HS prefix that ship on or after that day.
+```json
+{"data": {"start": "2026-10-15", "until": "2027-01-13", "days": 90,
+  "changes": [{"on": "2027-01-01", "kind": "changes", "market": "US", "marketName": "United States",
+    "requirementKey": "tariff", "title": "…", "whatChanges": "…", "orderIds": ["PO-6"],
+    "source": {"documentId": "…", "quote": "…"}}]}}
+```
+The company report's "Checklist changes coming up" section is built from the same list (`trade_map.list_checklist_changes`). `422` for `days` outside 1–365.
 
 ### Suppliers and sites (editor)
 Editors enter them in the map's side panel; viewers don't see the controls. The location comes from a click on the 2D map (which also suggests the country) or from typed `latitude, longitude`. After a save or delete the page reloads `GET /trade-map`, so order checks and flood proximity are recomputed. Each change writes an audit event (`supplier.created|updated|deleted`, `company_site.created|updated|deleted`).
@@ -537,7 +648,7 @@ Content shape (camelCase): `{title, subtitle, summary, sections: [{id, layout: "
   "edits": {"header": false, "sections": 0, "rowsEdited": 0, "rowsAdded": 0, "rowsRemoved": 0}}}
 ```
 - Order: order facts, the document checklist exactly as `GET /trade-map` checks it, what the order's latest analysis found (`analysis`: next step, estimated cost, review state, playbook rules fired, missing data; `costs`: each cost line with its formula and basis, and unpriced duties), cited sources with quotes, the CSV row. Preparing a report never starts an analysis (that changes order statuses and needs an editor); without one the sections say "Not analysed yet", and they say so when the checklist has changed since the analysis. `404` for another company's order.
-- Company: at a glance; checklist lines in the markets the company ships to that take effect or change in the next `days`, with the open orders shipping on or after that date; News watch alerts (high and medium, last `days`), read from the AI service's `GET /api/impacts` with the caller's token (`AI_SERVICE_URL`; if it can't be reached the section says so); floods within the check radius of suppliers and sites (last `days`); regulation versions added in the last `days` and the open orders whose checklists cite that regulation; open orders with document gaps; suppliers to follow up; sources.
+- Company: at a glance; checklist lines in the markets the company ships to that take effect or change in the next `days`, with the open orders shipping on or after that date; News watch alerts (high and medium, last `days`), read from the AI service's `GET /api/impacts` with the caller's token (`AI_SERVICE_URL`; if it can't be reached the section says so), each naming the orders someone confirmed it affects (`/news-matches`); floods within the check radius of suppliers and sites (last `days`); regulation versions added in the last `days` and the open orders whose checklists cite that regulation; open orders with document gaps; suppliers to follow up; sources.
 
 ### `GET /report-drafts` (viewer)
 The caller's 30 most recently updated reports (summary fields only).
@@ -563,6 +674,26 @@ The PDF of the saved content, `inline` for the preview; `?download=true` makes i
 - `sandbox: true` means `RESEND_API_KEY` isn't set: built and audited, not delivered.
 - Writes a `report.emailed` audit event with the recipients, note and edit counts (logs only carry counts).
 - `422 invalid_input` (bad addresses), `422 email_rejected`, `429 rate_limited` (`REPORT_EMAILS_PER_HOUR`, default 20 per user), `502 email_failed`, `503 email_unavailable`.
+
+## News watch and orders
+
+News watch (the AI service) matches each article to items in its sample stock, not to orders. The backend suggests which of the company's orders an alert may affect, and people decide (`news_order_reviews`, `services/news_matches.py`). An order is suggested when it hasn't shipped, shares an HS heading (first four digits) with an item the alert names (stock from the AI service's `GET /api/inventory`), and ships to one of that item's markets (`EU`, `US`…; items with no export market, such as raw material, match on the heading alone). A suggestion is a guess until an owner or editor confirms or rejects it, and only confirmed links reach reports. Alerts and stock are read with the caller's token. A review keeps a copy of the alert's headline and link, so it outlives the alert.
+
+### `GET /news-matches` (viewer)
+```json
+{"data": {"newsAvailable": true, "matches": [
+  {"impactId": "a1b2…", "orderId": "PO-2291", "product": "Acacia plywood · 18 mm", "destination": "Rotterdam, NL",
+   "market": "EU", "shipDate": "2026-10-27", "suggested": true,
+   "reason": "HS 4412 and ships to EU, like PLY-001 Acacia plywood 18 mm named in this alert.",
+   "review": {"verdict": "relevant", "note": "Our EU lots.", "reviewedBy": {"id": "…", "name": "Lan"}, "reviewedAt": "…"}}]}}
+```
+One entry per alert and order: every current suggestion (with its verdict, or `review: null` while it awaits one), plus orders a person linked or reviewed that are no longer suggested (shipped, HS code changed). Only alerts News watch returns now are listed. `newsAvailable: false` and no matches when the AI service can't be reached.
+
+### `PUT /news-matches/{impactId}/orders/{orderId}` (editor)
+`{"verdict": "relevant" | "not_relevant", "note": "…"}` (note optional, ≤500). `orderId` is the order's own ID. Works for any order of the company, suggested or not: an order that wasn't suggested is stored with `suggested: false`. A new verdict replaces the last one, whoever gave it. Returns the match. Audited as `news.reviewed`. `404` for an alert News watch doesn't show this company or an order that isn't the company's; `503` if News watch can't be reached.
+
+### `DELETE /news-matches/{impactId}/orders/{orderId}` (editor)
+Removes the verdict: a suggestion goes back to awaiting review; a linked order is unlinked. Audited as `news.review_cleared`. `404` if there is no verdict.
 
 ## Supplier messages
 
@@ -597,10 +728,37 @@ Approves the exact recipient, subject and body (a SHA-256 is recorded). The owne
 ### `POST /supplier-messages/{id}/send` (owner)
 Sends once: the row is locked and an optional `Idempotency-Key` header is passed to Resend. Replies go to the sender's own email. `sandbox: true` without `RESEND_API_KEY` (nothing delivered). Sending doesn't change the order's status. `409 not_approved`, `409 message_sent`, `409 changed_since_approval`; email errors (`422 email_rejected`, `502 email_failed`, `503 email_unavailable`) leave it `failed` with `error`.
 
+## Suggested solutions
+
+How to fix each problem an analysis report found (a document `missing` or `mismatch`), saved for later orders (`services/solutions.py`). A problem matches earlier solutions by market, requirement key and problem status, for any order. Every write is in the audit log (object type `solution`: `solution.suggested` with the full text and model, `solution.used`, `solution.note_added` with the note, `solution.adopted`, `solution.rejected`).
+
+A solution expires the day after `validUntil` (`SOLUTION_VALID_DAYS` after it was written, default 90, or the day before the requirement's `changesOn`), when the requirement cites another regulation version, or when it leaves the checklist; `expiredReason` says which. Expired solutions are listed for reference but are never the default, and can't be used or adopted (`409 solution_expired`).
+
+### `GET /solutions` (viewer)
+The knowledge base: every solution the company saved, grouped by problem. Each entry has `market`, `requirementKey`, `problemStatus`, `title` (the requirement's title in force, else its key), `inChecklist` (false once the requirement left the market's checklist) and `solutions` (valid before expired; adopted, then suggested, then rejected; newest first; the same shape as below). Problems whose best solution is valid and adopted come first. Empty when nothing is saved.
+
+### `GET /reports/{id}/solutions` (viewer)
+One entry per problem: `requirementKey`, `title`, `problemStatus`, `note`, `default` (the solution chosen for this order if still valid, else the best valid one: written from this report, adopted, same HS heading, same supplier, newest; never expired or rejected), `inUse`, `others` (other valid ones, rejected last), `expired`, `needsAnalysis` (no valid solution). Each solution has `summary`, `steps`, `status` (`suggested`, `adopted`, `rejected`), `writtenFor` (order ID), `basis` (regulation, document version and quote it was written from), `validUntil`, `expired`, `expiredReason`, `model`, `createdBy`, `reviewedBy`, `supersedesId`, `usedFor` (orders it was chosen for) and `notes` (oldest first). Empty when nothing is missing.
+
+### `POST /reports/{id}/solutions` (editor, rate limited, AI)
+`{"requirementKey": "geolocation"}`. Gemini writes a summary and up to 8 steps from the report's facts, the requirement's cited text, the company's notes on earlier solutions to the same problem and its expired solutions (marked outdated). Code checks every number in the answer appears in those facts and it links only to the regulation's address (`503 ai_unavailable` otherwise; nothing saved). A new solution after expired ones sets `supersedesId`. `422 not_a_problem`; `409 report_out_of_date` when the checklist changed since the report. Returns `201` with the problem's entry. `SOLUTION_SUGGESTIONS_PER_HOUR` (30).
+
+### `POST /solutions/{id}/use` (editor)
+`{"reportId": "…"}`: record that this solution is followed for that report's matching problem (the latest choice wins). `422 wrong_problem`, `409 solution_expired`, `409 solution_rejected`. Returns the problem's entry.
+
+### `POST /solutions/{id}/notes` (editor)
+`{"text": "…"}` (up to 2,000 characters): how the company handles this problem. Notes can't be edited or deleted, are allowed on expired solutions, and are given to the AI next time. Returns the solution.
+
+### `POST /solutions/{id}/review` (editor)
+`{"verdict": "adopted" | "rejected", "note": "…"}` (`note` optional, saved as a note). Adopted solutions are offered first; rejected ones are never the default. Returns the solution.
+
 ## Audit log
 
 ### `GET /audit-events?objectType=&userId=&cursor=&limit=` (owner)
 Who did what, newest first: imports, rule changes, uploads, reviews, approvals, sends. `[{"id", "action": "supplier_message.sent", "objectType", "objectId", "data": {…}, "user": {"id", "name", "email"} | null, "requestId", "createdAt"}]`; `meta.nextCursor` for the next page (`limit` 1–200, default 50). `user` is `null` for the system (the seed).
+
+### `GET /audit-events/export?objectType=&userId=` (owner)
+The whole log with the same filters as a CSV attachment (`exportmate-activity-YYYY-MM-DD.csv`, UTF-8 with a byte-order mark for Excel), newest first. Columns: `time_utc`, `person` (`System` for the seed), `email`, `action`, `object_type`, `object_id`, `details` (the event's `data` as JSON), `request_id`. Cells starting with `=`, `+`, `-`, `@`, tab or carriage return get a leading `'` so spreadsheets don't run them as formulas.
 
 ## Contact
 

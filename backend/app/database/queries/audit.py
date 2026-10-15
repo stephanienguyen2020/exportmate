@@ -38,9 +38,10 @@ def list_company_audit_events(
     object_type: str | None,
     user_id: uuid.UUID | None,
     before: tuple[datetime, uuid.UUID] | None,
-    limit: int,
+    limit: int | None,
 ) -> list[tuple[AuditEvent, User | None]]:
-    """Newest first. `before` is the (created_at, id) of the last event of the previous page."""
+    """Newest first. `before` is the (created_at, id) of the last event of the previous page;
+    `limit=None` returns every event (the CSV export)."""
     stmt = (
         select(AuditEvent, User)
         .outerjoin(User, AuditEvent.user_id == User.id)

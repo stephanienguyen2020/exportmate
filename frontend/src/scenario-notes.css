@@ -1,0 +1,160 @@
+/* Saved what-ifs in the trade map's compare panel (ScenarioNotes.tsx). */
+.sn-form .tm-muted {
+  margin: -4px 0 0;
+}
+.sn-textarea {
+  width: 100%;
+  min-height: 96px;
+  border: 1px solid var(--line);
+  background: #fffffc;
+  padding: 10px;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--green);
+  resize: vertical;
+}
+.sn-form .tm-field-error {
+  font-size: 11px;
+  color: var(--red);
+  margin: 8px 0 0;
+}
+.sn-form .tm-form-actions {
+  margin-top: 12px;
+}
+.sn-form .btn {
+  gap: 8px;
+}
+.sn-suggest {
+  gap: 6px;
+}
+.sn-suggest:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.sn-suggestion {
+  margin-top: 12px;
+  padding: 12px 14px;
+  background: #f3f5ee;
+  border-left: 2px solid var(--lime);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.sn-suggestion > p {
+  margin: 6px 0 0;
+}
+.sn-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font:
+    9px "DM Mono",
+    monospace;
+  color: #648b45;
+}
+.sn-points-title {
+  display: block;
+  margin-top: 10px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.sn-points {
+  margin: 4px 0 0;
+  padding-left: 16px;
+}
+.sn-points li {
+  margin-bottom: 6px;
+}
+.sn-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 3px;
+}
+.sn-items em {
+  font-style: normal;
+  font-size: 9px;
+  padding: 1px 6px;
+  background: #fffffc;
+  border: 1px solid var(--line);
+  color: #6b7466;
+}
+.sn-suggestion .fine-print {
+  margin: 10px 0 0;
+}
+.sn-saved h3 span {
+  font:
+    10px "DM Mono",
+    monospace;
+  color: #89927f;
+  margin-left: auto;
+}
+.sn-saved ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.sn-saved li {
+  position: relative;
+  padding: 9px 28px 9px 12px;
+  border-left: 2px solid var(--line);
+  margin-bottom: 6px;
+}
+.sn-saved li.open {
+  border-color: var(--green);
+  background: #f6f8f2;
+}
+.sn-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--green);
+  cursor: pointer;
+  text-align: left;
+}
+.sn-label:hover {
+  color: #648b45;
+}
+.sn-note {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.sn-saved small {
+  display: block;
+  margin-top: 4px;
+  font-size: 10px;
+  color: #89927f;
+}
+.sn-delete {
+  position: absolute;
+  top: 8px;
+  right: 4px;
+  padding: 4px;
+  border: 0;
+  background: none;
+  color: #8a937f;
+  cursor: pointer;
+}
+.sn-delete:hover {
+  color: var(--red);
+}
+.sn-confirm {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+}
+.sn-confirm .text-link {
+  gap: 4px;
+}
+.sn-form p[role="status"] {
+  margin: 8px 0 0;
+}

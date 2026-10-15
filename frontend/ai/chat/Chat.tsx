@@ -426,6 +426,7 @@ export function ChatWidget() {
         ref={launcher}
         type="button"
         className="chat-launcher"
+        data-tour="chat"
         aria-label={open ? "Close assistant" : "Open assistant"}
         aria-expanded={open}
         onClick={() => setOpen(!open)}

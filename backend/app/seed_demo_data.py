@@ -1,19 +1,23 @@
-"""Load the frontend's demo company (with its About company profile), 12 orders, 3 playbook
-rules and its trade-map data (suppliers with their documents, and the company's sites) for
-one user.
+"""Load a demo company (with its About company profile), its orders, playbook rules and
+trade-map data (suppliers with their documents, and the company's sites) for one user.
 
 Usage:  uv run python -m app.seed_demo_data --email lan@example.com
+        uv run python -m app.seed_demo_data --company us-furniture --email minh@example.com
 With AUTH_MODE=dev, sign in as that user with the token "dev:lan@example.com".
 For a real Firebase user, pass --firebase-uid <uid> as well.
 
-Order statuses copy the frontend demo (2 exposed, 10 clear). They are demo values,
-not the result of an analysis. Shared reference data (markets, checklists, ...) is loaded
+Companies: `binh-duong` (default) is the frontend's demo, 12 orders to the EU and Asia whose
+statuses copy the frontend (2 exposed, 10 clear). `us-furniture` is Vietnam Google AI Builder
+Furniture, 16 furniture orders from Vietnam to US ports (seed_data/us_furniture_company.json).
+Statuses are demo values, not the result of an analysis. A user belongs to one company, so
+each company needs its own email. Shared reference data (markets, checklists, ...) is loaded
 first. Running it again changes nothing.
 """
 
 import argparse
 import logging
 import uuid
+from dataclasses import dataclass
 from datetime import date
 
 from sqlalchemy.orm import Session
@@ -35,7 +39,9 @@ from app.services.trade_map import supplier_name_key
 
 log = logging.getLogger(__name__)
 
-DEMO_PROFILE = load_seed_file("demo_company.json")["profile"]
+DEMO_SEED_FILE = "demo_company.json"
+US_FURNITURE_SEED_FILE = "us_furniture_company.json"
+DEMO_PROFILE = load_seed_file(DEMO_SEED_FILE)["profile"]
 DEMO_COMPANY = OnboardingIn(
     company_name="Binh Duong Wood Co.",
     business_role="Manufacturer",
@@ -109,9 +115,58 @@ def build_demo_orders() -> list[dict]:
     return orders
 
 
-def seed_company_map_data(db: Session, company_id: uuid.UUID) -> tuple[int, int]:
-    """Suppliers (with their documents) and sites from seed_data/demo_company.json."""
-    data = load_seed_file("demo_company.json")
+@dataclass(frozen=True)
+class DemoCompanySeed:
+    seed_file: str
+    owner_name: str
+    onboarding: OnboardingIn
+    profile: dict
+    orders: list[dict]
+    rules: list[RuleIn]
+
+
+def build_seed_file_orders(data: dict) -> list[dict]:
+    return [
+        {
+            "external_id": o["id"],
+            "product": o["product"],
+            "supplier": o["supplier"],
+            "destination": o["destination"],
+            "value": o["value"],
+            "ship_date": date.fromisoformat(o["shipDate"]),
+            "hs_code": o["hsCode"],
+            "status": OrderStatus(o["status"]),
+        }
+        for o in data["orders"]
+    ]
+
+
+def load_demo_company_seed(company_key: str) -> DemoCompanySeed:
+    if company_key == "us-furniture":
+        data = load_seed_file(US_FURNITURE_SEED_FILE)
+        return DemoCompanySeed(
+            seed_file=US_FURNITURE_SEED_FILE,
+            owner_name=data["owner"],
+            onboarding=OnboardingIn.model_validate(data["company"]),
+            profile=data["profile"],
+            orders=build_seed_file_orders(data),
+            rules=[RuleIn.model_validate(rule) for rule in data["rules"]],
+        )
+    return DemoCompanySeed(
+        seed_file=DEMO_SEED_FILE,
+        owner_name="Ms. Lan",
+        onboarding=DEMO_COMPANY,
+        profile=DEMO_PROFILE,
+        orders=build_demo_orders(),
+        rules=DEMO_RULES,
+    )
+
+
+def seed_company_map_data(
+    db: Session, company_id: uuid.UUID, seed_file: str = DEMO_SEED_FILE
+) -> tuple[int, int]:
+    """Suppliers (with their documents) and sites from a seed file in seed_data/."""
+    data = load_seed_file(seed_file)
     for supplier in data["suppliers"]:
         supplier_id = map_queries.upsert_supplier(
             db,
@@ -128,18 +183,22 @@ def seed_company_map_data(db: Session, company_id: uuid.UUID) -> tuple[int, int]
                 "contact_email": supplier.get("contactEmail"),
             },
         )
-        map_queries.upsert_supplier_documents(
-            db,
-            [
-                {
-                    "supplier_id": supplier_id,
-                    "kind": doc["kind"],
-                    "detail": doc["detail"],
-                    "standards": doc.get("standards", []),
-                }
-                for doc in supplier["documents"]
-            ],
-        )
+        # One call per document: a multi-row upsert needs the same columns in every row, and
+        # issuer, number and expiry are only written when the seed file gives them.
+        for doc in supplier["documents"]:
+            row = {
+                "supplier_id": supplier_id,
+                "kind": doc["kind"],
+                "detail": doc["detail"],
+                "standards": doc.get("standards", []),
+            }
+            if "issuer" in doc:
+                row["issuer"] = doc["issuer"]
+            if "documentNumber" in doc:
+                row["document_number"] = doc["documentNumber"]
+            if "expiresOn" in doc:
+                row["expires_on"] = date.fromisoformat(doc["expiresOn"])
+            map_queries.upsert_supplier_documents(db, [row])
     map_queries.upsert_company_sites(
         db,
         [
@@ -168,9 +227,11 @@ def seed_company_map_data(db: Session, company_id: uuid.UUID) -> tuple[int, int]
     return counts
 
 
-def seed_company_profile(db: Session, ctx: CompanyContext) -> list[str]:
+def seed_company_profile(
+    db: Session, ctx: CompanyContext, profile_data: dict = DEMO_PROFILE
+) -> list[str]:
     """Fills About company fields that are still empty; never overwrites what the user wrote."""
-    profile = CompanyUpdate.model_validate(DEMO_PROFILE)
+    profile = CompanyUpdate.model_validate(profile_data)
     missing = {
         field: value
         for field, value in profile.model_dump(exclude_unset=True).items()
@@ -181,19 +242,25 @@ def seed_company_profile(db: Session, ctx: CompanyContext) -> list[str]:
     return sorted(missing)
 
 
-def seed_demo_data(email: str, firebase_uid: str) -> None:
+def seed_demo_data(email: str, firebase_uid: str, company_key: str = "binh-duong") -> None:
+    seed = load_demo_company_seed(company_key)
     with open_session() as db:
         seed_reference_data(db)
-        user = accounts.get_or_create_user(db, uid=firebase_uid, email=email, name="Ms. Lan")
+        user = accounts.get_or_create_user(db, uid=firebase_uid, email=email, name=seed.owner_name)
         found = accounts.find_user_company_membership(db, user.id)
         if found:
             membership, company = found
         else:
-            company, _ = accounts.onboard_user(db, user, DEMO_COMPANY)
+            company, _ = accounts.onboard_user(db, user, seed.onboarding)
             membership, company = accounts.find_user_company_membership(db, user.id)
+        if company.name != seed.onboarding.company_name:
+            raise SystemExit(
+                f"{email} already belongs to {company.name}. "
+                f"Use another --email for {seed.onboarding.company_name}."
+            )
         ctx = CompanyContext(user=user, company=company, role=membership.role)
 
-        demo = build_demo_orders()
+        demo = seed.orders
         existing = order_queries.find_existing_external_ids(
             db, company.id, [o["external_id"] for o in demo]
         )
@@ -204,7 +271,7 @@ def seed_demo_data(email: str, firebase_uid: str) -> None:
                 product=o["product"],
                 supplier=o["supplier"],
                 destination=o["destination"],
-                value_minor=o["value"] * 100,
+                value_minor=round(o["value"] * 100),
                 currency=company.currency,
                 ship_date=o["ship_date"],
                 hs_code=o["hs_code"],
@@ -218,23 +285,23 @@ def seed_demo_data(email: str, firebase_uid: str) -> None:
 
         rules, _ = playbook_service.list_playbook_rules(db, ctx)
         if not rules:
-            for rule in DEMO_RULES:
+            for rule in seed.rules:
                 playbook_service.create_playbook_rule(db, ctx, rule)
-        profile_fields = seed_company_profile(db, ctx)
-        suppliers, sites = seed_company_map_data(db, company.id)
+        profile_fields = seed_company_profile(db, ctx, seed.profile)
+        suppliers, sites = seed_company_map_data(db, company.id, seed.seed_file)
         log.info(
             "seed.demo_loaded",
             extra={
                 "company_id": str(company.id),
                 "orders_added": len(new_orders),
                 "orders_existing": len(existing),
-                "rules_added": 0 if rules else len(DEMO_RULES),
+                "rules_added": 0 if rules else len(seed.rules),
             },
         )
 
         print(f"Company: {company.name} ({company.id})")
         print(f"Orders added: {len(new_orders)} (already there: {len(existing)})")
-        print(f"Rules added: {0 if rules else len(DEMO_RULES)}")
+        print(f"Rules added: {0 if rules else len(seed.rules)}")
         print(f"Profile fields filled: {', '.join(profile_fields) or 'none (already set)'}")
         print(f"Trade map: {suppliers} suppliers, {sites} sites")
         print(f"Sign in locally with: Authorization: Bearer dev:{email}")
@@ -243,11 +310,17 @@ def seed_demo_data(email: str, firebase_uid: str) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--email", default="lan@example.com")
+    parser.add_argument(
+        "--company",
+        choices=["binh-duong", "us-furniture"],
+        default="binh-duong",
+        help="us-furniture: Vietnam Google AI Builder Furniture, Vietnam to the US",
+    )
     parser.add_argument("--firebase-uid", help="defaults to the dev-mode uid 'dev:<email>'")
     args = parser.parse_args()
     settings = get_settings()
     configure_logging(settings.log_level, settings.resolved_log_format)
-    seed_demo_data(args.email, args.firebase_uid or f"dev:{args.email}")
+    seed_demo_data(args.email, args.firebase_uid or f"dev:{args.email}", args.company)
 
 
 if __name__ == "__main__":

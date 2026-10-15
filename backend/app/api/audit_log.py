@@ -1,7 +1,7 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query, Request, Response
 from sqlalchemy.orm import Session
 
 from app.core.auth import OwnerContext
@@ -31,6 +31,28 @@ def list_audit_events(
         db, ctx, object_type=object_type, user_id=user_id, cursor=cursor, limit=limit
     )
     return success_response(events, nextCursor=next_cursor)
+
+
+@router.get("/audit-events/export", response_class=Response)
+def export_audit_events(
+    ctx: OwnerContext,
+    db: Db,
+    object_type: Annotated[str | None, Query(alias="objectType", max_length=50)] = None,
+    user_id: Annotated[uuid.UUID | None, Query(alias="userId")] = None,
+):
+    """The whole log (with the same filters) as a CSV download, newest first."""
+    content, filename = audit_service.export_audit_events_csv(
+        db, ctx, object_type=object_type, user_id=user_id
+    )
+    return Response(
+        content,
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 def _visitor_ip(request: Request) -> str:

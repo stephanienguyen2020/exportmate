@@ -7,7 +7,7 @@ from pydantic import Field
 from app.database.models import OrderStatus, ReportState, RunStatus
 from app.schemas.common import CamelCaseModel
 from app.schemas.cost_settings import CostSettingOut
-from app.schemas.orders import OrderOut, SourceRowOut
+from app.schemas.orders import OrderOut, OrderStatusChangeOut, SourceRowOut
 from app.schemas.trade_map import RequirementCheckOut, RequirementSourceOut
 
 
@@ -181,3 +181,5 @@ class OrderDetailOut(CamelCaseModel):
     order: OrderOut
     source: SourceRowOut | None  # None for seeded orders
     exposures: list[ExposureOut]  # problems the latest report found; empty before any run
+    latest_report_id: uuid.UUID | None = None  # the order's latest report; None before any run
+    status_changes: list[OrderStatusChangeOut] = Field(default_factory=list)  # newest first

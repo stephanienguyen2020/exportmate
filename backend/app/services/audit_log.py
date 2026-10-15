@@ -2,11 +2,13 @@
 
 import base64
 import binascii
+import csv
 import html
+import io
 import json
 import logging
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
@@ -68,6 +70,58 @@ def list_audit_events(
         )
         for event, user in page
     ], next_cursor
+
+
+CSV_COLUMNS = [
+    "time_utc",
+    "person",
+    "email",
+    "action",
+    "object_type",
+    "object_id",
+    "details",
+    "request_id",
+]
+
+
+def _csv_cell(value: str) -> str:
+    """Text a spreadsheet would run as a formula (notes and names are typed by people) is
+    prefixed with an apostrophe so it opens as text."""
+    return f"'{value}" if value[:1] in ("=", "+", "-", "@", "\t", "\r") else value
+
+
+def export_audit_events_csv(
+    db: Session, ctx: CompanyContext, *, object_type: str | None, user_id: uuid.UUID | None
+) -> tuple[bytes, str]:
+    """Every event matching the filters, newest first, as a CSV file and its name."""
+    rows = audit_queries.list_company_audit_events(
+        db, ctx.company_id, object_type=object_type, user_id=user_id, before=None, limit=None
+    )
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(CSV_COLUMNS)
+    for event, user in rows:
+        writer.writerow(
+            [
+                _csv_cell(value)
+                for value in (
+                    event.created_at.astimezone(UTC).strftime("%Y-%m-%d %H:%M:%S"),
+                    (user.name or "") if user else "System",
+                    user.email if user else "",
+                    event.action,
+                    event.object_type,
+                    event.object_id,
+                    json.dumps(event.data, ensure_ascii=False, sort_keys=True)
+                    if event.data
+                    else "",
+                    event.request_id or "",
+                )
+            ]
+        )
+    log.info("audit_log.exported", extra={"events": len(rows)})
+    filename = f"exportmate-activity-{datetime.now(UTC):%Y-%m-%d}.csv"
+    # A byte-order mark so Excel reads the file as UTF-8 (Vietnamese names).
+    return buffer.getvalue().encode("utf-8-sig"), filename
 
 
 def send_contact_message(payload: ContactIn) -> bool:

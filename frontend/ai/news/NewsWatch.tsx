@@ -6,9 +6,16 @@ import {
   Newspaper,
   Plus,
   RefreshCw,
+  Search,
   Trash2,
 } from "lucide-react";
 import { companyAuth } from "../chat/agent-client";
+import { matchCounts, OrderMatches } from "./NewsOrders";
+import { useNewsMatches, type StockItem } from "./news-matches";
+import { SkuChip } from "./SkuChip";
+import type { NewsMatch } from "../../src/api";
+import { CostWhy } from "../../src/CostWhy";
+import type { Order } from "../../src/data";
 import "./news.css";
 
 export type Impact = {
@@ -126,10 +133,50 @@ function SeverityTag({ impact }: { impact: Impact }) {
 
 // Items listed on a full card before "Show all".
 const REASONS_SHOWN = 3;
+// Stock-item chips shown on a card before the "+N" button.
+const SKUS_SHOWN = 4;
 
-function ImpactCard({ impact, compact }: { impact: Impact; compact?: boolean }) {
+// The stock list alerts are matched against (the demo matches its orders to it in the browser).
+// Loaded once per page load (it's the same sample list for everyone); a failure is retried.
+let stockRequest: Promise<StockItem[]> | null = null;
+const loadStock = () =>
+  (stockRequest ??= api<{ items: StockItem[] }>("/inventory")
+    .then((d) => d.items)
+    .catch((e) => {
+      stockRequest = null;
+      throw e;
+    }));
+
+function useStock() {
+  const [stock, setStock] = useState<Map<string, StockItem> | null>(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    loadStock()
+      .then((items) => setStock(new Map(items.map((i) => [i.sku, i]))))
+      .catch(() => setError("Couldn't load the stock list, so no orders can be matched."));
+  }, []);
+  return { stock, error };
+}
+
+// What a card's stock-item chips need to link to orders. `rejected`: orders a person marked
+// not relevant to the alert.
+type ChipData = { stock: Map<string, StockItem> | null; orders: Order[] | null; error: string; rejected?: Set<string> };
+
+function ImpactCard({
+  impact,
+  compact,
+  orders,
+  chips,
+}: {
+  impact: Impact;
+  compact?: boolean;
+  orders?: React.ReactNode;
+  chips?: ChipData;
+}) {
   const [expanded, setExpanded] = useState(false);
+  const [allSkus, setAllSkus] = useState(false);
   const reasons = expanded ? impact.affected : impact.affected.slice(0, REASONS_SHOWN);
+  const skus = allSkus ? impact.affected : impact.affected.slice(0, SKUS_SHOWN);
   return (
     <article className={`news-card ${compact ? "compact" : ""}`}>
       <div className="news-card-top">
@@ -141,12 +188,36 @@ function ImpactCard({ impact, compact }: { impact: Impact; compact?: boolean }) 
       <h3>{impact.headline}</h3>
       <p>{impact.why}</p>
       <div className="news-skus">
-        {impact.affected.slice(0, 4).map((a) => (
-          <span key={a.sku} title={`${a.name}: ${a.reason}`}>
-            {a.sku}
-          </span>
-        ))}
-        {impact.affected.length > 4 && <span>+{impact.affected.length - 4}</span>}
+        {skus.map((a) =>
+          chips ? (
+            <SkuChip
+              key={a.sku}
+              entry={a}
+              item={chips.stock?.get(a.sku)}
+              orders={chips.orders}
+              rejected={chips.rejected || new Set()}
+              error={
+                chips.error ||
+                (chips.stock && !chips.stock.has(a.sku) ? "This item isn't in the stock list, so no orders can be matched." : "")
+              }
+            />
+          ) : (
+            <span key={a.sku} title={`${a.name}: ${a.reason}`}>
+              {a.sku}
+            </span>
+          ),
+        )}
+        {impact.affected.length > SKUS_SHOWN && (
+          <button
+            type="button"
+            className="news-sku news-sku-more"
+            aria-expanded={allSkus}
+            aria-label={allSkus ? "Show fewer stock items" : `Show ${impact.affected.length - SKUS_SHOWN} more stock items`}
+            onClick={() => setAllSkus(!allSkus)}
+          >
+            {allSkus ? "Fewer" : `+${impact.affected.length - SKUS_SHOWN}`}
+          </button>
+        )}
         <b>{usd(impact.stockValueUsd)} stock exposed</b>
       </div>
       {!compact && (
@@ -171,6 +242,7 @@ function ImpactCard({ impact, compact }: { impact: Impact; compact?: boolean }) 
               <strong>Next step:</strong> {impact.action}
             </p>
           )}
+          {orders}
         </>
       )}
       <a className="text-link news-source" href={impact.url} target="_blank" rel="noopener noreferrer">
@@ -186,8 +258,9 @@ const SAMPLE_STOCK_NOTE = "Matched against ExportMate's sample inventory, not yo
 const DEMO_STOCK_NOTE = "Matched against the demo company's stock list (Stock tab), which is separate from its orders.";
 
 /** Overview section: today's top news impacts. */
-export function NewsHighlights({ live = false }: { live?: boolean }) {
+export function NewsHighlights({ live = false, orders }: { live?: boolean; orders?: Order[] }) {
   const { impacts, scan, error } = useImpacts();
+  const stock = useStock();
   if (error || !impacts?.length) return null;
   const top = impacts.slice(0, 3);
   return (
@@ -204,7 +277,7 @@ export function NewsHighlights({ live = false }: { live?: boolean }) {
       </div>
       <div className="news-grid">
         {top.map((i) => (
-          <ImpactCard key={i.id} impact={i} compact />
+          <ImpactCard key={i.id} impact={i} compact chips={{ ...stock, orders: orders || null }} />
         ))}
       </div>
     </>
@@ -277,7 +350,11 @@ function StockTable({ impacts }: { impacts: Impact[] }) {
   return (
     <>
       <p className="news-note">
-        {items.length} items · {usd(total)} on hand · a made-up stock list for the sample wood exporter, kept apart from
+        {items.length} items ·{" "}
+        <CostWhy why="Each item's quantity on hand × its unit cost, added up, from the sample stock list.">
+          {usd(total)}
+        </CostWhy>{" "}
+        on hand · a made-up stock list for the sample wood exporter, kept apart from
         the orders
       </p>
       <div className="table-scroll">
@@ -312,7 +389,13 @@ function StockTable({ impacts }: { impacts: Impact[] }) {
                 <td className="mono">
                   {i.qtyOnHand.toLocaleString()} {i.unit}
                 </td>
-                <td className="mono">{usd(i.qtyOnHand * i.unitCostUsd)}</td>
+                <td className="mono">
+                  <CostWhy
+                    why={`${i.qtyOnHand.toLocaleString()} ${i.unit} on hand × ${i.unitCostUsd.toLocaleString("en-US", { style: "currency", currency: "USD" })} unit cost, from the sample stock list.`}
+                  >
+                    {usd(i.qtyOnHand * i.unitCostUsd)}
+                  </CostWhy>
+                </td>
                 <td>
                   <span className={`status ${i.geolocationOnFile ? "green" : "amber"}`}>
                     <i />
@@ -435,25 +518,140 @@ function Sources({ locked }: { locked?: string }) {
   );
 }
 
+const SEVERITY_FILTERS = ["All", "High", "Medium", "Low", "Opportunities"];
+const PERIODS = [
+  { value: "", label: "Any time" },
+  { value: "7", label: "Past 7 days" },
+  { value: "30", label: "Past 30 days" },
+];
+const ORDER_FILTERS = [
+  { value: "", label: "Any orders" },
+  { value: "review", label: "Orders to review" },
+  { value: "confirmed", label: "Confirmed for an order" },
+  { value: "none", label: "No order linked" },
+];
+type AlertFilters = { severity: string; query: string; source: string; sku: string; period: string; orders: string };
+const NO_FILTERS: AlertFilters = { severity: "All", query: "", source: "", sku: "", period: "", orders: "" };
+
+function matches(i: Impact, f: AlertFilters, now: number, orders = matchCounts()) {
+  if (f.orders === "review" && !orders.toReview) return false;
+  if (f.orders === "confirmed" && !orders.confirmed) return false;
+  if (f.orders === "none" && orders.total) return false;
+  if (f.severity === "Opportunities" ? i.direction !== "opportunity" : f.severity !== "All" && i.severity !== f.severity.toLowerCase())
+    return false;
+  if (f.source && i.sourceName !== f.source) return false;
+  if (f.sku && !i.affected.some((a) => a.sku === f.sku)) return false;
+  // An undated article counts from when the scan raised the alert.
+  if (f.period && now - new Date(i.publishedAt || i.createdAt).getTime() > Number(f.period) * 86_400_000) return false;
+  const q = f.query.trim().toLowerCase();
+  if (!q) return true;
+  return [i.headline, i.why, i.title, i.publisher, ...i.affected.flatMap((a) => [a.sku, a.name])].some((s) =>
+    s?.toLowerCase().includes(q),
+  );
+}
+
+function AlertFilterBar({
+  impacts,
+  filters,
+  onChange,
+  withOrders,
+}: {
+  impacts: Impact[];
+  filters: AlertFilters;
+  onChange: (f: AlertFilters) => void;
+  withOrders: boolean;
+}) {
+  const set = (patch: Partial<AlertFilters>) => onChange({ ...filters, ...patch });
+  const sources = [...new Set(impacts.map((i) => i.sourceName).filter(Boolean))].sort();
+  const items = new Map<string, string>();
+  impacts.forEach((i) => i.affected.forEach((a) => items.set(a.sku, a.name)));
+  const skus = [...items.keys()].sort();
+  return (
+    <div className="news-filterbar">
+      <div className="news-filters" role="group" aria-label="Severity">
+        {SEVERITY_FILTERS.map((f) => (
+          <button key={f} className={filters.severity === f ? "selected" : ""} aria-pressed={filters.severity === f} onClick={() => set({ severity: f })}>
+            {f}
+          </button>
+        ))}
+      </div>
+      <div className="news-filter-fields">
+        <label className="search">
+          <Search size={15} />
+          <input
+            aria-label="Search alerts"
+            placeholder="Search headline, item or SKU…"
+            value={filters.query}
+            onChange={(e) => set({ query: e.target.value })}
+          />
+        </label>
+        {sources.length > 1 && (
+          <select aria-label="Source" value={filters.source} onChange={(e) => set({ source: e.target.value })}>
+            <option value="">All sources</option>
+            {sources.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        )}
+        {skus.length > 1 && (
+          <select aria-label="Stock item" value={filters.sku} onChange={(e) => set({ sku: e.target.value })}>
+            <option value="">All stock items</option>
+            {skus.map((s) => (
+              <option key={s} value={s}>
+                {s} · {items.get(s)}
+              </option>
+            ))}
+          </select>
+        )}
+        {withOrders && (
+          <select aria-label="Orders" value={filters.orders} onChange={(e) => set({ orders: e.target.value })}>
+            {ORDER_FILTERS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        )}
+        <select aria-label="Published" value={filters.period} onChange={(e) => set({ period: e.target.value })}>
+          {PERIODS.map((p) => (
+            <option key={p.value} value={p.value}>
+              {p.label}
+            </option>
+          ))}
+        </select>
+      </div>
+    </div>
+  );
+}
+
 const Loading = () => (
   <div className="news-empty">
     <Loader2 size={18} className="spin" /> Loading…
   </div>
 );
 
-// `sourcesLocked` / `scanLocked` explain why this session can't change sources or start a scan.
+// `sourcesLocked` / `scanLocked` explain why this session can't change sources or start a scan;
+// `editable`: this person may confirm or reject which orders an alert affects.
 export default function NewsWatchPage({
   sourcesLocked,
   scanLocked,
   live = false,
+  editable = false,
 }: {
   sourcesLocked?: string;
   scanLocked?: string;
   live?: boolean;
+  editable?: boolean;
 }) {
   const { impacts, scan, error, load, setScan } = useImpacts();
+  const news = useNewsMatches(impacts, loadStock);
+  const stock = useStock();
+  const byAlert = new Map<string, NewsMatch[]>();
+  news.matches?.forEach((m) => byAlert.set(m.impactId, [...(byAlert.get(m.impactId) || []), m]));
   const [tab, setTab] = useState("Alerts");
-  const [filter, setFilter] = useState("All");
+  const [filters, setFilters] = useState(NO_FILTERS);
   const [scanning, setScanning] = useState(false);
   const [message, setMessage] = useState("");
   const scanNow = async () => {
@@ -471,9 +669,9 @@ export default function NewsWatchPage({
       setScanning(false);
     }
   };
-  const shown = (impacts || []).filter(
-    (i) => filter === "All" || (filter === "Opportunities" ? i.direction === "opportunity" : i.severity === filter.toLowerCase()),
-  );
+  const now = Date.now();
+  const shown = (impacts || []).filter((i) => matches(i, filters, now, matchCounts(byAlert.get(i.id))));
+  const filtered = JSON.stringify(filters) !== JSON.stringify(NO_FILTERS);
   return (
     <>
       <section className="page-heading">
@@ -503,22 +701,47 @@ export default function NewsWatchPage({
           <Loading />
         ) : (
           <>
-            <div className="news-filters">
-              {["All", "High", "Medium", "Low", "Opportunities"].map((f) => (
-                <button key={f} className={filter === f ? "selected" : ""} onClick={() => setFilter(f)}>
-                  {f}
+            <AlertFilterBar impacts={impacts} filters={filters} onChange={setFilters} withOrders={Boolean(news.matches)} />
+            {news.error && <div className="news-error">{news.error}</div>}
+            {filtered && (
+              <p className="news-note news-filter-count" role="status">
+                Showing {shown.length} of {impacts.length} alerts.{" "}
+                <button type="button" className="news-more" onClick={() => setFilters(NO_FILTERS)}>
+                  Clear filters
                 </button>
-              ))}
-            </div>
+              </p>
+            )}
             {shown.length ? (
               <div className="news-list">
                 {shown.map((i) => (
-                  <ImpactCard key={i.id} impact={i} />
+                  <ImpactCard
+                    key={i.id}
+                    impact={i}
+                    chips={{
+                      stock: stock.stock,
+                      orders: news.matches ? news.orders : null,
+                      error: stock.error || (news.error && "Couldn't load the orders, so none can be matched."),
+                      rejected: new Set(
+                        (byAlert.get(i.id) || []).filter((m) => m.review?.verdict === "not_relevant").map((m) => m.orderId),
+                      ),
+                    }}
+                    orders={
+                      news.matches && (
+                        <OrderMatches
+                          matches={byAlert.get(i.id) || []}
+                          orders={news.orders}
+                          canReview={editable}
+                          onReview={(orderId, verdict, note) => news.review(i.id, orderId, verdict, note)}
+                          onClear={(orderId) => news.clear(i.id, orderId)}
+                        />
+                      )
+                    }
+                  />
                 ))}
               </div>
             ) : (
               <div className="news-empty">
-                <Newspaper size={18} /> No alerts here. Run a scan or change the filter.
+                <Newspaper size={18} /> No alerts here. Run a scan or change the filters.
               </div>
             )}
           </>
