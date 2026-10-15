@@ -694,20 +694,28 @@ async function fixture(
         });
       data = settings;
     } else if (path === "/audit-events") {
-      const first = !url.searchParams.has("cursor");
       data = [
         {
-          id: first ? "ev-1" : "ev-2",
-          action: first ? "supplier_message.sent" : "import.committed",
-          objectType: first ? "supplier_message" : "import",
-          objectId: first ? "msg-1" : "import-1",
-          data: first ? { sandbox: true } : { orders: 1 },
+          id: "ev-1",
+          action: "supplier_message.sent",
+          objectType: "supplier_message",
+          objectId: "msg-1",
+          data: { sandbox: true },
           user: { id: "user-1", name: "Test Owner", email: "owner@example.com" },
           requestId: "req-1",
           createdAt: "2026-10-15T09:03:00Z",
         },
       ];
-      meta = first ? { nextCursor: "page-2" } : {};
+      meta = { nextCursor: "page-2" };
+    } else if (path === "/audit-events/export") {
+      await route.fulfill({
+        contentType: "text/csv; charset=utf-8",
+        headers: {
+          "Content-Disposition": 'attachment; filename="exportmate-activity-2026-10-15.csv"',
+        },
+        body: "time_utc,person,email,action\n2026-10-15 09:03:00,Test Owner,owner@example.com,supplier_message.sent\n",
+      });
+      return;
     } else if (path === "/regulations") data = [{ ...companyRegulation, latestVersion: companyDocument }];
     else if (path === "/regulations/reg-company")
       data = { ...companyRegulation, latestVersion: companyDocument, versions: [companyDocument] };
@@ -1458,16 +1466,22 @@ test("owners change cost settings and read the activity log", async ({ page }) =
 
   const log = page.getByRole("region", { name: "Activity log" });
   await expect(log.getByText("supplier_message.sent")).toBeVisible();
-  await log.getByRole("button", { name: "Load more" }).click();
-  await expect(log.getByText("import.committed")).toBeVisible();
+  await expect(log.getByText("Older events are in the CSV download.")).toBeVisible();
+  await expect(log.getByRole("button", { name: "Load more" })).toHaveCount(0);
   expect(
     requests.filter((r) => r.path === "/audit-events").map((r) => r.query),
-  ).toEqual(["?limit=50", "?limit=50&cursor=page-2"]);
+  ).toEqual(["?limit=10"]);
   await log.getByLabel("Show").selectOption("supplier_message");
   await log.getByLabel("Person").selectOption("user-1");
   await expect
     .poll(() => requests.filter((r) => r.path === "/audit-events").at(-1)?.query)
-    .toBe("?limit=50&objectType=supplier_message&userId=user-1");
+    .toBe("?limit=10&objectType=supplier_message&userId=user-1");
+  const downloaded = page.waitForEvent("download");
+  await log.getByRole("button", { name: "Download CSV" }).click();
+  expect((await downloaded).suggestedFilename()).toBe("exportmate-activity-2026-10-15.csv");
+  expect(requests.filter((r) => r.path === "/audit-events/export").at(-1)?.query).toBe(
+    "?objectType=supplier_message&userId=user-1",
+  );
 });
 
 test("editors draft a regulation's requirements; the owner edits, approves and rejects them", async ({

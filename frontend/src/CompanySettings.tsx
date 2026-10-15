@@ -1,7 +1,7 @@
 // Account page, signed-in companies: the cost settings analysis uses (owners edit them), the
 // team (Team.tsx) and the activity log (owners only).
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, RotateCcw } from "lucide-react";
+import { Download, Loader2, RotateCcw } from "lucide-react";
 import { api, type AuditEvent, type CostSetting } from "./api";
 import { errorMessage } from "./auth";
 import Team from "./Team";
@@ -32,7 +32,7 @@ export default function CompanySettings({
     <>
       <CostSettings owner={role === "owner"} notify={notify} />
       <Team role={role} notify={notify} />
-      {role === "owner" && <ActivityLog />}
+      {role === "owner" && <ActivityLog notify={notify} />}
     </>
   );
 }
@@ -234,40 +234,54 @@ const OBJECT_TYPES: [string, string][] = [
   ["invite", "Invitations"],
 ];
 
-function ActivityLog() {
+// The page shows the latest few; the download has the whole log.
+const SHOWN_EVENTS = 10;
+
+function ActivityLog({ notify }: { notify: Notify }) {
   const [objectType, setObjectType] = useState("");
   const [userId, setUserId] = useState("");
   const [events, setEvents] = useState<AuditEvent[]>([]);
-  const [cursor, setCursor] = useState<string | null>(null);
+  const [more, setMore] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState("");
   // People seen so far, so the filter keeps them after it narrows the list.
   const [people, setPeople] = useState<Map<string, string>>(new Map());
-  const load = async (next: string | null, signal?: AbortSignal) => {
+  const load = async (signal: AbortSignal) => {
     setLoading(true);
     setError("");
     try {
       const page = await api.auditEvents(
-        { objectType, userId, cursor: next },
+        { objectType, userId, limit: SHOWN_EVENTS },
         signal,
       );
-      if (signal?.aborted) return;
-      setEvents((all) => (next ? [...all, ...page.events] : page.events));
-      setCursor(page.nextCursor);
+      if (signal.aborted) return;
+      setEvents(page.events);
+      setMore(page.more);
       setPeople((known) => {
         const map = new Map(known);
         for (const e of page.events) if (e.user) map.set(e.user.id, e.user.name || e.user.email);
         return map;
       });
     } catch (e) {
-      if (!signal?.aborted) setError(errorMessage(e));
+      if (!signal.aborted) setError(errorMessage(e));
     } finally {
-      if (!signal?.aborted) setLoading(false);
+      if (!signal.aborted) setLoading(false);
+    }
+  };
+  const download = async () => {
+    setDownloading(true);
+    try {
+      await api.downloadAuditEvents({ objectType, userId });
+    } catch (e) {
+      notify(errorMessage(e), true);
+    } finally {
+      setDownloading(false);
     }
   };
   useEffect(() => {
     const controller = new AbortController();
-    void load(null, controller.signal);
+    void load(controller.signal);
     return () => controller.abort();
   }, [objectType, userId]);
   const personOptions = useMemo(() => [...people.entries()], [people]);
@@ -275,7 +289,10 @@ function ActivityLog() {
     <section className="panel co-panel" aria-label="Activity log">
       <span className="eyebrow">ACTIVITY LOG · OWNER ONLY</span>
       <h2>Who did what, and when.</h2>
-      <p>Imports, edits, approvals and sent messages in your company, newest first.</p>
+      <p>
+        The latest {SHOWN_EVENTS} imports, edits, approvals and sent messages in your company.
+        Download the CSV for the whole log.
+      </p>
       <div className="co-filters">
         <label>
           Show
@@ -298,6 +315,14 @@ function ActivityLog() {
             ))}
           </select>
         </label>
+        <button
+          className="btn secondary"
+          onClick={() => void download()}
+          disabled={downloading || (!loading && !error && !events.length)}
+        >
+          {downloading ? <Loader2 size={15} className="spin" /> : <Download size={15} />}
+          Download CSV
+        </button>
       </div>
       {error && <p role="alert">{error}</p>}
       {events.length ? (
@@ -334,11 +359,7 @@ function ActivityLog() {
           <Loader2 size={15} className="spin" /> Loading…
         </p>
       )}
-      {cursor && !loading && (
-        <button className="btn secondary" onClick={() => void load(cursor)}>
-          Load more
-        </button>
-      )}
+      {more && !loading && <p>Older events are in the CSV download.</p>}
     </section>
   );
 }

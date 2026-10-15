@@ -127,7 +127,8 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
 | `POST /solutions/{id}/notes` | editor | Order page and Knowledge base solution: "Add note" |
 | `POST /solutions/{id}/review` | editor | Order page and Knowledge base solution: "Adopt for this problem", "Reject" |
 | **Audit log and contact** | | |
-| `GET /audit-events` | owner | Account: activity log (filters, "Load more") |
+| `GET /audit-events` | owner | Account: activity log (filters, latest 10) |
+| `GET /audit-events/export` | owner | Account: activity log "Download CSV" |
 | `POST /contact` | none (rate limited) | Landing page "Get in touch" (no token) |
 | [Planned](#planned) | | Later and phase 4 |
 
@@ -741,6 +742,9 @@ One entry per problem: `requirementKey`, `title`, `problemStatus`, `note`, `defa
 
 ### `GET /audit-events?objectType=&userId=&cursor=&limit=` (owner)
 Who did what, newest first: imports, rule changes, uploads, reviews, approvals, sends. `[{"id", "action": "supplier_message.sent", "objectType", "objectId", "data": {…}, "user": {"id", "name", "email"} | null, "requestId", "createdAt"}]`; `meta.nextCursor` for the next page (`limit` 1–200, default 50). `user` is `null` for the system (the seed).
+
+### `GET /audit-events/export?objectType=&userId=` (owner)
+The whole log with the same filters as a CSV attachment (`exportmate-activity-YYYY-MM-DD.csv`, UTF-8 with a byte-order mark for Excel), newest first. Columns: `time_utc`, `person` (`System` for the seed), `email`, `action`, `object_type`, `object_id`, `details` (the event's `data` as JSON), `request_id`. Cells starting with `=`, `+`, `-`, `@`, tab or carriage return get a leading `'` so spreadsheets don't run them as formulas.
 
 ## Contact
 
