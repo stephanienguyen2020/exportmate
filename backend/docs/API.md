@@ -45,6 +45,8 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
 | `GET /overview` | viewer | Dashboard |
 | `GET /orders` | viewer | Every workspace load |
 | `GET /orders/{id}` | viewer | Order detail page |
+| `PATCH /orders/{id}/status` | editor | Order page: Status panel, "Change status" |
+| `GET /order-statuses` | viewer | Every workspace load (badges, Orders filter tabs, Status panel) |
 | `POST /imports` | editor | Upload screen |
 | `GET /imports/{id}` | viewer | Upload screen (preview) |
 | `POST /imports/{id}/commit` | editor | Upload screen ("Import") |
@@ -108,7 +110,7 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
 | `POST /contact` | none (rate limited) | Landing page "Get in touch" (no token) |
 | [Planned](#planned) | | Later and phase 4 |
 
-"Every workspace load" means `refreshWorkspace()` in `frontend/src/main.tsx`. It runs on entering the workspace, after a commit, and on "Retry". It calls `GET /me`, then `GET /orders`, `GET /playbook/rules` and `GET /overview` in parallel. The browser-only demo session calls none of these: it uses localStorage.
+"Every workspace load" means `refreshWorkspace()` in `frontend/src/main.tsx`. It runs on entering the workspace, after a commit, and on "Retry". It calls `GET /me`, then `GET /orders`, `GET /playbook/rules`, `GET /overview` and `GET /order-statuses` in parallel (if the last fails, the workspace keeps its built-in labels). The browser-only demo session calls none of these: it uses localStorage.
 
 ---
 
@@ -206,10 +208,27 @@ On every workspace load, `api.orders()` reads every page (`limit=200`) until `ne
              "raw": {"id": "PO-2291", "product": "…", "value": "24000", "…": "…"}},
   "exposures": [{"reportId": "…", "requirementKey": "geolocation", "title": "Plot-level geolocation",
                   "status": "missing", "note": "Not on file from Binh Phu Wood.", "source": {…}}],
-  "latestReportId": "…"}}
+  "latestReportId": "…",
+  "statusChanges": [{"id": "…", "fromStatus": "exposed", "toStatus": "clear", "source": "manual",
+                     "note": "Buyer confirmed the plot geolocation by email.", "runId": null,
+                     "changedBy": {"id": "…", "name": "Lan"}, "changedAt": "…"}]}}
 ```
+`statusChanges` is the order's status history, newest first: changes by hand (`source: "manual"`, always with a `note`) and by analysis runs (`"analysis"`, with the `runId`; `changedBy` started the run). A run that leaves a status as it was adds nothing. Orders keep no entry for their first status (from the import or the seed).
 `source` is the CSV row the order came from, or `null` for seeded orders. `exposures` are the `missing` and `mismatch` findings of the order's latest report (`GET /reports/{id}`); empty before its first run. `latestReportId` is that report (also for an order in the clear, which has no exposures), or `null` before its first run.
 Opening `#/workspace/orders/<id>` in a live session.
+
+### `PATCH /orders/{id}/status` (editor)
+```json
+{"status": "clear", "note": "Buyer confirmed the plot geolocation by email."}
+```
+Sets the status by hand. `note` is required (1–1000 characters after trimming). Returns the order as `GET /orders/{id}` does, with the new entry first in `statusChanges`. The change is saved in `order_status_changes` and audited as `order.status_changed` (`{"from", "to", "note"}`). Errors: 422 for a missing note or a status whose `manual` is false (`status_not_settable`), 409 `status_unchanged` when the order already has that status, 404 for another company's order. The next analysis of the order sets its status again and records that change too.
+The Status panel on an order's page (owners and editors).
+
+### `GET /order-statuses` (viewer)
+```json
+{"data": [{"code": "exposed", "label": "Action needed", "description": "A document is missing or a rule changes before it ships.", "tone": "red", "manual": true}, …]}
+```
+Every order status from the `order_statuses` table, in display order: its label, a one-line description, its colour (`green`, `amber`, `red`) and whether a person may set it by hand. Loaded from `seed_data/reference.json` (`orderStatuses`) by `seed_reference_data`. The live workspace uses these labels for status badges, the Orders filter tabs and the Status panel; the browser demo keeps its own.
 
 ## CSV import
 

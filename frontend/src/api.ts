@@ -36,6 +36,24 @@ export type ApiOrder = Omit<Order, "value" | "risk"> & {
   currency: string;
   status: "awaiting_analysis" | "clear" | "exposed" | "needs_data";
 };
+// Order statuses as the backend's database names them (GET /order-statuses).
+export type OrderStatusOption = {
+  code: ApiOrder["status"];
+  label: string;
+  description: string;
+  tone: "green" | "amber" | "red" | string;
+  manual: boolean; // an owner or editor may set it by hand
+};
+export type OrderStatusChange = {
+  id: string;
+  fromStatus: ApiOrder["status"];
+  toStatus: ApiOrder["status"];
+  source: "manual" | "analysis";
+  note: string | null; // always set for a manual change
+  runId: string | null;
+  changedBy: { id: string; name: string };
+  changedAt: string;
+};
 export type Overview = {
   totalOrders: number;
   countsByStatus: Record<string, number>;
@@ -60,6 +78,7 @@ export type OrderDetail = {
     source: RequirementSource;
   }[];
   latestReportId?: string | null; // the order's latest analysis report; null before any run
+  statusChanges?: OrderStatusChange[]; // newest first
 };
 export type CostSetting = {
   key: string;
@@ -734,6 +753,15 @@ export const api = {
     request<OrderDetail>(`/orders/${encodeURIComponent(id)}`).then(
       (r) => r.data,
     ),
+  orderStatuses: (signal?: AbortSignal) =>
+    request<OrderStatusOption[]>("/order-statuses", { signal }).then(
+      (r) => r.data,
+    ),
+  changeOrderStatus: (id: string, status: ApiOrder["status"], note: string) =>
+    request<OrderDetail>(`/orders/${encodeURIComponent(id)}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status, note }),
+    }).then((r) => r.data),
   reports: (signal?: AbortSignal) =>
     request<ReportSummary[]>("/report-drafts", { signal }).then((r) => r.data),
   report: (id: string, signal?: AbortSignal) =>

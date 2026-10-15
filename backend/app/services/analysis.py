@@ -32,9 +32,11 @@ from app.database.models import (
     MarketRequirement,
     Order,
     OrderStatus,
+    OrderStatusChange,
     PlaybookRule,
     ReportState,
     RunStatus,
+    StatusChangeSource,
 )
 from app.database.queries import analysis as analysis_queries
 from app.database.queries import audit as audit_queries
@@ -495,8 +497,22 @@ def start_run(db: Session, ctx: CompanyContext, order_ids: list[str] | None) -> 
             for order, analysis in zip(orders, analyses, strict=True)
         ]
         analysis_queries.add_reports(db, reports)
+        changes = []
         for order, analysis in zip(orders, analyses, strict=True):
+            if order.status != analysis.order_status:
+                changes.append(
+                    OrderStatusChange(
+                        company_id=ctx.company_id,
+                        order_id=order.id,
+                        from_status=order.status,
+                        to_status=analysis.order_status,
+                        source=StatusChangeSource.analysis,
+                        run_id=run.id,
+                        changed_by=ctx.user.id,
+                    )
+                )
             order.status = analysis.order_status
+        order_queries.add_status_changes(db, changes)
         rules = playbook_queries.list_live_rules(db, ctx.company_id)
         run.steps = [
             s.model_dump(mode="json")
@@ -519,6 +535,7 @@ def start_run(db: Session, ctx: CompanyContext, order_ids: list[str] | None) -> 
             data={
                 "orders": len(orders),
                 "states": dict(Counter(a.state.value for a in analyses)),
+                "statusChanges": len(changes),
             },
         )
         db.commit()
