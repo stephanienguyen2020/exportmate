@@ -44,7 +44,7 @@ class SuggestedOrder:
 
 
 def hs_heading(hs_code: object) -> str:
-    """The first four digits of an HS code ("4412.33" → "4412"); "" when there are fewer."""
+    """The first four digits of an HS code ("1234.56" → "1234"); "" when there are fewer."""
     digits = re.sub(r"\D", "", str(hs_code or ""))
     return digits[:4] if len(digits) >= 4 else ""
 

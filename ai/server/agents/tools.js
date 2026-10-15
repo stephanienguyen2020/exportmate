@@ -192,7 +192,7 @@ export const REGISTRY = {
           originTraced: {
             type: Type.BOOLEAN,
             description:
-              "false: only items whose origin is not traced to where the material was produced (records such as the plot geolocation EU deforestation rules ask for); true: only items with those records. Filter here rather than reading each item.",
+              "false: only items whose origin is not traced to where the material was produced (records such as plot geolocation for EU deforestation rules, or farm and lot records for food traceability rules); true: only items with those records. Filter here rather than reading each item.",
           },
           sortBy: { type: Type.STRING, enum: ["stockValue", "quantity", "sku"] },
           limit: { type: Type.INTEGER, description: "Items to return, default 20, max 40" },

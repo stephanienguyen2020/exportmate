@@ -21,8 +21,8 @@ class HsHeading(Base):
     to word similarity."""
 
     __tablename__ = "hs_headings"
-    code: Mapped[str] = mapped_column(String(7), primary_key=True)  # "9403" or "9403.60"
-    digits: Mapped[str] = mapped_column(String(6), unique=True, nullable=False)  # "940360"
+    code: Mapped[str] = mapped_column(String(7), primary_key=True)  # "1234" or "1234.56"
+    digits: Mapped[str] = mapped_column(String(6), unique=True, nullable=False)  # "123456"
     level: Mapped[int] = mapped_column(Integer, nullable=False)  # 4 or 6
     description: Mapped[str] = mapped_column(Text, nullable=False)  # the line's full path
     # Hash of the embedded text: a changed description is embedded again.
@@ -57,7 +57,7 @@ class HsCodeSuggestion(Base):
     description: Mapped[str] = mapped_column(Text, nullable=False)  # the official wording
     reason: Mapped[str] = mapped_column(Text, nullable=False)
     # What it was based on: [{"type": "order", "ref": "PO-2291", "text": …, "hsCode": …} |
-    # {"type": "heading", "ref": "9403.60", "text": …}]
+    # {"type": "heading", "ref": "1234.56", "text": …}]
     based_on: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     status: Mapped[HsSuggestionStatus] = mapped_column(
         pg_enum(HsSuggestionStatus, "hs_suggestion_status"),

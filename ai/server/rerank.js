@@ -1,6 +1,6 @@
 // Hybrid retrieval: the vector index finds candidates by meaning, then BM25 over
 // those candidates rewards exact terms that embeddings blur, such as HS codes
-// (4412.33), SKUs (PLY-103) and rule names (EUDR, CBAM). Each hit keeps its
+// (1234.56), SKUs (ABC-103) and rule names (EUDR, CBAM). Each hit keeps its
 // cosine `score` and gains a `lexical` score in [0, 1]; results are ordered by
 // score + LEXICAL_WEIGHT × lexical.
 
@@ -12,7 +12,7 @@ const STOP = new Set(
   "the a an and or of to in on for with by from at as is are was were be been it its this that these those what which who how why when where do does did we our you your i my me any all have has had about into there their they them can could would should will much many more most some not if than then so".split(" "),
 );
 
-/** Lower-case terms; codes are kept whole and split ("4412.33" -> 4412.33, 4412, 33), plurals singular. */
+/** Lower-case terms; codes are kept whole and split ("1234.56" -> 1234.56, 1234, 56), plurals singular. */
 export function terms(text) {
   const out = [];
   for (const token of String(text ?? "").toLowerCase().match(/[a-z0-9]+(?:[.\-/][a-z0-9]+)*/g) || []) {

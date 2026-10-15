@@ -8,7 +8,7 @@ from app.database.models.base import Base, created_column, id_column
 
 
 class Regulation(Base):
-    """A rule, e.g. "EU deforestation regulation". Its documents are its versions.
+    """A rule, e.g. "EU general product safety regulation". Its documents are its versions.
 
     Shared (company_id null): an official text everyone reads, added by the seed or the crawler.
     Otherwise it belongs to one company (its own uploads, e.g. a news article).
