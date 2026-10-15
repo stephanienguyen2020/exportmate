@@ -2,6 +2,14 @@
 # Terraform creates them with a placeholder image; backend/deploy.sh sets the real one.
 
 locals {
+  # The AI service the website talks to: the /api rewrite in frontend/vercel.json. News watch
+  # matches and company reports read their alerts there, so they name the alerts people see.
+  # At the cutover (README.md) vercel.json points at this project's service and this follows.
+  website_ai_url = trimsuffix(one([
+    for rewrite in jsondecode(file("${path.module}/../../frontend/vercel.json")).rewrites :
+    rewrite.destination if rewrite.source == "/api/:path*"
+  ]), "/api/:path*")
+
   backend_env = {
     ENV                        = "production"
     AUTH_MODE                  = "firebase"
@@ -9,18 +17,17 @@ locals {
     ALLOWED_ORIGINS            = var.allowed_origins
     REGULATION_DOCUMENT_BUCKET = google_storage_bucket.regulation_documents.name
     REPORT_EMAIL_FROM          = var.report_email_from
-    # Company reports read News watch alerts. The deterministic URL (ai_service.tf) avoids a
-    # cycle: the AI service already points at this backend.
-    AI_SERVICE_URL       = local.ai_url
-    GOOGLE_CLOUD_PROJECT = var.project_id # Vertex AI project for Gemini
-    CONTACT_INBOX        = var.contact_inbox
+    AI_SERVICE_URL             = local.website_ai_url
+    GOOGLE_CLOUD_PROJECT       = var.project_id # Vertex AI project for Gemini
+    GEMINI_MODEL               = var.gemini_model
+    CONTACT_INBOX              = var.contact_inbox
   }
 }
 
 # Resend key for emailed order reports. Terraform makes the empty secret; add the key by hand
 # so it never lands in Terraform state:
 #   printf %s "$KEY" | gcloud secrets versions add backend-resend-api-key --data-file=-
-# then set resend_enabled = true. Until then reports are sent in sandbox mode (not delivered).
+# resend_enabled (default true) passes it to the backend; false sends in sandbox mode (not delivered).
 resource "google_secret_manager_secret" "resend_api_key" {
   secret_id = "backend-resend-api-key"
 

@@ -51,8 +51,9 @@ class Settings(BaseSettings):
     member_invites_per_hour: int = 30  # per owner
     # AI service origin; company reports read its news alerts with the caller's token.
     ai_service_url: str = "http://127.0.0.1:8080"
-    # Gemini on Vertex AI (core/gemini.py), in the project above.
-    gemini_model: str = "gemini-2.5-flash"
+    # Gemini on Vertex AI (core/gemini.py), in the project above. Production sets GEMINI_MODEL
+    # from Terraform's gemini_model, the model the AI service's news scan uses.
+    gemini_model: str = "gemini-3.5-flash"
     gemini_location: str = "global"
     gemini_timeout_seconds: int = 90
     # Embeddings for HS heading and document search; same model as ai/server's vector index.

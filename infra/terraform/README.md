@@ -117,7 +117,7 @@ gcloud run jobs execute exportmate-ai-task --region asia-southeast1 --wait --arg
 
 The AI service, its Firestore data and the daily scan used to live in project `exportmate-app`. To move them here:
 
-**Status (15 October 2026):** steps 1 and 2 are done and the new service is healthy. Its Firestore was filled with `node seed.js` and one scan (`node scan.js --lookback=14`: 58 articles, all screened by Model Armor), not yet copied from `exportmate-app`. The backend's `AI_SERVICE_URL` already points to the new service (company reports read its News watch alerts); the website's chat and News watch still use the old one until step 5.
+**Status (15 October 2026):** steps 1 and 2 are done and the new service is healthy. Its Firestore was filled with `node seed.js` and one scan (`node scan.js --lookback=14`: 58 articles, all screened by Model Armor), not yet copied from `exportmate-app`. The backend's `AI_SERVICE_URL` follows the website: Terraform reads it from the `/api` rewrite in `frontend/vercel.json`, so News watch matches and company reports use the alerts people see. Both use the old service until step 5.
 
 1. **Owner:** `terraform apply` (creates Firestore, service accounts and grants, the service, job, scheduler, metrics and build resources). `terraform plan` should show 0 to destroy.
 2. Deploy the code: `PROJECT_ID=skilful-scarab-511320-q9 ai/server/deploy.sh`.
@@ -126,7 +126,7 @@ The AI service, its Firestore data and the daily scan used to live in project `e
    cd ai/server && node copy-firestore.js --from=exportmate-app --to=skilful-scarab-511320-q9
    ```
 4. Check the new service before switching traffic: `curl "$(terraform output -raw ai_url)/"` (Cloud Run reserves `/healthz`, so check `/`), then run the eval job above.
-5. Switch traffic: set the `/api/:path*` destination in `frontend/vercel.json` to `$(terraform output -raw ai_url)/api/:path*`, set the default project in `ai/server/db.js` and the comment in `dev.sh` to `skilful-scarab-511320-q9`, then deploy the frontend. Re-run step 3 just before this if `exportmate-app` has had new scans or chats meanwhile.
+5. Switch traffic: set the `/api/:path*` destination in `frontend/vercel.json` to `$(terraform output -raw ai_url)/api/:path*`, set the default project in `ai/server/db.js` and the comment in `dev.sh` to `skilful-scarab-511320-q9`, then deploy the frontend and `terraform apply` (the backend's `AI_SERVICE_URL` follows the rewrite). Re-run step 3 just before this if `exportmate-app` has had new scans or chats meanwhile.
 6. Retire the old project's AI resources:
    ```sh
    gcloud scheduler jobs pause exportmate-daily-news-scan --project exportmate-app --location asia-southeast1

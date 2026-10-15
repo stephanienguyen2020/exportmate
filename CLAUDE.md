@@ -102,7 +102,7 @@ Locally `AUTH_MODE=dev` accepts `Authorization: Bearer dev:<email>` instead of a
 
 ### Deployment wiring
 
-- `frontend/vercel.json` rewrites `/api/*` to the Cloud Run URL; locally `frontend/vite.config.ts` proxies `/api` to `:8080`.
+- `frontend/vercel.json` rewrites `/api/*` to the Cloud Run URL; locally `frontend/vite.config.ts` proxies `/api` to `:8080`. Terraform reads that rewrite for the backend's `AI_SERVICE_URL`, so the backend reads the same AI service as the website.
 - `frontend/.vercelignore` excludes `ai/server` and `docs` from the Vercel upload; `ai/server/.gcloudignore` governs the Cloud Run source deploy.
 
 ## Docs
