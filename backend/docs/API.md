@@ -104,7 +104,7 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
 | `POST /contact` | none (rate limited) | Landing page "Get in touch" (no token) |
 | [Planned](#planned) | | Later and phase 4 |
 
-"Every workspace load" means `refreshWorkspace()` in `frontend/src/main.tsx`. It runs on entering the workspace, after a commit, and on "Retry". It calls `GET /me`, then `GET /orders`, `GET /playbook/rules` and `GET /overview` in parallel. The browser-only demo session calls none of these: it uses localStorage.
+"Every workspace load" means `refresh()` in `frontend/src/workspace/store.ts`. It runs on entering the workspace, after a commit, and on "Retry". It calls `GET /me`, then `GET /orders`, `GET /playbook/rules` and `GET /overview` in parallel. The browser-only demo session calls none of these: it uses localStorage.
 
 ---
 

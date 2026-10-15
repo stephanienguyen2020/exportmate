@@ -90,7 +90,7 @@ Ký hiệu: `[x]` là đã sửa, `[ ]` là chưa làm. **P0** = lỗi rõ ràng
 ### P2
 
 - [x] **Bundle chính** giảm từ 546 kB xuống 364 kB: Firebase SDK và PapaParse giờ chỉ tải khi cần.
-- [ ] **Tách `main.tsx`** (khoảng 2.150 dòng) thành component theo trang. Chưa làm: đây là refactor lớn, không phải lỗi.
+- [x] **Tách `main.tsx`** thành component theo trang: `frontend/src/workspace/` (mỗi trang một file, bảng route trong `Workspace.tsx`; `store.ts` là nơi duy nhất phân biệt demo và API). `TradeMap.tsx` cũng được tách thành `frontend/src/trade-map/`.
 
 ---
 

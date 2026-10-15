@@ -4,7 +4,7 @@
 // tested without the backend.
 
 export const ORDER_STATUSES = ["exposed", "needs_data", "awaiting_analysis", "clear"];
-// What the Orders page shows for each status (frontend/src/main.tsx).
+// What the Orders page shows for each status (frontend/src/workspace/OrderTable.tsx).
 const STATUS_LABELS = { exposed: "Action needed", needs_data: "Needs data", awaiting_analysis: "Awaiting analysis", clear: "In the clear" };
 // Checklist lines that count as gaps (the backend's gapCount).
 const GAPS = new Set(["missing", "mismatch"]);
