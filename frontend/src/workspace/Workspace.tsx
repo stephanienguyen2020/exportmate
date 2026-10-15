@@ -6,14 +6,11 @@ import {
   CircleAlert,
   CircleHelp,
   ClipboardList,
-  FileText,
   Globe2,
   LogOut,
   Map as MapIcon,
   Menu,
-  Newspaper,
   Package,
-  Settings2,
   ShieldCheck,
   Upload,
   UserRound,
@@ -22,6 +19,7 @@ import {
 import { AccountSettings } from "../Account";
 import { placeCode, routeStops } from "../account-store";
 import ErrorBoundary from "../ErrorBoundary";
+import WorkspaceSearch from "../Search";
 import Tour, { tourDone } from "../Tour";
 import NewsWatchPage from "../../ai/news/NewsWatch";
 import DataRoom from "./DataRoom";
@@ -39,20 +37,34 @@ const RegulationsPage = lazy(() => import("../Regulations"));
 const CompanySettings = lazy(() => import("../CompanySettings"));
 const TradeMapPage = lazy(() => import("../TradeMap"));
 const ReportsPage = lazy(() => import("../Reports"));
+const KnowledgeBasePage = lazy(() => import("../KnowledgeBase"));
 
-// Sidebar order. Each page is a route below.
+// The pages of the "Rules & news" tab. Each keeps its own route, so deep links still work.
+const ruleTabs: [string, string][] = [
+  ["news", "News watch"],
+  ["rules", "Rule watch"],
+  ["regulations", "Regulations"],
+  ["playbook", "Playbook"],
+  ["knowledge", "Knowledge base"],
+];
+// Sidebar order. Each page is a route below; "Rules & news" opens the first of its tabs.
 const nav: [path: string, label: string, icon: typeof Globe2][] = [
   ["", "Overview", Globe2],
   ["orders", "Orders", Package],
   ["map", "Trade map", MapIcon],
-  ["news", "News watch", Newspaper],
-  ["rules", "Rule watch", ShieldCheck],
-  ["regulations", "Regulations", FileText],
+  ["news", "Rules & news", ShieldCheck],
   ["reports", "Reports", ClipboardList],
   ["data", "Data room", Upload],
-  ["playbook", "Playbook", Settings2],
   ["account", "Account", UserRound],
 ];
+// Every page a search or a typed route can reach.
+const pages: [string, string][] = [
+  ...nav.filter(([p]) => p !== "news").map(([p, l]): [string, string] => [p, l]),
+  ...ruleTabs,
+];
+const ruleTabOf = (section: string) => ruleTabs.find(([p]) => p === section);
+/** The sidebar item a section belongs to. */
+const navSection = (section: string) => (ruleTabOf(section) ? "news" : section);
 
 // What every page can use from the shell.
 type PageContext = {
@@ -131,6 +143,7 @@ const routes: Record<string, Page> = {
   news: exact(({ ws }) => (
     <NewsWatchPage
       live={ws.live}
+      editable={ws.editable}
       sourcesLocked={
         !ws.live
           ? "Sign in to a company workspace to add or switch off sources."
@@ -172,6 +185,11 @@ const routes: Record<string, Page> = {
       />
     </Suspense>
   ),
+  knowledge: exact(({ ws, notify }) => (
+    <Suspense fallback={<Loading>Loading knowledge base…</Loading>}>
+      <KnowledgeBasePage live={ws.live} editable={ws.editable} notify={notify} />
+    </Suspense>
+  )),
   data: exact(({ ws, notify }) => <DataRoom ws={ws} notify={notify} />),
   playbook: exact(({ ws, notify }) => <PlaybookPage ws={ws} notify={notify} />),
   account: exact(({ ws, notify }) => (
@@ -245,6 +263,12 @@ export default function Workspace() {
     window.addEventListener("hashchange", fn);
     return () => window.removeEventListener("hashchange", fn);
   }, []);
+  // On a phone the Rules & news tab bar scrolls sideways: keep the current tab in view.
+  useEffect(() => {
+    document
+      .querySelector(".section-tabs a.active")
+      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [route]);
   useEffect(() => {
     if (toast) {
       const t = setTimeout(() => setToastState(null), toast.error ? 9000 : 4500);
@@ -265,6 +289,7 @@ export default function Workspace() {
     openDialog: setDialog,
   });
   const onOrder = section === "orders" && sub !== "";
+  const ruleTab = ruleTabOf(section);
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -287,7 +312,7 @@ export default function Workspace() {
         <nav>
           {nav.map(([path, label, Icon]) => (
             <a
-              className={(section === path ? "active " : "") + "nav-item"}
+              className={(navSection(section) === path ? "active " : "") + "nav-item"}
               href={"#/workspace/" + path}
               key={path}
               data-tour={"nav-" + path}
@@ -301,7 +326,7 @@ export default function Workspace() {
               {path === "orders" && (
                 <span className="nav-count">{ws.orders.length}</span>
               )}
-              {path === "rules" && !live && exposed.length > 0 && (
+              {path === "news" && !live && exposed.length > 0 && (
                 <span className="nav-dot" />
               )}
             </a>
@@ -361,10 +386,22 @@ export default function Workspace() {
             <strong>
               {onOrder && page
                 ? "Order impact"
-                : nav.find(([p]) => p === section)?.[1] || "Overview"}
+                : ruleTab
+                  ? `Rules & news / ${ruleTab[1]}`
+                  : nav.find(([p]) => p === section)?.[1] || "Overview"}
             </strong>
           </div>
           <div className="top-actions">
+            <WorkspaceSearch
+              live={live}
+              pages={pages}
+              orders={ws.orders}
+              rules={ws.rules}
+              onNavigate={(path) => {
+                setMobile(false);
+                go(path);
+              }}
+            />
             <span className="demo-badge">
               {live ? "CONNECTED WORKSPACE" : "DEMO WORKSPACE"}
             </span>
@@ -406,7 +443,7 @@ export default function Workspace() {
             <button
               className="notification icon-btn"
               aria-label="View alerts"
-              onClick={() => showOrders("Action needed")}
+              onClick={() => showOrders(ws.actionFilter)}
             >
               <Bell size={18} />
               {exposed.length > 0 && <i />}
@@ -426,8 +463,8 @@ export default function Workspace() {
               <a
                 key={p}
                 href={"#/workspace/" + p}
-                className={section === p ? "active" : ""}
-                aria-current={section === p ? "page" : undefined}
+                className={navSection(section) === p ? "active" : ""}
+                aria-current={navSection(section) === p ? "page" : undefined}
                 onClick={() => {
                   setMobile(false);
                   if (p === "orders")
@@ -457,6 +494,23 @@ export default function Workspace() {
             </section>
           ) : (
             <ErrorBoundary resetKey={route}>
+              {ruleTab && (
+                <nav className="section-tabs" aria-label="Rules & news">
+                  {ruleTabs.map(([p, l]) => (
+                    <a
+                      key={p}
+                      href={"#/workspace/" + p}
+                      className={ruleTab[0] === p ? "active" : ""}
+                      aria-current={ruleTab[0] === p ? "page" : undefined}
+                    >
+                      {l}
+                      {p === "rules" && !live && exposed.length > 0 && (
+                        <span className="nav-dot" />
+                      )}
+                    </a>
+                  ))}
+                </nav>
+              )}
               {page ?? (
                 <section className="empty">
                   <h2>We couldn’t find that page.</h2>

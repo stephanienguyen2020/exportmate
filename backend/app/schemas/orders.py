@@ -1,7 +1,10 @@
 import uuid
-from datetime import date
+from datetime import date, datetime
+from typing import Annotated, Literal
 
-from app.database.models import Order, OrderStatus
+from pydantic import StringConstraints
+
+from app.database.models import Order, OrderStatus, OrderStatusDefinition
 from app.schemas.common import CamelCaseModel
 
 
@@ -36,3 +39,45 @@ class SourceRowOut(CamelCaseModel):
     row_number: int
     raw: dict[str, str]
     row_hash: str
+
+
+class OrderStatusOut(CamelCaseModel):
+    """One order status as the database names it (seed_data/reference.json)."""
+
+    code: OrderStatus
+    label: str
+    description: str
+    tone: str  # green, amber or red
+    manual: bool  # an owner or editor may set it by hand
+
+    @classmethod
+    def from_definition(cls, definition: OrderStatusDefinition) -> "OrderStatusOut":
+        return cls(
+            code=definition.code,
+            label=definition.label,
+            description=definition.description,
+            tone=definition.tone,
+            manual=definition.manual,
+        )
+
+
+class OrderStatusChangeIn(CamelCaseModel):
+    status: OrderStatus
+    # Why the status is changed by hand; kept on the order's history and in the audit log.
+    note: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)]
+
+
+class StatusChangerOut(CamelCaseModel):
+    id: uuid.UUID
+    name: str
+
+
+class OrderStatusChangeOut(CamelCaseModel):
+    id: uuid.UUID
+    from_status: OrderStatus
+    to_status: OrderStatus
+    source: Literal["manual", "analysis"]
+    note: str | None  # always set for a manual change
+    run_id: uuid.UUID | None  # the analysis run that set it
+    changed_by: StatusChangerOut
+    changed_at: datetime

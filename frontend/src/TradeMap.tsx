@@ -492,6 +492,7 @@ function TradeMapView({
       onComparison={setComparisonResult}
       onClose={() => setScenario(null)}
       onOpenOrder={openOrder}
+      editable={editable}
     />
   ) : selection?.kind === "market" && marketByCode.has(selection.code) ? (
     <MarketPanel

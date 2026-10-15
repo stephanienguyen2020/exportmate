@@ -1,6 +1,6 @@
 // Phase 2/3 analysis screens for a signed-in company: the run panel on the Orders page and,
 // on an order's page, its latest analysis report, the owner's review, feedback, HS code
-// suggestions and supplier messages. Every number and quote comes from the backend.
+// suggestions, suggested solutions (Solutions.tsx) and supplier messages. Every number and quote comes from the backend.
 import { useEffect, useRef, useState } from "react";
 import {
   Check,
@@ -18,12 +18,15 @@ import {
   api,
   type AnalysisReport,
   type AnalysisRun,
+  type CostLine,
   type HsSuggestion,
   type ReportState,
   type SupplierMessage,
 } from "./api";
 import { errorMessage } from "./auth";
-import { RegulationCitation } from "./Regulations";
+import { CostWhy } from "./CostWhy";
+import { documentLink, RegulationCitation } from "./Regulations";
+import Solutions from "./Solutions";
 import "./analysis.css";
 
 type Role = "owner" | "editor" | "viewer" | null;
@@ -40,6 +43,32 @@ const totals = (byCurrency: Record<string, number>) =>
   Object.entries(byCurrency)
     .map(([code, minor]) => exactMoney(minor, code))
     .join(" + ") || "—";
+// The hover note on a cost line: the sum, then where each number in it came from.
+function CostLineWhy({ line }: { line: CostLine }) {
+  return (
+    <>
+      <span>
+        <b>{line.formula}</b> = {exactMoney(line.amountMinor, line.currency)}
+      </span>
+      {line.basis.map((basis, i) =>
+        basis.source ? (
+          <span key={i}>
+            Rate set by {basis.source.officialId || basis.source.regulationTitle}{" "}
+            v{basis.source.versionNumber}: <q>{basis.source.quote}</q>{" "}
+            <a href={documentLink(basis.source.documentId)}>View the text</a>
+          </span>
+        ) : (
+          <span key={i}>
+            {basis.type === "company_setting"
+              ? "Your cost setting: "
+              : "ExportMate's default, until you set your own: "}
+            {basis.label}. Set under Account › Cost settings.
+          </span>
+        ),
+      )}
+    </>
+  );
+}
 const when = (iso: string) =>
   new Date(iso).toLocaleString("en-GB", {
     day: "numeric",
@@ -202,7 +231,15 @@ export function RunPanel({
                         <small className="an-blocked">messages blocked</small>
                       )}
                     </td>
-                    <td className="mono">{totals(report.costTotals)}</td>
+                    <td className="mono">
+                      {Object.keys(report.costTotals).length ? (
+                        <CostWhy why="The sum of this order's cost lines. Open the order to see where each one comes from.">
+                          {totals(report.costTotals)}
+                        </CostWhy>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -329,6 +366,7 @@ export default function OrderAnalysis({
           />
         )}
       </section>
+      {report && <Solutions report={report} role={role} notify={notify} />}
       {report && (
         <SupplierMessages
           orderId={orderId}
@@ -435,21 +473,23 @@ function ReportBody({
             <div className="an-cost" key={i}>
               <div>
                 <span>{line.label}</span>
-                <small>
-                  {line.formula} ·{" "}
-                  {line.basis.map((b) => b.label).join("; ")}
-                </small>
-                {line.basis.map(
-                  (b, j) =>
-                    b.source && <RegulationCitation key={j} source={b.source} />,
-                )}
               </div>
-              <b className="mono">{exactMoney(line.amountMinor, line.currency)}</b>
+              <b className="mono">
+                <CostWhy why={<CostLineWhy line={line} />}>
+                  {exactMoney(line.amountMinor, line.currency)}
+                </CostWhy>
+              </b>
             </div>
           ))}
           <div className="cost-row total">
             <span>Total</span>
-            <b>{totals(report.costTotals)}</b>
+            <b>
+              <CostWhy
+                why={`The sum of the ${report.costLines.length} lines above, per currency. Hover a line to see where its numbers come from.`}
+              >
+                {totals(report.costTotals)}
+              </CostWhy>
+            </b>
           </div>
         </>
       ) : (
@@ -466,8 +506,8 @@ function ReportBody({
         </div>
       ))}
       <p className="fine-print">
-        Estimates from your cost settings and the official texts cited. Order
-        value is not included.
+        Estimates from your cost settings and the official texts cited; hover
+        an amount to see how it was worked out. Order value is not included.
       </p>
       <h3>Playbook rules</h3>
       {report.rulesFired.length ? (

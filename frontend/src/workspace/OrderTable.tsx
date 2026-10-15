@@ -4,16 +4,19 @@ import type { Workspace } from "./store";
 import { go, orderPath } from "./ui";
 
 export function OrderStatus({ order, ws }: { order: Order; ws: Workspace }) {
+  const option = ws.statusOption(order.status);
   return (
-    <span className={`status ${ws.tone(order)}`}>
+    <span className={`status ${option ? option.tone : ws.tone(order)}`}>
       <i />
-      {order.risk
-        ? "Action needed"
-        : ws.isClear(order)
-          ? "In the clear"
-          : order.status === "needs_data"
-            ? "Needs data"
-            : "Awaiting analysis"}
+      {option
+        ? option.label
+        : order.risk
+          ? "Action needed"
+          : ws.isClear(order)
+            ? "In the clear"
+            : order.status === "needs_data"
+              ? "Needs data"
+              : "Awaiting analysis"}
     </span>
   );
 }

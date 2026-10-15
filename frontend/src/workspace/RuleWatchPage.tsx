@@ -22,7 +22,7 @@ export default function RuleWatchPage({
         title="Rule watch."
         description={
           live
-            ? "The requirements behind your orders' market checklists."
+            ? "What changes soon in the markets you ship to, and what applies to your orders now."
             : "Changes affecting your products and markets."
         }
         action={
@@ -37,12 +37,9 @@ export default function RuleWatchPage({
       <div className="notice">
         <ShieldCheck size={18} />
         {live
-          ? "Built from your orders' market checklists. ExportMate doesn't yet read new rule texts by itself; the official texts are in the regulation library."
+          ? "Built from your orders' market checklists and the dates in each line's official text. ExportMate doesn't read new rule texts by itself yet: add a new version under Regulations and its dates show up here."
           : "Sample rule-change scenario: one illustrative rule, checked against every order in this demo, including ones you import."}
       </div>
-      <a className="text-link" href="#/workspace/regulations">
-        Open regulation library <ArrowUpRight size={16} />
-      </a>
       {live ? (
         <CompanyRuleWatch
           onOrder={(id) => go("map/order/" + encodeURIComponent(id))}
@@ -99,7 +96,7 @@ export default function RuleWatchPage({
               </span>
               <button
                 className="text-link"
-                onClick={() => showOrders("Action needed")}
+                onClick={() => showOrders(ws.actionFilter)}
               >
                 See affected orders
                 <ArrowUpRight size={17} />

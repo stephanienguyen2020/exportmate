@@ -1,0 +1,76 @@
+/* Account page: Team panel (Team.tsx). Shares the co-panel look from analysis.css. */
+.team-roles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+  margin: 0 0 14px;
+}
+.team-roles div {
+  border: 1px solid #e0e5d8;
+  padding: 10px 12px;
+  background: #fafbf5;
+}
+.team-roles dt {
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--green);
+}
+.team-roles dd {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #5d6b52;
+  line-height: 1.5;
+}
+.team-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 14px;
+  display: grid;
+  gap: 0;
+}
+.team-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid #e0e5d8;
+}
+.team-list li > span:first-child {
+  flex: 1 1 220px;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.team-list b {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.team-list small {
+  font-size: 11px;
+  color: #7d8c70;
+  overflow-wrap: anywhere;
+}
+.team-list em {
+  color: #a4572a;
+  font-style: normal;
+}
+.team-role {
+  font-size: 12px;
+  color: var(--green);
+}
+.team-invite {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.team-invite label {
+  display: grid;
+  gap: 4px;
+}
+@media (max-width: 640px) {
+  .team-invite {
+    grid-template-columns: 1fr;
+  }
+}
