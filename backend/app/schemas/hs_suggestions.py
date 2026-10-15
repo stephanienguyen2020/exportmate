@@ -15,7 +15,7 @@ class SuggestionBasisOut(CamelCaseModel):
     tariff line."""
 
     type: Literal["order", "heading"]
-    ref: str  # "PO-2291" or "9403.60"
+    ref: str  # "PO-2291" or "1234.56"
     text: str  # the order's product, or the heading's description
     hs_code: str | None = None  # for orders: the code it has
 

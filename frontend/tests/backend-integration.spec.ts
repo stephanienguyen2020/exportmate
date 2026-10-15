@@ -1790,7 +1790,7 @@ test("owners edit an order's details, then remove the order", async ({ page }) =
   await expect(form.getByText("product is required.")).toBeVisible();
   await form.getByLabel("PRODUCT").fill("API plywood, 18 mm");
   await form.getByLabel("HS CODE").fill("44.12");
-  await expect(form.getByText("hsCode must look like 4412.33")).toBeVisible();
+  await expect(form.getByText("hsCode must look like 1234.56")).toBeVisible();
   await expect(save).toBeDisabled();
   await form.getByLabel("HS CODE").fill("4412.33");
   await form.getByLabel("ORDER VALUE").fill("2,000.50");

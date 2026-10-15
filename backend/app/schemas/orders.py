@@ -78,7 +78,7 @@ class OrderUpdate(CamelCaseModel):
             return None
         value = value.strip()
         if value and not HS_CODE_PATTERN.match(value):
-            raise ValueError("Use an HS code like 4412.33 (digits, optional dots).")
+            raise ValueError("Use an HS code like 1234.56 (digits, optional dots).")
         return value
 
     @model_validator(mode="after")

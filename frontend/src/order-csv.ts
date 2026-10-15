@@ -26,7 +26,7 @@ export const MAX_IMPORT_ROWS = 10_000;
 // Vercel functions accept request bodies up to about 4.5 MB, so every layer uses 4 MB.
 export const MAX_UPLOAD_MB = 4;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
-// 4412 / 4412.33 / 441233 / 4412.33.00, kept as text so "0401.10" keeps its zero.
+// 1234 / 1234.56 / 123456 / 1234.56.00, kept as text so "0401.10" keeps its zero.
 const HS_CODE = /^\d{4}(\.?\d{2}){0,3}$/;
 
 let currencies: Set<string> | null = null;
@@ -72,7 +72,7 @@ export function orderCellErrors(
     fail("shipDate", "use a valid YYYY-MM-DD ship date.");
   const hsCode = cell("hsCode");
   if (hsCode && !HS_CODE.test(hsCode))
-    fail("hsCode", "hsCode must look like 4412.33 (digits, optional dots).");
+    fail("hsCode", "hsCode must look like 1234.56 (digits, optional dots).");
   if (!isCurrency((cell("currency") || defaultCurrency).toUpperCase()))
     fail("currency", "currency must be a 3-letter code like USD.");
   return errors;

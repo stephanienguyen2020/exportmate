@@ -55,7 +55,7 @@ type Item = {
   supplier: string;
   markets: string[];
   certifications: string[];
-  // Origin traced to where the material was produced, e.g. plot geolocation.
+  // Origin traced to where the material was produced, e.g. plot geolocation or farm records.
   originTraced: boolean;
   warehouse: string;
   unit: string;
