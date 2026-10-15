@@ -63,6 +63,7 @@ class Settings(BaseSettings):
     supplier_message_drafts_per_hour: int = 30
     requirement_drafts_per_hour: int = 20
     hs_suggestions_per_hour: int = 60
+    scenario_suggestions_per_hour: int = 30
     analysis_runs_per_hour: int = 60
 
     @model_validator(mode="after")

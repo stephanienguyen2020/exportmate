@@ -561,6 +561,27 @@ export type MarketComparison = {
   dropped: string[];
   assumptions?: string[];
 };
+export type ScenarioKind = "market" | "ship_date" | "route";
+export type SavedScenario = {
+  id: string;
+  orderId: string;
+  kind: ScenarioKind;
+  target: string;
+  label: string;
+  note: string | null;
+  comparison: MarketComparison; // as it stood when saved
+  createdBy: { id: string; name: string } | null;
+  updatedBy: { id: string; name: string } | null;
+  createdAt: string;
+  updatedAt: string;
+};
+export type ScenarioPoint = { text: string; items: string[] };
+export type ScenarioSuggestion = {
+  summary: string;
+  nextSteps: ScenarioPoint[];
+  questions: ScenarioPoint[];
+  note: string;
+};
 export type RegulationDocument = {
   id: string;
   title: string;
@@ -942,6 +963,40 @@ export const api = {
       `/trade-map/compare?${new URLSearchParams({ orderId, via })}`,
       { signal },
     ).then((r) => r.data),
+  // What-ifs saved with a note; saving changes nothing on the order.
+  scenarios: (orderId?: string, signal?: AbortSignal) =>
+    request<SavedScenario[]>(
+      `/trade-map/scenarios${orderId ? `?${new URLSearchParams({ orderId })}` : ""}`,
+      { signal },
+    ).then((r) => r.data),
+  saveScenario: (scenario: {
+    orderId: string;
+    kind: ScenarioKind;
+    target: string;
+    note: string | null;
+  }) =>
+    request<SavedScenario>("/trade-map/scenarios", {
+      method: "POST",
+      body: JSON.stringify(scenario),
+    }).then((r) => r.data),
+  updateScenarioNote: (id: string, note: string | null) =>
+    request<SavedScenario>(`/trade-map/scenarios/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ note }),
+    }).then((r) => r.data),
+  deleteScenario: (id: string) =>
+    request(`/trade-map/scenarios/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
+  suggestScenarioNote: (what: {
+    orderId: string;
+    kind: ScenarioKind;
+    target: string;
+  }) =>
+    request<ScenarioSuggestion>("/trade-map/scenarios/suggest", {
+      method: "POST",
+      body: JSON.stringify(what),
+    }).then((r) => r.data),
   // Analysis: every order when orderIds is omitted. Returns the finished run.
   startRun: (orderIds?: string[]) =>
     request<AnalysisRun>("/runs", {

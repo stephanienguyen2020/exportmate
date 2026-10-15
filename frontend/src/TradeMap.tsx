@@ -54,6 +54,7 @@ import {
 import { errorMessage } from "./auth";
 import { useImpacts, type Impact } from "../ai/news/NewsWatch";
 import { RegulationCitation } from "./Regulations";
+import ScenarioNotes from "./ScenarioNotes";
 import TradeMapGlobe, {
   type GlobePoint,
   type GlobeRoute,
@@ -808,6 +809,7 @@ function TradeMapView({
       onComparison={setComparisonResult}
       onClose={() => setScenario(null)}
       onOpenOrder={openOrder}
+      editable={editable}
     />
   ) : selection?.kind === "market" && marketByCode.has(selection.code) ? (
     <MarketPanel
@@ -3702,6 +3704,7 @@ function ScenarioPanel({
   onComparison,
   onClose,
   onOpenOrder,
+  editable,
 }: {
   rows: Row[];
   markets: MapMarket[];
@@ -3713,6 +3716,7 @@ function ScenarioPanel({
   ) => void;
   onClose: () => void;
   onOpenOrder: (id: string) => void;
+  editable: boolean;
 }) {
   const row = rows.find((r) => r.order.id === scenario.orderId) ?? rows[0];
   const [result, setResult] = useState<{
@@ -3986,6 +3990,20 @@ function ScenarioPanel({
           </p>
         </>
       )}
+      <ScenarioNotes
+        orderId={row.order.id}
+        kind={scenario.mode === "date" ? "ship_date" : scenario.mode}
+        target={scenario.target}
+        ready={!!comparison}
+        editable={editable}
+        onShow={(saved) =>
+          onChange({
+            orderId: saved.orderId,
+            mode: saved.kind === "ship_date" ? "date" : saved.kind,
+            target: saved.target,
+          })
+        }
+      />
       <button className="text-link" onClick={() => onOpenOrder(row.order.id)}>
         Open {row.order.id} <ArrowUpRight size={14} />
       </button>
