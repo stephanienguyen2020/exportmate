@@ -5,7 +5,7 @@ experiment "ExportMate assistant" where runs can be compared.
 Input: the JSON that `npm run eval:vertex` writes to eval/results/<session>.vertex.json. Each case
 is agent data (types.evals.AgentData): the instruction and tool declarations the model was given,
 earlier turns, every function call and response, the auditor's send-back and the final answer.
-Usage:  uv run --project eval/vertex python eval/vertex/vertex_eval.py eval/results/<session>.vertex.json
+Usage:  uv run --project platform python platform/evaluate.py eval/results/<session>.vertex.json
 
 Managed, Gemini-judged metrics with adaptive rubrics: final response quality, tool use quality,
 hallucination (claims not supported by the tool results) and safety. The runner's own checks

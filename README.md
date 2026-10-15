@@ -49,13 +49,15 @@ Verification (from `frontend/`): `npm run build`; `npx playwright install chromi
 
 How to use the assistant and News watch, and how they work: [docs/AI_GUIDE.md](docs/AI_GUIDE.md).
 
-The chat UI lives in [`frontend/ai/chat/`](frontend/ai/chat/), News watch in [`frontend/ai/news/`](frontend/ai/news/), and one Node service in [`ai/server/`](ai/server/) that serves every `/api/*` route.
+The chat UI lives in [`frontend/ai/chat/`](frontend/ai/chat/), News watch in [`frontend/ai/news/`](frontend/ai/news/), and one Node image in [`ai/server/`](ai/server/) that runs both the API on Cloud Run (every `/api/*` route) and the assistant's agents on Gemini Enterprise Agent Platform.
 
-- **Assistant (RAG agent):** a launcher at the bottom-right of every screen; `#/chat` is the full-screen view with the session's audit trail. Gemini on Vertex AI plans and calls tools in a loop ([`ai/server/agent.js`](ai/server/agent.js)): `search_knowledge` (vector search), `query_inventory` and `get_alerts` (exact Firestore lookups), `calculate` (arithmetic, so figures are traceable), `get_scan_status`, and the workspace's own `query_orders` and `get_playbook` (plus `get_company_profile` when signed in). Every fact is cited with a numbered source. Before an answer is returned, an auditor step checks that citations resolve to retrieved evidence, that figures appear in tool results, that cited news is dated and that links are retrieved sources; a failing draft goes back to the model once, and one that still fails is shown marked "Needs review". Each question goes to a small fast model or a bigger one by rules (`router.js`).
-- **Vector database:** Firestore vector search over `gemini-embedding-001` embeddings (768 dimensions, cosine), in the `kb` collection ([`ai/server/rag.js`](ai/server/rag.js)). Indexed: stock items, news articles, alerts, sources and help guides ([`ai/server/seed/guides.js`](ai/server/seed/guides.js)). Each scan indexes its new articles and alerts; `npm run index` rebuilds everything and removes stale entries.
+- **Assistant (ADK multi-agent team on Agent Platform):** a launcher at the bottom-right of every screen; `#/chat` is the full-screen view with the session's audit trail. The agents run on Agent Runtime ([`ai/server/runtime.js`](ai/server/runtime.js), [`ai/server/agents/`](ai/server/agents/)): a router sends each question to a quick-answer agent (small fast model, every read tool) or to an analyst (the bigger model), which delegates to stock, news, company and knowledge specialists and does the arithmetic. Every fact is cited with a numbered source. Before an answer is returned, an auditor checks that citations resolve to retrieved evidence and that figures appear in tool results; a failing draft goes back once, to the analyst.
+- **Search (RAG Engine):** Agent Platform RAG Engine, one corpus per document type (multilingual embeddings), filled from text files in Cloud Storage ([`ai/server/rag.js`](ai/server/rag.js)). Indexed: stock items, news articles, alerts, sources and help guides ([`ai/server/seed/guides.js`](ai/server/seed/guides.js)). Results another company may not see are dropped before any agent reads them, then reranked with BM25. Each scan indexes its new articles and alerts; `npm run index` rebuilds everything and removes stale entries.
+- **Sessions and memory:** each chat continues its own Agent Platform session, and Agent Platform Memory Bank remembers a signed-in user's preferences and what they work on (never personal details, 180 days, per user). Account › What the assistant remembers lists them and forgets any on request.
+- **Governance:** the agents run as their own Agent Identity with least-privilege roles; Agent Registry lists every endpoint they call; their traffic goes through Agent Gateway, which checks it against per-endpoint IAM egress policies and has Model Armor screen it for prompt injection (in observe mode until enforced).
 - **Audit trail:** each answer streams its steps live (NDJSON) and stores an audit record in `audits`: question, reasoning summaries, every tool call with arguments and retrieved evidence (with similarity scores), auditor findings, checks, citations, model, token usage and timing. Open "Audit" under any answer, or the side panel on `#/chat`, which reloads the session's records from Firestore. Records can be downloaded as JSON. `GET /api/audits?session=<id>` returns only that session's records.
 - **News watch** (`#/workspace/news`, plus a section on Overview): every day at 07:00 Asia/Ho_Chi_Minh, Cloud Scheduler calls `POST /api/scan`. The service reads the enabled RSS/Atom sources, skips articles it has already analysed, and asks Gemini which stock items each new article could affect. Alerts store severity, direction (risk/opportunity/watch), affected SKUs with reasons, stock value exposed, and a next step.
-- **Data:** Firestore (`asia-southeast1`) holds `inventory` (31 synthetic SKUs for a Vietnamese wood-products and furniture exporter), `sources`, `articles`, `impacts`, `scans`, `kb` (vector index) and `audits`. The industry was chosen because current news moves it: EUDR, US Section 232 timber/furniture tariffs, plywood trade cases. Stock is fictional; news is real.
+- **Data:** Firestore (`asia-southeast1`) holds `inventory` (31 synthetic SKUs for a Vietnamese wood-products and furniture exporter), `sources`, `articles`, `impacts`, `scans`, `rag_files` (search records), `chat_sessions`, `answer_cache` and `audits`. The industry was chosen because current news moves it: EUDR, US Section 232 timber/furniture tariffs, plywood trade cases. Stock is fictional; news is real.
 - **Sources:** seven built-in feeds (Timber Trades Journal, VnExpress International, European Commission press corner, four Google News searches). Signed-in company owners and editors can add any public HTTPS feed and switch sources on or off; sources are shared by every workspace, so the service checks the caller's role with the backend (`GET /api/v1/me`, which needs `BACKEND_URL` set on the service). The server tests a new feed first and blocks private/metadata addresses. The sample demo and viewer accounts see the sources read-only.
 
 ### Google Cloud resources
@@ -64,14 +66,18 @@ Everything runs in one project, `skilful-scarab-511320-q9`, defined in [`infra/t
 
 | Resource | Name |
 | --- | --- |
-| Cloud Run service | `exportmate-ai` (asia-southeast1), runs as `exportmate-ai@…` with `roles/aiplatform.user` and `roles/datastore.user` only |
+| Cloud Run service | `exportmate-ai` (asia-southeast1), the API in front of the agents; runs as `exportmate-ai@…` with `roles/aiplatform.user` and `roles/datastore.user` only |
+| Agent Runtime | `exportmate-agents` (asia-southeast1): the agents, the same image (`SERVE=runtime`), with Sessions and Memory Bank, created by `ai/server/platform/runtime.py`, running as its own Agent Identity |
+| RAG Engine | corpora `exportmate-kb-<type>` (asia-southeast1), imported from the `<project>-kb` bucket |
+| Govern | Agent Registry entries, IAM egress policies, Agent Gateway `exportmate-egress` with IAP and Model Armor policies ([`infra/agent-platform/govern.sh`](infra/agent-platform/govern.sh)) |
+| Evaluation | evaluation experiment "ExportMate assistant" on Agent Platform › Evaluation (us-central1) |
 | Cloud Run job | `exportmate-ai-task` (same image): seed, re-index, scan, eval, ops |
-| Firestore | `(default)` database, native mode, asia-southeast1; vector indexes on `kb.embedding` and `(kb.type, kb.embedding)` |
+| Firestore | `(default)` database, native mode, asia-southeast1 |
 | Cloud Scheduler | `exportmate-daily-news-scan`, OIDC-signed as `exportmate-scheduler@…` |
 | Cloud Build | images built as `exportmate-builder@…` into the `exportmate` Artifact Registry repo |
 | Agent Platform Evaluation | experiment "ExportMate assistant" (us-central1): golden-set runs scored by managed judges (`npm run eval:vertex`) |
 | Cloud Logging / Monitoring | JSON logs; log-based metrics `exportmate_ai/chat_answers`, `chat_latency`, `guard_withheld`, `scan_failures` |
-| Models | Assistant: `gemini-3.5-flash-lite` for simple questions and `gemini-4-argon` for complex ones (`GEMINI_MODEL_SIMPLE`, `GEMINI_MODEL_COMPLEX`); scans and the eval judge: `gemini-3.5-flash` (`GEMINI_MODEL`); embeddings: `gemini-embedding-001` (`EMBED_MODEL`); all via Vertex AI. These are the code defaults (`ai/server/models.js`); `GET /healthz` reports what the service runs |
+| Models | Assistant: `gemini-3.5-flash-lite` for simple questions and `gemini-4-argon` for complex ones (`GEMINI_MODEL_SIMPLE`, `GEMINI_MODEL_COMPLEX`); scans and the eval judge: `gemini-3.5-flash` (`GEMINI_MODEL`); search embeddings: `text-multilingual-embedding-002` (RAG Engine, `RAG_EMBED_MODEL`); all via Vertex AI. These are the code defaults (`ai/server/models.js`); `GET /healthz` reports what the service runs |
 
 `frontend/vercel.json` rewrites `/api/*` to the Cloud Run URL; locally `frontend/vite.config.ts` proxies `/api` to `127.0.0.1:8080`.
 
@@ -80,12 +86,13 @@ Everything runs in one project, `skilful-scarab-511320-q9`, defined in [`infra/t
 ```sh
 gcloud auth application-default login
 cd ai/server && npm install
-npm run seed   # load synthetic stock and default sources, then rebuild the vector index
+npm run seed   # load synthetic stock and default sources, then rebuild the search index
 npm run scan   # run one news scan now (add --lookback=14 to re-read two weeks)
-npm run index  # rebuild the vector index; `node rag.js "<query>"` runs a test search
+npm run index  # rebuild the RAG Engine index; `node rag.js "<query>"` runs a test search
 npm run dev    # API on :8080 (run `npm run dev` in frontend/ too)
-npm test       # harness unit tests; `npm run eval` runs the golden set against Gemini
-PROJECT_ID=skilful-scarab-511320-q9 ./deploy.sh   # build on Cloud Build, roll out the service and job
+npm test       # harness unit tests; `npm run eval` runs the golden set (`--engine`: against the deployed agents)
+npm run eval:vertex   # the same, plus an evaluation run on Agent Platform › Evaluation
+PROJECT_ID=skilful-scarab-511320-q9 ./deploy.sh   # build on Cloud Build, roll out the service, job and Agent Runtime
 ```
 
 The API is public for the prototype (max 3 instances). Chat is capped per hour at 40 questions per client and 200 per instance (`CHAT_LIMIT_PER_CLIENT`, `CHAT_LIMIT_PER_INSTANCE`). "Scan now" is limited to one scan per 10 minutes; the signed scheduler request skips that limit. Chat questions and answers are stored in `audits`. Alerts and answers are AI assessments of headlines and snippets, not legal advice. Signed-in orders and playbook rules live in the FastAPI backend, and the assistant reads them with the user's own token. Sample-demo records remain browser-local; the demo's orders and switched-on rules travel with each chat question so the assistant can read them.

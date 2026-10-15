@@ -3,8 +3,10 @@
 //        npm run eval -- --only=latest-scan,unknown-sku
 //        npm run eval -- --judge            also grade answers with an LLM judge
 //        npm run eval -- --tier=complex     every case on one model tier instead of the router's choice
+//        npm run eval -- --engine           ask the deployed agents on Agent Runtime (AGENT_RUNTIME) instead
+//                                           of running them in this process
 //        npm run eval -- --vertex           also create an evaluation run on Agent Platform (Gen AI evaluation:
-//                                           tool use, hallucination, response quality, safety; eval/vertex, needs uv)
+//                                           tool use, hallucination, response quality, safety; platform/evaluate.py, needs uv)
 // On GCP: gcloud run jobs execute exportmate-ai-task --args="node eval/run.js --judge" --wait
 // Each run is stored in the Firestore `eval_runs` collection and compared with the
 // previous run; it exits 1 if a case that passed now fails (a regression). Run it
@@ -16,9 +18,11 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { GoogleGenAI, Type } from "@google/genai";
 import { runAgent } from "../agent.js";
+import { runtime } from "../agents/platform.js";
+import { callRuntime } from "../agents/remote.js";
 import { demoMapOrders, demoPlaybook } from "../orders.js";
 import { PROJECT, db, inventory, list } from "../db.js";
-import { SCAN_MODEL, TIERS } from "../models.js";
+import { GEMINI_LOCATION, SCAN_MODEL, TIERS } from "../models.js";
 import { summarizeAudits } from "../metrics.js";
 import { POLICY_VERSION, RULES } from "../policy.js";
 import { goldenCases } from "./golden.js";
@@ -30,9 +34,11 @@ const only = arg("only")?.split(",").filter(Boolean);
 const useJudge = arg("judge") !== undefined;
 const tier = arg("tier") || undefined;
 const toVertex = arg("vertex") !== undefined;
+const onEngine = arg("engine") !== undefined;
+if (onEngine && !runtime) throw new Error("--engine needs AGENT_RUNTIME (the deployed instance)");
 if (tier && !TIERS[tier]) throw new Error(`--tier must be one of ${Object.keys(TIERS).join(", ")}`);
 const JUDGE_MODEL = process.env.JUDGE_MODEL || SCAN_MODEL;
-const ai = new GoogleGenAI({ vertexai: true, project: PROJECT, location: process.env.GOOGLE_CLOUD_LOCATION || "global" });
+const ai = new GoogleGenAI({ vertexai: true, project: PROJECT, location: GEMINI_LOCATION });
 
 const VERDICT = {
   type: Type.OBJECT,
@@ -67,34 +73,37 @@ ${testCase.rubric ? `RUBRIC: ${testCase.rubric}` : "RUBRIC: none (return rubric 
   return JSON.parse(res.text || "{}");
 }
 
-// One golden case as Agent Platform agent data (types.evals.AgentData): the agent's config and the
-// conversation as ADK-style events, rebuilt from the audit steps and the tool results.
-const AGENT = "exportmate_assistant";
+// One golden case as Agent Platform agent data (types.evals.AgentData): every agent's config and
+// the conversation as ADK-style events, each attributed to the agent that made it, rebuilt from the
+// audit steps, the tool results and the specialists' reports.
 const text = (role, author, t) => ({ author, content: { role, parts: [{ text: t }] } });
 function vertexCase(c, r, s) {
   const outputs = [...r.trace.toolResults];
+  const reports = [...r.trace.reports];
+  const answering = r.route.agent;
   const turns = [];
   const history = c.messages.slice(0, -1);
   for (let i = 0; i < history.length; i += 2)
-    turns.push({ turn_index: turns.length, events: history.slice(i, i + 2).map((m) => (m.role === "user" ? text("user", "user", m.text) : text("model", AGENT, m.text))) });
+    turns.push({ turn_index: turns.length, events: history.slice(i, i + 2).map((m) => (m.role === "user" ? text("user", "user", m.text) : text("model", answering, m.text))) });
   const events = [text("user", "user", c.messages.at(-1).text)];
   for (const step of r.steps) {
+    const author = step.agent || answering;
     if (step.kind === "plan")
-      events.push({ author: AGENT, content: { role: "model", parts: [...(step.note ? [{ text: step.note }] : []), ...step.calls.map((x) => ({ function_call: { name: x.name, args: x.args } }))] } });
-    else if (step.kind === "tool") events.push({ author: AGENT, content: { role: "user", parts: [{ function_response: { name: step.name, response: outputs.shift() } }] } });
-    else if (step.kind === "draft") events.push(text("model", AGENT, step.excerpt));
+      events.push({ author, content: { role: "model", parts: [...(step.note ? [{ text: step.note }] : []), ...step.calls.map((x) => ({ function_call: { name: x.name, args: x.args } }))] } });
+    else if (step.kind === "tool") events.push({ author, content: { role: "user", parts: [{ function_response: { name: step.name, response: outputs.shift() } }] } });
+    else if (step.kind === "delegate") {
+      const { report } = reports.shift();
+      events.push({ author: "analyst", content: { role: "user", parts: [{ function_response: { name: step.agent, response: typeof report === "string" ? { result: report } : report } }] } });
+    } else if (step.kind === "draft") events.push(text("model", author, step.excerpt));
     else if (step.kind === "review") events.push(text("user", "auditor", `Auditor review of your draft: ${step.problems.join(" ")}`));
   }
-  if (r.answer) events.push(text("model", AGENT, r.answer));
+  if (r.answer) events.push(text("model", r.route.answeredBy || answering, r.answer));
   turns.push({ turn_index: turns.length, events });
   return {
     id: c.id,
     category: c.category,
     prompt: c.messages.at(-1).text,
-    agent_data: {
-      agents: { [AGENT]: { agent_id: AGENT, agent_type: "LlmAgent", description: "ExportMate trade-compliance assistant", instruction: r.trace.instruction, tools: [{ function_declarations: r.trace.tools }] } },
-      turns,
-    },
+    agent_data: { agents: r.trace.agents, turns },
     golden_pass: s.pass,
     auditor_pass: r.status === "ok" && r.checks.every((x) => x.ok),
     tier: r.route.tier,
@@ -103,24 +112,31 @@ function vertexCase(c, r, s) {
   };
 }
 
+const delegations = (r) => {
+  const used = [...new Set(r.steps.filter((x) => x.kind === "delegate").map((x) => x.agent.replace("_specialist", "")))];
+  return used.length ? ` (${used.join(", ")})` : "";
+};
+
 const items = await list(inventory);
 const cases = goldenCases(items, { rules: RULES }).filter((c) => !only || only.includes(c.id));
 const sessionId = `eval-${Date.now().toString(36)}`;
-console.log(`Eval ${sessionId}: ${cases.length} cases, policy ${POLICY_VERSION}${tier ? `, all on ${tier} (${TIERS[tier].model})` : ""}${useJudge ? `, judge ${JUDGE_MODEL}` : ""}`);
+console.log(`Eval ${sessionId}${onEngine ? ` on ${runtime.name}` : ""}: ${cases.length} cases, policy ${POLICY_VERSION}${tier ? `, all on ${tier} (${TIERS[tier].model})` : ""}${useJudge ? `, judge ${JUDGE_MODEL}` : ""}`);
 
 const scored = [];
 const results = [];
 for (const c of cases) {
   // A demo case's orders and playbook go through the same checks as a demo chat's (index.js).
   const demo = c.demo ? { orders: demoMapOrders(c.demo.orders), playbook: demoPlaybook(c.demo.rules) } : null;
-  const result = await runAgent({ messages: c.messages, sessionId, channel: "eval", withEvidence: true, tier, demo });
+  const result = onEngine
+    ? (await callRuntime("query", { messages: c.messages, sessionId, channel: "eval", tier, demo })).result
+    : await runAgent({ messages: c.messages, sessionId, channel: "eval", withEvidence: true, tier, demo });
   const verdict = useJudge ? await judge(c, result).catch((e) => ({ faithfulness: null, relevance: null, reason: `judge failed: ${e.message}` })) : null;
   const s = scoreCase(c, result, verdict);
   results.push(result);
   scored.push(s);
   const failed = s.checks.filter((x) => !x.ok);
   console.log(
-    `${s.pass ? "PASS" : "FAIL"} ${c.id.padEnd(24)} ${(s.metrics.latencyMs / 1000).toFixed(1)}s ${s.metrics.toolCalls} tools, ${result.route.tier}${result.route.escalated ? "→complex" : ""}${s.metrics.revised ? ", revised" : ""}` +
+    `${s.pass ? "PASS" : "FAIL"} ${c.id.padEnd(24)} ${(s.metrics.latencyMs / 1000).toFixed(1)}s ${s.metrics.toolCalls} tools, ${result.route.agent}${result.route.escalated ? "→analyst" : ""}${delegations(result)}${s.metrics.revised ? ", revised" : ""}` +
       (failed.length ? `\n     ${failed.map((x) => `${x.name}: ${x.detail}`).join("\n     ")}` : ""),
   );
 }
@@ -153,7 +169,7 @@ if (previous) {
 }
 console.log(`Saved eval_runs/${saved.id} in Firestore (${PROJECT})`);
 
-// Hands the run to eval/vertex/vertex_eval.py, which creates an evaluation run on Agent Platform:
+// Hands the run to platform/evaluate.py, which creates an evaluation run on Agent Platform:
 // every case as agent data (the instruction and tools the model had, earlier turns, each function
 // call and response, the auditor's send-back and the answer) plus this runner's own scores.
 if (toVertex) {
@@ -162,7 +178,8 @@ if (toVertex) {
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, JSON.stringify({ run: { sessionId, firestoreRun: saved.id, policyVersion: POLICY_VERSION, tier: tier || "routed" }, cases: cases.map((c, n) => vertexCase(c, results[n], scored[n])) }));
   console.log(`\nCreating an Agent Platform evaluation run (${file})`);
-  const py = spawnSync("uv", ["run", "--project", join(here, "vertex"), "python", join(here, "vertex", "vertex_eval.py"), file], { stdio: "inherit" });
+  const platform = join(here, "..", "platform");
+  const py = spawnSync("uv", ["run", "--project", platform, "python", join(platform, "evaluate.py"), file], { stdio: "inherit" });
   if (py.error || py.status !== 0) console.error(`Agent Platform evaluation failed${py.error ? `: ${py.error.message}` : ""}; the export is in ${file}`);
 }
 process.exit(diff.regressions.length ? 1 : 0);

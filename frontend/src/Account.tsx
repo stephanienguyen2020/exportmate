@@ -37,6 +37,7 @@ import {
 import "./account.css";
 import { api, cacheAccount, type Account, type ReceivedInvite } from "./api";
 import { clearChat } from "../ai/chat/Chat";
+import { AssistantMemories } from "../ai/chat/Memories";
 import {
   signIn,
   signUp,
@@ -518,6 +519,7 @@ export function AccountSettings({
           <span role="status">{saved}</span>
         </div>
       </form>
+      {live && account?.company && <AssistantMemories />}
     </section>
   );
 }
