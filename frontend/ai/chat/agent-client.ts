@@ -233,8 +233,13 @@ export function downloadJson(filename: string, value: unknown) {
 // What Memory Bank remembers about the signed-in company user (Account page).
 export type Memory = { id: string; fact: string; updatedAt?: string };
 
-export async function listMemories(): Promise<{ memories: Memory[]; enabled: boolean }> {
+// keepDays: how long Memory Bank keeps a memory, from the Agent Runtime instance (null if unknown).
+export type MemoryList = { memories: Memory[]; enabled: boolean; keepDays?: number | null };
+
+export async function listMemories(): Promise<MemoryList> {
   const res = await fetch(`${API}/memories`, { headers: await companyAuth() });
+  // An AI service from before Memory Bank has no such route: memory isn't on there.
+  if (res.status === 404) return { memories: [], enabled: false };
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || "Couldn't load what the assistant remembers.");
   return data;

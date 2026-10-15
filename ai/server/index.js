@@ -10,7 +10,7 @@ import { indexDocs, removeDocs, toDoc } from "./rag.js";
 import { log } from "./log.js";
 import { ANONYMOUS, auditVisible, isShared, presentSources, publicAudit, publicStep, sourceVisible, visibleItems } from "./access.js";
 import { readJson, scanBlocked } from "./limits.js";
-import { deleteMemory, listMemories, remembers, userKeyFor } from "./agents/platform.js";
+import { deleteMemory, listMemories, memoryKeepDays, remembers, userKeyFor } from "./agents/platform.js";
 import { AGENTS_AT, callAgents, streamTurn } from "./agents/remote.js";
 import { demoMapOrders, demoPlaybook } from "./orders.js";
 import { SCAN_MODEL, TIERS } from "./models.js";
@@ -428,7 +428,14 @@ async function memoryRoute(method, path, req) {
   const userKey = userKeyFor({ company: { company: account.company }, user: account.user });
   if (!remembers(userKey)) return [200, { memories: [], enabled: false }];
   if (method === "GET" && path === "/api/memories")
-    return [200, { memories: AGENTS_AT ? (await callAgents("list_memories", { userKey })).memories : await listMemories(userKey), enabled: true }];
+    return [
+      200,
+      {
+        memories: AGENTS_AT ? (await callAgents("list_memories", { userKey })).memories : await listMemories(userKey),
+        enabled: true,
+        keepDays: await memoryKeepDays(),
+      },
+    ];
   const m = path.match(/^\/api\/memories\/(\d{1,30})$/);
   if (method === "DELETE" && m) {
     const deleted = AGENTS_AT ? (await callAgents("delete_memory", { userKey, id: m[1] })).deleted : await deleteMemory(userKey, m[1]);

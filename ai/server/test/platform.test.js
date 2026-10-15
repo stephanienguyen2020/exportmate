@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { remembers, userKeyFor } from "../agents/platform.js";
+import { keepDaysOf, memoryKeepDays, remembers, userKeyFor } from "../agents/platform.js";
 import { system } from "../agents/instructions.js";
 import { answerKey } from "../answer-cache.js";
 
@@ -16,6 +16,13 @@ test("a company user's chats run as that user; the demo runs as its browser sess
 test("nothing is remembered without an Agent Runtime, and never for the demo", () => {
   assert.equal(remembers("co-1:u-7"), false); // AGENT_RUNTIME is unset in tests
   assert.equal(remembers("demo:s-1"), false);
+});
+
+test("how long memories are kept comes from the instance's Memory Bank TTL", async () => {
+  assert.equal(keepDaysOf({ contextSpec: { memoryBankConfig: { ttlConfig: { defaultTtl: "15552000s" } } } }), 180);
+  assert.equal(keepDaysOf({ contextSpec: { memoryBankConfig: {} } }), null);
+  assert.equal(keepDaysOf(undefined), null);
+  assert.equal(await memoryKeepDays(), null); // no Agent Runtime in tests, so nothing to read
 });
 
 test("remembered preferences reach the prompt as data, only when there are some", () => {

@@ -59,6 +59,28 @@ async function memoryApi(method, path, data) {
 }
 const scopeOf = (userKey) => ({ app_name: APP, user_id: userKey });
 
+// How many days Memory Bank keeps a memory: the instance's default TTL, which platform/runtime.py
+// sets. Read once per process; null when there is no instance or it can't be read.
+let keepDays;
+export function memoryKeepDays() {
+  if (!runtime) return Promise.resolve(null);
+  keepDays ??= auth
+    .getClient()
+    .then((client) => client.request({ url: `https://${runtime.location}-aiplatform.googleapis.com/v1beta1/${runtime.name}` }))
+    .then(({ data }) => keepDaysOf(data))
+    .catch(() => {
+      keepDays = undefined;
+      return null;
+    });
+  return keepDays;
+}
+
+/** Days from a reasoning engine's contextSpec.memoryBankConfig.ttlConfig.defaultTtl ("15552000s"). */
+export function keepDaysOf(engine) {
+  const seconds = parseInt(engine?.contextSpec?.memoryBankConfig?.ttlConfig?.defaultTtl, 10);
+  return Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds / 86400) : null;
+}
+
 /** Everything Memory Bank remembers about one user, newest first. */
 export async function listMemories(userKey) {
   if (!remembers(userKey)) return [];

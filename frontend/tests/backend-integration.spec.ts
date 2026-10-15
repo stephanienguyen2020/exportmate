@@ -1319,17 +1319,29 @@ test("a company user sees what the assistant remembers and can make it forget", 
       memories = memories.filter((m) => !path.endsWith(`/${m.id}`));
       return route.fulfill({ json: { ok: true } });
     }
-    return route.fulfill({ json: { memories, enabled: true } });
+    return route.fulfill({ json: { memories, enabled: true, keepDays: 180 } });
   });
   await login(page);
   await page.goto("/#/workspace/account");
   const panel = page.getByRole("region", { name: "What the assistant remembers" });
   await expect(panel.getByText("I mainly sell plywood to the UK.")).toBeVisible();
+  await expect(panel).toContainText("what you work on, for 180 days, so it doesn't have to ask again");
   await panel.getByRole("button", { name: "Forget: Keep answers to short bullet points." }).click();
   await expect(panel.getByText("Forgotten.")).toBeVisible();
   await expect(panel.getByText("Keep answers to short bullet points.")).toHaveCount(0);
   expect(calls.find((c) => c.method === "DELETE")?.path).toBe("/api/memories/102");
   expect(calls.every((c) => c.auth?.startsWith("Bearer "))).toBe(true);
+});
+
+test("an AI service without Memory Bank shows memory as switched off, not an error", async ({ page }) => {
+  await fixture(page);
+  await page.route("**/api/memories**", (route) => route.fulfill({ status: 404, json: { error: "Not found" } }));
+  await login(page);
+  await page.goto("/#/workspace/account");
+  const panel = page.getByRole("region", { name: "What the assistant remembers" });
+  await expect(panel.getByText("Memory isn't switched on for this workspace yet.")).toBeVisible();
+  await expect(panel).toContainText("what you work on, so it doesn't have to ask again");
+  await expect(panel.getByText("Not found")).toHaveCount(0);
 });
 
 test("analyses every order from the Orders page and shows each step", async ({ page }) => {
