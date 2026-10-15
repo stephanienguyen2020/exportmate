@@ -146,6 +146,7 @@ class ReportSummaryOut(CamelCaseModel):
     order_status: OrderStatus
     blocked: bool
     cost_totals: dict[str, int]
+    missing_data: list[str]  # why the order needs data, empty when it doesn't
 
 
 class RunStepOut(CamelCaseModel):

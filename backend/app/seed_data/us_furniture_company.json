@@ -137,7 +137,7 @@
     { "id": "PO-3106", "product": "Okoume-faced hardwood plywood · 18 mm", "supplier": "Kon Tum Veneer Mill", "destination": "Norfolk, US", "value": 29900, "shipDate": "2026-11-18", "hsCode": "4412.33", "status": "exposed" },
     { "id": "PO-3107", "product": "Rubberwood bed frame · queen", "supplier": "Tan Uyen Rubberwood", "destination": "New York, US", "value": 44700, "shipDate": "2026-11-20", "hsCode": "9403.50", "status": "clear" },
     { "id": "PO-3108", "product": "FSC acacia chaise lounger", "supplier": "Phu Cat Acacia", "destination": "Charleston, US", "value": 24300, "shipDate": "2026-11-25", "hsCode": "9401.69", "status": "clear" },
-    { "id": "PO-3109", "product": "Rattan-wrapped accent chair", "supplier": "Hiep Phuoc Rattan", "destination": "Oakland, US", "value": 18750, "shipDate": "2026-12-02", "hsCode": "9401.59", "status": "needs_data" },
+    { "id": "PO-3109", "product": "Rattan-wrapped accent chair", "supplier": "Hiep Phuoc Rattan", "destination": "Oakland, US", "value": 18750, "shipDate": "2026-12-02", "hsCode": "9401.59", "status": "exposed" },
     { "id": "PO-3110", "product": "Two-seat upholstered sofa", "supplier": "Bien Hoa Upholstery Works", "destination": "Seattle, US", "value": 47900, "shipDate": "2026-12-09", "hsCode": "9401.61", "status": "exposed" },
     { "id": "PO-3111", "product": "Rubberwood sideboard", "supplier": "Tan Uyen Rubberwood", "destination": "Charleston, US", "value": 31600, "shipDate": "2026-12-11", "hsCode": "9403.60", "status": "clear" },
     { "id": "PO-3112", "product": "Kitchen cabinet set · white oak doors", "supplier": "Long An Panel Co.", "destination": "Houston, US", "value": 63200, "shipDate": "2026-12-29", "hsCode": "9403.40", "status": "exposed" },

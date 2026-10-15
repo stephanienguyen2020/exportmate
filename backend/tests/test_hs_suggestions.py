@@ -109,7 +109,7 @@ def test_accepting_a_suggestion_sets_the_code_and_reanalyses_the_order(client, l
     data = accepted.json()["data"]
     assert data["order"]["hsCode"] == "9403.40"
     assert data["run"]["orderCount"] == 1
-    assert data["run"]["reports"][0]["orderStatus"] != "needs_data"
+    assert data["run"]["reports"][0]["missingData"] == []
 
     path = "/api/v1/orders/PO-2/hs-suggestions"
     decided = {c["hsCode"]: c["status"] for c in client.get(path, headers=lan).json()["data"]}
@@ -119,8 +119,8 @@ def test_accepting_a_suggestion_sets_the_code_and_reanalyses_the_order(client, l
     assert client.get(path, headers=other).status_code == 404
 
 
-def test_orders_without_a_code_need_data(client, lan):
+def test_orders_without_a_code_need_action_to_add_it(client, lan):
     run = client.post("/api/v1/runs", headers=lan, json={"orderIds": ["PO-3"]}).json()["data"]
     report = client.get(f"/api/v1/reports/{run['reports'][0]['id']}", headers=lan).json()["data"]
-    assert report["orderStatus"] == "needs_data"
+    assert report["orderStatus"] == "exposed"
     assert report["missingData"][0].startswith("Add the HS code, or ask for a suggested one")

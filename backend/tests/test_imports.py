@@ -20,9 +20,13 @@ def test_upload_validates_and_previews(client):
     assert client.get("/api/v1/orders", headers=headers).json()["meta"]["total"] == 0
 
 
-def test_commit_creates_orders_awaiting_analysis(client):
+def test_commit_keeps_the_orders_when_their_analysis_fails(client):
+    # No reference data or cost settings are seeded here, so the analysis run fails.
     headers = onboard(client, "lan@example.com")
-    uploaded = import_orders(client, headers)
+    uploaded = upload_csv(client, headers, VALID_CSV).json()["data"]
+    committed = client.post(f"/api/v1/imports/{uploaded['id']}/commit", headers=headers)
+    assert committed.status_code == 200, committed.text
+    assert committed.json()["data"]["run"] is None
 
     orders = client.get("/api/v1/orders", headers=headers).json()["data"]
     assert {o["status"] for o in orders} == {"awaiting_analysis"}

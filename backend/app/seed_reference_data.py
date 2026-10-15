@@ -123,6 +123,7 @@ def seed_order_statuses(db: Session) -> int:
                 "description": s["description"],
                 "tone": s["tone"],
                 "manual": s["manual"],
+                "retired": s.get("retired", False),
                 "sort_order": i,
             }
             for i, s in enumerate(statuses)

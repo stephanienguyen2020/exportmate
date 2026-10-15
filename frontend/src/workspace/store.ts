@@ -18,6 +18,7 @@ import {
   cacheAccount,
   ApiError,
   type Account,
+  type AnalysisRun,
   type Overview,
   type OrderStatusOption,
   type RuleFields,
@@ -52,10 +53,11 @@ type Source = {
   updateRule(id: string, change: RuleChecks): Promise<Rule>;
   deleteRule(id: string): Promise<void>;
   checkImport(file: File, existingIds: Set<string>): Promise<CheckedImport>;
-  // The demo returns the orders to add; the backend saves them itself.
+  // The demo returns the orders to add; the backend saves them itself and analyses them
+  // (`run`, null when that analysis failed).
   commitImport(
     checked: CheckedImport,
-  ): Promise<{ created: number; added: Order[] | null }>;
+  ): Promise<{ created: number; added: Order[] | null; run: AnalysisRun | null }>;
 };
 
 const apiSource: Source = {
@@ -84,7 +86,7 @@ const apiSource: Source = {
   },
   async commitImport(checked) {
     const result = await api.commit(checked.id!);
-    return { created: result.ordersCreated, added: null };
+    return { created: result.ordersCreated, added: null, run: result.run };
   },
 };
 
@@ -139,6 +141,7 @@ const demoSource: Source = {
   commitImport: async (checked) => ({
     created: checked.preview.length,
     added: checked.preview.map(withSampleRisk),
+    run: null,
   }),
 };
 
@@ -205,6 +208,8 @@ export function useWorkspace(notify: Notify) {
   const [ruleFields, setRuleFields] = useState<RuleFields | null>(null);
   // Signed in: each status's label, colour and whether it may be set by hand, from the database.
   const [statusOptions, setStatusOptions] = useState<OrderStatusOption[]>([]);
+  // The analysis the last import ran, shown on the Orders page.
+  const [importRun, setImportRun] = useState<AnalysisRun | null>(null);
   const [loading, setLoading] = useState(live);
   const [loadError, setLoadError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -317,6 +322,7 @@ export function useWorkspace(notify: Notify) {
     isPending,
     statusOptions,
     statusOption,
+    importRun,
     // The filter that lists exposed orders, named as the database names it when signed in.
     actionFilter: statusOption("exposed")?.label || "Action needed",
     exposed: orders.filter((o) => o.risk),
@@ -364,6 +370,7 @@ export function useWorkspace(notify: Notify) {
     async commitImport(checked: CheckedImport) {
       const result = await source.commitImport(checked);
       const { added } = result;
+      setImportRun(result.run);
       if (added) setOrders((v) => [...v, ...added]);
       else await refresh();
       return result;

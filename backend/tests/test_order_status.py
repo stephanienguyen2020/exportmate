@@ -59,6 +59,10 @@ def test_statuses_come_from_the_database(client, lan):
     assert [(s["code"], s["label"], s["tone"]) for s in response.json()["data"]] == [
         (s["code"], s["label"], s["tone"]) for s in seeded
     ]
+    # Needs data is retired: still named for earlier changes, never set by hand.
+    retired = [s for s in response.json()["data"] if s["retired"]]
+    assert [(s["code"], s["manual"]) for s in retired] == [("needs_data", False)]
+    assert change(client, lan, "needs_data").status_code == 422
     with open_session() as db:
         db.execute(
             update(OrderStatusDefinition)
@@ -163,7 +167,7 @@ def test_an_analysis_after_a_manual_change_is_recorded_too(client):
     assert run.status_code == 201, run.text
     detail = client.get("/api/v1/orders/PO-1", headers=headers).json()["data"]
     assert detail["order"]["status"] == "exposed"
-    latest, manual = detail["statusChanges"]
+    latest, manual, on_import = detail["statusChanges"]
     assert (latest["source"], latest["fromStatus"], latest["toStatus"]) == (
         "analysis",
         "clear",
@@ -172,11 +176,12 @@ def test_an_analysis_after_a_manual_change_is_recorded_too(client):
     assert latest["runId"] == run.json()["data"]["id"]
     assert latest["note"] is None
     assert manual["source"] == "manual"
+    assert (on_import["source"], on_import["fromStatus"]) == ("analysis", "awaiting_analysis")
 
     # A second run that doesn't change the status adds nothing.
     assert client.post("/api/v1/runs", headers=headers).status_code == 201
     detail = client.get("/api/v1/orders/PO-1", headers=headers).json()["data"]
-    assert len(detail["statusChanges"]) == 2
+    assert len(detail["statusChanges"]) == 3
 
 
 def change_many(client, headers, ids, status, note="Buyer confirmed the documents by email."):
@@ -198,7 +203,7 @@ def lan3(client) -> dict:
 
 
 def test_several_orders_change_together_each_with_its_history_and_audit(client, lan3):
-    assert change(client, lan3, "needs_data").status_code == 200  # PO-1, before
+    assert change(client, lan3, "exposed").status_code == 200  # PO-1, before
     # A repeated id counts once.
     response = change_many(
         client, lan3, ["PO-3", "PO-1", "PO-3", "PO-2"], "clear", "  Buyer sent it.  "
@@ -209,7 +214,7 @@ def test_several_orders_change_together_each_with_its_history_and_audit(client, 
     assert {o["status"] for o in data["changed"]} == {"clear"}
     assert data["unchanged"] == []
 
-    for order_id, before in (("PO-1", "needs_data"), ("PO-2", "awaiting_analysis")):
+    for order_id, before in (("PO-1", "exposed"), ("PO-2", "awaiting_analysis")):
         detail = client.get(f"/api/v1/orders/{order_id}", headers=lan3).json()["data"]
         latest = detail["statusChanges"][0]
         assert (latest["fromStatus"], latest["toStatus"], latest["note"], latest["source"]) == (
