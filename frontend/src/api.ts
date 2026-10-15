@@ -471,6 +471,23 @@ export type RequirementCheck = {
   status: CheckStatus;
   note: string;
 };
+// A checklist line that takes effect or changes soon in a market the company ships to.
+export type ChecklistChange = {
+  on: string;
+  kind: "effective" | "changes";
+  market: string;
+  marketName: string;
+  requirementKey: string;
+  title: string;
+  whatChanges: string;
+  orderIds: string[]; // open orders to that market shipping on or after `on`
+  source: RequirementSource;
+};
+export type ChecklistChanges = {
+  start: string;
+  until: string;
+  changes: ChecklistChange[];
+};
 export type MapOrder = {
   order: ApiOrder;
   placement: {
@@ -968,6 +985,10 @@ export const api = {
   },
   tradeMap: (signal?: AbortSignal) =>
     request<TradeMap>("/trade-map", { signal }).then((r) => r.data),
+  checklistChanges: (days: number, signal?: AbortSignal) =>
+    request<ChecklistChanges>(`/trade-map/changes?days=${days}`, {
+      signal,
+    }).then((r) => r.data),
   createSupplier: (supplier: SupplierInput) =>
     request<SupplierRecord>("/suppliers", {
       method: "POST",

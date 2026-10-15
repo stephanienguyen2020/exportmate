@@ -16,6 +16,7 @@ from app.schemas.reports import ReportContent
 from app.seed_reference_data import seed_reference_data
 from app.services import news_matches as news_service
 from app.services import reports as report_service
+from app.services import trade_map as trade_map_service
 
 TODAY = date(2026, 10, 15)
 # PO-6 ships after the US Section 232 change on 1 Jan 2027; PO-2 ships before it.
@@ -64,6 +65,7 @@ def fixed_world(monkeypatch: pytest.MonkeyPatch) -> dict:
         return calls["news"]
 
     monkeypatch.setattr(report_service, "today_utc", lambda: TODAY)
+    monkeypatch.setattr(trade_map_service, "today_utc", lambda: TODAY)
     monkeypatch.setattr(report_service, "fetch_news_alerts", fake_news)
     report_api.report_email_limiter._hits.clear()
     return calls
@@ -133,6 +135,26 @@ def test_order_report_lists_checks_sources_and_csv_row(client, lan):
     assert preview.headers["content-disposition"].startswith("inline;")
     saved = client.get(f"/api/v1/report-drafts/{report['id']}/pdf?download=true", headers=lan)
     assert saved.headers["content-disposition"].startswith("attachment;")
+
+
+def test_rule_watch_lists_checklist_changes_with_the_orders_they_reach(client, lan):
+    response = client.get("/api/v1/trade-map/changes?days=90", headers=lan)
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assert data["start"] == "2026-10-15" and data["until"] == "2027-01-13"
+    tariff = next(c for c in data["changes"] if c["requirementKey"] == "tariff")
+    assert tariff["on"] == "2027-01-01" and tariff["kind"] == "changes"
+    assert tariff["market"] == "US" and tariff["orderIds"] == ["PO-6"]
+    assert tariff["source"]["documentId"] and tariff["source"]["quote"]
+    # The same lines as the company report's "changes" section.
+    report = create(client, lan, kind="company", days=90)
+    assert {
+        f"change-{c['market']}-{c['requirementKey']}-{c['kind']}" for c in data["changes"]
+    } == set(rows(report["content"], "changes"))
+
+    shorter = client.get("/api/v1/trade-map/changes?days=30", headers=lan).json()["data"]
+    assert all(c["on"] <= "2026-11-14" for c in shorter["changes"])
+    assert client.get("/api/v1/trade-map/changes?days=0", headers=lan).status_code == 422
 
 
 def test_company_report_covers_what_is_happening_and_what_it_affects(client, lan, fixed_world):

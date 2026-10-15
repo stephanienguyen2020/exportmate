@@ -890,9 +890,58 @@ test("rule watch shows the company's own requirements, not the sample scenario",
   page,
 }) => {
   await fixture(page);
+  await page.route("**/api/v1/trade-map/changes?days=90", (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          start: "2026-10-15",
+          until: "2027-01-13",
+          changes: [
+            {
+              on: "2026-12-30",
+              kind: "effective",
+              market: "EU",
+              marketName: "European Union",
+              requirementKey: "dds",
+              title: "Due-diligence statement reference",
+              whatChanges: "Takes effect. Large operators file a statement per shipment.",
+              orderIds: ["SERVER-1"],
+              source: {
+                regulationId: "reg-2",
+                regulationTitle: "Timber due diligence",
+                officialId: null,
+                documentId: "doc-2",
+                documentTitle: "Guidance",
+                versionNumber: 2,
+                sourceUrl: null,
+                quote: "Operators shall file…",
+              },
+            },
+          ],
+        },
+      },
+    }),
+  );
   await login(page);
   await expect(page.getByText("CONNECTED WORKSPACE")).toBeVisible();
   await page.goto("/#/workspace/rules");
+  // One sidebar item for news, rules, regulations and the playbook; a tab per page.
+  await expect(page.locator(".nav-item.active")).toHaveText("Rules & news");
+  const tabs = page.getByRole("navigation", { name: "Rules & news" });
+  await expect(tabs.getByRole("link", { name: "Rule watch" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  await expect(page.getByRole("heading", { name: "Coming up." })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Due-diligence statement reference" }),
+  ).toBeVisible();
+  await expect(page.getByText("1 open order affected")).toBeVisible();
+  await expect(page.getByText("Takes effect on 30 Dec 2026 · European Union")).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: /Timber due diligence, version 2/ }),
+  ).toHaveAttribute("href", "#/workspace/regulations/documents/doc-2");
+  await expect(page.getByRole("button", { name: "SERVER-1", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Plot-level geolocation" })).toBeVisible();
   await expect(page.getByText("1 of 1 orders have a gap")).toBeVisible();
   await expect(
@@ -900,6 +949,9 @@ test("rule watch shows the company's own requirements, not the sample scenario",
   ).toHaveAttribute("href", "#/workspace/regulations/documents/doc-1");
   await expect(page.getByText("Geolocation documentation for EU-bound wood")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Run rule-change demo" })).toHaveCount(0);
+  await tabs.getByRole("link", { name: "Playbook" }).click();
+  await expect(page).toHaveURL(/#\/workspace\/playbook$/);
+  await expect(page.locator(".nav-item.active")).toHaveText("Rules & news");
 });
 
 test("prepares an order report, edits it, previews the PDF and emails it once", async ({

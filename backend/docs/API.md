@@ -69,6 +69,7 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
 | **Trade map, suppliers and sites** | | |
 | `GET /trade-map` | viewer | Trade map; `ai/server` chat (`query_orders`) |
 | `GET /trade-map/compare` | viewer | Trade map: "What if" panel |
+| `GET /trade-map/changes` | viewer | Rules & news › Rule watch: "Coming up" |
 | `GET /trade-map/scenarios` | viewer | Trade map: "What if" panel, "Saved what-ifs" |
 | `POST /trade-map/scenarios` | editor | Trade map: "What if" panel, "Save what-if" / "Update" |
 | `POST /trade-map/scenarios/suggest` | editor | Trade map: "What if" panel, "Suggest a note with AI" |
@@ -422,6 +423,15 @@ A what-if from the compare panel kept on record with a note: a proposal, not a c
   "note": "A stop in Singapore …\n\nNext steps:\n- …\n\nTo ask:\n- …"}}
 ```
 
+### `GET /trade-map/changes` (viewer)
+`?days=90` (1–365, default 90). Checklist lines in force in the markets of the company's open orders (ship date today or later) that take effect (`effectiveOn`) or change (`changesOn`) between today and `until`, oldest first, each with the open orders to that market and HS prefix that ship on or after that day.
+```json
+{"data": {"start": "2026-10-15", "until": "2027-01-13",
+  "changes": [{"on": "2027-01-01", "kind": "changes", "market": "US", "marketName": "United States",
+    "requirementKey": "tariff", "title": "…", "whatChanges": "…", "orderIds": ["PO-6"],
+    "source": {"documentId": "…", "quote": "…"}}]}}
+```
+The company report's "Checklist changes coming up" section is built from the same list (`trade_map.list_checklist_changes`). `422` for `days` outside 1–365.
 
 ### Suppliers and sites (editor)
 Editors enter them in the map's side panel; viewers don't see the controls. The location comes from a click on the 2D map (which also suggests the country) or from typed `latitude, longitude`. After a save or delete the page reloads `GET /trade-map`, so order checks and flood proximity are recomputed. Each change writes an audit event (`supplier.created|updated|deleted`, `company_site.created|updated|deleted`).

@@ -33,7 +33,6 @@ import {
   Trash2,
   UserRound,
   LogOut,
-  Newspaper,
   Map as MapIcon,
   ClipboardList,
   CircleHelp,
@@ -105,18 +104,29 @@ const RunPanel = lazy(() =>
 const CompanySettings = lazy(() => import("./CompanySettings"));
 const TradeMapPage = lazy(() => import("./TradeMap"));
 const ReportsPage = lazy(() => import("./Reports"));
-const nav = [
-  ["", "Overview"],
-  ["orders", "Orders"],
-  ["map", "Trade map"],
+// The pages of the "Rules & news" tab. Each keeps its own route, so deep links still work.
+const ruleTabs: [string, string][] = [
   ["news", "News watch"],
   ["rules", "Rule watch"],
   ["regulations", "Regulations"],
+  ["playbook", "Playbook"],
+];
+const nav: [string, string][] = [
+  ["", "Overview"],
+  ["orders", "Orders"],
+  ["map", "Trade map"],
+  ["news", "Rules & news"],
   ["reports", "Reports"],
   ["data", "Data room"],
-  ["playbook", "Playbook"],
   ["account", "Account"],
 ];
+// Every page a search or a typed route can reach.
+const pages = [...nav.filter(([p]) => p !== "news"), ...ruleTabs];
+const ruleTabOf = (route: string) =>
+  ruleTabs.find(([p]) => p === route.split("/")[0]);
+/** The sidebar item a route belongs to. */
+const navSection = (route: string) =>
+  ruleTabOf(route) ? "news" : route.split("/")[0];
 const initialsOf = (text: string) =>
   text
     .trim()
@@ -709,18 +719,15 @@ function App() {
               Globe2,
               Package,
               MapIcon,
-              Newspaper,
               ShieldCheck,
-              FileText,
               ClipboardList,
               Upload,
-              Settings2,
               UserRound,
             ][i];
             return (
               <a
                 className={
-                  (route.split("/")[0] === path ? "active " : "") + "nav-item"
+                  (navSection(route) === path ? "active " : "") + "nav-item"
                 }
                 href={"#/workspace/" + path}
                 key={path}
@@ -732,7 +739,7 @@ function App() {
                 {path === "orders" && (
                   <span className="nav-count">{orders.length}</span>
                 )}
-                {path === "rules" && !live && exposed.length > 0 && (
+                {path === "news" && !live && exposed.length > 0 && (
                   <span className="nav-dot" />
                 )}
               </a>
@@ -790,14 +797,16 @@ function App() {
             <strong>
               {detail
                 ? "Order impact"
-                : nav.find(([p]) => p === route.split("/")[0])?.[1] ||
-                  "Overview"}
+                : ruleTabOf(route)
+                  ? `Rules & news / ${ruleTabOf(route)![1]}`
+                  : nav.find(([p]) => p === route.split("/")[0])?.[1] ||
+                    "Overview"}
             </strong>
           </div>
           <div className="top-actions">
             <WorkspaceSearch
               live={live}
-              pages={nav as [string, string][]}
+              pages={pages}
               orders={orders}
               rules={rules}
               onNavigate={(path) => {
@@ -869,8 +878,8 @@ function App() {
               <a
                 key={p}
                 href={"#/workspace/" + p}
-                className={route.split("/")[0] === p ? "active" : ""}
-                aria-current={route.split("/")[0] === p ? "page" : undefined}
+                className={navSection(route) === p ? "active" : ""}
+                aria-current={navSection(route) === p ? "page" : undefined}
                 onClick={() => {
                   setMobile(false);
                   if (p === "orders") setFilter("All orders");
@@ -1681,6 +1690,25 @@ function App() {
                   />
                 </Suspense>
               )}
+              {ruleTabOf(route) && (
+                <nav className="section-tabs" aria-label="Rules & news">
+                  {ruleTabs.map(([p, l]) => (
+                    <a
+                      key={p}
+                      href={"#/workspace/" + p}
+                      className={ruleTabOf(route)![0] === p ? "active" : ""}
+                      aria-current={
+                        ruleTabOf(route)![0] === p ? "page" : undefined
+                      }
+                    >
+                      {l}
+                      {p === "rules" && !live && exposed.length > 0 && (
+                        <span className="nav-dot" />
+                      )}
+                    </a>
+                  ))}
+                </nav>
+              )}
               {route.split("/")[0] === "regulations" && (
                 <Suspense fallback={<section className="panel" role="status">Loading regulations…</section>}>
                   <RegulationsPage key={route} live={live} editable={editable} owner={account?.role === "owner"} path={route.slice("regulations".length)} />
@@ -1713,7 +1741,7 @@ function App() {
                     title="Rule watch."
                     description={
                       live
-                        ? "The requirements behind your orders' market checklists."
+                        ? "What changes soon in the markets you ship to, and what applies to your orders now."
                         : "Changes affecting your products and markets."
                     }
                     action={
@@ -1728,12 +1756,9 @@ function App() {
                   <div className="notice">
                     <ShieldCheck size={18} />
                     {live
-                      ? "Built from your orders' market checklists. ExportMate doesn't yet read new rule texts by itself; the official texts are in the regulation library."
+                      ? "Built from your orders' market checklists and the dates in each line's official text. ExportMate doesn't read new rule texts by itself yet: add a new version under Regulations and its dates show up here."
                       : "Sample rule-change scenario: one illustrative rule, checked against every order in this demo, including ones you import."}
                   </div>
-                  <a className="text-link" href="#/workspace/regulations">
-                    Open regulation library <ArrowUpRight size={16} />
-                  </a>
                   {live ? (
                     <CompanyRuleWatch
                       onOrder={(id) =>
@@ -2319,7 +2344,7 @@ function App() {
               )}
               {!(live && route.startsWith("orders/")) &&
                 route !== "" &&
-                !nav.some(([p]) => p === route) &&
+                !pages.some(([p]) => p === route) &&
                 route.split("/")[0] !== "map" &&
                 route.split("/")[0] !== "regulations" &&
                 route.split("/")[0] !== "reports" &&

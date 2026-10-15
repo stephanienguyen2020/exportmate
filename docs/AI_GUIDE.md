@@ -109,7 +109,7 @@ The full-screen view at `#/chat` shows the audits of every answer in the convers
 
 ## Using News watch
 
-News watch is at `#/workspace/news`. The Overview page also shows the top three alerts.
+News watch is at `#/workspace/news`, the first tab of "Rules & news" in the sidebar (beside Rule watch, Regulations and the Playbook). The Overview page also shows the top three alerts.
 
 **Alerts tab.** Each alert card shows:
 

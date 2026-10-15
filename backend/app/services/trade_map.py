@@ -13,7 +13,7 @@ import time
 import uuid
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from itertools import pairwise
 
 from sqlalchemy.orm import Session
@@ -39,6 +39,8 @@ from app.database.queries import regulations as regulation_queries
 from app.database.queries import trade_map as map_queries
 from app.schemas.orders import OrderOut
 from app.schemas.trade_map import (
+    ChecklistChangeOut,
+    ChecklistChangesOut,
     CheckStatus,
     ComparisonItemOut,
     CountryOut,
@@ -626,6 +628,69 @@ def build_trade_map(db: Session, ctx: CompanyContext) -> TradeMapOut:
         ),
         check_radius_km=radius,
     )
+
+
+def today_utc() -> date:
+    return datetime.now(UTC).date()
+
+
+def list_checklist_changes(
+    db: Session,
+    company_id: uuid.UUID,
+    open_orders: list[tuple[OrderOut, str | None]],
+    start: date,
+    until: date,
+) -> list[ChecklistChangeOut]:
+    """Checklist lines in force in the markets of `open_orders` (each with its market code) that
+    take effect or change between `start` and `until`, and the orders shipping on or after."""
+    shipped_to = {market for _, market in open_orders if market}
+    changing = [
+        (day, kind, req)
+        for req in map_queries.list_requirements_in_force(db, company_id)
+        if req.market_code in shipped_to
+        for day, kind in ((req.effective_on, "effective"), (req.changes_on, "changes"))
+        if day and start <= day <= until
+    ]
+    sources = load_requirement_sources(db, {"": [r for _, _, r in changing]})
+    names = {m.code: m.name for m in map_queries.list_markets(db)}
+    return [
+        ChecklistChangeOut(
+            on=day,
+            kind=kind,
+            market=req.market_code,
+            market_name=names.get(req.market_code, req.market_code),
+            requirement_key=req.requirement_key,
+            title=req.title,
+            what_changes=f"Takes effect. {req.why}"
+            if kind == "effective"
+            else req.change_note or req.why,
+            order_ids=[
+                order.id
+                for order, market in open_orders
+                if market == req.market_code
+                and applies_to(req, order.hs_code)
+                and order.ship_date >= day
+            ],
+            source=sources[req.regulation_document_id].model_copy(
+                update={"quote": req.source_quote}
+            ),
+        )
+        for day, kind, req in sorted(changing, key=lambda c: (c[0], c[2].market_code, c[2].title))
+    ]
+
+
+def build_checklist_changes(db: Session, ctx: CompanyContext, days: int) -> ChecklistChangesOut:
+    """Rule watch: what changes in the company's markets in the next `days` days."""
+    today = today_utc()
+    until = today + timedelta(days=days)
+    gazetteer = load_gazetteer(db)
+    open_orders = [
+        (OrderOut.from_order(order), locate_destination(order.destination, gazetteer).market)
+        for order in order_queries.list_company_orders(db, ctx.company_id)
+        if order.ship_date >= today
+    ]
+    changes = list_checklist_changes(db, ctx.company_id, open_orders, today, until)
+    return ChecklistChangesOut(start=today, until=until, changes=changes)
 
 
 def _load_order(db: Session, ctx: CompanyContext, order_id: str) -> Order:
