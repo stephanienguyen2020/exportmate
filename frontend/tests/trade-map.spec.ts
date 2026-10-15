@@ -518,6 +518,8 @@ test("editors add a supplier from a map click or typed coordinates", async ({
         country: "KH",
         location: { latitude: 10.61, longitude: 104.18 },
         supplies: null,
+        contactName: null,
+        contactEmail: null,
         documents: [
           {
             kind: "legality",

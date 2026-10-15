@@ -26,7 +26,7 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
 | 403 | `forbidden` | The caller's role is too low |
 | 404 | `not_found` | Missing, or it belongs to another company |
 | 422 | `invalid_input` | Validation failed. `fieldErrors` holds one message per field |
-| 429 | `rate_limited` | Per-user hourly limit reached, counted per instance: uploads 60 (per upload type), analysis runs 60, report emails 20, HS suggestions 60, requirement drafts 20 |
+| 429 | `rate_limited` | Hourly limit reached, counted per instance: uploads 60 per user (per upload type), analysis runs 60, report emails 20, HS suggestions 60, requirement drafts 20, supplier message drafts 30; contact form 5 per visitor IP |
 | 503 | `ai_unavailable` / `ai_not_configured` | An AI step (Gemini) failed or isn't set up (`GOOGLE_CLOUD_PROJECT`). Nothing was saved; try again |
 
 ## Index
@@ -90,7 +90,19 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
 | `PATCH /report-drafts/{id}` | viewer (author) | Report editor: save (also before preview, download, email) |
 | `GET /report-drafts/{id}/pdf` | viewer (author) | Report editor: "Preview PDF", "Download PDF" |
 | `POST /report-drafts/{id}/email` | editor (author) | Report editor: "Email report" |
-| [Planned](#planned) | | Phases 3–4 |
+| **Supplier messages and report actions** | | |
+| `POST /reports/{id}/review` | owner | Not yet (report view: "Reviewed: OK to contact the supplier") |
+| `POST /reports/{id}/feedback` | viewer | Not yet (report view) |
+| `POST /supplier-messages` | editor | Not yet (order detail: "Draft email to supplier") |
+| `GET /orders/{id}/supplier-messages` | viewer | Not yet (order detail) |
+| `GET /supplier-messages/{id}` | viewer | Not yet (message editor) |
+| `PATCH /supplier-messages/{id}` | editor | Not yet (message editor) |
+| `POST /supplier-messages/{id}/approve` | owner | Not yet (message editor: "Approve") |
+| `POST /supplier-messages/{id}/send` | owner | Not yet (message editor: "Send") |
+| **Audit log and contact** | | |
+| `GET /audit-events` | owner | Not yet (audit log screen) |
+| `POST /contact` | none (rate limited) | Not yet (landing page "Get in touch" saves to the browser only) |
+| [Planned](#planned) | | Later and phase 4 |
 
 "Every workspace load" means `refreshWorkspace()` in `frontend/src/main.tsx`. It runs on entering the workspace, after a commit, and on "Retry". It calls `GET /me`, then `GET /orders`, `GET /playbook/rules` and `GET /overview` in parallel. The browser-only demo session calls none of these: it uses localStorage.
 
@@ -320,7 +332,7 @@ Editors enter them in the map's side panel; viewers don't see the controls. The 
  "location": {"latitude": 10.95, "longitude": 106.82}, "supplies": "Acacia veneer",
  "documents": [{"kind": "formaldehyde", "detail": "Test report, May 2026", "standards": ["EN 717-1"]}]}
 ```
-Only `name` (1–300) is required. `place` ≤200, `supplies` ≤1000 (blank is stored as `null`), `country` an alpha-2 code from `countries` (`UK` is read as `GB`), `location` −90..90 / −180..180, up to 20 `documents`, one per `kind` from `documentKinds` (`detail` 1–500, up to 10 `standards`, optional `documentNumber` ≤100, `issuer` ≤200, `expiresOn` `YYYY-MM-DD`). A typed document and one confirmed from an upload (`POST /supplier-documents/{id}/confirm`) are the same record; a kind kept in the list keeps its upload link (`fromUpload`). Returns the supplier with `id` and labelled `documents`.
+Only `name` (1–300) is required. `place` ≤200, `supplies` ≤1000 (blank is stored as `null`), `country` an alpha-2 code from `countries` (`UK` is read as `GB`), `location` −90..90 / −180..180, `contactName` ≤200 and `contactEmail` (one address; supplier messages are pre-filled with it), up to 20 `documents`, one per `kind` from `documentKinds` (`detail` 1–500, up to 10 `standards`, optional `documentNumber` ≤100, `issuer` ≤200, `expiresOn` `YYYY-MM-DD`). A typed document and one confirmed from an upload (`POST /supplier-documents/{id}/confirm`) are the same record; a kind kept in the list keeps its upload link (`fromUpload`). Returns the supplier with `id` and labelled `documents`.
 - `409 supplier_exists`: the company has a supplier with the same name, ignoring case and spacing. Orders match suppliers on that key, so a renamed supplier stops matching orders written with the old name.
 - `422 invalid_input` with `fieldErrors.country` / `fieldErrors.documents` for an unknown country or document kind.
 
@@ -552,21 +564,57 @@ The PDF of the saved content, `inline` for the preview; `?download=true` makes i
 - Writes a `report.emailed` audit event with the recipients, note and edit counts (logs only carry counts).
 - `422 invalid_input` (bad addresses), `422 email_rejected`, `429 rate_limited` (`REPORT_EMAILS_PER_HOUR`, default 20 per user), `502 email_failed`, `503 email_unavailable`.
 
+## Supplier messages
+
+From an analysis report to an email to the order's supplier (REQUIREMENTS.md §4.7). English only for now.
+
+```json
+{"id": "…", "reportId": "…", "orderId": "PO-2291", "supplierId": "…", "status": "approved",
+ "recipient": "minh@binhphuwood.example.com", "subject": "PO-2291: plot geolocation needed", "body": "Dear Minh, …",
+ "createdBy": {"id": "…", "name": "Lan"}, "createdAt": "…", "approvedBy": {"id": "…", "name": "Lan"},
+ "approvedAt": "…", "approvedByAuthor": true, "sentAt": null, "sandbox": null, "error": null}
+```
+`status`: `draft` → `approved` → `sent`, or `failed` (the email service refused it; it can be sent again). Delivery confirmation (`delivered`) needs a Resend webhook: later.
+
+### `POST /reports/{id}/review` (owner)
+`{"note": "Ask them today."}` (optional). Clears a report a playbook rule sent to the owner (`needs_human_review`) so a message can be drafted from it. Returns the report with `review`. `409 no_review_needed`, `409 already_reviewed`, `409 report_failed_checks` (a failed audit can't be reviewed away: run the analysis again).
+
+### `POST /reports/{id}/feedback` (viewer)
+`{"useful": true, "note": "…"}`: one verdict per person (a new one replaces theirs). Returns `{"useful": 2, "notUseful": 0, "mine": true, "myNote": null}`. `GET /reports/{id}` also returns `feedback`, `review` and `messageBlockedReason` (why no message can be drafted, or `null`).
+
+### `POST /supplier-messages` (editor, rate limited, AI)
+`{"reportId": "…", "recipient": "…"}` (`recipient` optional: default the supplier's `contactEmail`). The report must be the order's latest, not blocked by a playbook rule, past its checks, reviewed if a rule asked for it, and have something missing; otherwise `409 message_not_allowed` with the reason. Gemini drafts subject and body from the report's facts only (order, product, missing documents and the regulation behind each, the date to ask by) and the company's playbook rules about writing; code checks it names the order and links only to sources the report cites (`503 ai_unavailable` otherwise). Returns `201` with the message.
+
+### `GET /orders/{id}/supplier-messages`, `GET /supplier-messages/{id}` (viewer)
+The order's messages (newest first), or one message.
+
+### `PATCH /supplier-messages/{id}` (editor)
+Any of `recipient`, `subject`, `body`, and `saveRecipientToSupplier: true` (also store the recipient as the supplier's contact email). Editing an approved message sends it back to `draft`. `409 message_sent` once sent.
+
+### `POST /supplier-messages/{id}/approve` (owner)
+Approves the exact recipient, subject and body (a SHA-256 is recorded). The owner may approve their own draft (`approvedByAuthor: true`, recorded in the audit log). `422` without a recipient; `409 not_a_draft`.
+
+### `POST /supplier-messages/{id}/send` (owner)
+Sends once: the row is locked and an optional `Idempotency-Key` header is passed to Resend. Replies go to the sender's own email. `sandbox: true` without `RESEND_API_KEY` (nothing delivered). Sending doesn't change the order's status. `409 not_approved`, `409 message_sent`, `409 changed_since_approval`; email errors (`422 email_rejected`, `502 email_failed`, `503 email_unavailable`) leave it `failed` with `error`.
+
+## Audit log
+
+### `GET /audit-events?objectType=&userId=&cursor=&limit=` (owner)
+Who did what, newest first: imports, rule changes, uploads, reviews, approvals, sends. `[{"id", "action": "supplier_message.sent", "objectType", "objectId", "data": {…}, "user": {"id", "name", "email"} | null, "requestId", "createdAt"}]`; `meta.nextCursor` for the next page (`limit` 1–200, default 50). `user` is `null` for the system (the seed).
+
+## Contact
+
+### `POST /contact` (no sign-in, rate limited per visitor IP)
+`{"name": "…", "email": "…", "company": "…", "message": "…", "website": ""}` → `202 {"received": true}`. Emailed to the ExportMate team (`CONTACT_INBOX`) with replies going to the visitor. `website` is a hidden field: when a bot fills it, nothing is sent but the answer is the same. `503 contact_unavailable` without `CONTACT_INBOX`; delivered only with `RESEND_API_KEY` (sandbox otherwise). 5 per IP per hour (`CONTACT_MESSAGES_PER_HOUR`).
+
 ## Planned
 
 Not built. Shapes follow the requirements and may change. Phases are the ones in REQUIREMENTS.md §5.
 
 | Endpoint | Phase | Role | Does | Will be used by |
 | --- | --- | --- | --- | --- |
-| `POST /reports/{id}/feedback` | 3 | viewer | Thumbs up/down + note on an analysis report | Report view |
-| `POST /actions/drafts` | 3 | editor | AI drafts a supplier message from a `pass` report that isn't `blocked` | "Draft email" |
-| `PATCH /actions/{id}` | 3 | editor | Edit text or recipient. Resets an approved action to `draft` | Message editor |
-| `POST /actions/{id}/approve` | 3 | owner | Records who, when and a hash of the exact text | "Approve" |
-| `POST /actions/{id}/send` | 3 | owner | Sends once (`Idempotency-Key` header). Sandbox email in v1 | "Send" |
-| `GET /actions/{id}` | 3 | viewer | State: `draft → approved → queued → sent → delivered`, or `failed` / `expired` / `cancelled` | Message status |
-| `GET /audit-events` | 3 | owner | Who imported, edited, approved and sent what, and when | Audit log screen |
-| `POST /contact` | 3 | none (rate limited) | Name, email and message to the team inbox | Landing page contact section (`#/contact`) |
-| `POST /internal/runs/{id}/execute` | later | Cloud Tasks only (OIDC) | Runs a run's work outside the request, once a step waits on AI (e.g. the phase 3 message draft). Phase 2 runs finish inside `POST /runs` | Not the frontend |
+| `POST /internal/runs/{id}/execute` | later | Cloud Tasks only (OIDC) | Runs a run's work outside the request, if a step ever waits on AI. Runs and message drafts finish inside their requests today | Not the frontend |
+| Resend webhook (`delivered`) | later | Resend (signed) | Marks a sent supplier message delivered or bounced | Message status |
 | `GET /sources` | 4 | viewer | Rule sources the crawler watches and when each was last checked; fills `sourcesCheckedAt` | Dashboard "last checked" |
 | `GET /watch-sources`, `POST`, `PATCH /watch-sources/{id}` | 4 | viewer / editor | The company's rule sources (RSS, Federal Register, EUR-Lex) for the daily crawl | Sources settings |
 | `POST /regulations/{id}/follow`, `DELETE …/follow` | 4 | editor | Follow a shared regulation. Matching uses only followed ones | Rule library |

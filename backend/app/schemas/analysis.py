@@ -97,6 +97,26 @@ class ReportContentOut(CamelCaseModel):
     audit: AuditResultOut
 
 
+class PersonOut(CamelCaseModel):
+    id: uuid.UUID
+    name: str
+
+
+class ReportReviewOut(CamelCaseModel):
+    """The owner's review of a report a playbook rule sent to them."""
+
+    reviewed_by: PersonOut
+    reviewed_at: datetime
+    note: str | None
+
+
+class ReportFeedbackOut(CamelCaseModel):
+    useful: int
+    not_useful: int
+    mine: bool | None  # the caller's own verdict, if any
+    my_note: str | None
+
+
 class ReportOut(ReportContentOut):
     id: uuid.UUID
     run_id: uuid.UUID
@@ -104,6 +124,19 @@ class ReportOut(ReportContentOut):
     order_status: OrderStatus
     blocked: bool  # a playbook rule blocks messages from this report
     created_at: datetime
+    review: ReportReviewOut | None = None
+    # Why no supplier message can be drafted from it (None: it can).
+    message_blocked_reason: str | None = None
+    feedback: ReportFeedbackOut | None = None
+
+
+class ReportReviewIn(CamelCaseModel):
+    note: str | None = Field(default=None, max_length=1000)
+
+
+class ReportFeedbackIn(CamelCaseModel):
+    useful: bool
+    note: str | None = Field(default=None, max_length=1000)
 
 
 class ReportSummaryOut(CamelCaseModel):
