@@ -1,25 +1,35 @@
-// A fixed check after Gemini's assessment. The prompt says other commodities are not
-// relevant, but the model still flags some of them when they mention EU deforestation rules
-// (e.g. "Ghana's cocoa faces EU deforestation test"). An article that names another
-// commodity and never mentions wood goods is dropped whatever the model said. Articles about
-// trade measures that name no commodity at all are left to the model.
-const WOOD =
-  /\b(wood|wooden|woodworking|timber|lumber|plywood|veneers?|sawn|sawmills?|hardwoods?|softwoods?|furniture|cabinets?|flooring|mdf|particleboard|pellets?|forest products|rubberwood|acacia|oak|birch|eucalyptus|teak|walnut)\b/i;
-const OTHER_COMMODITY = /\b(cocoa|coffee|cattle|beef|soy|soya|soybeans?|palm oil|rubber|leather|chocolate)\b/i;
+// A fixed check after Gemini's assessment. The prompt says goods the company doesn't stock are
+// not relevant, but the model still flags some articles about them when they mention a rule
+// that also covers the company's goods (e.g. "Ghana's cocoa faces EU deforestation test" for a
+// wood exporter). An article that names one of the stock's `otherGoods` and none of its
+// `goodsTerms` (seed/inventory.js STOCK_PROFILE) is dropped whatever the model said. Articles
+// about trade measures that name no goods are left to the model, and so is every article when
+// the profile lists no other goods.
+import { STOCK_PROFILE } from "./seed/inventory.js";
 
-/** False when an article is about another commodity and not about wood goods. */
-export function aboutWoodGoods({ title = "", snippet = "" }) {
+const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+// Whole words or phrases, plurals included.
+const wordsPattern = (words) => (words?.length ? new RegExp(`\\b(${words.map(escape).join("|")})(s|es)?\\b`, "i") : null);
+const patterns = new WeakMap();
+function patternsOf(profile) {
+  if (!patterns.has(profile)) patterns.set(profile, { own: wordsPattern(profile.goodsTerms), other: wordsPattern(profile.otherGoods) });
+  return patterns.get(profile);
+}
+
+/** False when an article is about goods the stock doesn't hold and not about its own goods. */
+export function aboutStockedGoods({ title = "", snippet = "" }, profile = STOCK_PROFILE) {
+  const { own, other } = patternsOf(profile);
   const text = `${title} ${snippet}`;
-  return WOOD.test(text) || !OTHER_COMMODITY.test(text);
+  return !other || Boolean(own?.test(text)) || !other.test(text);
 }
 
 /**
  * The scan's verdict on one article, from Gemini's assessment `r` of it (article number `n`
  * in its batch). SKUs the model named that are not in stock are dropped; an article is
  * relevant only if the model said so, at least one real SKU is affected, it is not a repeat
- * of another article in the batch and it passes aboutWoodGoods. Shared by the scan and its eval.
+ * of another article in the batch and it passes aboutStockedGoods. Shared by the scan and its eval.
  */
-export function decide(article, r, n, bySku) {
+export function decide(article, r, n, bySku, profile = STOCK_PROFILE) {
   const affected = (r.affected || [])
     .filter((x) => bySku.has(x.sku))
     .map((x) => {
@@ -27,6 +37,6 @@ export function decide(article, r, n, bySku) {
       return { sku: x.sku, name: it.name, reason: x.reason, stockValueUsd: Math.round(it.qtyOnHand * it.unitCostUsd) };
     });
   const duplicate = Number.isInteger(r.sameAs) && r.sameAs !== n;
-  const otherCommodity = Boolean(r.relevant) && !aboutWoodGoods(article);
+  const otherCommodity = Boolean(r.relevant) && !aboutStockedGoods(article, profile);
   return { relevant: Boolean(r.relevant && affected.length && !duplicate && !otherCommodity), affected, duplicate, otherCommodity };
 }

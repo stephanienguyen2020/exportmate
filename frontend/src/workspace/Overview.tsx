@@ -255,7 +255,7 @@ export default function Overview({
             <span className="mono muted">
               {live
                 ? routeStops(profile).map(placeCode).join(" · ")
-                : `${sampleObligation.market} · WOOD PRODUCTS`}
+                : `${sampleObligation.market} · ${sampleObligation.goods.toUpperCase()}`}
             </span>
           </div>
           <h3>

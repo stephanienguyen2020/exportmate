@@ -25,8 +25,8 @@ export const SPECIALISTS = [
   {
     name: "stock_specialist",
     tools: ["query_inventory", "calculate"],
-    role: "you look up the workspace's stock items (SKUs, categories, markets, certifications, geolocation, suppliers, quantities and stock values).",
-    description: "Stock lookups: items by SKU, category, market, HS code, species, origin, supplier, certification or geolocation status, with counts and stock values.",
+    role: "you look up the workspace's stock items (SKUs, categories, markets, materials, certifications, origin traceability, suppliers, quantities and stock values).",
+    description: "Stock lookups: items by SKU, category, market, HS code, material, material origin, supplier, certification or whether their origin is traced, with counts and stock values.",
   },
   {
     name: "news_specialist",

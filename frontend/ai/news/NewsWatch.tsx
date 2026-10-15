@@ -50,12 +50,13 @@ type Item = {
   name: string;
   category: string;
   hsCode: string;
-  species: string;
-  timberOrigin: string;
+  material: string;
+  materialOrigin: string;
   supplier: string;
   markets: string[];
   certifications: string[];
-  geolocationOnFile: boolean;
+  // Origin traced to where the material was produced, e.g. plot geolocation.
+  originTraced: boolean;
   warehouse: string;
   unit: string;
   qtyOnHand: number;
@@ -334,12 +335,19 @@ function ScanBar({
   );
 }
 
+// Whose sample stock it is, as the AI service seeds it.
+type StockOwner = { company: string; about: string };
+
 function StockTable({ impacts }: { impacts: Impact[] }) {
   const [items, setItems] = useState<Item[] | null>(null);
+  const [owner, setOwner] = useState<StockOwner | null>(null);
   const [error, setError] = useState("");
   useEffect(() => {
-    api<{ items: Item[] }>("/inventory")
-      .then((d) => setItems(d.items))
+    api<{ items: Item[]; owner?: StockOwner }>("/inventory")
+      .then((d) => {
+        setItems(d.items);
+        setOwner(d.owner ?? null);
+      })
       .catch((e) => setError(e.message));
   }, []);
   if (error) return <div className="news-error">{error}</div>;
@@ -354,8 +362,8 @@ function StockTable({ impacts }: { impacts: Impact[] }) {
         <CostWhy why="Each item's quantity on hand × its unit cost, added up, from the sample stock list.">
           {usd(total)}
         </CostWhy>{" "}
-        on hand · a made-up stock list for the sample wood exporter, kept apart from
-        the orders
+        on hand · a made-up stock list{owner ? ` for ${owner.company}` : ""}, kept
+        apart from the orders
       </p>
       <div className="table-scroll">
         <table>
@@ -363,11 +371,11 @@ function StockTable({ impacts }: { impacts: Impact[] }) {
             <tr>
               <th>SKU / item</th>
               <th>HS code</th>
-              <th>Timber</th>
+              <th>Material</th>
               <th>Markets</th>
               <th>On hand</th>
               <th>Stock value</th>
-              <th>Geolocation</th>
+              <th>Origin trace</th>
               <th>News alerts</th>
             </tr>
           </thead>
@@ -380,9 +388,9 @@ function StockTable({ impacts }: { impacts: Impact[] }) {
                 </td>
                 <td className="mono">{i.hsCode}</td>
                 <td>
-                  {i.species}
+                  {i.material}
                   <small>
-                    {i.timberOrigin} · {i.supplier}
+                    {i.materialOrigin} · {i.supplier}
                   </small>
                 </td>
                 <td>{i.markets.join(", ")}</td>
@@ -397,9 +405,9 @@ function StockTable({ impacts }: { impacts: Impact[] }) {
                   </CostWhy>
                 </td>
                 <td>
-                  <span className={`status ${i.geolocationOnFile ? "green" : "amber"}`}>
+                  <span className={`status ${i.originTraced ? "green" : "amber"}`}>
                     <i />
-                    {i.geolocationOnFile ? "On file" : "Missing"}
+                    {i.originTraced ? "On file" : "Missing"}
                   </span>
                 </td>
                 <td>

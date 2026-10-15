@@ -69,7 +69,7 @@ When the assistant gets something wrong:
 1. Find the answer's audit (request ID in the logs, or download it from the app) and see which step failed: retrieval, tool choice, arguments, figures or citation.
 2. Add a golden case that reproduces it (`eval/golden.js`).
 3. Fix it at the right layer: a tool or its schema, retrieval, an auditor check, or a rule in `policy.js` with its `prevents` line. Examples:
-   - Writing the `category-count` case showed that `category: "Plywood"` also matched Hardwood plywood (production answered USD 655,181 instead of 494,053), so category and market are now enums with exact matching.
+   - Writing the `category-count` case showed that `category: "Plywood"` also matched Hardwood plywood (production answered USD 655,181 instead of 494,053), so category and market are now enums with exact matching, filled each turn from the stock's own values.
    - The first eval run on GCP (14/17, 13 Oct 2026) found the agent dropping news dates despite the `dated-evidence` rule, so the auditor now enforces them (`News cited with its date`), and writing a poem despite the `scope` rule, so that rule moved first and names what to decline. The other failure was in the judge, which marked a correct decline as irrelevant; it now grades against the rubric. Next run: 17/17.
 4. Run `npm test` and `npm run eval`; no regressions before deploying.
 

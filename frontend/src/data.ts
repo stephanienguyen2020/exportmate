@@ -39,11 +39,19 @@ export const daysUntil = (day: string) =>
 // imported). Illustrative, like the rest of the demo; signed-in companies get their
 // checklists from the backend instead (GET /api/v1/trade-map).
 export const sampleObligation = {
+  id: "EU-WOOD-001",
   title: "Geolocation documentation for EU-bound wood",
   short: "Geolocation data missing.",
   before:
     "Supplier-level origin documentation is present in the firm's existing records.",
   requirement: "plot-level geolocation",
+  // What the supplier sends, and what the rule is about (its goods, and their material).
+  records: "geolocation records",
+  evidence: "Geolocation evidence",
+  goods: "wood products",
+  material: "wood",
+  quote:
+    "Geolocation information must identify the plots of land on which the relevant wood was produced.",
   // An order is covered when its HS code starts with one of these or its product names a material.
   hsPrefixes: ["4412.33"],
   materials: ["acacia"],
