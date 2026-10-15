@@ -34,9 +34,9 @@ variable "allowed_origins" {
 }
 
 variable "resend_enabled" {
-  description = "Pass the backend-resend-api-key secret to the backend. Add a version to the secret first."
+  description = "Pass the backend-resend-api-key secret to the backend (it needs a version, added by hand). false: email in sandbox mode."
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "report_email_from" {
@@ -65,7 +65,7 @@ variable "google_oauth_client_secret" {
 }
 
 variable "gemini_model" {
-  description = "Gemini model on Vertex AI for the news scan and the eval judge (gemini-2.5-flash retires 2026-10-20)."
+  description = "Gemini model on Vertex AI for the backend's AI features, the news scan and the eval judge (gemini-2.5-flash retires 2026-10-20)."
   type        = string
   default     = "gemini-3.5-flash"
 }
