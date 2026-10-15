@@ -117,9 +117,10 @@ Local: `AUTH_MODE=dev` accepts `Bearer dev:<email>` (no Firebase). Production re
 
 - Reports are emailed through Resend (`core/email.py`); without `RESEND_API_KEY` it is a sandbox that builds and audits the email but delivers nothing. Auth emails stay Firebase's.
 - Sending once: an optional `Idempotency-Key` (Resend keeps it 24 hours) and a row lock; a sent report is locked.
-- Phase 3 supplier messages will use the same sender, after an owner approves the exact text.
+- Supplier messages use the same sender, after the owner approves the exact text; replies go to the approver's own email. The public contact form goes to `CONTACT_INBOX` (the ExportMate team's address, a Terraform variable) with replies to the visitor.
+- Delivery confirmation (`delivered`, bounces) would need a Resend webhook: a public endpoint and a signing secret. Not built; a sent message is `sent`.
 
 ## 12. Limits
 
-- Uploads: 4 MB (the Vercel function accepts about 4.5 MB), 60 per user per hour per upload type. Analysis runs: 60. Report emails: 20 (`REPORT_EMAILS_PER_HOUR`). Requirement drafts: 20; HS suggestions: 60. Counted in memory per Cloud Run instance, so it stops runaway scripts but isn't a quota.
+- Uploads: 4 MB (the Vercel function accepts about 4.5 MB), 60 per user per hour per upload type. Analysis runs: 60. Report emails: 20 (`REPORT_EMAILS_PER_HOUR`). Requirement drafts: 20; HS suggestions: 60; supplier message drafts: 30. The contact form: 5 per visitor IP (the first `X-Forwarded-For` address). Counted in memory per Cloud Run instance, so it stops runaway scripts but isn't a quota.
 - CSV: 10,000 rows. Uncommitted imports are deleted after 30 days (`python -m app.cleanup_imports`).

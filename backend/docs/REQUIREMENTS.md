@@ -33,9 +33,9 @@ Example end-to-end:
 | Analysis: match rules to orders, compute cost, report with citations, block reports that fail checks | Built (backend only) |
 | Rule extraction (AI drafts a company's requirements from its own regulation, the owner reviews) and HS code suggestions (from past orders and the official tariff) | Built (backend only) |
 | Supplier documents uploaded as files (AI reads, a person confirms) | Built (backend only) |
-| Actions: draft message → approve → send once (sandbox email) | Phase 3 (email delivery through Resend is built for reports) |
+| Actions: owner review of a report → AI drafts the supplier message → edit → owner approves → send once (sandbox until a Resend key); report feedback; audit log | Built (backend only) |
 | Overview numbers for the dashboard | Built (except "sources checked at") |
-| Contact form delivery | Phase 3 |
+| Contact form delivery (to the ExportMate team) | Built (backend only; the landing page form still saves to the browser) |
 
 **Later (not v1):** Excel, PDF and photo imports (OCR); automatic crawling of official rule websites; Zalo delivery; buyer (Singapore) view with its own data; ERP connectors.
 
@@ -223,14 +223,20 @@ A **run** checks orders against the market requirements:
 - Each run saves a short summary per step, so the UI can show what happened. Users never see raw AI reasoning.
 
 ### 4.7 Actions (messages)
-**Status: phase 3.**
+**Status: built (backend only).**
 
-State flow: `draft → approved → queued → sent → delivered`, or `failed` / `expired` / `cancelled`.
-- Editing text or recipient after approval resets it to `draft`.
-- Approval records who, when, and a hash of the exact text.
-- Sending is idempotent: double-clicking "Send" sends one email.
+**Use case.** PO-2291 is missing the plot geolocation from Binh Phu Wood. Lan opens the order's report and clicks "Draft email to supplier". AI writes, in English, a short request naming the order, the product, the document and the regulation behind it, and the date to ask by. The "To" field holds the supplier's contact email (Minh); Lan confirms it or types another, and can save it to the supplier. The owner approves the exact text and sends it. Replies come back to the owner's own inbox.
+
+- **Which reports can lead to a message:** the order's latest report, not blocked by a playbook rule, past its checks, with something missing. When a playbook rule sent it to the owner (`needs_human_review`), the owner first clicks "Reviewed: OK to contact the supplier" (with an optional note). A report that failed its checks can't be reviewed away: run the analysis again.
+- State flow: `draft → approved → sent`, or `failed` (the email service refused it; it can be sent again). Delivery confirmation (`delivered`) needs a Resend webhook: later.
+- Editing the recipient, subject or body after approval resets it to `draft`.
+- Approval records who, when, and a hash of the exact recipient, subject and body. The owner may approve their own draft (one-person companies); it is recorded.
+- Sending is idempotent: the row is locked and a double click sends one email.
 - Sending does **not** clear the exposure. New evidence and a new passing analysis do.
-- v1 channel: sandbox email, labelled as such.
+- v1 channel: email through Resend; a sandbox (nothing delivered) until a key and a verified sender domain are set.
+- AI writes only from the report's facts: no prices, costs or internal notes, links only to the sources the report cites. The company's playbook rules about writing to suppliers are passed to it.
+- **Feedback:** anyone can mark a report useful or not, with a note; later these become cases for the AI test set (question 22).
+- **Audit log:** the owner sees who imported, edited, reviewed, approved and sent what, and when.
 
 ### 4.8 Overview
 **Status: built, except "sources checked at"**, which needs the crawler (phase 4). Until then the dashboard reads the news scan time from the AI service.
@@ -252,7 +258,7 @@ A map of the company's own export activity: its suppliers, sites and markets, an
 - Satellite observations (e.g. flood extents) are extra evidence: suppliers and sites within 25 km get a check-in prompt. Order statuses never change because of them. Observations are samples until a real source is connected.
 
 ### 4.10 Contact form
-**Status: phase 3.** Validates name, email and message; rate limited; sends to a team inbox.
+**Status: built (backend only).** The public landing page's "Get in touch" form, for people curious about ExportMate (not company users). Validates name, email and message; a hidden field catches bots; 5 per visitor IP per hour; emailed to the ExportMate team's inbox (`CONTACT_INBOX`), replies go to the visitor. The landing page still saves the form in the browser only, until it calls `POST /contact`.
 
 ### 4.11 Non-functional
 
@@ -271,7 +277,7 @@ A map of the company's own export activity: its suppliers, sites and markets, an
 | --- | --- | --- |
 | 1. Foundation | Auth, companies and roles, profile and onboarding, orders, CSV import, playbook, overview. Frontend on the API for these. | Done |
 | 2. Analysis | Rule library with versions, shared official texts, trade map (with "what if" and supplier/site editing), checked playbook rules, cost settings, runs (match → cost → playbook → plan → auditor), analysis reports with citations, shareable order and company reports (PDF, email), supplier document upload with OCR, requirement drafting + review, HS code suggestions with retrieval | Backend built, tested and deployed (15 October 2026); frontend screens for analysis, cost settings, checked rules, document upload, requirement review and HS suggestions missing |
-| 3. Actions | Draft → approve → send once (sandbox email), delivery status, feedback, contact form, audit log screen | Later. Email sending through Resend is built (report drafts) |
+| 3. Actions | Owner review of reports, supplier messages (draft → approve → send once), feedback, contact form, audit log | Backend built and tested; not yet deployed; frontend screens missing. Later: delivery confirmation (Resend webhook) |
 | 4. Connect + automate | Chat reads orders and the playbook through the backend (built: `query_orders`, `get_playbook`), chat reads analysis reports, analysis runs on events (open question 20), scheduled source watching (crawler) and "sources checked at", following shared regulations, buyer tenant, Excel import | Later, except chat reading orders and the playbook |
 
 Each phase ends with: tests green, deployed, frontend working against it.
@@ -300,7 +306,7 @@ Each phase ends with: tests green, deployed, frontend working against it.
 | 18 | ~~Which documents does a rule require?~~ | **Decided:** a market requirement is the obligation; it names a document kind and cites its regulation version (§4.5). |
 | 19 | ~~Vector store~~ | **Decided:** `pgvector` in the backend's Postgres for the official HS headings (embedded once at seed time). Past orders use word similarity (`pg_trgm`); sections of a long regulation are embedded in memory while drafting, never stored. Supplier documents aren't searched yet. `ai/server` keeps Firestore vector search for its own index. |
 | 20 | When do checks re-run? | **Decided for phase 2:** only when an editor clicks "Analyse" (`POST /runs`). **Direction:** analysis runs on events (CSV import, a supplier document confirmed, a rule or regulation change, a daily expiry check), the shareable order report and the chat read its latest report. |
-| 21 | Language | Vietnamese UI, Vietnamese documents for OCR, English rules. Translate in reports? |
+| 21 | ~~Language~~ | **Decided for now:** English everywhere: the UI, reports, supplier messages and the AI's answers. Vietnamese later, as one change across the whole app (not per feature). |
 | 22 | ~~How do we test AI quality?~~ | **Decided:** a developer test set, not a user feature. About 20 cases with known answers per AI job (supplier document reading now; extraction and HS code suggestion when built), e.g. "Oak dining table" → HS 9403.60. Not built yet for the backend. Run by hand before changing a prompt or the model; a case that passed and now fails blocks the change. Same approach as `ai/server/eval/`. |
 | 23 | Where does crawling live? | **Leaning `ai/server`**: it already has per-company news sources (shared built-ins a company can switch off, plus its own feeds). Still open: does a backend `watch_sources` table replace this, or does the backend read sources from `ai/server`? |
 | 24 | Operator role | Platform staff (us) who maintain the shared library and review extracted requirements. A flag on users, or a separate admin app? **Not in phase 2:** the seed is reviewed as code (10). |

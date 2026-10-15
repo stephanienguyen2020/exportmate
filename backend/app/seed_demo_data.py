@@ -124,6 +124,8 @@ def seed_company_map_data(db: Session, company_id: uuid.UUID) -> tuple[int, int]
                 "longitude": supplier["at"][0],
                 "latitude": supplier["at"][1],
                 "supplies": supplier["supplies"],
+                "contact_name": supplier.get("contactName"),
+                "contact_email": supplier.get("contactEmail"),
             },
         )
         map_queries.upsert_supplier_documents(

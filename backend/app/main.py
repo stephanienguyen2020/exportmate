@@ -9,6 +9,7 @@ from sqlalchemy.engine import make_url
 from app.api import (
     account,
     analysis,
+    audit_log,
     company_sites,
     cost_settings,
     health,
@@ -20,6 +21,7 @@ from app.api import (
     regulations,
     reports,
     supplier_documents,
+    supplier_messages,
     suppliers,
     trade_map,
 )
@@ -123,6 +125,8 @@ def create_app() -> FastAPI:
         supplier_documents,
         market_requirements,
         hs_suggestions,
+        supplier_messages,
+        audit_log,
     ):
         api.include_router(module.router)
     app.include_router(api)
