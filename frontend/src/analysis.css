@@ -442,6 +442,50 @@
 .an-status-form .btn {
   justify-self: start;
 }
+/* Orders page: one status and note for every ticked order */
+.an-bulk-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 14px;
+  margin: 0 0 16px;
+  padding: 14px 16px;
+}
+.an-bulk-status > b {
+  font-size: 12px;
+  align-self: center;
+}
+.an-bulk-status label {
+  display: grid;
+  gap: 5px;
+  font-size: 11px;
+  color: #7d8c70;
+  min-width: 0;
+}
+.an-bulk-status .an-bulk-note {
+  flex: 1 1 260px;
+}
+.an-bulk-status select,
+.an-bulk-status input {
+  border: 1px solid #d1d8c9;
+  padding: 9px 11px;
+  background: #fafbf5;
+  color: var(--green);
+  font-size: 12px;
+  min-width: 0;
+}
+.an-bulk-status .text-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  align-self: center;
+}
+.an-bulk-status small {
+  flex-basis: 100%;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.6;
+}
 .an-status-history {
   list-style: none;
   padding: 0;

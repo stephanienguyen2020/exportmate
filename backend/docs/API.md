@@ -56,6 +56,7 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
 | `GET /orders` | viewer | Every workspace load |
 | `GET /orders/{id}` | viewer | Order detail page |
 | `PATCH /orders/{id}/status` | editor | Order page: Status panel, "Change status" |
+| `PATCH /orders/status` | editor | Orders page: tick orders, "Change N orders" |
 | `GET /order-statuses` | viewer | Every workspace load (badges, Orders filter tabs, Status panel) |
 | `POST /imports` | editor | Upload screen |
 | `GET /imports/{id}` | viewer | Upload screen (preview) |
@@ -279,6 +280,17 @@ Opening `#/workspace/orders/<id>` in a live session.
 ```
 Sets the status by hand. `note` is required (1–1000 characters after trimming). Returns the order as `GET /orders/{id}` does, with the new entry first in `statusChanges`. The change is saved in `order_status_changes` and audited as `order.status_changed` (`{"from", "to", "note"}`). Errors: 422 for a missing note or a status whose `manual` is false (`status_not_settable`), 409 `status_unchanged` when the order already has that status, 404 for another company's order. The next analysis of the order sets its status again and records that change too.
 The Status panel on an order's page (owners and editors).
+
+### `PATCH /orders/status` (editor)
+```json
+{"orderIds": ["PO-2291", "PO-2292"], "status": "clear", "note": "Buyer confirmed the plot geolocation by email."}
+```
+Sets several orders' status by hand with one note, all of them or none. Each order changed gets its own entry in `order_status_changes` and its own `order.status_changed` audit event, as if changed one at a time. A repeated id counts once; at most `MAX_STATUS_CHANGE_ORDERS` ids (default 500).
+```json
+{"data": {"changed": [{"id": "PO-2291", "status": "clear", …}], "unchanged": ["PO-2292"]}}
+```
+`changed` are the orders as `GET /orders` lists them, in the order asked for; `unchanged` are those that already had the status (left alone, nothing recorded). Errors: 422 for a missing note, no ids, a status whose `manual` is false (`status_not_settable`) or too many ids (`too_many_orders`); 404 when any id isn't one of the company's orders (`fieldErrors.orderIds` names them; nothing is changed); 409 `status_unchanged` when every order already has the status.
+The Orders page (owners and editors): tick orders, or "Select every order shown", then choose a status and write a note. Only ticked orders that the filter and search still show are sent.
 
 ### `GET /order-statuses` (viewer)
 ```json
