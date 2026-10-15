@@ -2117,3 +2117,60 @@ test("viewers see suggested orders awaiting review without the buttons", async (
   await expect(page.getByLabel("Order to link")).toHaveCount(0);
   expect(reviews).toHaveLength(0);
 });
+
+test("a company's News watch is about its own goods, shown by name", async ({ page }) => {
+  await fixture(page);
+  const tee = { sku: "G-3FA2C1", name: "Cotton T-shirt", hsCode: "6109.10", markets: ["EU"], supplier: "Mill A", orders: ["PO-1"], source: "orders" };
+  const sweaters = { sku: "G-00A1B2", name: "Merino sweaters", hsCode: "", markets: [], supplier: "", orders: [], source: "profile" };
+  let stockAuth: string | undefined;
+  await page.route("**/api/inventory**", (route) => {
+    stockAuth = route.request().headers().authorization;
+    return route.fulfill({ json: { kind: "company", items: [tee, sweaters], owner: { company: "Acme", about: "" }, watchedSince: null } });
+  });
+  await page.route("**/api/impacts**", (route) =>
+    route.fulfill({
+      json: {
+        scan: null,
+        impacts: [
+          {
+            id: "labels~co-1",
+            title: "EU textile labelling",
+            url: "https://news.example/labels",
+            publisher: "EU press",
+            sourceName: "Trade news",
+            publishedAt: new Date().toISOString(),
+            severity: "medium",
+            direction: "watch",
+            headline: "EU revises textile fibre labelling",
+            why: "Why it matters.",
+            action: "",
+            affected: [{ sku: tee.sku, name: tee.name, reason: "EU-bound cotton tees" }],
+            createdAt: new Date().toISOString(),
+          },
+        ],
+      },
+    }),
+  );
+  await page.route("**/api/v1/news-matches**", (route) =>
+    route.fulfill({ json: { data: { newsAvailable: true, matches: [] }, meta: {} } }),
+  );
+  await login(page);
+  await expect(page.getByText("CONNECTED WORKSPACE")).toBeVisible();
+  await page.goto("/#/workspace/news");
+  await expect(page.getByRole("heading", { name: "News that moves your goods." })).toBeVisible();
+  const card = page.locator(".news-list .news-card");
+  await expect(card.getByRole("button", { name: /^Cotton T-shirt:/ })).toBeVisible();
+  await expect(card).toContainText("Cotton T-shirt EU-bound cotton tees");
+  await expect(card).not.toContainText("G-3FA2C1");
+  await expect(card).not.toContainText("stock exposed");
+
+  await page.getByRole("button", { name: "Your goods", exact: true }).click();
+  await expect(page.getByText(/2 items News watch reads the news for/)).toBeVisible();
+  await expect(page.getByText(/Alerts about them start with the next scan/)).toBeVisible();
+  const row = page.getByRole("row", { name: /Cotton T-shirt/ });
+  await expect(row).toContainText("6109.10");
+  await expect(row).toContainText("PO-1");
+  await expect(row).toContainText("Mill A");
+  await expect(page.getByRole("row", { name: /Merino sweaters/ })).toContainText("From About company");
+  expect(stockAuth).toBe("Bearer dev:owner@example.com");
+});

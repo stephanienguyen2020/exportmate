@@ -34,7 +34,9 @@ export function decide(article, r, n, bySku, profile = STOCK_PROFILE) {
     .filter((x) => bySku.has(x.sku))
     .map((x) => {
       const it = bySku.get(x.sku);
-      return { sku: x.sku, name: it.name, reason: x.reason, stockValueUsd: Math.round(it.qtyOnHand * it.unitCostUsd) };
+      // A company's goods have no quantity or cost, so no stock value.
+      const value = Math.round(it.qtyOnHand * it.unitCostUsd);
+      return { sku: x.sku, name: it.name, reason: x.reason, ...(Number.isFinite(value) ? { stockValueUsd: value } : {}) };
     });
   const duplicate = Number.isInteger(r.sameAs) && r.sameAs !== n;
   const otherCommodity = Boolean(r.relevant) && !aboutStockedGoods(article, profile);

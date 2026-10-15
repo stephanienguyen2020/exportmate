@@ -11,6 +11,8 @@ export const impacts = db.collection("impacts");
 export const scans = db.collection("scans");
 // Per company: the shared news sources it switched off ({ disabled: [sourceId] }).
 export const companySources = db.collection("companySources");
+// Per company: its goods for News watch (goods.js), refreshed by goods-store.js.
+export const goodsByCompany = db.collection("companyGoods");
 // One document per lock; "scan" stops two scans running at once across instances.
 export const locks = db.collection("locks");
 // Answers already given ({ auditId, expireAt }), keyed by answer-cache.js answerKey.

@@ -38,7 +38,7 @@ export function suggestOrders(alert: Alert, stock: Map<string, StockItem>, open:
       found.set(order.id, {
         order,
         market,
-        reason: `HS ${heading}${where}, like ${entry.sku} ${item.name || entry.name} named in this alert.`,
+        reason: `HS ${heading}${where}, like ${item.name || entry.name || entry.sku} named in this alert.`,
       });
     }
   }
