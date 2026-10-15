@@ -47,7 +47,7 @@ Example end-to-end:
 
 **Products are matched by HS code, not by name.**
 - "Acacia plywood 18 mm", "Ván ép keo" and "Plywood AC-18" all have HS `4412.33`, so they count as the same product.
-- An order without an HS code is `needs_data`. The AI suggests codes from the company's past orders and the official tariff lines closest to the product name; the user confirms one.
+- An order without an HS code is `exposed`, with adding the code as its next step. The AI suggests codes from the company's past orders and the official tariff lines closest to the product name; the user confirms one.
 
 **HS codes are a tree. A rule on a parent code covers every child under it.**
 
@@ -96,7 +96,7 @@ Firebase handles sign up, sign in, email verification and password reset emails,
 **Status: built.** The order page's exposures come from its latest analysis report.
 
 - Fields: `id`, `product`, `supplier`, `destination`, value + currency, `shipDate`, `hsCode`, `status`.
-- Status: `awaiting_analysis`, `clear`, `exposed`, `needs_data`. New and imported orders start as `awaiting_analysis`, never `clear`.
+- Status: `awaiting_analysis`, `clear`, `exposed` (`needs_data` is retired: missing data makes an order `exposed`; it stays only in earlier status history). New and imported orders start as `awaiting_analysis`, never `clear`; an import analyses its orders as soon as it is committed.
 - List: filter by status, search by text, sorted by ship date, paged.
 - Detail: the order, the CSV row it came from, and its exposures and reports.
 
@@ -115,7 +115,7 @@ Columns as in the template: `id,product,supplier,destination,value,shipDate,hsCo
 
 Rules:
 - HS codes stay text (`0401.10` stays `0401.10`, not `401.1`). Dates are `YYYY-MM-DD`. Currencies are ISO 4217 codes.
-- An `hsCode` cell may be empty (the column must be there): the order is `needs_data` until a code is added or a suggested one accepted (§8.4).
+- An `hsCode` cell may be empty (the column must be there): the order is `exposed`, its next step adding a code or accepting a suggested one (§8.4).
 - Keep the original file and every row, so a report can cite "import 7, row 2".
 - The same file uploaded again is flagged as a duplicate (a warning, not an error).
 - Uploads never committed are deleted after 30 days.
@@ -208,7 +208,7 @@ The playbook is the company's own instructions, the way a manager briefs a new e
 **Status: built (backend only).** `POST /runs` runs every step in code and finishes inside the request; nothing waits on AI. Cloud Tasks come in when a step does (the phase 3 message draft).
 
 A **run** checks orders against the market requirements:
-1. **Relevance**: which market each order's destination is in. Orders outside every market need data.
+1. **Relevance**: which market each order's destination is in. Orders outside every market need action: their next step is the missing checklist.
 2. **Exposure**: the same check as the trade map (§4.9): the destination gives the market, the HS code picks the market requirements that apply, and the supplier's documents are checked against them. A `missing` or `mismatch` result makes the order exposed. No supplier record → `needs_data`, not `clear` (question 3).
 3. **Cost**: computed in code, not by the AI (question 5). Each cost line names where its number came from:
    - **the rule's own figure** when it has one: Section 232 25% × USD 54,300 = USD 13,575, cited to Proclamation 10976. If the stated rate changes on or before the ship date (Section 232 rises on 1 January 2027), the duty is named with no amount: "rate changes on 1 Jan 2027, recheck";
@@ -217,8 +217,8 @@ A **run** checks orders against the market requirements:
 5. **Plan**: suggest one action, in code: complete the data, ask the supplier by a date, move the ship date (the supplier can't make it), recheck the landed cost, or nothing. Drafting the message is phase 3.
 6. **Auditor**: every finding has a quote, every cost line re-computes and names where its number came from, totals add up. Fail → `needs_human_review` (the steps are code, so a retry would give the same answer).
 
-- Report states: `pass`, `needs_data`, `rejected`, `needs_human_review`. Only `pass` reports that no `block` rule stopped can lead to a message.
-- Each order's status follows its latest report: `exposed` (a document missing or mismatched), `clear`, or `needs_data`. A duty alone doesn't make an order exposed.
+- Report states: `pass`, `rejected`, `needs_human_review` (`needs_data` only on reports made before it was retired). Only `pass` reports with nothing in `missingData` that no `block` rule stopped can lead to a message.
+- Each order's status follows its latest report: `exposed` (a document missing or mismatched, or data missing: HS code, market checklist, supplier record) or `clear`. A duty alone doesn't make an order exposed.
 - A report keeps a copy of everything it cites (findings with quotes, settings used, rules fired), so it reads the same after requirements, rules or settings change. It also cites the CSV row the order came from.
 - **One report, two views.** The analysis report is the source of truth. The order report a person edits and emails (`/report-drafts`) repeats the latest analysis (next step, costs, rules fired) next to the live checklist, and says when it is missing or out of date. The chat assistant reads orders and rules through the backend; later it reads analysis reports too.
 - Each run saves a short summary per step, so the UI can show what happened. Users never see raw AI reasoning.
@@ -306,7 +306,7 @@ Each phase ends with: tests green, deployed, frontend working against it.
 | 17 | ~~Markets vs countries~~ | **Decided:** a market groups countries; the destination text is parsed (§4.9). |
 | 18 | ~~Which documents does a rule require?~~ | **Decided:** a market requirement is the obligation; it names a document kind and cites its regulation version (§4.5). |
 | 19 | ~~Vector store~~ | **Decided:** `pgvector` in the backend's Postgres for the official HS headings (embedded once at seed time). Past orders use word similarity (`pg_trgm`); sections of a long regulation are embedded in memory while drafting, never stored. Supplier documents aren't searched yet. `ai/server` keeps Firestore vector search for its own index. |
-| 20 | When do checks re-run? | **Decided for phase 2:** only when an editor clicks "Analyse" (`POST /runs`). **Direction:** analysis runs on events (CSV import, a supplier document confirmed, a rule or regulation change, a daily expiry check), the shareable order report and the chat read its latest report. |
+| 20 | When do checks re-run? | **Decided for phase 2:** when an editor clicks "Analyse" (`POST /runs`) and when a CSV import is committed (its new orders). **Direction:** analysis runs on events (CSV import, a supplier document confirmed, a rule or regulation change, a daily expiry check), the shareable order report and the chat read its latest report. |
 | 21 | ~~Language~~ | **Decided for now:** English everywhere: the UI, reports, supplier messages and the AI's answers. Vietnamese later, as one change across the whole app (not per feature). |
 | 22 | ~~How do we test AI quality?~~ | **Decided:** a developer test set, not a user feature. About 20 cases with known answers per AI job (supplier document reading now; extraction and HS code suggestion when built), e.g. "Oak dining table" → HS 9403.60. Not built yet for the backend. Run by hand before changing a prompt or the model; a case that passed and now fails blocks the change. Same approach as `ai/server/eval/`. |
 | 23 | Where does crawling live? | **Leaning `ai/server`**: it already has per-company news sources (shared built-ins a company can switch off, plus its own feeds). Still open: does a backend `watch_sources` table replace this, or does the backend read sources from `ai/server`? |
@@ -384,12 +384,12 @@ For each enabled watch source: fetch new items → skip ones already seen (by ha
 4. Compare with the previous version's requirements → list what changed → queue J4.
 
 **J4 Match orders** (code only, no AI; built as analysis runs, §4.6)
-For each reviewed requirement × each company order: 6-digit prefix + exceptions + market + date → `clear` / `exposed` / `needs_data`. Only orders whose status changed raise an alert.
+For each reviewed requirement × each company order: 6-digit prefix + exceptions + market + date → `clear` / `exposed`. Only orders whose status changed raise an alert.
 
 **J5 Suggest HS code** (when an order has no code; built)
 1. Retrieve: the company's past orders with similar product names that have a code (word similarity), and the official tariff lines closest in meaning (embeddings).
 2. AI: top 3 codes from those, each with a description, a reason and what it was based on.
-3. Code keeps real tariff lines and the citations AI was shown. Saved as `pending`. The order stays `needs_data`.
+3. Code keeps real tariff lines and the citations AI was shown. Saved as `pending`. The order stays `exposed` until a code is accepted.
 4. The editor accepts one → the order gets the code → J4 runs for that order.
 
 ### 8.4 HS code cases

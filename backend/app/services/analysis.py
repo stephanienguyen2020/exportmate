@@ -370,17 +370,11 @@ def analyse_order(
     )
     content.audit = audit_report(content, {r.id for r in rules})
 
-    order_status = (
-        OrderStatus.needs_data
-        if missing_data
-        else OrderStatus.exposed
-        if gaps
-        else OrderStatus.clear
-    )
+    # Missing data is something to do, like a missing document: the order is never clear
+    # without it, and its next step names what to add.
+    order_status = OrderStatus.exposed if missing_data or gaps else OrderStatus.clear
     if not content.audit.passed or any(r.action == "owner_review" for r in fired):
         state = ReportState.needs_human_review
-    elif missing_data:
-        state = ReportState.needs_data
     else:
         state = ReportState.passed
     return OrderAnalysis(
@@ -410,6 +404,7 @@ def _run_steps(
     actions = Counter(a.content.suggested_action.kind for a in analyses)
     review = sum(a.state == ReportState.needs_human_review for a in analyses)
     failed_audits = sum(not a.content.audit.passed for a in analyses)
+    incomplete = sum(bool(a.content.missing_data) for a in analyses)
     return [
         RunStepOut(
             name="relevance",
@@ -418,9 +413,9 @@ def _run_steps(
         ),
         RunStepOut(
             name="exposure",
-            summary=f"{statuses[OrderStatus.exposed]} exposed, {statuses[OrderStatus.clear]} "
-            f"clear, {statuses[OrderStatus.needs_data]} need data. Checked against "
-            f"{requirement_count} market requirements.",
+            summary=f"{statuses[OrderStatus.exposed]} exposed ({incomplete} missing data), "
+            f"{statuses[OrderStatus.clear]} clear. Checked against {requirement_count} market "
+            "requirements.",
         ),
         RunStepOut(
             name="cost",
@@ -613,6 +608,7 @@ def _summary(report: AnalysisReport, external_id: str) -> ReportSummaryOut:
         order_status=report.order_status,
         blocked=report.blocked,
         cost_totals=report.content["costTotals"],
+        missing_data=report.content.get("missingData", []),
     )
 
 

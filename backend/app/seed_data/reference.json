@@ -10,7 +10,7 @@
     { "code": "awaiting_analysis", "label": "Awaiting analysis", "description": "Not checked yet, or a person asked for it to be checked again.", "tone": "amber", "manual": true },
     { "code": "clear", "label": "In the clear", "description": "Every document its market needs is on file, and nothing changes before it ships.", "tone": "green", "manual": true },
     { "code": "exposed", "label": "Action needed", "description": "A document is missing or a rule changes before it ships.", "tone": "red", "manual": true },
-    { "code": "needs_data", "label": "Needs data", "description": "Its market, supplier or HS code couldn't be matched, so it couldn't be checked.", "tone": "amber", "manual": true }
+    { "code": "needs_data", "label": "Needs data", "description": "No longer used: an order missing its market, supplier or HS code is Action needed, with what to add as its next step. Kept for earlier status changes.", "tone": "amber", "manual": false, "retired": true }
   ],
   "documentKinds": [
     {

@@ -26,7 +26,9 @@ class RunStatus(str, enum.Enum):
 
 class ReportState(str, enum.Enum):
     passed = "pass"  # every claim cited, every number re-computes
-    needs_data = "needs_data"  # HS code, supplier record or market checklist missing
+    # Retired: reports with missing data are `pass` (or wait for review) and list it in
+    # `missingData`. Kept for reports made before.
+    needs_data = "needs_data"
     rejected = "rejected"  # the auditor turned it down; it can't lead to a message
     needs_human_review = "needs_human_review"  # a playbook rule or the auditor asks for a person
 

@@ -43,6 +43,7 @@ export type OrderStatusOption = {
   description: string;
   tone: "green" | "amber" | "red" | string;
   manual: boolean; // an owner or editor may set it by hand
+  retired: boolean; // no longer given to orders; only earlier status changes name it
 };
 export type OrderStatusChange = {
   id: string;
@@ -193,6 +194,7 @@ export type AnalysisRun = {
     orderStatus: ApiOrder["status"];
     blocked: boolean;
     costTotals: Record<string, number>;
+    missingData: string[];
   }[];
 };
 export type HsSuggestion = {
@@ -974,8 +976,9 @@ export const api = {
   },
   import: (id: string) =>
     request<ImportPreview>(`/imports/${id}`).then((r) => r.data),
+  // Commits the import and analyses the new orders; run is null when the analysis failed.
   commit: (id: string) =>
-    request<{ ordersCreated: number }>(`/imports/${id}/commit`, {
+    request<{ ordersCreated: number; run: AnalysisRun | null }>(`/imports/${id}/commit`, {
       method: "POST",
     }).then((r) => r.data),
   regulations: (signal?: AbortSignal) =>

@@ -26,6 +26,8 @@ class OrderStatus(str, enum.Enum):
     awaiting_analysis = "awaiting_analysis"
     clear = "clear"
     exposed = "exposed"
+    # Retired: an order missing data is now `exposed`, with that data as its next step. Kept
+    # for the status history of orders analysed before.
     needs_data = "needs_data"
 
 
@@ -122,6 +124,8 @@ class OrderStatusDefinition(Base):
     description: Mapped[str] = mapped_column(String(500), nullable=False)
     tone: Mapped[str] = mapped_column(String(20), nullable=False)  # green, amber or red
     manual: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    # No longer given to orders: named only in the status history, never offered or filtered on.
+    retired: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False)
 
 

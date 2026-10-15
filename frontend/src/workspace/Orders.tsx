@@ -42,9 +42,7 @@ export default function Orders({
           ? o.risk
           : filter === "Awaiting analysis"
             ? ws.isPending(o)
-            : filter === "Needs data"
-              ? o.status === "needs_data"
-              : ws.isClear(o))) &&
+            : ws.isClear(o))) &&
       `${o.id} ${o.product} ${o.supplier} ${o.destination}`
         .toLowerCase()
         .includes(search.toLowerCase()),
@@ -70,6 +68,7 @@ export default function Orders({
           <RunPanel
             editable={ws.editable}
             pending={orders.filter(ws.isPending).length}
+            lastRun={ws.importRun}
             onFinished={ws.refreshOrders}
             notify={notify}
           />
@@ -92,11 +91,11 @@ export default function Orders({
           {[
             "All orders",
             ...(live && statusOptions.length
-              ? statusOptions.map((s) => s.label)
+              ? statusOptions.filter((s) => !s.retired).map((s) => s.label)
               : [
                   "Action needed",
                   "In the clear",
-                  ...(live ? ["Awaiting analysis", "Needs data"] : []),
+                  ...(live ? ["Awaiting analysis"] : []),
                 ]),
           ].map((f) => (
             <button

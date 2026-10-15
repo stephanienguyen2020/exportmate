@@ -294,16 +294,16 @@ The Orders page (owners and editors): tick orders, or "Select every order shown"
 
 ### `GET /order-statuses` (viewer)
 ```json
-{"data": [{"code": "exposed", "label": "Action needed", "description": "A document is missing or a rule changes before it ships.", "tone": "red", "manual": true}, …]}
+{"data": [{"code": "exposed", "label": "Action needed", "description": "A document is missing or a rule changes before it ships.", "tone": "red", "manual": true, "retired": false}, …]}
 ```
-Every order status from the `order_statuses` table, in display order: its label, a one-line description, its colour (`green`, `amber`, `red`) and whether a person may set it by hand. Loaded from `seed_data/reference.json` (`orderStatuses`) by `seed_reference_data`. The live workspace uses these labels for status badges, the Orders filter tabs and the Status panel; the browser demo keeps its own.
+Every order status from the `order_statuses` table, in display order: its label, a one-line description, its colour (`green`, `amber`, `red`), whether a person may set it by hand, and whether it is `retired` (no longer given to orders, only named in earlier status changes: `needs_data`, since missing data makes an order `exposed`). Retired statuses are not filter tabs. Loaded from `seed_data/reference.json` (`orderStatuses`) by `seed_reference_data`. The live workspace uses these labels for status badges, the Orders filter tabs and the Status panel; the browser demo keeps its own.
 
 ## CSV import
 
-Upload screen, live session: choose file → `POST /imports` → `GET /imports/{id}` → show errors and preview → "Import" → `POST /imports/{id}/commit` → toast "N orders imported. Awaiting analysis." → workspace reload. The demo session parses the file in the browser instead (PapaParse, `frontend/src/order-csv.ts`, with the same checks).
+Upload screen, live session: choose file → `POST /imports` → `GET /imports/{id}` → show errors and preview → "Import" → `POST /imports/{id}/commit` → toast "N orders imported and analysed." with the count per status → workspace reload; the Orders page shows the import's run, with why each order needs data. The demo session parses the file in the browser instead (PapaParse, `frontend/src/order-csv.ts`, with the same checks).
 
 ### `POST /imports` (editor, rate limited)
-`multipart/form-data` with `file`. `.csv` only, ≤4 MB, ≤10,000 rows. Columns: `id,product,supplier,destination,value,shipDate,hsCode` (+ optional `currency`, which defaults to the company's). An `hsCode` cell may be empty: analysis marks the order `needs_data` and `POST /orders/{id}/hs-suggestions` suggests a code.
+`multipart/form-data` with `file`. `.csv` only, ≤4 MB, ≤10,000 rows. Columns: `id,product,supplier,destination,value,shipDate,hsCode` (+ optional `currency`, which defaults to the company's). An `hsCode` cell may be empty: analysis makes the order `exposed` with "Add the HS code" as its next step, and `POST /orders/{id}/hs-suggestions` suggests a code.
 The file and every row are always saved. Row problems don't fail the request; they show up in `errors` and set `status: "invalid"`. Returns `201` with the import:
 
 ```json
@@ -323,7 +323,7 @@ The file and every row are always saved. Row problems don't fail the request; th
 Same shape as the upload response. The frontend calls it straight after the upload.
 
 ### `POST /imports/{id}/commit` (editor)
-All or nothing: creates one order per row, each `awaiting_analysis` and linked to its row. Returns `{"importId": "…", "ordersCreated": 12}`.
+All or nothing: creates one order per row, each `awaiting_analysis` and linked to its row, then analyses the new orders as `POST /runs` with their IDs would (not counted against the runs rate limit). Returns `{"importId": "…", "ordersCreated": 12, "run": {…as POST /runs…}}`. `run` is `null` when the analysis failed: the orders are saved anyway and stay `awaiting_analysis` until "Analyse orders".
 - `409 already_committed`, `422 import_has_errors`, `409 orders_already_exist` (an order ID was added after validation).
 
 Uploads never committed are deleted by `python -m app.cleanup_imports --older-than-days 30`.
@@ -584,15 +584,16 @@ Body optional: `{"orderIds": ["PO-2291"]}` (default: every order). Updates each 
 ```json
 {"id": "…", "status": "done", "orderCount": 4, "playbookRevision": 3,
  "steps": [{"name": "relevance", "summary": "3 of 4 orders ship to a market with a checklist (EU, US)."},
-           {"name": "exposure", "summary": "1 exposed, 1 clear, 2 need data. Checked against 30 market requirements."},
+           {"name": "exposure", "summary": "3 exposed (2 missing data), 1 clear. Checked against 30 market requirements."},
            {"name": "cost", "summary": "Estimated cost: USD 14,775.00."},
            {"name": "playbook", "summary": "2 checked rules (playbook revision 3) fired 2 times. …"},
            {"name": "plan", "summary": "4 orders have a suggested action."},
            {"name": "auditor", "summary": "4 of 4 reports passed the checks; 1 go to human review."}],
  "costSettings": [ …the values used… ], "error": null, "createdAt": "…", "finishedAt": "…",
  "reports": [{"id": "…", "orderId": "PO-2291", "state": "pass", "orderStatus": "exposed", "blocked": false,
-              "costTotals": {"USD": 120000}}]}
+              "costTotals": {"USD": 120000}, "missingData": []}]}
 ```
+- `missingData`: why the order needs data (no HS code, no checklist for the destination, a supplier not on the map); empty otherwise.
 - `422 unknown_orders`, `422 no_orders`. `500 analysis_failed`: the run is saved as `failed` and nothing else changes.
 
 ### `GET /runs/{id}` (viewer)
@@ -603,8 +604,8 @@ One order's report. Stored as it was written, so it reads the same after require
 
 | Key | Holds |
 | --- | --- |
-| `state` | `pass`, `needs_data` (no checklist for the destination, or no supplier record), `needs_human_review` (an `owner_review` rule fired or the audit failed), `rejected` (reserved) |
-| `orderStatus`, `blocked` | What the order became (`exposed` / `clear` / `needs_data`); `blocked` when a `block` rule fired |
+| `state` | `pass`, `needs_human_review` (an `owner_review` rule fired or the audit failed), `rejected` (reserved) |
+| `orderStatus`, `blocked` | What the order became: `exposed` (a document missing or mismatched, or `missingData`: no HS code, no checklist for the destination, or no supplier record; the suggested action names what to add) or `clear`. Reports and statuses from before may still say `needs_data`; `blocked` when a `block` rule fired |
 | `order`, `orderSource` | The order as analysed and its CSV row (`importId`, `rowNumber`) |
 | `findings[]` | Every requirement checked, as in the trade map's `checks[]`, each with its source and quote |
 | `costLines[]` | `kind` (`missing_document` / `new_test` / `delay` / `duty`), `label`, `quantity`, `unitAmountMinor` or `baseAmountMinor` + `ratePercent`, `amountMinor`, `currency`, `formula` ("4 days × USD 200.00"), `basis[]` (`regulation` with its source, `company_setting` or `default`) |
