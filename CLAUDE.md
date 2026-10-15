@@ -108,7 +108,7 @@ Locally `AUTH_MODE=dev` accepts `Authorization: Bearer dev:<email>` instead of a
 
 ### Deployment wiring
 
-- `frontend/vercel.json` rewrites `/api/*` to the Cloud Run URL; locally `frontend/vite.config.ts` proxies `/api` to `:8080`.
+- `frontend/vercel.json` rewrites `/api/*` to the Cloud Run URL; locally `frontend/vite.config.ts` proxies `/api` to `:8080`. Terraform reads that rewrite for the backend's `AI_SERVICE_URL`, so the backend reads the same AI service as the website.
 - Browser → Vercel → Cloud Run `exportmate-ai` (`index.js`, its service account calls Agent Platform) → Agent Runtime instance (`runtime.js`, its own Agent Identity, egress through Agent Gateway). The same image serves both; `deploy.sh` updates both. Evaluation runs live in us-central1 (the service isn't offered in asia-southeast1); everything else is asia-southeast1 plus Gemini's global endpoint.
 - `frontend/.vercelignore` excludes `ai/server` and `docs` from the Vercel upload; `ai/server/.gcloudignore` governs the Cloud Run source deploy.
 
