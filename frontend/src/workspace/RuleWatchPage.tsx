@@ -83,8 +83,8 @@ export default function RuleWatchPage({
               <div>
                 <span className="eyebrow">NEW SAMPLE REQUIREMENT</span>
                 <p>
-                  Provide <mark>{sampleObligation.requirement}</mark> for the
-                  wood in each affected lot.
+                  Provide <mark>{sampleObligation.requirement}</mark> for the{" "}
+                  {sampleObligation.material} in each affected lot.
                 </p>
               </div>
             </div>

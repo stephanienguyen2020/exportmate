@@ -422,7 +422,7 @@ export function AccountSettings({
                   rows={2}
                   value={p.products}
                   onChange={(e) => update("products", e.target.value)}
-                  placeholder="e.g. Acacia plywood, engineered flooring, garden furniture"
+                  placeholder="e.g. Cotton T-shirts, roasted coffee, LED lamps"
                 />
               </label>
               <label className="ac-field">
@@ -433,7 +433,7 @@ export function AccountSettings({
                   rows={2}
                   value={p.materials}
                   onChange={(e) => update("materials", e.target.value)}
-                  placeholder="e.g. Plantation acacia (Vietnam), birch veneer (imported)"
+                  placeholder="e.g. Organic cotton (India), arabica beans (Vietnam)"
                 />
               </label>
               <label className="ac-field">
@@ -444,7 +444,7 @@ export function AccountSettings({
                   rows={2}
                   value={p.certifications}
                   onChange={(e) => update("certifications", e.target.value)}
-                  placeholder="e.g. FSC Chain of Custody, VNTLAS, ISO 9001"
+                  placeholder="e.g. ISO 9001, GOTS, Fairtrade"
                 />
               </label>
               <RouteFields

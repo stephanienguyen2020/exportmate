@@ -51,7 +51,7 @@ type StockItem = {
   name: string;
   category: string;
   hsCode: string;
-  species: string;
+  material: string;
   supplier: string;
   markets: string[];
 };
@@ -139,7 +139,7 @@ function buildHits(
         "stock",
         s.sku,
         `${s.sku} · ${s.name}`,
-        [s.category, s.species, s.supplier].filter(Boolean).join(" · "),
+        [s.category, s.material, s.supplier].filter(Boolean).join(" · "),
         [s.hsCode, ...s.markets],
         { path: "news" },
       ),

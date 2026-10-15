@@ -1,8 +1,8 @@
 """Market requirements from a company's own regulation: drafted by AI, reviewed by the owner.
 
 1. An editor asks for drafts from one version (a regulation document). Its text is read (PDF,
-   HTML or plain text); a long text is cut down to the sections closest to what a wood and
-   furniture exporter must do (services/document_text.py). Gemini returns requirements with the
+   HTML or plain text); a long text is cut down to the sections closest to what an exporter of
+   the company's goods must do (services/document_text.py). Gemini returns requirements with the
    exact sentence for each. Code drops any that name an unknown market or document kind, or
    quote a sentence that isn't in the text. A scanned PDF has no text: Gemini reads the file and
    its quotes are marked unverified for the reviewer.
@@ -36,6 +36,7 @@ from app.database.models import (
 )
 from app.database.queries import audit as audit_queries
 from app.database.queries import market_requirements as requirement_queries
+from app.database.queries import orders as order_queries
 from app.database.queries import regulations as regulation_queries
 from app.database.queries import trade_map as map_queries
 from app.schemas.market_requirements import (
@@ -53,12 +54,8 @@ log = logging.getLogger(__name__)
 
 _KEY = re.compile(r"^[a-z0-9_]{1,40}$")
 _HS_PREFIX = re.compile(r"^\d{2,10}$")
-# What the sections of a long text are ranked against.
-SECTION_QUERY = (
-    "Obligations for importers and exporters of wood, timber, plywood and furniture: documents "
-    "suppliers must provide, certificates, due diligence, proof of origin, test reports, "
-    "labelling, duties and tariff rates, HS codes and dates they apply from."
-)
+# Products named when the company's profile doesn't say what it makes or sells.
+GOODS_FROM_ORDERS = 12
 # Fields compared between versions; the quote and the explanation always change with the text.
 _COMPARED_FIELDS = {
     "title": "title",
@@ -99,12 +96,35 @@ def requirement_out(requirement: MarketRequirement) -> MarketRequirementOut:
     )
 
 
+def company_goods(db: Session, ctx: CompanyContext) -> str:
+    """What the company makes or sells, in its own words: its profile's products and materials,
+    else the products its orders name; "" when it has neither."""
+    company = ctx.company
+    products = company.products.strip() or ", ".join(
+        order_queries.list_order_products(db, ctx.company_id, GOODS_FROM_ORDERS)
+    )
+    materials = company.materials.strip()
+    return "; ".join(
+        part for part in (products, f"materials: {materials}" if materials else "") if part
+    )
+
+
+def section_query(goods: str) -> str:
+    """What the sections of a long text are ranked against."""
+    return (
+        f"Obligations for importers and exporters of {goods or 'goods'}: documents suppliers "
+        "must provide, certificates, due diligence, proof of origin, test reports, labelling, "
+        "duties and tariff rates, HS codes and dates they apply from."
+    )
+
+
 def _extraction_prompt(
     db: Session,
     ctx: CompanyContext,
     regulation: Regulation,
     document: RegulationDocument,
     text: str | None,
+    goods: str,
 ) -> str:
     markets = "\n".join(f"- {m.code}: {m.name}" for m in map_queries.list_markets(db))
     kinds = "\n".join(f"- {k.kind}: {k.label}" for k in map_queries.list_document_kinds(db))
@@ -116,8 +136,14 @@ def _extraction_prompt(
         if text is not None
         else "The document is the attached file."
     )
+    company = (
+        f"The company makes or sells: {goods}. List what the regulation requires for these goods."
+        if goods
+        else "The company hasn't said what it makes or sells, so list what the regulation "
+        "requires for any goods it covers."
+    )
     return f"""You read one version of a regulation and list what it requires of a company that
-exports wood products and furniture, for each market it applies to.
+exports goods, for each market it applies to. {company}
 
 List only what goes on an exporter's checklist for a shipment: a document the supplier must
 provide, paperwork prepared for each shipment, or something to check before shipping (a tariff,
@@ -225,12 +251,15 @@ def draft_requirements(
         )
     content = get_file_storage().load_file(document.storage_path)
     text = document_text.document_text(content, document.content_type)
+    goods = company_goods(db, ctx)
     prompt_text, cut_down = (
-        document_text.relevant_text(text, SECTION_QUERY) if text is not None else (None, False)
+        document_text.relevant_text(text, section_query(goods))
+        if text is not None
+        else (None, False)
     )
     answer = gemini.generate_json(
         "requirement_extraction",
-        _extraction_prompt(db, ctx, regulation, document, prompt_text),
+        _extraction_prompt(db, ctx, regulation, document, prompt_text, goods),
         ExtractedRequirements,
         file=(content, document.content_type) if text is None else None,
     )

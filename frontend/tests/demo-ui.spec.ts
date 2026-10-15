@@ -553,3 +553,15 @@ test("people confirm or reject which demo orders a news alert affects", async ({
   await page.getByLabel("Orders", { exact: true }).selectOption("review");
   await expect(page.locator(".news-list .news-card")).toHaveCount(1);
 });
+
+test("the CSV template has the import's columns and the demo's first order as its example", async ({ page }) => {
+  await openDemo(page, "#/workspace/data");
+  const [file] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("button", { name: "Download the template" }).click(),
+  ]);
+  const text = await (await file.createReadStream()).toArray().then((parts) => Buffer.concat(parts).toString());
+  const [header, row] = text.trim().split("\n");
+  expect(header).toBe("id,product,supplier,destination,value,shipDate,hsCode,currency");
+  expect(row).toMatch(/^PO-2291,Acacia plywood · 18 mm,Binh Phu Wood,"Rotterdam, NL",24000,\d{4}-\d{2}-\d{2},4412\.33,USD$/);
+});

@@ -27,11 +27,11 @@ const item = (sku: string, name: string, hsCode: string, markets: string[]) => (
   hsCode,
   markets,
   category: "",
-  species: "",
-  timberOrigin: "",
+  material: "",
+  materialOrigin: "",
   supplier: "",
   certifications: [],
-  geolocationOnFile: false,
+  originTraced: false,
   warehouse: "",
   unit: "pcs",
   qtyOnHand: 1,
@@ -92,4 +92,23 @@ test("the +N chip on a news card shows the rest of its stock items", async ({ pa
   await expect(card.locator(".news-skus").getByText("FLR-102")).toBeVisible();
   await card.getByRole("button", { name: "Show fewer stock items" }).click();
   await expect(card.locator(".news-skus").getByText("FLR-102")).toHaveCount(0);
+});
+
+test("the stock list shows each item's material and origin trace, and whose stock it is", async ({ page }) => {
+  const traced = { ...item("TEX-101", "Organic cotton tee", "6109.10", ["EU"]), material: "Organic cotton", materialOrigin: "India", originTraced: true };
+  await page.route("**/api/impacts**", (route) => route.fulfill({ json: { impacts: [], scan: null } }));
+  await page.route("**/api/inventory**", (route) =>
+    route.fulfill({ json: { items: [traced], owner: { company: "Sample Textiles Ltd.", about: "a sample apparel maker" } } }),
+  );
+  await page.goto("/");
+  await page.evaluate(() => sessionStorage.setItem("em-session", "demo"));
+  await page.goto("/#/workspace/news");
+  await page.getByRole("button", { name: "Stock", exact: true }).click();
+  await expect(page.getByText("a made-up stock list for Sample Textiles Ltd., kept apart from the orders")).toBeVisible();
+  const row = page.getByRole("row", { name: /TEX-101/ });
+  await expect(row).toContainText("Organic cotton");
+  await expect(row).toContainText("India");
+  await expect(row).toContainText("On file");
+  await expect(page.getByRole("columnheader", { name: "Material" })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "Origin trace" })).toBeVisible();
 });

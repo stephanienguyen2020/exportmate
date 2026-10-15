@@ -1,9 +1,9 @@
 """Build app/seed_data/hs_headings.json from the US Harmonized Tariff Schedule (USITC).
 
 The HTS is public and its first 6 digits are the international HS code. We keep the 4-digit
-headings and 6-digit subheadings of the chapters our checklists cover (the chapters of every
-`hsPrefixes` in reference.json), each with its full description path, e.g. "Seats (other than
-those of heading 9402)…: Other seats, with wooden frames: Upholstered".
+headings and 6-digit subheadings of every HS chapter, so HS code suggestions work whatever a
+company makes, each with its full description path, e.g. "Seats (other than those of heading
+9402)…: Other seats, with wooden frames: Upholstered".
 
 Run it when the HS edition changes (HS 2027 takes effect on 1 January 2027), then commit the
 JSON; the reference seed loads it and embeds new or changed lines.
@@ -32,16 +32,9 @@ def _clean(description: str) -> str:
     return " ".join(text.split()).rstrip(":").strip()
 
 
-def chapters_in_use() -> list[str]:
-    reference = json.loads((SEED_DIR / "reference.json").read_text(encoding="utf-8"))
-    prefixes = {
-        _digits(p)
-        for items in reference["requirements"].values()
-        for r in items
-        for p in r.get("hsPrefixes", [])
-    }
-    # Wood and furniture are the demo company's own goods, whatever the checklists say.
-    return sorted({p[:2] for p in prefixes if len(p) >= 2} | {"44", "94"})
+def hs_chapters() -> list[str]:
+    """The HS chapters, 01 to 97; 77 is reserved. (98 and 99 are US-only provisions.)"""
+    return [f"{n:02d}" for n in range(1, 98) if n != 77]
 
 
 def headings_of_chapter(chapter: str) -> list[dict]:
@@ -69,13 +62,13 @@ def headings_of_chapter(chapter: str) -> list[dict]:
 
 def main() -> None:
     headings = []
-    for chapter in chapters_in_use():
+    for chapter in hs_chapters():
         chapter_headings = headings_of_chapter(chapter)
         print(f"chapter {chapter}: {len(chapter_headings)} lines", file=sys.stderr)
         headings += chapter_headings
     out = {
         "_about": "4-digit headings and 6-digit subheadings of the US Harmonized Tariff Schedule "
-        "(first 6 digits = the international HS code), for the chapters the checklists cover. "
+        "(first 6 digits = the international HS code), for every HS chapter. "
         "Built by scripts/build_hs_headings.py; the description is the line's full path.",
         "source": "USITC Harmonized Tariff Schedule",
         "sourceUrl": SOURCE_URL,

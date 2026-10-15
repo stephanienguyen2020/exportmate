@@ -349,7 +349,7 @@ export function SupplierForm({
         maxLength={1000}
         value={supplies}
         onChange={(e) => setSupplies(e.target.value)}
-        placeholder="Acacia plywood, rubberwood panels"
+        placeholder="e.g. Cotton yarn, printed labels"
       />
       <label htmlFor="tm-supplier-contact-name">Contact person (optional)</label>
       <input

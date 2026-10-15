@@ -238,7 +238,7 @@ export function SampleOrder({
             <p>
               The sample obligation requires {sampleObligation.requirement} for{" "}
               {sampleObligation.materials.join(", ")} and HS{" "}
-              {sampleObligation.hsPrefixes.join(", ")} wood products bound for
+              {sampleObligation.hsPrefixes.join(", ")} {sampleObligation.goods} bound for
               the {sampleObligation.marketName}. {sampleGap(order)}
             </p>
             <button className="evidence-link" onClick={() => onEvidence(order)}>
@@ -320,7 +320,7 @@ export function SampleOrder({
               your supplier.
             </h2>
             <p>
-              Request plot-level geolocation and supporting origin records from{" "}
+              Request {sampleObligation.requirement} and supporting origin records from{" "}
               {order.supplier}.
             </p>
             <div className="recommendation-meta">

@@ -327,7 +327,7 @@ function CertificateUpload({
       <input
         id="tm-cert-standards"
         value={fields.standards}
-        placeholder="Comma-separated, e.g. FSC-STD-40-004"
+        placeholder="Comma-separated, e.g. ISO 9001, GOTS 7.0"
         onChange={(e) => set({ standards: e.target.value })}
       />
       <FormActions

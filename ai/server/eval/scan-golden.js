@@ -1,6 +1,6 @@
 // Labeled articles for the news scan's relevance judgment (scan.js assess + relevance.js
 // decide). The articles are written for this eval, not real news: each one isolates a
-// link the scan should find (HS code, market, timber origin, missing geolocation) or a
+// link the scan should find (HS code, market, material origin, missing origin trace) or a
 // trap it should ignore (other commodities, exchange rates, fuel, measures on other goods
 // from Vietnam). Expected SKUs are computed from the stock the scan will see and dates
 // from today, so the set stays right when the seed or the calendar changes.
@@ -22,8 +22,8 @@ export function scanCases(items, { today = new Date() } = {}) {
 
   const usPlywood = skus((i) => i.hsCode.startsWith("4412") && sells("US")(i));
   const usCabinets = skus((i) => i.category === "Kitchen cabinets & vanities" && sells("US")(i));
-  const euNoGeo = skus((i) => sells("EU")(i) && !i.geolocationOnFile);
-  const fromRussia = skus((i) => i.timberOrigin === "Russia");
+  const euNoGeo = skus((i) => sells("EU")(i) && !i.originTraced);
+  const fromRussia = skus((i) => i.materialOrigin === "Russia");
   const usSeating = skus((i) => i.category === "Upholstered seating" && sells("US")(i));
 
   return [
@@ -55,7 +55,7 @@ export function scanCases(items, { today = new Date() } = {}) {
         "US sets preliminary anti-dumping duties on hardwood and decorative plywood from Vietnam",
         `The Commerce Department announced preliminary duties of 12% to 110% on hardwood and decorative plywood (HS 4412) imported from Vietnam. Cash deposits will be collected from ${day(30)}.`,
       ),
-      expect: { relevant: true, skus: usPlywood, allowed: [...usPlywood, ...skus((i) => /plywood/i.test(i.species) && sells("US")(i))], severity: ["high"], direction: ["risk"] },
+      expect: { relevant: true, skus: usPlywood, allowed: [...usPlywood, ...skus((i) => /plywood/i.test(i.material) && sells("US")(i))], severity: ["high"], direction: ["risk"] },
     },
     {
       id: "copper-232",
@@ -145,7 +145,7 @@ export function scanCases(items, { today = new Date() } = {}) {
         "Cameroon suspends sawn sapele exports pending legality audit",
         "The forestry ministry halted export permits for sawn sapele for at least three months while it audits concession records.",
       ),
-      expect: { relevant: true, skus: skus((i) => i.timberOrigin === "Cameroon"), allowed: skus((i) => i.timberOrigin === "Cameroon"), severity: ["high", "medium"], direction: ["risk"] },
+      expect: { relevant: true, skus: skus((i) => i.materialOrigin === "Cameroon"), allowed: skus((i) => i.materialOrigin === "Cameroon"), severity: ["high", "medium"], direction: ["risk"] },
     },
     {
       id: "shrimp-antidumping",
@@ -182,7 +182,7 @@ export function scanCases(items, { today = new Date() } = {}) {
         "UK adds extra due-diligence checks for timber products from Laos",
         "Importers must provide concession-level legality evidence for any wood product containing Laotian timber, including outdoor furniture.",
       ),
-      expect: { relevant: true, skus: skus((i) => i.timberOrigin === "Laos" && sells("UK")(i)), allowed: skus(sells("UK")), direction: ["risk"] },
+      expect: { relevant: true, skus: skus((i) => i.materialOrigin === "Laos" && sells("UK")(i)), allowed: skus(sells("UK")), direction: ["risk"] },
     },
     {
       id: "industrial-land",
@@ -202,8 +202,8 @@ export function scanCases(items, { today = new Date() } = {}) {
       ),
       expect: {
         relevant: true,
-        skus: skus((i) => i.category === "Imported sawn timber" && i.timberOrigin === "United States"),
-        allowed: skus((i) => i.timberOrigin === "United States"),
+        skus: skus((i) => i.category === "Imported sawn timber" && i.materialOrigin === "United States"),
+        allowed: skus((i) => i.materialOrigin === "United States"),
         direction: ["opportunity", "watch"],
       },
     },

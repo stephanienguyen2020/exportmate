@@ -114,7 +114,7 @@ export default function OrderStatusPanel({
             maxLength={1000}
             required
             value={note}
-            placeholder="e.g. Buyer confirmed the plot geolocation by email on 14 Oct."
+            placeholder="e.g. Supplier sent the missing certificate by email on 14 Oct."
             onChange={(e) => setNote(e.target.value)}
           />
           <small>
@@ -248,7 +248,7 @@ export function BulkStatusBar({
           maxLength={1000}
           required
           value={note}
-          placeholder="e.g. Buyer confirmed the plot geolocation by email on 14 Oct."
+          placeholder="e.g. Supplier sent the missing certificate by email on 14 Oct."
           onChange={(e) => setNote(e.target.value)}
         />
       </label>
