@@ -181,3 +181,4 @@ class OrderDetailOut(CamelCaseModel):
     order: OrderOut
     source: SourceRowOut | None  # None for seeded orders
     exposures: list[ExposureOut]  # problems the latest report found; empty before any run
+    latest_report_id: uuid.UUID | None = None  # the order's latest report; None before any run

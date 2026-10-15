@@ -196,6 +196,35 @@ async function openMap(
           json: { error: { message: "Map service unavailable" } },
         });
       data = { ...current, sites: options.noOrigin ? [] : current.sites };
+    } else if (path === "/suppliers/supplier-1/documents") {
+      options.writes?.push({ method: "POST", path, body: null });
+      data = {
+        id: "upload-1",
+        supplierId: "supplier-1",
+        filename: "fsc.pdf",
+        contentType: "application/pdf",
+        sizeBytes: 9,
+        status: "draft",
+        extracted: {
+          kind: "legality",
+          documentNumber: "SGS-COC-001234",
+          issuer: "SGS",
+          issuedOn: "2025-12-15",
+          expiresOn: "2026-12-15",
+          standards: ["FSC-STD-40-004"],
+          detail: "FSC chain of custody SGS-COC-001234",
+          notes: "The stamp is faint.",
+        },
+        createdAt: "2026-10-15T08:00:00Z",
+        confirmedAt: null,
+      };
+    } else if (path === "/supplier-documents/upload-1/confirm") {
+      const body = route.request().postDataJSON();
+      options.writes?.push({ method: "POST", path, body });
+      current.suppliers[0].documents = [
+        { ...body, label: "Timber legality evidence", fromUpload: true },
+      ];
+      data = { id: "doc-1", supplierId: "supplier-1", uploadId: "upload-1", ...body };
     } else if (path === "/suppliers" || path.startsWith("/sites/")) {
       const method = route.request().method();
       const body = route.request().postDataJSON();
@@ -578,4 +607,48 @@ test("viewers can't add or edit places", async ({ page }) => {
   await page.getByRole("button", { name: /Sample factory/ }).click();
   await expect(page.locator(".tm-panel h2")).toHaveText("Sample factory.");
   await expect(page.getByRole("button", { name: "Edit site" })).toHaveCount(0);
+});
+
+test("editors upload a supplier certificate and confirm what AI read", async ({
+  page,
+}) => {
+  const writes: { method: string; path: string; body: any }[] = [];
+  await openMap(page, {
+    writes,
+    hash: "map/supplier/" + encodeURIComponent("Sample supplier"),
+  });
+  await expect(page.locator(".tm-panel h2")).toHaveText("Sample supplier.");
+  await page
+    .getByLabel("Upload a certificate for Sample supplier")
+    .setInputFiles({
+      name: "fsc.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from("%PDF-1.4 "),
+    });
+  const form = page.locator(".tm-upload-form");
+  await expect(form.getByText("Hard to read: The stamp is faint.")).toBeVisible();
+  await expect(form.getByLabel("Document number (optional)")).toHaveValue(
+    "SGS-COC-001234",
+  );
+  await expect(form.getByLabel("Expires on (optional)")).toHaveValue("2026-12-15");
+  await form.getByLabel("Issued by (optional)").fill("SGS Vietnam");
+  await form.getByRole("button", { name: "Confirm certificate" }).click();
+  await expect(
+    page.getByText(/expires 2026-12-15 · from an uploaded certificate/),
+  ).toBeVisible();
+  expect(writes).toEqual([
+    { method: "POST", path: "/suppliers/supplier-1/documents", body: null },
+    {
+      method: "POST",
+      path: "/supplier-documents/upload-1/confirm",
+      body: {
+        kind: "legality",
+        detail: "FSC chain of custody SGS-COC-001234",
+        standards: ["FSC-STD-40-004"],
+        documentNumber: "SGS-COC-001234",
+        issuer: "SGS Vietnam",
+        expiresOn: "2026-12-15",
+      },
+    },
+  ]);
 });

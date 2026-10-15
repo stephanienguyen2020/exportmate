@@ -1342,3 +1342,26 @@ button.tm-callout.tm-callout-row {
   stroke: #f5f4eb;
   stroke-width: 3px;
 }
+
+/* Supplier panel: certificate upload and the confirm form */
+.tm-upload {
+  display: grid;
+  gap: 4px;
+  margin-top: 12px;
+}
+.tm-upload > .text-link {
+  justify-self: start;
+}
+.tm-upload small,
+.tm-upload-form > small {
+  font-size: 10px;
+  color: var(--muted);
+}
+.tm-upload-form {
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+.tm-upload-form h3 {
+  margin: 0;
+}

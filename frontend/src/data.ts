@@ -15,6 +15,10 @@ export type Rule = {
   text: string;
   category: string;
   enabled: boolean;
+  // Checked rules (signed-in companies only): WHEN every condition holds, THEN the action.
+  when?: { field: string; op: string; value: unknown }[] | null;
+  then?: { action: string; note: string | null } | null;
+  checked?: boolean;
 };
 // Today's date as YYYY-MM-DD in the visitor's time zone.
 export const isoDay = (d = new Date()) =>

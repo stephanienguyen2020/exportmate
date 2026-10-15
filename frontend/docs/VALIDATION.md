@@ -112,3 +112,9 @@ Supersedes the fixture-based trade map checks above where they differ. Map data 
 - Vercel proxy test on Node 25: 4 passed (Node 20 can't load the `.ts` module, as before).
 - AI service: `npm test` 86 passed; `node --check` on every module. New tests: demo orders become map orders (`demoMapOrders`; malformed rows dropped, text trimmed, at most 200), demo playbook rules (`demoPlaybook`), the gateway's `orders` scope (offered to a demo with orders, refused without), the `company-orders` and `playbook` rules applying wherever their tools can read. New golden case `demo-order-status` (complex tier).
 - Not exercised: the assistant against live Gemini (the golden set, including `demo-order-status`, needs a run on GCP after deploy), the signed-in chat reading `GET /playbook/rules` with a real token, and `npm run index` to re-index the updated help guides.
+
+### Workspace tour (15 October 2026)
+
+- First-visit walkthrough of the workspace: a welcome card, then a spotlight on each sidebar page (Overview to Playbook), the demo's Maker/Buyer switch, the assistant button and the ? that replays it. Skip, Back/Next, Escape and arrow keys; focus stays in the card and returns afterwards. Shown once per browser (`em-tour-done`); signed in it waits until the workspace has loaded. On phones the sidebar steps are centred cards.
+- Playwright (port 5199, since 5175 was in use): 54 passed, 1 skipped. New `tests/tour.spec.ts`: the tour opens on a first visit, places the card beside the item it describes, goes back, closes with Escape, stays closed after a reload and reopens from the ? button; at 390 px every step fits the screen and the last one spotlights the ? button. Screenshots at 1366 and 390 px checked.
+- Not exercised: a signed-in company workspace with a real backend.

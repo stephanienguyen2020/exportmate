@@ -645,13 +645,13 @@ def report_with_actions_out(db: Session, ctx: CompanyContext, report: AnalysisRe
     return out
 
 
-def latest_exposures(db: Session, order: Order) -> list[ExposureOut]:
-    """The problems the order's latest report found, for the order page."""
+def latest_exposures(db: Session, order: Order) -> tuple[uuid.UUID | None, list[ExposureOut]]:
+    """The order's latest report ID and the problems it found, for the order page."""
     report = analysis_queries.get_latest_order_report(db, order.id)
     if not report:
-        return []
+        return None, []
     content = ReportContentOut.model_validate(report.content)
-    return [
+    return report.id, [
         ExposureOut(
             report_id=report.id,
             requirement_key=f.requirement_key,
