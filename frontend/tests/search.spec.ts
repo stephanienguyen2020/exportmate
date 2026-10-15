@@ -21,7 +21,7 @@ const item = {
   name: "Acacia plywood 18 mm",
   category: "Panels",
   hsCode: "4412",
-  species: "Acacia",
+  material: "Acacia",
   supplier: "Binh Phu Wood",
   markets: ["EU"],
 };

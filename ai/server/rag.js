@@ -109,8 +109,8 @@ export const toDoc = {
     url: "#/workspace/news",
     text:
       `Stock item ${i.sku}: ${i.name}. Category ${i.category}, HS code ${i.hsCode}. ` +
-      `Made of ${i.species} from ${i.timberOrigin}; supplier ${i.supplier}. Sold to ${i.markets.join(", ")}. ` +
-      `Certifications: ${i.certifications.join(", ") || "none"}. Geolocation data ${i.geolocationOnFile ? "on file" : "missing"}. ` +
+      `Made of ${i.material} from ${i.materialOrigin}; supplier ${i.supplier}. Sold to ${i.markets.join(", ")}. ` +
+      `Certifications: ${i.certifications.join(", ") || "none"}. Origin trace ${i.originTraced ? "on file" : "missing"}. ` +
       `${i.qtyOnHand} ${i.unit} on hand at ${i.warehouse}, unit cost USD ${i.unitCostUsd}, stock value USD ${Math.round(i.qtyOnHand * i.unitCostUsd)}.`,
   }),
   alert: (a) => ({

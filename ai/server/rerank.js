@@ -1,6 +1,6 @@
 // Hybrid retrieval: the vector index finds candidates by meaning, then BM25 over
 // those candidates rewards exact terms that embeddings blur, such as HS codes
-// (4412.33), SKUs (PLY-103) and rule names (EUDR, VNTLAS). Each hit keeps its
+// (4412.33), SKUs (PLY-103) and rule names (EUDR, CBAM). Each hit keeps its
 // cosine `score` and gains a `lexical` score in [0, 1]; results are ordered by
 // score + LEXICAL_WEIGHT × lexical.
 

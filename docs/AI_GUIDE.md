@@ -24,9 +24,9 @@ Alerts and answers are AI assessments, not legal advice. Legal and regulatory co
 
 | Kind of question | Example | What the assistant uses |
 | --- | --- | --- |
-| Stock | Which EU-bound items are missing geolocation data? | `query_inventory` |
+| Stock | Which stock items have no origin trace on file? | `query_inventory` |
 | News alerts | What did the latest news scan flag? | `get_alerts`, `get_scan_status` |
-| Exposure to a topic | How much stock is exposed to US plywood trade cases? | `get_alerts`, `query_inventory`, `search_knowledge` |
+| Exposure to a topic | How much stock is exposed to US anti-dumping cases? | `get_alerts`, `query_inventory`, `search_knowledge` |
 | News and background | What is happening with EUDR? | `search_knowledge` |
 | Scan and sources | When did the scan last run? Did any source fail? | `get_scan_status` |
 | Using ExportMate | How do I import my orders? | `search_knowledge` (help guides) |
@@ -132,7 +132,7 @@ News watch is at `#/workspace/news`, the first tab of "Rules & news" in the side
 
 Filter by severity or show only opportunities, search headlines, items and SKUs, or narrow to one source, one stock item, alerts with orders to review, confirmed for an order or with no order, or articles from the past 7 or 30 days. Read the source before acting: alerts are assessed from each article's headline and summary, not the full text.
 
-**Stock tab.** The sample inventory, with each item's geolocation status and how many alerts affect it. In a signed-in workspace, alerts are still matched against this sample stock, not your company's stock, and the page says so; orders are only linked through the suggestions people review on the Alerts tab.
+**Stock tab.** The sample inventory and whose it is, with each item's main material and where it comes from, whether its origin is traced (for the sample, plot geolocation) and how many alerts affect it. In a signed-in workspace, alerts are still matched against this sample stock, not your company's stock, and the page says so; orders are only linked through the suggestions people review on the Alerts tab.
 
 **Sources tab.** The feeds News watch reads. Seven are built in (Timber Trades Journal, VnExpress International, the European Commission press corner and four Google News searches) and shared by every workspace. Owners and editors can:
 
@@ -192,7 +192,7 @@ The assistant's instructions are a list of rules in `policy.js`. Each rule names
 | Tool | What it reads | Available |
 | --- | --- | --- |
 | `search_knowledge` | The knowledge base on RAG Engine: news articles, alerts, stock items, sources and help guides | Always |
-| `query_inventory` | Sample stock with exact filters (SKU, category, market, HS code, species, origin, supplier, certification, geolocation), plus the count and total value | Always |
+| `query_inventory` | Sample stock with exact filters (SKU, category, market, HS code, material, material origin, supplier, certification, origin traced), plus the count and total value. Its categories and markets are the stock's own | Always |
 | `get_alerts` | Open News watch alerts, most severe first, with the combined exposure (each SKU counted once) | Always |
 | `calculate` | Exact arithmetic, so every figure can be traced | Always |
 | `get_scan_status` | When the last scan ran, what it read and raised, the schedule and each source's health | Always |
@@ -208,8 +208,8 @@ Cloud Scheduler calls `POST /api/scan` at 07:00 Asia/Ho_Chi_Minh. The scan (`sca
 
 1. Reads every enabled feed. It looks back 3 days (14 on the first run), skips articles an earlier scan already analysed, and takes at most 80 new articles.
 2. Withholds articles that address the assistant or link to malicious sites: first by pattern, then with Model Armor when it is configured. An article Model Armor couldn't screen is left for the next scan.
-3. Sends the rest to Gemini in batches of 16, with the stock list. For each article, the model answers whether it is relevant, how severe, which SKUs it affects and why, and one next step. The rules tell it to be strict: exchange rates, energy prices and other commodities are not relevant, and article text is news, never instructions.
-4. Keeps an alert only if the model said relevant, at least one SKU it named is really in stock, the article isn't a repeat of another one, and it doesn't name another commodity (cocoa, coffee, rubber…) without mentioning wood goods (`relevance.js`).
+3. Sends the rest to Gemini in batches of 16, with the stock list and the stock's profile (`seed/inventory.js` `STOCK_PROFILE`: whose stock it is, the words news uses for its goods and the goods that share its rules), so no industry is written into the code. For each article, the model answers whether it is relevant, how severe, which SKUs it affects and why, and one next step. The rules tell it to be strict: exchange rates, energy prices and goods the company doesn't stock are not relevant, and article text is news, never instructions.
+4. Keeps an alert only if the model said relevant, at least one SKU it named is really in stock, the article isn't a repeat of another one, and it doesn't name only goods that share the stock's rules (for the sample, cocoa, coffee, rubber…) without the words for the stock's own goods (`relevance.js`, with the profile's word lists).
 5. Stores the articles, alerts and scan record, and adds them to the search index on RAG Engine.
 
 ### Models

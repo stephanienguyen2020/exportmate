@@ -40,9 +40,9 @@ export function clearChat() {
   window.dispatchEvent(new Event(RESET_EVENT));
 }
 const suggestions = [
-  "Which EU-bound items are missing geolocation data?",
+  "Which orders need action, and why?",
   "What did the latest news scan flag?",
-  "How much stock is exposed to US plywood trade cases?",
+  "Which stock items have no origin trace on file?",
   "How do I import my orders?",
 ];
 

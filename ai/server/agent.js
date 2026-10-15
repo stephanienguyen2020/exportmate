@@ -22,7 +22,7 @@ import { TIERS, thinkingFor } from "./models.js";
 import { routeQuestion } from "./router.js";
 import { answerKey, cacheable, cachedAudit, fingerprint, CACHE_TTL_MS } from "./answer-cache.js";
 import { GUIDES } from "./seed/guides.js";
-import { LIVE_TOOLS, REGISTRY, UnknownToolPlugin, cached, clearCaches, lastDoneScan, makeRefs, workspaceReaders } from "./agents/tools.js";
+import { LIVE_TOOLS, REGISTRY, UnknownToolPlugin, cached, clearCaches, lastDoneScan, makeRefs, withStockLists, workspaceReaders } from "./agents/tools.js";
 import { ANSWERING, buildAssistant } from "./agents/assistant.js";
 import { APP, chatSession, memoryService, remembers, userKeyFor } from "./agents/platform.js";
 
@@ -145,7 +145,10 @@ export async function runAgent({
   // analyst on the complex tier.
   let current = route.tier;
   const refs = makeRefs();
-  const gateway = toolGateway(REGISTRY, { refs, access, ...session }, { maxCalls: TOOL_BUDGET });
+  // The stock's own categories and markets for query_inventory's filters; unread, the filters
+  // are free text and the tool reports the error if it's called.
+  const stock = await cached("inventory", () => list(inventory)).catch(() => []);
+  const gateway = toolGateway(withStockLists(REGISTRY, stock), { refs, access, ...session }, { maxCalls: TOOL_BUDGET });
   const audit = {
     sessionId,
     requestId,

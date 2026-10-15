@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { FieldValue } from "@google-cloud/firestore";
 import { OAuth2Client } from "google-auth-library";
 import { db, inventory, sources, impacts, scans, companySources, locks, list } from "./db.js";
+import { STOCK_PROFILE } from "./seed/inventory.js";
 import { fetchFeed } from "./feeds.js";
 import { runScan } from "./scan.js";
 import { runAgent, audits, clearCaches } from "./agent.js";
@@ -371,7 +372,8 @@ async function route(method, path, body, req, query) {
   if (method === "GET" && path === "/api/audits") return sessionAudits(query, await readerAccess(req));
   const a = path.match(/^\/api\/audits\/([\w-]{1,40})$/);
   if (method === "GET" && a) return oneAudit(a[1], query, await readerAccess(req));
-  if (method === "GET" && path === "/api/inventory") return [200, { items: await list(inventory.orderBy("sku")) }];
+  if (method === "GET" && path === "/api/inventory")
+    return [200, { items: await list(inventory.orderBy("sku")), owner: { company: STOCK_PROFILE.company, about: STOCK_PROFILE.about } }];
   if (method === "GET" && path === "/api/impacts") {
     const [access, stored, all, scan] = await Promise.all([
       readerAccess(req),

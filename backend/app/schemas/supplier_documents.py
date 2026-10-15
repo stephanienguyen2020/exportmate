@@ -15,8 +15,8 @@ class ReadDocumentFields(CamelCaseModel):
     issuer: str | None
     issued_on: date | None
     expires_on: date | None
-    standards: list[str]  # e.g. ["FSC-STD-40-004"], ["TSCA Title VI"]
-    detail: str  # one line, e.g. "FSC chain of custody SGS-COC-001234, valid to 15 Dec 2026"
+    standards: list[str]  # e.g. ["ISO 9001:2015"], ["GOTS 7.0"]
+    detail: str  # one line, e.g. "ISO 9001 certificate QMS-001234, valid to 15 Dec 2026"
     notes: str | None  # what was hard to read
 
 

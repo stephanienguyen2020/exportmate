@@ -28,9 +28,6 @@ const clamp = (n, lo, hi, fallback) => (Number.isInteger(n) ? Math.min(hi, Math.
 const has = (value, wanted) => !wanted || String(value).toLowerCase().includes(String(wanted).toLowerCase());
 const ageDays = (iso) => (iso && !isNaN(Date.parse(iso)) ? Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / 86_400_000)) : undefined);
 const SEVERITY = { high: 0, medium: 1, low: 2 };
-// Stock categories and markets, as enums so the gateway rejects anything else.
-const CATEGORIES = ["Plywood", "Hardwood plywood", "Wooden furniture", "Upholstered seating", "Kitchen cabinets & vanities", "Outdoor furniture", "Engineered flooring", "Wood pellets", "Imported sawn timber"];
-const MARKETS = ["EU", "UK", "US", "CA", "JP", "KR", "AU", "Raw material"];
 // Document types whose text comes from third parties (news feeds, or alerts written from them).
 const UNTRUSTED_TYPES = new Set(["article", "alert", "source"]);
 
@@ -83,7 +80,7 @@ export async function lastDoneScan() {
   return snap.docs.map((d) => ({ id: d.id, ...d.data() })).find((s) => s.status === "done") ?? null;
 }
 
-// Names a filtered query in its citation, e.g. "skus=PLY-101/PLY-102, market=EU".
+// Names a filtered query in its citation, e.g. "skus=A-101/A-102, market=EU".
 const describe = (args, skip) =>
   Object.entries(args)
     .filter(([k]) => !skip.includes(k))
@@ -91,7 +88,7 @@ const describe = (args, skip) =>
     .join(", ");
 
 // Keyword filter: phrases split into singular words of 3+ letters, minus words most trade news shares.
-// A word matches at the start of a word, so "plywood" finds "plywood case" and "tariff" finds "tariffs".
+// A word matches at the start of a word, so "dumping" finds "dumping case" and "tariff" finds "tariffs".
 const GENERIC = new Set(["trade", "case", "court", "news", "alert", "stock", "exposure", "exposed", "risk", "impact", "market", "company", "product", "goods", "rule", "regulation", "the", "and", "for", "with", "from", "about"]);
 const topicPatterns = (keywords) =>
   [
@@ -104,6 +101,23 @@ const topicPatterns = (keywords) =>
   ].map((w) => new RegExp(`(^|[^a-z0-9])${w}`, "i"));
 
 const withFlags = (audit, guard) => (guard.flags.length ? { ...audit, flags: guard.flags } : audit);
+
+/**
+ * The registry with query_inventory's category and market filters limited to what the stock
+ * holds, so the model sees the real names and the gateway rejects anything else.
+ */
+export function withStockLists(registry, items) {
+  const tool = registry.query_inventory;
+  const { parameters } = tool.declaration;
+  const listed = (values) => [...new Set(values.filter(Boolean))].sort();
+  const limit = (schema, values) => (values.length ? { ...schema, enum: values } : schema);
+  const properties = {
+    ...parameters.properties,
+    category: limit(parameters.properties.category, listed(items.map((i) => i.category))),
+    market: limit(parameters.properties.market, listed(items.flatMap((i) => i.markets || []))),
+  };
+  return { ...registry, query_inventory: { ...tool, declaration: { ...tool.declaration, parameters: { ...parameters, properties } } } };
+}
 
 // Tool registry: what the model may ask for, who may use it and the handler that runs it.
 // Every tool is read-only (least privilege): the assistant can look things up, never change them.
@@ -162,19 +176,24 @@ export const REGISTRY = {
     declaration: {
       name: "query_inventory",
       description:
-        "Exact lookup of stock items. Returns each matching item's SKU, name, category, HS code, species, timber origin, supplier, markets, certifications, geolocation status, quantity, unit cost and stock value, plus the count and total stock value. Filters combine with AND. Market codes: EU, UK, US, CA, JP, KR, AU, and 'Raw material' for imported inputs.",
+        "Exact lookup of stock items. Returns each matching item's SKU, name, category, HS code, main material and the country it comes from, supplier, markets, certifications, whether its origin is traced, quantity, unit cost and stock value, plus the count and total stock value. Filters combine with AND.",
       parameters: {
         type: Type.OBJECT,
         properties: {
           skus: { type: Type.ARRAY, items: { type: Type.STRING } },
-          category: { type: Type.STRING, enum: CATEGORIES, description: "Exact category; Plywood does not include Hardwood plywood" },
-          market: { type: Type.STRING, enum: MARKETS },
-          hsCode: { type: Type.STRING, description: "HS code or prefix, e.g. 4412 or 9403.60" },
-          species: { type: Type.STRING },
-          timberOrigin: { type: Type.STRING, description: "Country the timber comes from" },
+          // The stock's own categories and markets fill these enums each turn (withStockLists).
+          category: { type: Type.STRING, description: "Exact category: one category, not the ones whose names contain it" },
+          market: { type: Type.STRING, description: "A market the item is sold to" },
+          hsCode: { type: Type.STRING, description: "HS code or prefix, with or without the dot" },
+          material: { type: Type.STRING, description: "Part of the main material's name" },
+          materialOrigin: { type: Type.STRING, description: "Country the main material comes from" },
           supplier: { type: Type.STRING },
-          certification: { type: Type.STRING, description: "e.g. FSC, VNTLAS, PEFC" },
-          geolocationOnFile: { type: Type.BOOLEAN, description: "false: only items with no geolocation data on file (what EUDR needs for EU sales); true: only items with it. Filter here rather than reading each item." },
+          certification: { type: Type.STRING, description: "Part of a certification's name" },
+          originTraced: {
+            type: Type.BOOLEAN,
+            description:
+              "false: only items whose origin is not traced to where the material was produced (records such as the plot geolocation EU deforestation rules ask for); true: only items with those records. Filter here rather than reading each item.",
+          },
           sortBy: { type: Type.STRING, enum: ["stockValue", "quantity", "sku"] },
           limit: { type: Type.INTEGER, description: "Items to return, default 20, max 40" },
         },
@@ -190,11 +209,11 @@ export const REGISTRY = {
             (!args.category || i.category.toLowerCase() === args.category.toLowerCase()) &&
             (!args.market || i.markets.some((m) => m.toLowerCase() === args.market.toLowerCase())) &&
             (!args.hsCode || i.hsCode.replace(".", "").startsWith(args.hsCode.replace(".", ""))) &&
-            has(i.species, args.species) &&
-            has(i.timberOrigin, args.timberOrigin) &&
+            has(i.material, args.material) &&
+            has(i.materialOrigin, args.materialOrigin) &&
             has(i.supplier, args.supplier) &&
             (!args.certification || i.certifications.some((c) => has(c, args.certification))) &&
-            (typeof args.geolocationOnFile !== "boolean" || i.geolocationOnFile === args.geolocationOnFile),
+            (typeof args.originTraced !== "boolean" || i.originTraced === args.originTraced),
         )
         .map((i) => ({ ...i, stockValueUsd: Math.round(i.qtyOnHand * i.unitCostUsd) }));
       const sort = args.sortBy || "stockValue";
@@ -207,12 +226,12 @@ export const REGISTRY = {
         name: i.name,
         category: i.category,
         hsCode: i.hsCode,
-        species: i.species,
-        timberOrigin: i.timberOrigin,
+        material: i.material,
+        materialOrigin: i.materialOrigin,
         supplier: i.supplier,
         markets: i.markets,
         certifications: i.certifications,
-        geolocationOnFile: i.geolocationOnFile,
+        originTraced: i.originTraced,
         qtyOnHand: i.qtyOnHand,
         unit: i.unit,
         unitCostUsd: i.unitCostUsd,
@@ -247,7 +266,7 @@ export const REGISTRY = {
     declaration: {
       name: "get_alerts",
       description:
-        "News-impact alerts from the daily AI news scans, most severe first. By default it returns open alerts from every scan so far; set latestScanOnly for the most recent scan only. Each alert includes its headline, severity, direction, why it matters, every affected SKU (name, reason, stock value, markets, timber origin, geolocation status), the total stock value exposed, the next step and the source article with its age in days. Also returns the exposure across all matching alerts: the distinct affected SKUs and their combined stock value, each SKU counted once. Filters combine with AND.",
+        "News-impact alerts from the daily AI news scans, most severe first. By default it returns open alerts from every scan so far; set latestScanOnly for the most recent scan only. Each alert includes its headline, severity, direction, why it matters, every affected SKU (name, reason, stock value, markets, material origin, whether its origin is traced), the total stock value exposed, the next step and the source article with its age in days. Also returns the exposure across all matching alerts: the distinct affected SKUs and their combined stock value, each SKU counted once. Filters combine with AND.",
       parameters: {
         type: Type.OBJECT,
         properties: {
@@ -256,7 +275,7 @@ export const REGISTRY = {
             type: Type.ARRAY,
             items: { type: Type.STRING },
             description:
-              "Topic filter: alerts whose headline, article title or explanation mentions any of these topic words, e.g. [\"plywood\", \"antidumping\"] or [\"EUDR\", \"deforestation\"]. Generic words (trade, case, court, market...) and country codes like US or EU are ignored, so it can return off-topic alerts; check each one.",
+              "Topic filter: alerts whose headline, article title or explanation mentions any of these topic words, e.g. a product and a measure ([\"steel\", \"antidumping\"]) or a rule's name and subject. Generic words (trade, case, court, market...) and country codes like US or EU are ignored, so it can return off-topic alerts; check each one.",
           },
           ids: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Only these alerts, by the id returned with each alert" },
           severity: { type: Type.STRING, enum: ["high", "medium", "low"], description: "Only when the user asks for this severity" },
@@ -327,8 +346,8 @@ export const REGISTRY = {
             reason: guard.clean(reason, `alert ${a.id} ${sku}`),
             stockValueUsd,
             markets: bySku.get(sku)?.markets,
-            timberOrigin: bySku.get(sku)?.timberOrigin,
-            geolocationOnFile: bySku.get(sku)?.geolocationOnFile,
+            materialOrigin: bySku.get(sku)?.materialOrigin,
+            originTraced: bySku.get(sku)?.originTraced,
           })),
           stockValueUsd: a.stockValueUsd,
           article: guard.clean(a.title, `alert ${a.id} article title`),
