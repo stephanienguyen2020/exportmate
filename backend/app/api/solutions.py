@@ -13,6 +13,7 @@ from app.schemas.solutions import (
     SolutionCaseOut,
     SolutionNoteIn,
     SolutionOut,
+    SolutionProblemOut,
     SolutionReviewIn,
     SolutionSuggestIn,
     SolutionUseIn,
@@ -22,6 +23,13 @@ from app.services import solutions as solution_service
 router = APIRouter(tags=["solutions"])
 Db = Annotated[Session, Depends(get_db)]
 suggest_limiter = RateLimiter("solution suggestions")
+
+
+@router.get("/solutions", response_model=SuccessResponse[list[SolutionProblemOut]])
+def list_company_solutions(ctx: ViewerContext, db: Db):
+    """The knowledge base: every solution the company saved, grouped by problem (market,
+    requirement, missing or wrong), with notes, uses and whether each is still valid."""
+    return success_response(solution_service.list_company_solutions(db, ctx))
 
 
 @router.get("/reports/{report_id}/solutions", response_model=SuccessResponse[list[SolutionCaseOut]])

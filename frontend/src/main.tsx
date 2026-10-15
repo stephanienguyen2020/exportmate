@@ -104,12 +104,14 @@ const RunPanel = lazy(() =>
 const CompanySettings = lazy(() => import("./CompanySettings"));
 const TradeMapPage = lazy(() => import("./TradeMap"));
 const ReportsPage = lazy(() => import("./Reports"));
+const KnowledgeBasePage = lazy(() => import("./KnowledgeBase"));
 // The pages of the "Rules & news" tab. Each keeps its own route, so deep links still work.
 const ruleTabs: [string, string][] = [
   ["news", "News watch"],
   ["rules", "Rule watch"],
   ["regulations", "Regulations"],
   ["playbook", "Playbook"],
+  ["knowledge", "Knowledge base"],
 ];
 const nav: [string, string][] = [
   ["", "Overview"],
@@ -351,6 +353,12 @@ function App() {
       .catch(() => undefined);
     return () => controller.abort();
   }, [live, route, ruleFields]);
+  // On a phone the Rules & news tab bar scrolls sideways: keep the current tab in view.
+  useEffect(() => {
+    document
+      .querySelector(".section-tabs a.active")
+      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [route]);
   const [preview, setPreview] = useState<Order[]>([]);
   const [importErrors, setImportErrors] = useState<string[]>([]);
   const [fileName, setFileName] = useState("");
@@ -1712,6 +1720,11 @@ function App() {
               {route.split("/")[0] === "regulations" && (
                 <Suspense fallback={<section className="panel" role="status">Loading regulations…</section>}>
                   <RegulationsPage key={route} live={live} editable={editable} owner={account?.role === "owner"} path={route.slice("regulations".length)} />
+                </Suspense>
+              )}
+              {route === "knowledge" && (
+                <Suspense fallback={<section className="panel" role="status">Loading knowledge base…</section>}>
+                  <KnowledgeBasePage live={live} editable={editable} notify={setToast} />
                 </Suspense>
               )}
               {route === "news" && (

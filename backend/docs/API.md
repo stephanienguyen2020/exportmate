@@ -122,6 +122,7 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
 | `POST /supplier-messages/{id}/approve` | owner | Order page message: "Approve" |
 | `POST /supplier-messages/{id}/send` | owner | Order page message: "Send" (one `Idempotency-Key` per message) |
 | **Suggested solutions** | | |
+| `GET /solutions` | viewer | Rules & news › Knowledge base |
 | `GET /reports/{id}/solutions` | viewer | Order page: "Suggested solutions" |
 | `POST /reports/{id}/solutions` | editor | Order page: "Suggest a solution", "Analyse again", "Ask AI for another" |
 | `POST /solutions/{id}/use` | editor | Order page solution: "Use for <order>" |
@@ -732,6 +733,9 @@ Sends once: the row is locked and an optional `Idempotency-Key` header is passed
 How to fix each problem an analysis report found (a document `missing` or `mismatch`), saved for later orders (`services/solutions.py`). A problem matches earlier solutions by market, requirement key and problem status, for any order. Every write is in the audit log (object type `solution`: `solution.suggested` with the full text and model, `solution.used`, `solution.note_added` with the note, `solution.adopted`, `solution.rejected`).
 
 A solution expires the day after `validUntil` (`SOLUTION_VALID_DAYS` after it was written, default 90, or the day before the requirement's `changesOn`), when the requirement cites another regulation version, or when it leaves the checklist; `expiredReason` says which. Expired solutions are listed for reference but are never the default, and can't be used or adopted (`409 solution_expired`).
+
+### `GET /solutions` (viewer)
+The knowledge base: every solution the company saved, grouped by problem. Each entry has `market`, `requirementKey`, `problemStatus`, `title` (the requirement's title in force, else its key), `inChecklist` (false once the requirement left the market's checklist) and `solutions` (valid before expired; adopted, then suggested, then rejected; newest first; the same shape as below). Problems whose best solution is valid and adopted come first. Empty when nothing is saved.
 
 ### `GET /reports/{id}/solutions` (viewer)
 One entry per problem: `requirementKey`, `title`, `problemStatus`, `note`, `default` (the solution chosen for this order if still valid, else the best valid one: written from this report, adopted, same HS heading, same supplier, newest; never expired or rejected), `inUse`, `others` (other valid ones, rejected last), `expired`, `needsAnalysis` (no valid solution). Each solution has `summary`, `steps`, `status` (`suggested`, `adopted`, `rejected`), `writtenFor` (order ID), `basis` (regulation, document version and quote it was written from), `validUntil`, `expired`, `expiredReason`, `model`, `createdBy`, `reviewedBy`, `supersedesId`, `usedFor` (orders it was chosen for) and `notes` (oldest first). Empty when nothing is missing.
