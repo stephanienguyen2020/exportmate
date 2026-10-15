@@ -226,9 +226,6 @@
   font-size: 11px;
   color: var(--red);
 }
-.news-rules {
-  margin-bottom: 22px;
-}
 .news-scanbar .btn,
 .news-add .btn {
   display: inline-flex;
@@ -314,6 +311,9 @@
   margin: 0;
   padding: 0;
   border-top: 1px solid var(--line);
+}
+.news-sources.news-rules {
+  margin-bottom: 26px;
 }
 .news-sources li {
   display: flex;
