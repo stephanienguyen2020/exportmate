@@ -73,6 +73,20 @@ def list_company_orders(db: Session, company_id: uuid.UUID) -> list[Order]:
     )
 
 
+def list_order_products(db: Session, company_id: uuid.UUID, limit: int) -> list[str]:
+    """Up to `limit` different products a company's orders name, most frequent first."""
+    count = func.count(Order.id)
+    return list(
+        db.scalars(
+            select(Order.product)
+            .where(Order.company_id == company_id)
+            .group_by(Order.product)
+            .order_by(count.desc(), Order.product)
+            .limit(limit)
+        )
+    )
+
+
 def get_order_by_external_id(
     db: Session, company_id: uuid.UUID, external_id: str, *, lock: bool = False
 ) -> Order | None:

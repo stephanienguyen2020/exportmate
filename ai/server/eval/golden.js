@@ -23,7 +23,7 @@ export function goldenCases(items, { rules = [] } = {}) {
   const bySku = (sku) => items.find((i) => i.sku === sku);
   const plywood = items.filter((i) => i.category === "Plywood");
   const plywoodUs = plywood.filter((i) => i.markets.includes("US"));
-  const euNoGeo = items.filter((i) => i.markets.includes("EU") && !i.geolocationOnFile);
+  const euNoGeo = items.filter((i) => i.markets.includes("EU") && !i.originTraced);
   const pefc = items.filter((i) => i.certifications.includes("PEFC"));
   const ply101 = bySku("PLY-101");
   const pair = ["PLY-101", "PLY-102"].map(bySku).filter(Boolean);
@@ -49,7 +49,7 @@ export function goldenCases(items, { rules = [] } = {}) {
       question: "Which items we sell to the EU have no geolocation data on file? List the SKUs.",
       expect: {
         tools: ["query_inventory"],
-        args: { query_inventory: { geolocationOnFile: false } },
+        args: { query_inventory: { originTraced: false } },
         contains: euNoGeo.length <= 10 ? euNoGeo.map((i) => i.sku) : [],
       },
     },

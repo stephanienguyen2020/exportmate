@@ -234,3 +234,23 @@ def test_drafting_needs_the_ai_and_a_company_document(client, lan, fake_gemini):
 
     other = onboard(client, "mai@example.com", company="Other Co")
     assert draft(client, other, document["id"]).status_code == 404
+
+
+def test_drafts_are_asked_for_the_company_own_goods(client, lan, fake_gemini):
+    fake_gemini.answers["requirement_extraction"] = lambda prompt, file: {"requirements": []}
+
+    # No profile and no orders: any goods the regulation covers.
+    draft(client, lan, upload_policy(client, lan, POLICY_V1)["id"])
+    assert "hasn't said what it makes or sells" in fake_gemini.calls[-1]["prompt"]
+
+    # Without products in the profile, the products its orders name.
+    import_orders(client, lan, ORDERS)
+    draft(client, lan, upload_policy(client, lan, POLICY_V1, filename="v2.txt")["id"])
+    assert "The company makes or sells: Oak dining table." in fake_gemini.calls[-1]["prompt"]
+
+    # The profile's own words win, with its materials.
+    profile = {"products": "Cotton T-shirts", "materials": "Organic cotton (India)"}
+    client.patch("/api/v1/company", headers=lan, json=profile)
+    draft(client, lan, upload_policy(client, lan, POLICY_V1, filename="v3.txt")["id"])
+    prompt = fake_gemini.calls[-1]["prompt"]
+    assert "makes or sells: Cotton T-shirts; materials: Organic cotton (India)." in prompt

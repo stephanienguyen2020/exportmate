@@ -169,7 +169,7 @@ function RuleChangeRun({
     [
       "Order exposure",
       matches.length
-        ? `${listNames(matches.slice(0, 4).map((o) => o.id))}${matches.length > 4 ? ` and ${matches.length - 4} more` : ""} ${matches.length === 1 ? "lacks" : "lack"} supplier geolocation records.`
+        ? `${listNames(matches.slice(0, 4).map((o) => o.id))}${matches.length > 4 ? ` and ${matches.length - 4} more` : ""} ${matches.length === 1 ? "lacks" : "lack"} supplier ${sampleObligation.records}.`
         : "No open order is covered and missing records.",
     ],
     [
@@ -181,7 +181,7 @@ function RuleChangeRun({
     [
       "Action planner",
       matches.length
-        ? `Draft a request to ${listNames([...new Set(matches.map((o) => o.supplier))])} for geolocation records.`
+        ? `Draft a request to ${listNames([...new Set(matches.map((o) => o.supplier))])} for ${sampleObligation.records}.`
         : "No supplier request needed.",
     ],
     ["Auditor", "Rejected: alternate supplier claim has no evidence."],
@@ -199,7 +199,8 @@ function RuleChangeRun({
           : "Now you know your next move."}
       </h2>
       <p>
-        A simulated EU wood-documentation change, matched against your{" "}
+        A simulated {sampleObligation.market} {sampleObligation.material}-documentation
+        change, matched against your{" "}
         {plural(orders.length, "open order")}. This resets the sample orders
         and demo confirmations. Imported orders are kept and checked too.
       </p>
@@ -260,7 +261,7 @@ function SupplierMessage({
   const { profile } = ws;
   const [message, setMessage] = useState(
     () =>
-      `Hello ${order.supplier},\n\nWe’re preparing ${order.id} (${order.product}) for shipment on ${date(order.shipDate)} to ${order.destination}.\n\nPlease share the ${sampleObligation.requirement} data and supporting origin records for the wood used in this order. We need these to review the documentation for our EU-bound shipment.\n\nCould you confirm availability and an expected delivery date?\n\nThank you,\n${profile.name} · ${profile.company || "Your company"}`,
+      `Hello ${order.supplier},\n\nWe’re preparing ${order.id} (${order.product}) for shipment on ${date(order.shipDate)} to ${order.destination}.\n\nPlease share the ${sampleObligation.requirement} data and supporting origin records for the ${sampleObligation.material} used in this order. We need these to review the documentation for our ${sampleObligation.market}-bound shipment.\n\nCould you confirm availability and an expected delivery date?\n\nThank you,\n${profile.name} · ${profile.company || "Your company"}`,
   );
   return (
     <Dialog onClose={onClose}>
@@ -313,11 +314,10 @@ function Evidence({ order, onClose }: { order: Order; onClose: () => void }) {
       </div>
       <h3>01 / Sample source clause</h3>
       <blockquote>
-        “Geolocation information must identify the plots of land on which the
-        relevant wood was produced.”
+        “{sampleObligation.quote}”
       </blockquote>
       <p className="fine-print">
-        Demo obligation EU-WOOD-001 · illustrative §9. Production must link a
+        Demo obligation {sampleObligation.id} · illustrative §9. Production must link a
         versioned official document and exact clause.
       </p>
       <h3>02 / Your order row</h3>
@@ -332,7 +332,7 @@ function Evidence({ order, onClose }: { order: Order; onClose: () => void }) {
         <b>{order.supplier}</b>
         <span>Destination</span>
         <b>{order.destination}</b>
-        <span>Geolocation evidence</span>
+        <span>{sampleObligation.evidence}</span>
         <b className="danger">
           {sampleGap(order) || "On file in the supplier record"}
         </b>
@@ -348,7 +348,7 @@ function Evidence({ order, onClose }: { order: Order; onClose: () => void }) {
         onClick={() =>
           download(
             "exportmate-" + order.id + "-evidence.txt",
-            `FICTIONAL DEMO EVIDENCE\nOrder: ${order.id}\nProduct: ${order.product}\nSupplier: ${order.supplier}\nHS code: ${order.hsCode}\nDestination: ${order.destination}\nSample obligation: EU-WOOD-001 (${sampleObligation.title})\nFinding: ${sampleGap(order) || "geolocation record on file"}\nAssumptions: ${maker.currency} ${maker.documentation} documentation + ${maker.delayDays} days x ${maker.currency} ${maker.delayPerDay}/day = ${maker.currency} ${makerCost}.\nNot verified legal text or advice.\n`,
+            `FICTIONAL DEMO EVIDENCE\nOrder: ${order.id}\nProduct: ${order.product}\nSupplier: ${order.supplier}\nHS code: ${order.hsCode}\nDestination: ${order.destination}\nSample obligation: ${sampleObligation.id} (${sampleObligation.title})\nFinding: ${sampleGap(order) || `${sampleObligation.records} on file`}\nAssumptions: ${maker.currency} ${maker.documentation} documentation + ${maker.delayDays} days x ${maker.currency} ${maker.delayPerDay}/day = ${maker.currency} ${makerCost}.\nNot verified legal text or advice.\n`,
             "text/plain",
           )
         }

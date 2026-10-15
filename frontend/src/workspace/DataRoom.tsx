@@ -10,9 +10,20 @@ import {
 } from "lucide-react";
 import { initialOrders, money, sampleObligation } from "../data";
 import { errorMessage } from "../auth";
-import { MAX_UPLOAD_MB } from "../order-csv";
+import { DEFAULT_CURRENCY, MAX_UPLOAD_MB, REQUIRED_COLUMNS } from "../order-csv";
 import type { CheckedImport, Workspace } from "./store";
 import { Button, PageHeading, download, go, plural, type Notify } from "./ui";
+
+// The CSV template: the columns, with the demo's first sample order as the example row.
+function templateCsv() {
+  const columns = [...REQUIRED_COLUMNS, "currency"];
+  const example: Record<string, unknown> = { currency: DEFAULT_CURRENCY, ...initialOrders[0] };
+  const cell = (v: unknown) => {
+    const text = String(v ?? "");
+    return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+  };
+  return `${columns.join(",")}\n${columns.map((c) => cell(example[c])).join(",")}\n`;
+}
 
 export default function DataRoom({
   ws,
@@ -146,10 +157,7 @@ export default function DataRoom({
           <button
             className="text-link template"
             onClick={() =>
-              download(
-                "exportmate-orders-template.csv",
-                'id,product,supplier,destination,value,shipDate,hsCode,currency\nPO-2400,Acacia plywood,Binh Phu Wood,"Rotterdam, NL",24000,2026-11-15,4412.33,USD\n',
-              )
+              download("exportmate-orders-template.csv", templateCsv())
             }
           >
             <Download size={15} />

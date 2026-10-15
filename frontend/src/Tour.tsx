@@ -3,6 +3,7 @@
 // (`em-tour-done` in localStorage); the "?" in the top bar replays it.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, X } from "lucide-react";
+import { defaultProfile } from "./account-store";
 import "./tour.css";
 
 type TourStep = {
@@ -37,7 +38,7 @@ function tourSteps(live: boolean): TourStep[] {
       title: "Welcome to ExportMate.",
       body: live
         ? "A one-minute look at where things are in your workspace. Skip it whenever you like; the ? button at the top brings it back."
-        : "This is a sample workspace for a Vietnamese furniture maker, so nothing you do here touches real data. A one-minute look at where things are; skip it whenever you like.",
+        : `This is a sample workspace for ${defaultProfile.company}, a ${defaultProfile.role.toLowerCase()} in ${defaultProfile.origin}, so nothing you do here touches real data. A one-minute look at where things are; skip it whenever you like.`,
     },
     {
       target: "nav-",

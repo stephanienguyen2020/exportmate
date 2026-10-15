@@ -12,8 +12,9 @@ const SKU = /\b[A-Z]{2,5}-\d{2,4}\b/gi;
 const ARITHMETIC = /\b(total|combined|sum|average|mean|percent(age)?|share|ratio|difference|how much|exposure|exposed|margin)\b|%|tổng|trung bình|phần trăm/i;
 const JUDGEMENT =
   /\b(why|should|recommend|advise|compare|comparison|versus|vs\.?|better|best|worst|prioriti[sz]e|matter most|impact|affect(s|ed)?|risks?|plan|strategy|what if|trade-?off)\b|tại sao|so sánh|rủi ro|ảnh hưởng|nên làm/i;
+// Words for trade rules in any industry, not the names of particular rules.
 const RULES =
-  /\b(eudr|cbam|lacey|anti-?dumping|countervailing|dut(y|ies)|tariffs?|quotas?|sanctions?|regulations?|complian(ce|t)|comply|due diligence|legal|law)\b|thuế|chống bán phá giá|quy định/i;
+  /\b(anti-?dumping|countervailing|dut(y|ies)|tariffs?|quotas?|sanctions?|embargo(es)?|bans?|banned|regulations?|regulat(ed|es)|directives?|requirements?|requir(e|es|ed)|complian(ce|t)|comply|due diligence|legal|law)\b|thuế|chống bán phá giá|quy định/i;
 const QUOTED = /["“'‘][^"”'’]{40,}["”'’]/;
 const LONG = 300;
 
