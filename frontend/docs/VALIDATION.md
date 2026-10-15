@@ -136,3 +136,9 @@ Supersedes the fixture-based trade map checks above where they differ. Map data 
 - Frontend: `npm run build` passes. Playwright (port 5179, since other sessions share 5175): 69 passed, 1 skipped. New test: the tab is current in the tab bar, the default Valid view is empty when only an expired solution exists, the Expired view shows it with its note and no "Use for" button, and search filters it.
 - At 390 px the five tabs are wider than the screen (420 px in 346 px): the bar scrolls sideways and now scrolls the current tab into view. No horizontal page overflow at 390 or 1366 px.
 - Not exercised: a real backend with saved solutions in the browser.
+
+### Workspace split onto current main (15 October 2026)
+
+- `main.tsx` and `TradeMap.tsx` split into `frontend/src/workspace/` and `frontend/src/trade-map/` (branch `frontend-structure`), with main's later changes moved into the new files: order statuses from the database (store, status badge, Orders tabs, the order's Status panel), cost hovers, workspace search, the Rules & news tab bar, the Knowledge base page and saved what-ifs in the compare panel.
+- `npm run build` passes. Playwright: 74 passed, 1 skipped: all of main's tests plus the split's new demo tests (adding and switching off a rule, the rule-change walkthrough, the evidence dialog's focus trap, the alerts bell, unknown pages).
+- Not exercised: a signed-in company workspace with a real backend.
