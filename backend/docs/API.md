@@ -69,6 +69,11 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
 | **Trade map, suppliers and sites** | | |
 | `GET /trade-map` | viewer | Trade map; `ai/server` chat (`query_orders`) |
 | `GET /trade-map/compare` | viewer | Trade map: "What if" panel |
+| `GET /trade-map/scenarios` | viewer | Trade map: "What if" panel, "Saved what-ifs" |
+| `POST /trade-map/scenarios` | editor | Trade map: "What if" panel, "Save what-if" / "Update" |
+| `POST /trade-map/scenarios/suggest` | editor | Trade map: "What if" panel, "Suggest a note with AI" |
+| `PATCH /trade-map/scenarios/{id}` | editor | (not yet: the panel re-saves through `POST`) |
+| `DELETE /trade-map/scenarios/{id}` | editor | Trade map: "Saved what-ifs", delete |
 | `POST /suppliers` | editor | Trade map: "Add supplier" / "Add a supplier record" |
 | `PATCH /suppliers/{id}` | editor | Trade map: "Edit supplier" |
 | `DELETE /suppliers/{id}` | editor | Trade map: "Delete supplier" |
@@ -388,6 +393,28 @@ One what-if at a time. Send exactly one of `market`, `shipDate`, or `via`.
 Checklists are scoped by HS prefix: wood lines (chapters 44 and furniture 9401/9403), food (chapters 01–23), textiles (50–63), and listed electronics headings. A prefix-less line, such as proof of origin or ISPM 15 packaging, still applies across those products. Each line still cites an official text.
 
 Called from the order's "What if" panel each time the market, date, or route changes. A new call cancels the previous one.
+
+### Saved what-ifs: `/trade-map/scenarios`
+A what-if from the compare panel kept on record with a note: a proposal, not a change. Saving changes nothing on the order (status, ship date, destination, reports); nothing else reads it yet. Audited as `scenario.saved` / `scenario.deleted` (object: the order).
+
+`POST` (editor) `{"orderId": "PO-2291", "kind": "route", "target": "SG", "note": "Buyer prefers Singapore."}`. `kind` is `market`, `ship_date` or `route`; `target` is a market code, an ISO date, or a `via` code as in `/trade-map/compare`. The comparison is worked out again on the server (same errors as `/trade-map/compare`: `422 unknown_market`, `same_market`, `same_date`, `unknown_route`, `same_route`, `invalid_input` for a bad date, `404` for an unknown order) and stored as it stood. Saving the same order, kind and target again replaces the note and the stored comparison. Note: up to 2,000 characters; blank is `null`.
+```json
+{"data": {"id": "…", "orderId": "PO-2291", "kind": "route", "target": "SG",
+  "label": "Route via Singapore", "note": "Buyer prefers Singapore.",
+  "comparison": {"kind": "route", "via": "SG", "reevaluate": […], "unknown": […], "…": "…"},
+  "createdBy": {"id": "…", "name": "Lan"}, "updatedBy": {"id": "…", "name": "Lan"},
+  "createdAt": "…", "updatedAt": "…"}}
+```
+`GET` (viewer) lists them, newest change first; `?orderId=` for one order (`404` for an unknown order). `PATCH /{id}` (editor) `{"note": "…"}` edits the note only. `DELETE /{id}` (editor). Another company's ID is `404`.
+
+`POST /suggest` (editor, `SCENARIO_SUGGESTIONS_PER_HOUR`, default 30 per user) `{"orderId", "kind", "target"}`: Gemini (`scenario_note`) reads that comparison and returns a summary, up to 4 `nextSteps` and up to 3 `questions` for the buyer or supplier, each with the comparison line titles (`items`) it rests on, plus `note`, all of it as plain text. Code drops a point whose `items` name no line of the comparison, or that has a link or a figure not in the order or comparison; a summary that fails those checks is `503 ai_unavailable`. Nothing is saved.
+```json
+{"data": {"summary": "A stop in Singapore asks for a fresh look at origin proof.",
+  "nextSteps": [{"text": "Ask the forwarder how the goods stay unaltered.", "items": ["Proof of origin"]}],
+  "questions": [{"text": "Who pays any extra freight?", "items": ["Freight cost"]}],
+  "note": "A stop in Singapore …\n\nNext steps:\n- …\n\nTo ask:\n- …"}}
+```
+
 
 ### Suppliers and sites (editor)
 Editors enter them in the map's side panel; viewers don't see the controls. The location comes from a click on the 2D map (which also suggests the country) or from typed `latitude, longitude`. After a save or delete the page reloads `GET /trade-map`, so order checks and flood proximity are recomputed. Each change writes an audit event (`supplier.created|updated|deleted`, `company_site.created|updated|deleted`).

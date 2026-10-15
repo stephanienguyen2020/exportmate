@@ -29,6 +29,7 @@ from app.database.models.order import (
 from app.database.models.playbook import PlaybookRevision, PlaybookRule
 from app.database.models.regulation import Regulation, RegulationDocument
 from app.database.models.report import ReportDraft, ReportKind
+from app.database.models.scenario import OrderScenario, ScenarioKind
 from app.database.models.supplier_message import (
     ReportFeedback,
     SupplierMessage,
@@ -82,6 +83,7 @@ __all__ = [
     "ObservationConfidence",
     "ObservationKind",
     "Order",
+    "OrderScenario",
     "OrderStatus",
     "OrderStatusChange",
     "OrderStatusDefinition",
@@ -99,6 +101,7 @@ __all__ = [
     "Role",
     "RunStatus",
     "SatelliteObservation",
+    "ScenarioKind",
     "SiteKind",
     "StatusChangeSource",
     "Supplier",
