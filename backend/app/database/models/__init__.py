@@ -15,6 +15,7 @@ from app.database.models.hs_code import (
     HsHeading,
     HsSuggestionStatus,
 )
+from app.database.models.news import NewsOrderReview, NewsVerdict
 from app.database.models.order import Import, ImportRow, ImportStatus, Order, OrderStatus
 from app.database.models.playbook import PlaybookRevision, PlaybookRule
 from app.database.models.regulation import Regulation, RegulationDocument
@@ -66,6 +67,8 @@ __all__ = [
     "Market",
     "MarketRequirement",
     "Membership",
+    "NewsOrderReview",
+    "NewsVerdict",
     "ObservationConfidence",
     "ObservationKind",
     "Order",

@@ -93,6 +93,12 @@ export function destinationCountry(destination: string) {
   for (const code of EU_COUNTRIES) if (countryName(code).toLowerCase() === name) return code;
   return null;
 }
+/** The market an order ships to, as News watch's stock lists them: "EU", "UK", "US"… */
+export function destinationMarket(destination: string) {
+  const code = destinationCountry(destination);
+  if (!code) return null;
+  return EU_COUNTRIES.has(code) ? "EU" : code === "GB" ? "UK" : code;
+}
 /** "Rotterdam, NL" → "Rotterdam, Netherlands". */
 export function placeName(destination: string) {
   const code = destinationCountry(destination);

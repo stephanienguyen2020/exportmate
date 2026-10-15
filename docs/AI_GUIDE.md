@@ -116,9 +116,11 @@ News watch is at `#/workspace/news`. The Overview page also shows the top three 
 - **Direction**: *risk*, *opportunity*, or *watch* (vague news, or something to verify).
 - The headline, why it matters, each affected SKU with the reason, the stock value exposed, one next step, and a link to the source article.
 
-Filter by severity or show only opportunities. Read the source before acting: alerts are assessed from each article's headline and summary, not the full text.
+- **Orders this may affect**: open orders that share an HS heading (the first four digits) with an item the alert names and ship to one of that item's markets. These are suggestions, not findings. An owner or editor marks each one **Affects this order** or **Not relevant**, with an optional note, can **Undo** a verdict, and can link an order that wasn't suggested. Viewers see the suggestions and verdicts. Company reports name only confirmed orders next to each alert. In the demo, verdicts stay in your browser.
 
-**Stock tab.** The sample inventory, with each item's geolocation status and how many alerts affect it. In a signed-in workspace, alerts are still matched against this sample stock, not your company's stock or orders, and the page says so.
+Filter by severity or show only opportunities, search headlines, items and SKUs, or narrow to one source, one stock item, alerts with orders to review, confirmed for an order or with no order, or articles from the past 7 or 30 days. Read the source before acting: alerts are assessed from each article's headline and summary, not the full text.
+
+**Stock tab.** The sample inventory, with each item's geolocation status and how many alerts affect it. In a signed-in workspace, alerts are still matched against this sample stock, not your company's stock, and the page says so; orders are only linked through the suggestions people review on the Alerts tab.
 
 **Sources tab.** The feeds News watch reads. Seven are built in (Timber Trades Journal, VnExpress International, the European Commission press corner and four Google News searches) and shared by every workspace. Owners and editors can:
 

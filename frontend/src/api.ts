@@ -568,6 +568,25 @@ type Envelope<T> = {
   data: T;
   meta: { nextCursor?: string | null; total?: number; revision?: number };
 };
+export type NewsVerdict = "relevant" | "not_relevant";
+// An order a News watch alert may affect: suggested (same HS heading and market as a stock
+// item the alert names), linked by a person, or both, with the person's verdict once given.
+export type NewsMatch = {
+  impactId: string;
+  orderId: string;
+  product: string;
+  destination: string;
+  market: string | null;
+  shipDate: string;
+  suggested: boolean;
+  reason: string;
+  review: {
+    verdict: NewsVerdict;
+    note: string | null;
+    reviewedBy: { id: string; name: string };
+    reviewedAt: string;
+  } | null;
+};
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -1007,6 +1026,25 @@ export const api = {
     });
     return { events: page.data, nextCursor: page.meta.nextCursor ?? null };
   },
+  newsMatches: (signal?: AbortSignal) =>
+    request<{ newsAvailable: boolean; matches: NewsMatch[] }>("/news-matches", {
+      signal,
+    }).then((r) => r.data),
+  reviewNewsMatch: (
+    impactId: string,
+    orderId: string,
+    verdict: NewsVerdict,
+    note: string | null,
+  ) =>
+    request<NewsMatch>(
+      `/news-matches/${encodeURIComponent(impactId)}/orders/${encodeURIComponent(orderId)}`,
+      { method: "PUT", body: JSON.stringify({ verdict, note }) },
+    ).then((r) => r.data),
+  clearNewsReview: (impactId: string, orderId: string) =>
+    request(
+      `/news-matches/${encodeURIComponent(impactId)}/orders/${encodeURIComponent(orderId)}`,
+      { method: "DELETE" },
+    ),
 };
 
 // The public contact form: no sign-in, so no token.
