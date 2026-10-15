@@ -27,13 +27,13 @@ Example end-to-end:
 | Orders: list, search, filter, detail | Built |
 | CSV import: upload → validate → preview → commit | Built |
 | Playbook rules: list, add, toggle, delete; checked rules (WHEN/THEN) | Built (checked rules: backend only) |
-| Trade map: orders, suppliers and sites on a map; document checks per market; "what if another market" | Built |
+| Trade map: orders, suppliers and sites on a map; document checks per market; "what if" another market, ship date or route; add, edit and delete suppliers (with their documents) and sites | Built |
 | Reports: an order's checklist report, or a company report (what is happening: checklist changes, news alerts, floods near suppliers, new regulation versions; what it affects: orders with gaps, suppliers). Edit anything, preview the PDF (edits marked), email it to up to five addresses (Resend, sandbox without a key); sent reports are locked | Built |
 | Rule library: shared official texts and the company's own uploads, with versions | Built |
 | Analysis: match rules to orders, compute cost, report with citations, block reports that fail checks | Built (backend only) |
 | Rule extraction (AI drafts a company's requirements, the owner reviews) and HS code suggestions | Phase 2, later (with retrieval) |
 | Supplier documents uploaded as files (AI reads, a person confirms) | Built (backend only) |
-| Actions: draft message → approve → send once (sandbox email) | Phase 3 |
+| Actions: draft message → approve → send once (sandbox email) | Phase 3 (email delivery through Resend is built for reports) |
 | Overview numbers for the dashboard | Built (except "sources checked at") |
 | Contact form delivery | Phase 3 |
 
@@ -47,7 +47,7 @@ Example end-to-end:
 
 **Products are matched by HS code, not by name.**
 - "Acacia plywood 18 mm", "Ván ép keo" and "Plywood AC-18" all have HS `4412.33`, so they count as the same product.
-- An order without an HS code is `needs_data`. The AI may suggest a code from the product name; the user confirms it.
+- An order without an HS code is `needs_data`. The AI may suggest a code from the product name; the user confirms it (later: today the CSV requires a code, §8.4).
 
 **HS codes are a tree. A rule on a parent code covers every child under it.**
 
@@ -211,7 +211,6 @@ A **run** checks orders against the market requirements:
 3. **Cost**: computed in code, not by the AI (question 5). Each cost line names where its number came from:
    - **the rule's own figure** when it has one: Section 232 25% × USD 54,300 = USD 13,575, cited to Proclamation 10976. If the stated rate changes on or before the ship date (Section 232 rises on 1 January 2027), the duty is named with no amount: "rate changes on 1 Jan 2027, recheck";
    - otherwise a **company setting**, starting from a shared default the company can change: delay USD 200/day by default (Lan sets USD 350/day); getting a missing document USD 400; a new lab test USD 400; a supplier needs 14 days to send a document. A missing document 10 days before shipping = USD 400 + (14 − 10) days × USD 200 = USD 1,200;
-   - fines with no fixed amount are shown as "fine possible", with no number.
 4. **Playbook**: run the company's checked rules (§4.4) against the order and its cost, and record which rules fired.
 5. **Plan**: suggest one action, in code: complete the data, ask the supplier by a date, move the ship date (the supplier can't make it), recheck the landed cost, or nothing. Drafting the message is phase 3.
 6. **Auditor**: every finding has a quote, every cost line re-computes and names where its number came from, totals add up. Fail → `needs_human_review` (the steps are code, so a retry would give the same answer).
@@ -220,7 +219,7 @@ A **run** checks orders against the market requirements:
 - Each order's status follows its latest report: `exposed` (a document missing or mismatched), `clear`, or `needs_data`. A duty alone doesn't make an order exposed.
 - A report keeps a copy of everything it cites (findings with quotes, settings used, rules fired), so it reads the same after requirements, rules or settings change. It also cites the CSV row the order came from.
 - **One report, two views.** The analysis report is the source of truth. The order report a person edits and emails (`/report-drafts`) repeats the latest analysis (next step, costs, rules fired) next to the live checklist, and says when it is missing or out of date. The chat assistant reads orders and rules through the backend; later it reads analysis reports too.
-- Run progress is saved, so the UI shows the steps and survives a refresh. Users see short step summaries, not raw AI reasoning.
+- Each run saves a short summary per step, so the UI can show what happened. Users never see raw AI reasoning.
 
 ### 4.7 Actions (messages)
 **Status: phase 3.**
@@ -245,10 +244,11 @@ A map of the company's own export activity: its suppliers, sites and markets, an
 - Each order is placed from its destination text (`Rotterdam, NL` → NL → EU; a known port name → its country). Countries belong to markets (EU = 27 countries).
 - Each order is checked against its market's requirements (§4.5): a supplier document is `on_file`, `missing`, `mismatch` (wrong test standard, or it expires before the ship date) or `unknown` (no supplier record); shipment paperwork is `prepare`; reminders are `check`. Every check shows its source.
 - Selecting a market shows its orders, changes to check (orders needing action, tariff checks, news items naming the market) and missing supplier documents.
-- "What if this order went to another market?": documents that can be reused, requirements to re-evaluate (new or changed), and what the data can't conclude. Paperwork only; the customer, contract and sales case still decide.
+- **"What if"**, one change at a time: another market, another ship date (which checklist lines start or change in between) or a stop on the way (`via`: which origin proofs to recheck, the route distance). It lists documents that can be reused, requirements to re-evaluate (new or changed), and what the data can't conclude. Paperwork only; the customer, contract, freight and sales case still decide.
+- Checklist lines can have a start date (`effectiveOn`: the line applies to ship dates on or after it), a stated change (`changesOn`, e.g. a tariff rate) and a route flag (origin proofs). Checklists cover wood and furniture, food, textiles and some electronics headings, by HS prefix.
+- Suppliers, their documents and sites belong to the company; orders match suppliers by name (ignoring case and spacing). Owners and editors add, edit and delete them on the map: a location is a click on the map or typed coordinates; a supplier records which documents it has on file. The demo seed fills them for the demo company.
 - **Supplier documents from files** (built, backend only): an editor uploads a certificate (PDF or photo). AI reads it into fields (kind, number, issuer, dates, standards); a person checks and confirms them. Only then does it count, replacing the supplier's older document of that kind. Typed and uploaded documents are the same record: the supplier form shows number, issuer and expiry too, and editing a supplier keeps each document's upload link.
 - Satellite observations (e.g. flood extents) are extra evidence: suppliers and sites within 25 km get a check-in prompt. Order statuses never change because of them. Observations are samples until a real source is connected.
-- Suppliers, their documents and sites belong to the company; orders match suppliers by name (ignoring case and spacing). Owners and editors add, edit and delete them on the map: a location is a click on the map or typed coordinates; a supplier records which documents it has on file. The demo seed fills them for the demo company.
 
 ### 4.10 Contact form
 **Status: phase 3.** Validates name, email and message; rate limited; sends to a team inbox.
@@ -269,9 +269,9 @@ A map of the company's own export activity: its suppliers, sites and markets, an
 | Phase | Delivers | Status |
 | --- | --- | --- |
 | 1. Foundation | Auth, companies and roles, profile and onboarding, orders, CSV import, playbook, overview. Frontend on the API for these. | Done |
-| 2. Analysis | Rule library with versions, shared official texts, trade map; checked playbook rules, cost settings, runs (match → cost → playbook → plan → auditor), reports with citations, supplier document upload with OCR. Later, with retrieval: extraction + review, HS code suggestions | Backend built (except extraction and HS suggestions); frontend screens and deploy next |
-| 3. Actions | Draft → approve → send once (sandbox email), delivery status, feedback, contact form, audit log screen | Later |
-| 4. Connect + automate | Chat reads orders through the backend, scheduled source watching (crawler) and "sources checked at", following shared regulations, buyer tenant, Excel import | Later |
+| 2. Analysis | Rule library with versions, shared official texts, trade map (with "what if" and supplier/site editing), checked playbook rules, cost settings, runs (match → cost → playbook → plan → auditor), analysis reports with citations, shareable order and company reports (PDF, email), supplier document upload with OCR. Later, with retrieval: extraction + review, HS code suggestions | Backend built and tested (except extraction and HS suggestions). Not yet deployed; frontend screens for analysis, cost settings, checked rules and document upload missing |
+| 3. Actions | Draft → approve → send once (sandbox email), delivery status, feedback, contact form, audit log screen | Later. Email sending through Resend is built (report drafts) |
+| 4. Connect + automate | Chat reads orders and the playbook through the backend (built: `query_orders`, `get_playbook`), chat reads analysis reports, analysis runs on events (open question 20), scheduled source watching (crawler) and "sources checked at", following shared regulations, buyer tenant, Excel import | Later, except chat reading orders and the playbook |
 
 Each phase ends with: tests green, deployed, frontend working against it.
 
@@ -294,13 +294,13 @@ Each phase ends with: tests green, deployed, frontend working against it.
 | 13 | ~~How much of the code do we match on?~~ | **Decided:** 6 digits, prefix check in code, no AI (§8). |
 | 14 | ~~Rule amendments~~ | **Decided:** store the consolidated text as the next version; with none, each amending act is a version (§4.5). Stretch: the agent drafts merged conditions, a person reviews. |
 | 15 | ~~Who confirms AI-suggested HS codes?~~ | **Decided:** the company's editor; the CSV value is never overwritten (§8.4). |
-| 16 | Conditions that aren't HS codes | **Not in phase 2:** matching uses HS code + destination only (3). Later: origin country, company size, order value thresholds, wood species; some need data we don't have. |
+| 16 | Conditions that aren't HS codes | **Partly built:** a line can start on a date (`effectiveOn`, compared with the ship date) and be route-sensitive (origin proofs). Matching is otherwise HS code + destination (3). Later: origin country, company size, order value thresholds, wood species; some need data we don't have. |
 | 17 | ~~Markets vs countries~~ | **Decided:** a market groups countries; the destination text is parsed (§4.9). |
 | 18 | ~~Which documents does a rule require?~~ | **Decided:** a market requirement is the obligation; it names a document kind and cites its regulation version (§4.5). |
 | 19 | Supplier document storage | Uploaded certificates: file + record + embedding for search. Which vector store: Firestore (like `ai/server`) or `pgvector`? |
 | 20 | When do checks re-run? | **Decided for phase 2:** only when an editor clicks "Analyse" (`POST /runs`). **Direction:** analysis runs on events (CSV import, a supplier document confirmed, a rule or regulation change, a daily expiry check), the shareable order report and the chat read its latest report. |
 | 21 | Language | Vietnamese UI, Vietnamese documents for OCR, English rules. Translate in reports? |
-| 22 | ~~How do we test AI quality?~~ | **Decided:** a developer test set, not a user feature. About 20 cases with known answers per AI job (extraction, HS code suggestion, plan, auditor), e.g. "Oak dining table" → HS 9403.60. Run by hand before changing a prompt or the model; a case that passed and now fails blocks the change. Same approach as `ai/server/eval/`. |
+| 22 | ~~How do we test AI quality?~~ | **Decided:** a developer test set, not a user feature. About 20 cases with known answers per AI job (supplier document reading now; extraction and HS code suggestion when built), e.g. "Oak dining table" → HS 9403.60. Not built yet for the backend. Run by hand before changing a prompt or the model; a case that passed and now fails blocks the change. Same approach as `ai/server/eval/`. |
 | 23 | Where does crawling live? | **Leaning `ai/server`**: it already has per-company news sources (shared built-ins a company can switch off, plus its own feeds). Still open: does a backend `watch_sources` table replace this, or does the backend read sources from `ai/server`? |
 | 24 | Operator role | Platform staff (us) who maintain the shared library and review extracted requirements. A flag on users, or a separate admin app? **Not in phase 2:** the seed is reviewed as code (10). |
 | 25 | A company's own requirements | **Direction decided:** market requirements that belong to one company (drafted by AI from its own regulation, reviewed by the owner), checked next to the shared ones (§4.5 use case 3); built with extraction. Later: companies **follow** shared regulations, request missing ones, and matching checks only followed ones. |
@@ -310,9 +310,9 @@ Each phase ends with: tests green, deployed, frontend working against it.
 | Who | Does |
 | --- | --- |
 | **Operator** (our staff, later) | Maintains the shared rule library: adds official texts, reviews extracted requirements. |
-| Company **owner** | Everything an editor does, plus edits the company and approves outgoing messages. |
-| Company **editor** | Imports orders, uploads the company's own regulations, confirms AI-suggested HS codes, manages watch sources. |
-| Company **viewer** | Reads. |
+| Company **owner** | Everything an editor does, plus edits the company and its cost settings, and approves outgoing messages (phase 3). Later: reviews requirements drafted from the company's own regulations. |
+| Company **editor** | Imports orders, edits the playbook, suppliers and sites, uploads the company's own regulations and supplier documents (and confirms what AI read), runs analysis, emails reports. Later: confirms AI-suggested HS codes, manages watch sources. |
+| Company **viewer** | Reads, and prepares reports (only the author sees a draft). |
 
 ## 8. Rule sources and matching: roadmap
 
@@ -326,7 +326,7 @@ Everything not marked **built** is a goal. We can pitch the whole path, labelled
 | 1 | + Shared official texts (seed) and the company's own uploads (official text or article) | Consolidated text as the next version; requirements written by hand in the seed | Trade map and analysis document checks (code) ✓. Next: AI drafts a company's requirements; AI suggests HS codes for orders without one (both with retrieval); 6-digit HS prefix + exceptions | **Partly built** |
 | 2 | + Crawler (J1): per-company watch list + official APIs (US Federal Register, EUR-Lex) | Extraction agent drafts requirements, a person reviews | Same | Phase 4 |
 | 3 (stretch) | + Agent goes from a news article to the official text (Gemini grounding with Google Search, EUR-Lex search); a person confirms | Agent spots amendments and drafts merged conditions; a person reviews. Version detection without the uploader picking (below) | + AI flags CSV codes that don't fit the product; 8–10 digit national codes when a rule names them | Goal |
-| 4 (stretch) | + Vietnamese official sources, more markets | Same | Same | Goal |
+| 4 (stretch) | + Vietnamese official sources, more markets | Same | Same | Goal. Started: checklists already cover food, textiles and some electronics headings |
 
 Pitch line: "The agent finds the likely official text and shows it to you. You confirm it before it's used."
 
@@ -346,17 +346,18 @@ A wrong automatic link would compare unrelated texts and raise wrong alerts, so 
 | --- | --- |
 | Regulation | **Built.** Title, optional official ID (unique per company, and among shared ones), owning company or none (shared) |
 | Regulation document | **Built.** One version: number, title, source URL, file, content hash (a file can be in a regulation only once). The company comes from the regulation. Later: kind (official text / article), fetched date for crawled files |
-| Market requirement | **Built.** One requirement in a market's checklist: level, document kind, accepted standards, HS prefixes, duty rate, the regulation version it comes from, its quote. Later, for extraction: the company for a company's own, `draft` → `reviewed` → `replaced`, HS exclude, start date |
+| Market requirement | **Built.** One requirement in a market's checklist: level, document kind, accepted standards, HS prefixes, duty rate, start date (`effective_on`), a stated change (`changes_on`, `change_note`), route-sensitive, the regulation version it comes from, its quote. Later, for extraction: the company for a company's own, `draft` → `reviewed` → `replaced`, HS exclude |
 | Watch source | Later. Company (or shared), URL, kind (`rss`, `federal_register`, `eurlex`, `page`), enabled, last checked |
 | Followed regulation | Later. Which company follows which shared regulation |
 | HS code suggestion | Later. Order, suggested code, description, reason, confidence, `pending` / `accepted` / `rejected`, who decided |
 | Analysis run and report | **Built.** Run: status, step summaries, playbook revision and cost settings used. Report per order: state, order status, blocked, and its content as JSON |
 | Cost default / company cost setting | **Built.** Key, label, unit (`days` or a currency), value |
-| Supplier document upload | **Built.** File in Cloud Storage, what AI read, `draft` → `confirmed`. A supplier document now also has number, issuer, expiry and the upload it came from |
+| Supplier document upload | **Built.** File in Cloud Storage, what AI read, `draft` → `confirmed`. A supplier document (typed or confirmed) has number, issuer, expiry and the upload it came from |
+| Report draft | **Built.** An order or company report: the generated `original`, the edited `content`, who sent it to whom and when (locked once sent) |
 
 ### 8.3 AI jobs (high level)
 
-Each job runs as a background task (DECISIONS.md §4), saves its steps, and stores every AI output with its source quote, model and prompt version.
+Jobs that wait on AI run as background tasks (DECISIONS.md §4); J4 is code and runs inside the request. Each saves its steps and stores every AI output with its source quote, model and prompt version.
 
 **J1 Crawl** (daily)
 For each enabled watch source: fetch new items → skip ones already seen (by hash) → official texts become the next version of a shared regulation, articles go to J2. Same download rules as the seed (§4.5). New official versions go to J3.
@@ -388,7 +389,7 @@ For each reviewed requirement × each company order: 6-digit prefix + exceptions
 | Case | What happens |
 | --- | --- |
 | CSV has a code | Use it. No AI. |
-| CSV code is empty | J5 suggests; the editor confirms; then matching runs. |
+| CSV code is empty | Not possible yet (the CSV requires a code). With J5: AI suggests; the editor confirms; then matching runs. |
 | CSV code looks wrong for the product (e.g. "Milk powder" + 4412.33) | Level 3: AI flags "code doesn't look like the product". The CSV value stays; the editor decides. |
 | Excel/PDF import (later) | Same as an empty code. |
 

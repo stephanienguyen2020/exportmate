@@ -20,10 +20,10 @@ Firestore can do these, but with more code.
 | Service | Owns |
 | --- | --- |
 | `backend` (Python) | Accounts, companies, orders, imports, playbook, regulations, trade map, analysis runs, reports, messages. Source of truth. |
-| `ai/server` (Node) | Chat assistant, daily news scan. |
+| `ai/server` (Node) | Chat assistant (Google ADK), daily news scan, News watch alerts. |
 
-- Analysis (match → cost → auditor) lives in `backend`: it needs orders and must be deterministic and tested. It calls Gemini directly for the "plan" and extraction steps.
-- `ai/server` never reads the backend's DB. It calls the backend's API with the user's own token: the company profile for chat (`BACKEND_URL`) and the user's role before changing news sources. Demo chats stay anonymous.
+- Analysis (match → cost → playbook → plan → auditor) lives in `backend`: it needs orders and must be deterministic and tested, so every step is code. The backend calls Gemini only to read uploaded supplier documents (§9).
+- Neither service reads the other's database; each calls the other's API with the user's own token. `ai/server` reads the company profile, orders (`GET /trade-map`), the playbook and the user's role (`BACKEND_URL`). The backend's company report reads News watch alerts (`GET /api/impacts`, `AI_SERVICE_URL`). Demo chats stay anonymous.
 
 ## 3. Code layout
 
@@ -98,8 +98,15 @@ Local: `AUTH_MODE=dev` accepts `Bearer dev:<email>` (no Firebase). Production re
 - Uploaded files are untrusted: the prompt says to ignore instructions inside them. Prompts and answers are never logged; logs carry the task name, model and duration.
 - Settings: `GOOGLE_CLOUD_PROJECT` (required), `GEMINI_MODEL` (default `gemini-2.5-flash`), `GEMINI_LOCATION` (`global`). The backend's service account has `roles/aiplatform.user`. Without a project, AI routes return `503 ai_not_configured`; a failed call returns `503 ai_unavailable` and nothing is saved. Tests replace `generate_json` with a fake.
 - Analysis, matching, costs and playbook rules are code, never AI, so the same input always gives the same answer.
+- The chat assistant (`ai/server`) is separate: a Google ADK agent with a model router, with its own harness (`docs/AGENT_HARNESS.md`).
 
-## 10. Limits
+## 10. Email: Resend
 
-- Uploads: 4 MB (the Vercel function accepts about 4.5 MB), 60 per user per hour per upload type. Analysis runs: 60. Counted in memory per Cloud Run instance, so it stops runaway scripts but isn't a quota.
+- Reports are emailed through Resend (`core/email.py`); without `RESEND_API_KEY` it is a sandbox that builds and audits the email but delivers nothing. Auth emails stay Firebase's.
+- Sending once: an optional `Idempotency-Key` (Resend keeps it 24 hours) and a row lock; a sent report is locked.
+- Phase 3 supplier messages will use the same sender, after an owner approves the exact text.
+
+## 11. Limits
+
+- Uploads: 4 MB (the Vercel function accepts about 4.5 MB), 60 per user per hour per upload type. Analysis runs: 60. Report emails: 20 (`REPORT_EMAILS_PER_HOUR`). Counted in memory per Cloud Run instance, so it stops runaway scripts but isn't a quota.
 - CSV: 10,000 rows. Uncommitted imports are deleted after 30 days (`python -m app.cleanup_imports`).

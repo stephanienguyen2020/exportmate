@@ -26,13 +26,14 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
 | 403 | `forbidden` | The caller's role is too low |
 | 404 | `not_found` | Missing, or it belongs to another company |
 | 422 | `invalid_input` | Validation failed. `fieldErrors` holds one message per field |
-| 429 | `rate_limited` | Per-user hourly limit reached, counted per instance: uploads 60, analysis runs 60 |
+| 429 | `rate_limited` | Per-user hourly limit reached, counted per instance: uploads 60 (per upload type), analysis runs 60, report emails 20 |
 | 503 | `ai_unavailable` / `ai_not_configured` | An AI step (Gemini) failed or isn't set up (`GOOGLE_CLOUD_PROJECT`). Nothing was saved; try again |
 
 ## Index
 
 | Endpoint | Role | Used by |
 | --- | --- | --- |
+| **Account** | | |
 | `GET /health` | none | Uptime checks, `deploy.sh` |
 | `GET /me` | signed in | Sign-in, every workspace load, Account settings; `ai/server` |
 | `PATCH /me` | signed in | Account settings |
@@ -40,44 +41,50 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
 | `POST /onboarding` | signed in, no company | Onboarding wizard |
 | `PATCH /company` | owner | Account settings (About company) |
 | `GET /company/knowledge` | viewer | `ai/server` chat only |
+| **Orders and import** | | |
 | `GET /overview` | viewer | Dashboard |
 | `GET /orders` | viewer | Every workspace load |
 | `GET /orders/{id}` | viewer | Order detail page |
 | `POST /imports` | editor | Upload screen |
 | `GET /imports/{id}` | viewer | Upload screen (preview) |
 | `POST /imports/{id}/commit` | editor | Upload screen ("Import") |
+| **Playbook** | | |
 | `GET /playbook/rules` | viewer | Every workspace load; `ai/server` chat (`get_playbook`) |
 | `POST /playbook/rules` | editor | Playbook: add rule |
 | `PATCH /playbook/rules/{id}` | editor | Playbook: on/off toggle |
 | `DELETE /playbook/rules/{id}` | editor | Playbook: delete |
+| `GET /playbook/fields` | viewer | Not yet (playbook rule form) |
+| **Trade map, suppliers and sites** | | |
 | `GET /trade-map` | viewer | Trade map; `ai/server` chat (`query_orders`) |
 | `GET /trade-map/compare` | viewer | Trade map: "What if" panel |
 | `POST /suppliers` | editor | Trade map: "Add supplier" / "Add a supplier record" |
 | `PATCH /suppliers/{id}` | editor | Trade map: "Edit supplier" |
 | `DELETE /suppliers/{id}` | editor | Trade map: "Delete supplier" |
+| `POST /suppliers/{id}/documents` | editor | Not yet (supplier panel) |
+| `POST /supplier-documents/{id}/confirm` | editor | Not yet (supplier panel) |
 | `POST /sites` | editor | Trade map: "Add site" |
 | `PATCH /sites/{id}` | editor | Trade map: "Edit site" |
 | `DELETE /sites/{id}` | editor | Trade map: "Delete site" |
+| **Regulations** | | |
+| `POST /regulation-documents` | editor | Regulation library: add regulation / version |
+| `GET /regulation-documents/{id}` | viewer | Regulation library |
+| `GET /regulation-documents/{id}/file` | viewer | Regulation library |
+| `GET /regulations` | viewer | Regulation library |
+| `GET /regulations/{id}` | viewer | Regulation library |
+| **Analysis** | | |
+| `GET /company/cost-settings` | viewer | Not yet (settings, report cost lines) |
+| `PATCH /company/cost-settings` | owner | Not yet (settings) |
+| `POST /runs` | editor | Not yet ("Analyse", replacing the simulated five-agent review) |
+| `GET /runs/{id}` | viewer | Not yet (run panel) |
+| `GET /reports/{id}` | viewer | Not yet (report view) |
+| **Shareable reports** | | |
 | `POST /report-drafts` | viewer | Order detail: "Prepare report"; Reports: "Generate company report" |
 | `GET /report-drafts` | viewer | Reports: your reports |
 | `GET /report-drafts/{id}` | viewer (author) | Report editor |
 | `PATCH /report-drafts/{id}` | viewer (author) | Report editor: save (also before preview, download, email) |
 | `GET /report-drafts/{id}/pdf` | viewer (author) | Report editor: "Preview PDF", "Download PDF" |
 | `POST /report-drafts/{id}/email` | editor (author) | Report editor: "Email report" |
-| `POST /regulation-documents` | editor | Regulation library: add regulation / version |
-| `GET /regulation-documents/{id}` | viewer | Regulation library |
-| `GET /regulation-documents/{id}/file` | viewer | Regulation library |
-| `GET /regulations` | viewer | Regulation library |
-| `GET /regulations/{id}` | viewer | Regulation library |
-| `GET /playbook/fields` | viewer | Not yet (playbook rule form) |
-| `GET /company/cost-settings` | viewer | Not yet (settings, report cost lines) |
-| `PATCH /company/cost-settings` | owner | Not yet (settings) |
-| `POST /runs` | editor | Not yet ("Analyse", replacing the simulated five-agent review) |
-| `GET /runs/{id}` | viewer | Not yet (run panel) |
-| `GET /reports/{id}` | viewer | Not yet (report view) |
-| `POST /suppliers/{id}/documents` | editor | Not yet (supplier panel) |
-| `POST /supplier-documents/{id}/confirm` | editor | Not yet (supplier panel) |
-| [Planned](#planned) | | Phases 3–4 |
+| [Planned](#planned) | | Phases 2 (later) – 4 |
 
 "Every workspace load" means `refreshWorkspace()` in `frontend/src/main.tsx`. It runs on entering the workspace, after a commit, and on "Retry". It calls `GET /me`, then `GET /orders`, `GET /playbook/rules` and `GET /overview` in parallel. The browser-only demo session calls none of these: it uses localStorage.
 
@@ -326,6 +333,26 @@ Only `name` (1–300) is required. `place` ≤200, `supplies` ≤1000 (blank is 
 
 Both: `404` for another company's supplier or site.
 
+## Supplier documents
+
+A supplier's certificate uploaded as a file: AI reads it, a person confirms the fields, then it counts in the trade map and analysis.
+
+### `POST /suppliers/{id}/documents` (editor, rate limited, AI)
+`multipart/form-data` with `file`: `.pdf`, `.png`, `.jpg`/`.jpeg`, ≤4 MB, checked by its first bytes. The file is saved in Cloud Storage and Gemini reads it. Returns `201` with the draft:
+```json
+{"id": "…", "supplierId": "…", "filename": "geo.pdf", "contentType": "application/pdf", "sizeBytes": 51234,
+ "status": "draft", "createdAt": "…", "confirmedAt": null,
+ "extracted": {"kind": "geolocation", "documentNumber": "GEO-2026-118", "issuer": "…",
+               "issuedOn": "2026-09-01", "expiresOn": "2027-10-14", "standards": [],
+               "detail": "Plot coordinates for the 2026 acacia harvest, 4 plots", "notes": null}}
+```
+A `kind` that isn't a known document kind and dates that aren't `YYYY-MM-DD` come back `null`. Nothing is saved when the AI step fails (`503`). `404` for another company's supplier; `422 invalid_file_type` / `file_too_large` / `empty_file` / `invalid_file`.
+
+### `POST /supplier-documents/{id}/confirm` (editor)
+`{id}` is the upload. Body: the fields as the person checked them: `kind`, `detail`, `standards`, `documentNumber`, `issuer`, `expiresOn`. Writes the supplier's document of that kind (replacing an older one) and returns it with its `uploadId`. `409 already_confirmed`, `422` for an unknown kind.
+
+---
+
 ## Regulations
 
 `#/workspace/regulations` (`frontend/src/Regulations.tsx`) lists regulations, uploads company texts, shows version history and downloads files with bearer authentication. Document deep links use `#/workspace/regulations/documents/{id}`; trade-map citations link there. Viewers can read/download; only owners/editors can upload.
@@ -360,11 +387,15 @@ Every regulation, oldest first, with `versionCount` and `latestVersion`. With `o
 ### `GET /regulations/{id}` (viewer)
 The regulation plus `versions[]`, newest first.
 
-## Cost settings
+## Analysis (runs and reports)
+
+A run checks orders against the market requirements, prices the problems, applies the checked playbook rules, suggests one action and audits the result (REQUIREMENTS.md §4.6). Plain code, no AI: it finishes inside the request.
+
+### Cost settings
 
 The numbers analysis uses when a regulation doesn't give one (REQUIREMENTS.md §4.6 step 3). Shared defaults are seeded (`reference.json` `costDefaults`); a company can set its own.
 
-### `GET /company/cost-settings` (viewer)
+#### `GET /company/cost-settings` (viewer)
 ```json
 [{"key": "delay_per_day", "label": "Delay: cost of each day an order waits (storage, late fees)",
   "unit": "USD", "value": 35000, "source": "company_setting", "defaultUnit": "USD", "defaultValue": 20000},
@@ -373,12 +404,8 @@ The numbers analysis uses when a regulation doesn't give one (REQUIREMENTS.md §
 ```
 Keys: `delay_per_day`, `missing_document`, `new_test` (money: `value` in hundredths of `unit`), `supplier_lead_days` (`unit` `days`).
 
-### `PATCH /company/cost-settings` (owner)
+#### `PATCH /company/cost-settings` (owner)
 `{"settings": [{"key": "delay_per_day", "value": 35000, "unit": "USD"}]}`. `value: null` goes back to the default. A money setting may change currency; a days setting can't. Returns the full list. `422` for an unknown key or a bad unit.
-
-## Analysis (runs and reports)
-
-A run checks orders against the market requirements, prices the problems, applies the checked playbook rules, suggests one action and audits the result (REQUIREMENTS.md §4.6). Plain code, no AI: it finishes inside the request.
 
 ### `POST /runs` (editor, rate limited)
 Body optional: `{"orderIds": ["PO-2291"]}` (default: every order). Updates each order's `status` and returns `201` with the run:
@@ -416,27 +443,7 @@ One order's report. Stored as it was written, so it reads the same after require
 | `audit` | `passed`, `problems[]`: every finding has a quote, every cost line re-computes and names its basis, totals add up, every rule exists |
 | `missingData`, `daysUntilShip`, `market` | What's missing, days to the ship date at run time, the market |
 
-## Supplier documents
-
-A supplier's certificate uploaded as a file: AI reads it, a person confirms the fields, then it counts in the trade map and analysis.
-
-### `POST /suppliers/{id}/documents` (editor, rate limited, AI)
-`multipart/form-data` with `file`: `.pdf`, `.png`, `.jpg`/`.jpeg`, ≤4 MB, checked by its first bytes. The file is saved in Cloud Storage and Gemini reads it. Returns `201` with the draft:
-```json
-{"id": "…", "supplierId": "…", "filename": "geo.pdf", "contentType": "application/pdf", "sizeBytes": 51234,
- "status": "draft", "createdAt": "…", "confirmedAt": null,
- "extracted": {"kind": "geolocation", "documentNumber": "GEO-2026-118", "issuer": "…",
-               "issuedOn": "2026-09-01", "expiresOn": "2027-10-14", "standards": [],
-               "detail": "Plot coordinates for the 2026 acacia harvest, 4 plots", "notes": null}}
-```
-A `kind` that isn't a known document kind and dates that aren't `YYYY-MM-DD` come back `null`. Nothing is saved when the AI step fails (`503`). `404` for another company's supplier; `422 invalid_file_type` / `file_too_large` / `empty_file` / `invalid_file`.
-
-### `POST /supplier-documents/{id}/confirm` (editor)
-`{id}` is the upload. Body: the fields as the person checked them: `kind`, `detail`, `standards`, `documentNumber`, `issuer`, `expiresOn`. Writes the supplier's document of that kind (replacing an older one) and returns it with its `uploadId`. `409 already_confirmed`, `422` for an unknown kind.
-
----
-
-## Reports
+## Shareable reports (report drafts)
 
 A report is generated into a draft that only its author sees (`report_drafts`). The draft keeps the generated report (`original`) and an editable copy (`content`). Everything in `content` can be edited, but the PDF shades every line that differs from `original`, notes per section what was changed, added or left out and by whom, and says "contains edits by <name>" in the footer. Sending locks the draft. An order report is the shareable copy of the order's latest analysis report (`GET /reports/{id}`): analysis decides statuses and costs; this repeats them for a reader outside the app.
 
@@ -481,17 +488,15 @@ The PDF of the saved content, `inline` for the preview; `?download=true` makes i
 
 ## Planned
 
-Not built. Shapes follow the requirements and may change. Phases are the ones in REQUIREMENTS.md §5. Phase 2 is mostly built (above; the frontend doesn't call the new endpoints yet). Requirement drafting and HS code suggestions wait for retrieval (RAG).
+Not built. Shapes follow the requirements and may change. Phases are the ones in REQUIREMENTS.md §5. Requirement drafting and HS code suggestions are phase 2 but wait for retrieval (RAG).
 
 | Endpoint | Phase | Role | Does | Will be used by |
 | --- | --- | --- | --- | --- |
-| `GET /sources` | 4 | viewer | Rule sources the crawler watches and when each was last checked; fills `sourcesCheckedAt` | Dashboard "last checked" |
-| `POST /reports/{id}/feedback` | 3 | viewer | Thumbs up/down + note on a report | Report view |
 | `GET /regulations/{id}/requirements?version=` | 2 (later, with RAG) | viewer | The market requirements a version sets, each with its quote, plus what changed from the previous version | Rule-change review, regulation page |
 | `POST /regulation-documents/{id}/requirements` | 2 (later, with RAG) | editor | AI drafts the market requirements of one version of the company's own regulation; quotes checked against the text (PDF text too); long texts searched by section | Rule-change review |
 | `PATCH /market-requirements/{id}` | 2 (later, with RAG) | owner | Edit a drafted requirement and mark it `reviewed` / `rejected`. Only reviewed ones are checked | Rule-change review |
 | `POST /orders/{id}/hs-suggestions`, `GET …`, `POST /hs-suggestions/{id}/accept` / `reject` | 2 (later, with RAG) | editor / viewer | AI suggests HS codes for orders without one, from the company's past orders and the HS headings it retrieves. Accepting sets the code and analyses the order again. Needs empty `hsCode` cells allowed in the CSV | Order detail (`needs_data`) |
-| `POST /internal/runs/{id}/execute` | later | Cloud Tasks only (OIDC) | Runs a run's work outside the request, once a step waits on AI (e.g. the phase 3 message draft). Phase 2 runs finish inside `POST /runs` | Not the frontend |
+| `POST /reports/{id}/feedback` | 3 | viewer | Thumbs up/down + note on an analysis report | Report view |
 | `POST /actions/drafts` | 3 | editor | AI drafts a supplier message from a `pass` report that isn't `blocked` | "Draft email" |
 | `PATCH /actions/{id}` | 3 | editor | Edit text or recipient. Resets an approved action to `draft` | Message editor |
 | `POST /actions/{id}/approve` | 3 | owner | Records who, when and a hash of the exact text | "Approve" |
@@ -499,6 +504,7 @@ Not built. Shapes follow the requirements and may change. Phases are the ones in
 | `GET /actions/{id}` | 3 | viewer | State: `draft → approved → queued → sent → delivered`, or `failed` / `expired` / `cancelled` | Message status |
 | `GET /audit-events` | 3 | owner | Who imported, edited, approved and sent what, and when | Audit log screen |
 | `POST /contact` | 3 | none (rate limited) | Name, email and message to the team inbox | Landing page contact section (`#/contact`) |
+| `POST /internal/runs/{id}/execute` | later | Cloud Tasks only (OIDC) | Runs a run's work outside the request, once a step waits on AI (e.g. the phase 3 message draft). Phase 2 runs finish inside `POST /runs` | Not the frontend |
+| `GET /sources` | 4 | viewer | Rule sources the crawler watches and when each was last checked; fills `sourcesCheckedAt` | Dashboard "last checked" |
 | `GET /watch-sources`, `POST`, `PATCH /watch-sources/{id}` | 4 | viewer / editor | The company's rule sources (RSS, Federal Register, EUR-Lex) for the daily crawl | Sources settings |
 | `POST /regulations/{id}/follow`, `DELETE …/follow` | 4 | editor | Follow a shared regulation. Matching uses only followed ones | Rule library |
-| `GET /orders` for the AI | 4 | viewer | Same endpoint, called by `ai/server` with the user's token so chat can see orders | Chat |
