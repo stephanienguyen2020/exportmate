@@ -18,6 +18,8 @@ All settings come from `backend/.env` (app, Alembic, seed and tests), whichever 
 
 Uploaded documents always go to the Cloud Storage bucket `REGULATION_DOCUMENT_BUCKET`, also when running locally: run `gcloud auth application-default login` once. Without it, uploads and downloads return `503 storage_not_configured`. Tests use an in-memory fake.
 
+The AI steps (reading supplier documents, drafting requirements, HS code and what-if suggestions, suggested solutions, supplier messages) call Gemini on Vertex AI in `GOOGLE_CLOUD_PROJECT`, also locally (`.env.example` uses the AI service's project), with the same `gcloud auth application-default login`. Without a project or credentials they answer `503 ai_not_configured`. `python -m app.seed_reference_data` embeds the HS headings that HS code suggestions search, once; without AI it loads them unembedded and suggestions search them by words. Tests use `FakeGemini`.
+
 Company reports read News watch alerts from the AI service at `AI_SERVICE_URL` (default `http://127.0.0.1:8080`, HTTPS otherwise); if it isn't running, the report says News watch was unavailable. Reports are emailed through Resend when `RESEND_API_KEY` is set (sender `REPORT_EMAIL_FROM`, whose domain must be verified in Resend). Without a key they run in sandbox mode: the PDF is built and the send is audited, but nothing is delivered, and the API answers `sandbox: true`. Tests always use the sandbox.
 
 API docs: http://127.0.0.1:8000/api/v1/docs

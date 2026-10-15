@@ -29,7 +29,7 @@ npm run dev
 
 Open the local URL printed by Vite (normally http://127.0.0.1:5173). `npm run build` type-checks and produces `dist/`; `npm run preview` serves the production build. The sample demo needs no credentials. Signed-in workspaces require the backend and Firebase configuration below.
 
-To run the whole stack (Postgres, backend, AI service and frontend) with one command, use `./dev.sh` from the repository root. It needs Docker and [uv](https://docs.astral.sh/uv/), installs dependencies when lockfiles change, migrates and seeds the database, and uses dev sign-in: log in as `lan@example.com` with any password of 8+ characters. Ctrl+C stops everything except Postgres.
+To run the whole stack (Postgres, backend, AI service and frontend) with one command, use `./dev.sh` from the repository root. It needs Docker and [uv](https://docs.astral.sh/uv/), installs dependencies when lockfiles change, migrates and seeds the database, and uses dev sign-in: log in as `lan@example.com` with any password of 8+ characters. Ctrl+C stops everything except Postgres. The AI features call Gemini and read the AI service's data in GCP, so run `gcloud auth application-default login` once; `GOOGLE_CLOUD_PROJECT` in `backend/.env` turns on the backend's AI steps, and `ai/server/.env` (see its `.env.example`) can turn on the assistant's Memory Bank.
 
 ## Company API integration
 
