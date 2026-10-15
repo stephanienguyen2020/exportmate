@@ -12,7 +12,6 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import {
-  date,
   makerCost,
   money,
   sampleCostWhy,
@@ -24,6 +23,7 @@ import {
 import { api, asOrder, type OrderDetail } from "../api";
 import { errorMessage } from "../auth";
 import { CostWhy } from "../CostWhy";
+import { OrderFacts } from "./OrderFacts";
 import { OrderStatus } from "./OrderTable";
 import type { Workspace } from "./store";
 import { Button, PageHeading, go, orderPath, type Notify } from "./ui";
@@ -32,7 +32,17 @@ const OrderAnalysis = lazy(() => import("../Analysis"));
 const OrderStatusPanel = lazy(() => import("../OrderStatus"));
 const costMoney = (n: number) => money(n, sampleCosts.maker.currency);
 
-function OrderHeading({ order, ws }: { order: Order; ws: Workspace }) {
+function OrderHeading({
+  order,
+  ws,
+  notify,
+  onSaved,
+}: {
+  order: Order;
+  ws: Workspace;
+  notify: Notify;
+  onSaved?: (detail: OrderDetail) => void | Promise<void>;
+}) {
   return (
     <>
       <button className="text-link back" onClick={() => go("orders")}>
@@ -49,26 +59,7 @@ function OrderHeading({ order, ws }: { order: Order; ws: Workspace }) {
         description={order.product + " · " + order.destination}
         action={<OrderStatus order={order} ws={ws} />}
       />
-      <div className="detail-meta">
-        <div>
-          <small>SUPPLIER</small>
-          <b>{order.supplier}</b>
-        </div>
-        <div>
-          <small>SHIP DATE</small>
-          <b>
-            {date(order.shipDate)} {order.shipDate.slice(0, 4)}
-          </b>
-        </div>
-        <div>
-          <small>ORDER VALUE</small>
-          <b>{money(order.value, order.currency)}</b>
-        </div>
-        <div>
-          <small>HS CODE</small>
-          <b>{order.hsCode}</b>
-        </div>
-      </div>
+      <OrderFacts order={order} ws={ws} notify={notify} onSaved={onSaved} />
     </>
   );
 }
@@ -104,7 +95,16 @@ export function CompanyOrder({
     });
   return (
     <>
-      <OrderHeading order={order} ws={ws} />
+      <OrderHeading
+        order={order}
+        ws={ws}
+        notify={notify}
+        onSaved={(next) => {
+          // Only if the visitor is still on this order.
+          if (location.hash.endsWith("/" + orderPath(next.order.id)))
+            setDetail(next);
+        }}
+      />
       <button
         className="text-link order-map-link"
         onClick={() => go("map/order/" + encodeURIComponent(order.id))}
@@ -211,19 +211,21 @@ export function SampleOrder({
   order,
   ws,
   buyer,
+  notify,
   onMessage,
   onEvidence,
 }: {
   order: Order;
   ws: Workspace;
   buyer: boolean;
+  notify: Notify;
   onMessage: (order: Order) => void;
   onEvidence: (order: Order) => void;
 }) {
   const sent = ws.sent.includes(order.id);
   return (
     <>
-      <OrderHeading order={order} ws={ws} />
+      <OrderHeading order={order} ws={ws} notify={notify} />
       {order.risk ? (
         <div className="detail-grid">
           <section className="panel">

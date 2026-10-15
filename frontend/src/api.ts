@@ -60,6 +60,22 @@ export type OrderStatusBulkChange = {
   changed: ApiOrder[];
   unchanged: string[]; // ids of orders that already had the status
 };
+// PATCH /orders/{id}: only the fields that changed. The order's id can't change.
+export type OrderChange = Partial<
+  Pick<
+    Order,
+    | "product"
+    | "supplier"
+    | "destination"
+    | "value"
+    | "currency"
+    | "shipDate"
+    | "hsCode"
+  >
+>;
+// The order after the change and the analysis it ran: null when nothing changed or the
+// analysis failed (the change is saved either way).
+export type OrderUpdated = { detail: OrderDetail; run: AnalysisRun | null };
 export type Overview = {
   totalOrders: number;
   countsByStatus: Record<string, number>;
@@ -900,6 +916,17 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ orderIds: ids, status, note }),
     }).then((r) => r.data),
+  updateOrder: (id: string, { value, ...change }: OrderChange) =>
+    request<OrderUpdated>(`/orders/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        ...change,
+        // Hundredths of the currency unit, as the backend keeps every amount.
+        ...(value === undefined ? {} : { valueMinor: Math.round(value * 100) }),
+      }),
+    }).then((r) => r.data),
+  deleteOrder: (id: string) =>
+    request(`/orders/${encodeURIComponent(id)}`, { method: "DELETE" }),
   reports: (signal?: AbortSignal) =>
     request<ReportSummary[]>("/report-drafts", { signal }).then((r) => r.data),
   report: (id: string, signal?: AbortSignal) =>

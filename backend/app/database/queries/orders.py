@@ -118,6 +118,13 @@ def add_orders(db: Session, orders: list[Order]) -> None:
     db.flush()
 
 
+def delete_order(db: Session, order: Order) -> None:
+    """Its status history, analysis reports (with their supplier messages and solution uses),
+    HS code suggestions, saved what-ifs and news reviews go with it (ON DELETE CASCADE)."""
+    db.delete(order)
+    db.flush()
+
+
 def count_orders_by_status(db: Session, company_id: uuid.UUID) -> dict[str, int]:
     rows = db.execute(
         select(Order.status, func.count())
