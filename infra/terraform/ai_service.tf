@@ -107,9 +107,9 @@ resource "google_firestore_field" "answer_cache_ttl" {
 }
 
 # Screens each new news article before Gemini or the search index sees it (ai/server/armor.js,
-# called by scan.js): prompt injection and jailbreaks, at medium confidence and above; a withheld
-# article is recorded with what matched. (The malicious-URL filter isn't offered in
-# asia-southeast1, so links are checked by guard.js only.)
+# called by scan.js): prompt injection and jailbreaks, and links to known-malicious sites.
+# Medium confidence and above; a withheld article is recorded with what matched. It lives in
+# var.model_armor_region because asia-southeast1 doesn't offer the malicious-link filter.
 resource "google_model_armor_template" "untrusted_text" {
   location    = var.model_armor_region
   template_id = "exportmate-untrusted-text"
@@ -118,6 +118,10 @@ resource "google_model_armor_template" "untrusted_text" {
     pi_and_jailbreak_filter_settings {
       filter_enforcement = "ENABLED"
       confidence_level   = "MEDIUM_AND_ABOVE"
+    }
+
+    malicious_uri_filter_settings {
+      filter_enforcement = "ENABLED"
     }
   }
 
