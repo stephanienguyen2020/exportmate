@@ -225,3 +225,39 @@ def test_auditor_rejects_numbers_that_dont_recompute(client, lan):
     assert not result.passed
     assert any("doesn't re-compute" in p for p in result.problems)
     assert "The totals don't match the cost lines." in result.problems
+
+
+def test_a_duty_whose_rate_changes_by_the_ship_date_is_not_priced(client, lan):
+    import_orders(
+        client,
+        lan,
+        "id,product,supplier,destination,value,shipDate,hsCode\n"
+        'PO-9,Bathroom vanity,An Cuong Wood,"Long Beach, US",20000,2027-02-01,9403.40\n',
+    )
+    report = reports_by_order(client, lan, run(client, lan, orderIds=["PO-9"]))["PO-9"]
+    assert [line["kind"] for line in report["costLines"]] == []
+    assert report["unpricedCosts"][0]["requirementKey"] == "tariff"
+    assert report["unpricedCosts"][0]["reason"].startswith("The rate changes on 2027-01-01")
+    assert report["suggestedAction"]["kind"] == "recheck_landed_cost"
+    assert report["audit"]["passed"] is True
+
+
+def test_the_order_report_repeats_the_latest_analysis(client, lan):
+    def sections(order_id: str) -> dict[str, dict]:
+        response = client.post(
+            "/api/v1/report-drafts", headers=lan, json={"kind": "order", "orderId": order_id}
+        )
+        assert response.status_code == 201, response.text
+        return {s["id"]: s for s in response.json()["data"]["content"]["sections"]}
+
+    before = sections("PO-1")
+    assert before["analysis"]["note"].startswith("Not analysed yet")
+    assert before["costs"]["rows"] == []
+
+    run(client, lan, orderIds=["PO-1"])
+    after = sections("PO-1")
+    facts = {row["cells"][0]: row["cells"][1] for row in after["analysis"]["rows"]}
+    assert facts["Estimated cost"] == "USD 1,200.00"
+    assert facts["Next step"].startswith("Binh Phu Wood needs 14 days")
+    assert [row["cells"][2] for row in after["costs"]["rows"]] == ["USD 400.00", "USD 800.00"]
+    assert "changed since" not in after["analysis"]["note"]

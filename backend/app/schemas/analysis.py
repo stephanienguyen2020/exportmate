@@ -40,6 +40,17 @@ class CostLineOut(CamelCaseModel):
     basis: list[CostBasisOut]
 
 
+class UnpricedCostOut(CamelCaseModel):
+    """A cost the regulation states but we can't price for this ship date, e.g. a duty rate
+    that changes on or before it. Shown with no amount rather than a wrong one."""
+
+    kind: Literal["duty"]
+    label: str
+    requirement_key: str
+    reason: str  # "The rate changes on 2027-01-01, on or before the ship date: recheck it."
+    source: RequirementSourceOut
+
+
 class RuleResultOut(CamelCaseModel):
     rule_id: uuid.UUID
     text: str
@@ -79,6 +90,7 @@ class ReportContentOut(CamelCaseModel):
     cost_totals: dict[str, int]  # every line, by currency, hundredths
     # Without duties: what the problems cost. Playbook rules on "estimated cost" use this.
     problem_cost_totals: dict[str, int]
+    unpriced_costs: list[UnpricedCostOut]  # stated costs with no reliable amount for this date
     rules_fired: list[RuleResultOut]
     rules_not_checked: int  # enabled rules with no WHEN/THEN
     suggested_action: SuggestedActionOut

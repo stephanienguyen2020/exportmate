@@ -260,7 +260,7 @@ Everything the map draws, in one call when the page opens:
 | `orders[]` | `order`, `placement` (city, country, market, location, `approximate` = placed at the country centre), `checks[]`, `gapCount` |
 | `orders[].checks[]` | `requirementKey`, `title`, `level` (`supplier` / `shipment` / `check`), `status` (`on_file` / `missing` / `mismatch` / `prepare` / `check` / `unknown`), `note`, `source` |
 | `checks[].source` | The shared regulation version behind the requirement and the sentence that requires it: `regulationTitle`, `officialId`, `documentId` (→ `GET /regulation-documents/{id}/file`), `versionNumber`, `sourceUrl`, `quote` |
-| `suppliers[]` | From orders (matched by trimmed, lower-case name) + the supplier list. `id`/`documents` are `null` when the supplier is only named on orders. A document has `kind`, `detail`, `standards`, and `documentNumber`/`issuer`/`expiresOn` when confirmed from an upload |
+| `suppliers[]` | From orders (matched by trimmed, lower-case name) + the supplier list. `id`/`documents` are `null` when the supplier is only named on orders. A document has `kind`, `detail`, `standards`, `documentNumber`, `issuer`, `expiresOn` (typed in or read from an upload) and `fromUpload` |
 | `sites[]` | Factories, ports, warehouses. `isRouteOrigin` marks the company's route start |
 | `observations[]` | Satellite samples (`isSample: true`) with a GeoJSON `extent` and `nearby` suppliers/sites within `checkRadiusKm` (default 25). Order statuses never change because of them |
 | `documentKinds`, `homeCountryIds`, `checkRadiusKm` | Labels, the countries to highlight, the flood check radius |
@@ -307,7 +307,7 @@ Editors enter them in the map's side panel; viewers don't see the controls. The 
  "location": {"latitude": 10.95, "longitude": 106.82}, "supplies": "Acacia veneer",
  "documents": [{"kind": "formaldehyde", "detail": "Test report, May 2026", "standards": ["EN 717-1"]}]}
 ```
-Only `name` (1–300) is required. `place` ≤200, `supplies` ≤1000 (blank is stored as `null`), `country` an alpha-2 code from `countries` (`UK` is read as `GB`), `location` −90..90 / −180..180, up to 20 `documents`, one per `kind` from `documentKinds` (`detail` 1–500, up to 10 `standards`). Returns the supplier with `id` and labelled `documents`.
+Only `name` (1–300) is required. `place` ≤200, `supplies` ≤1000 (blank is stored as `null`), `country` an alpha-2 code from `countries` (`UK` is read as `GB`), `location` −90..90 / −180..180, up to 20 `documents`, one per `kind` from `documentKinds` (`detail` 1–500, up to 10 `standards`, optional `documentNumber` ≤100, `issuer` ≤200, `expiresOn` `YYYY-MM-DD`). A typed document and one confirmed from an upload (`POST /supplier-documents/{id}/confirm`) are the same record; a kind kept in the list keeps its upload link (`fromUpload`). Returns the supplier with `id` and labelled `documents`.
 - `409 supplier_exists`: the company has a supplier with the same name, ignoring case and spacing. Orders match suppliers on that key, so a renamed supplier stops matching orders written with the old name.
 - `422 invalid_input` with `fieldErrors.country` / `fieldErrors.documents` for an unknown country or document kind.
 
@@ -410,6 +410,7 @@ One order's report. Stored as it was written, so it reads the same after require
 | `findings[]` | Every requirement checked, as in the trade map's `checks[]`, each with its source and quote |
 | `costLines[]` | `kind` (`missing_document` / `new_test` / `delay` / `duty`), `label`, `quantity`, `unitAmountMinor` or `baseAmountMinor` + `ratePercent`, `amountMinor`, `currency`, `formula` ("4 days × USD 200.00"), `basis[]` (`regulation` with its source, `company_setting` or `default`) |
 | `costTotals`, `problemCostTotals` | By currency; the second leaves out duties (what playbook rules on `estimated_cost` compare) |
+| `unpricedCosts[]` | Duties the regulation states but whose rate changes on or before the ship date (`changesOn`): `label`, `reason`, `source`, no amount, so the report never shows a rate it knows may be wrong |
 | `rulesFired[]`, `rulesNotChecked` | Checked rules that fired (`ruleId`, `text`, `action`, `note`, `conditions` in words); enabled rules that are stored only |
 | `suggestedAction` | `kind` (`complete_data` / `request_documents` / `move_ship_date` / `recheck_landed_cost` / `none`), `text`, `requestBy` |
 | `audit` | `passed`, `problems[]`: every finding has a quote, every cost line re-computes and names its basis, totals add up, every rule exists |
@@ -437,7 +438,7 @@ A `kind` that isn't a known document kind and dates that aren't `YYYY-MM-DD` com
 
 ## Reports
 
-A report is generated into a draft that only its author sees (`report_drafts`). The draft keeps the generated report (`original`) and an editable copy (`content`). Everything in `content` can be edited, but the PDF shades every line that differs from `original`, notes per section what was changed, added or left out and by whom, and says "contains edits by <name>" in the footer. Sending locks the draft. These are not the phase 2 analysis reports (`GET /reports/{id}`, planned below).
+A report is generated into a draft that only its author sees (`report_drafts`). The draft keeps the generated report (`original`) and an editable copy (`content`). Everything in `content` can be edited, but the PDF shades every line that differs from `original`, notes per section what was changed, added or left out and by whom, and says "contains edits by <name>" in the footer. Sending locks the draft. An order report is the shareable copy of the order's latest analysis report (`GET /reports/{id}`): analysis decides statuses and costs; this repeats them for a reader outside the app.
 
 Content shape (camelCase): `{title, subtitle, summary, sections: [{id, layout: "facts"|"table"|"sources", heading, note, empty, columns, widths, toneColumn, included, rows: [{id, cells: [..one per column..], tone: "gap"|"warn"|null, included}]}]}`. A cell whose last line is only a URL renders as a link (`Publisher\nhttps://…`).
 
@@ -450,7 +451,7 @@ Content shape (camelCase): `{title, subtitle, summary, sections: [{id, layout: "
   "content": {…}, "original": {…},
   "edits": {"header": false, "sections": 0, "rowsEdited": 0, "rowsAdded": 0, "rowsRemoved": 0}}}
 ```
-- Order: order facts, the document checklist exactly as `GET /trade-map` checks it, cited sources with quotes, the CSV row. `404` for another company's order.
+- Order: order facts, the document checklist exactly as `GET /trade-map` checks it, what the order's latest analysis found (`analysis`: next step, estimated cost, review state, playbook rules fired, missing data; `costs`: each cost line with its formula and basis, and unpriced duties), cited sources with quotes, the CSV row. Preparing a report never starts an analysis (that changes order statuses and needs an editor); without one the sections say "Not analysed yet", and they say so when the checklist has changed since the analysis. `404` for another company's order.
 - Company: at a glance; checklist lines in the markets the company ships to that take effect or change in the next `days`, with the open orders shipping on or after that date; News watch alerts (high and medium, last `days`), read from the AI service's `GET /api/impacts` with the caller's token (`AI_SERVICE_URL`; if it can't be reached the section says so); floods within the check radius of suppliers and sites (last `days`); regulation versions added in the last `days` and the open orders whose checklists cite that regulation; open orders with document gaps; suppliers to follow up; sources.
 
 ### `GET /report-drafts` (viewer)

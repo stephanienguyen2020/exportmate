@@ -209,7 +209,7 @@ A **run** checks orders against the market requirements:
 1. **Relevance**: which market each order's destination is in. Orders outside every market need data.
 2. **Exposure**: the same check as the trade map (§4.9): the destination gives the market, the HS code picks the market requirements that apply, and the supplier's documents are checked against them. A `missing` or `mismatch` result makes the order exposed. No supplier record → `needs_data`, not `clear` (question 3).
 3. **Cost**: computed in code, not by the AI (question 5). Each cost line names where its number came from:
-   - **the rule's own figure** when it has one: Section 232 25% × USD 54,300 = USD 13,575, cited to Proclamation 10976;
+   - **the rule's own figure** when it has one: Section 232 25% × USD 54,300 = USD 13,575, cited to Proclamation 10976. If the stated rate changes on or before the ship date (Section 232 rises on 1 January 2027), the duty is named with no amount: "rate changes on 1 Jan 2027, recheck";
    - otherwise a **company setting**, starting from a shared default the company can change: delay USD 200/day by default (Lan sets USD 350/day); getting a missing document USD 400; a new lab test USD 400; a supplier needs 14 days to send a document. A missing document 10 days before shipping = USD 400 + (14 − 10) days × USD 200 = USD 1,200;
    - fines with no fixed amount are shown as "fine possible", with no number.
 4. **Playbook**: run the company's checked rules (§4.4) against the order and its cost, and record which rules fired.
@@ -219,6 +219,7 @@ A **run** checks orders against the market requirements:
 - Report states: `pass`, `needs_data`, `rejected`, `needs_human_review`. Only `pass` reports that no `block` rule stopped can lead to a message.
 - Each order's status follows its latest report: `exposed` (a document missing or mismatched), `clear`, or `needs_data`. A duty alone doesn't make an order exposed.
 - A report keeps a copy of everything it cites (findings with quotes, settings used, rules fired), so it reads the same after requirements, rules or settings change. It also cites the CSV row the order came from.
+- **One report, two views.** The analysis report is the source of truth. The order report a person edits and emails (`/report-drafts`) repeats the latest analysis (next step, costs, rules fired) next to the live checklist, and says when it is missing or out of date. The chat assistant reads orders and rules through the backend; later it reads analysis reports too.
 - Run progress is saved, so the UI shows the steps and survives a refresh. Users see short step summaries, not raw AI reasoning.
 
 ### 4.7 Actions (messages)
@@ -245,7 +246,7 @@ A map of the company's own export activity: its suppliers, sites and markets, an
 - Each order is checked against its market's requirements (§4.5): a supplier document is `on_file`, `missing`, `mismatch` (wrong test standard, or it expires before the ship date) or `unknown` (no supplier record); shipment paperwork is `prepare`; reminders are `check`. Every check shows its source.
 - Selecting a market shows its orders, changes to check (orders needing action, tariff checks, news items naming the market) and missing supplier documents.
 - "What if this order went to another market?": documents that can be reused, requirements to re-evaluate (new or changed), and what the data can't conclude. Paperwork only; the customer, contract and sales case still decide.
-- **Supplier documents from files** (built, backend only): an editor uploads a certificate (PDF or photo). AI reads it into fields (kind, number, issuer, dates, standards); a person checks and confirms them. Only then does it count, replacing the supplier's older document of that kind.
+- **Supplier documents from files** (built, backend only): an editor uploads a certificate (PDF or photo). AI reads it into fields (kind, number, issuer, dates, standards); a person checks and confirms them. Only then does it count, replacing the supplier's older document of that kind. Typed and uploaded documents are the same record: the supplier form shows number, issuer and expiry too, and editing a supplier keeps each document's upload link.
 - Satellite observations (e.g. flood extents) are extra evidence: suppliers and sites within 25 km get a check-in prompt. Order statuses never change because of them. Observations are samples until a real source is connected.
 - Suppliers, their documents and sites belong to the company; orders match suppliers by name (ignoring case and spacing). Owners and editors add, edit and delete them on the map: a location is a click on the map or typed coordinates; a supplier records which documents it has on file. The demo seed fills them for the demo company.
 
@@ -297,7 +298,7 @@ Each phase ends with: tests green, deployed, frontend working against it.
 | 17 | ~~Markets vs countries~~ | **Decided:** a market groups countries; the destination text is parsed (§4.9). |
 | 18 | ~~Which documents does a rule require?~~ | **Decided:** a market requirement is the obligation; it names a document kind and cites its regulation version (§4.5). |
 | 19 | Supplier document storage | Uploaded certificates: file + record + embedding for search. Which vector store: Firestore (like `ai/server`) or `pgvector`? |
-| 20 | When do checks re-run? | **Decided for phase 2:** only when someone clicks "Analyse" (`POST /runs`). Later: automatically on import, rule change, document upload, a daily expiry check, "ready to ship". |
+| 20 | When do checks re-run? | **Decided for phase 2:** only when an editor clicks "Analyse" (`POST /runs`). **Direction:** analysis runs on events (CSV import, a supplier document confirmed, a rule or regulation change, a daily expiry check), the shareable order report and the chat read its latest report. |
 | 21 | Language | Vietnamese UI, Vietnamese documents for OCR, English rules. Translate in reports? |
 | 22 | ~~How do we test AI quality?~~ | **Decided:** a developer test set, not a user feature. About 20 cases with known answers per AI job (extraction, HS code suggestion, plan, auditor), e.g. "Oak dining table" → HS 9403.60. Run by hand before changing a prompt or the model; a case that passed and now fails blocks the change. Same approach as `ai/server/eval/`. |
 | 23 | Where does crawling live? | **Leaning `ai/server`**: it already has per-company news sources (shared built-ins a company can switch off, plus its own feeds). Still open: does a backend `watch_sources` table replace this, or does the backend read sources from `ai/server`? |

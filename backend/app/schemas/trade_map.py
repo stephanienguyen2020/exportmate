@@ -86,7 +86,8 @@ class SupplierDocumentOut(CamelCaseModel):
     standards: list[str]
     document_number: str | None = None
     issuer: str | None = None
-    expires_on: date | None = None  # after an order's ship date counts as a mismatch
+    expires_on: date | None = None  # before an order's ship date: a mismatch
+    from_upload: bool = False  # confirmed from an uploaded file (its file stays in storage)
 
 
 class MapSupplierOut(CamelCaseModel):
@@ -207,9 +208,17 @@ def _keep_required(model: CamelCaseModel, fields: tuple[str, ...]) -> None:
 
 
 class SupplierDocumentIn(CamelCaseModel):
+    """Typed in, or confirmed from an upload (POST /supplier-documents/{id}/confirm): the same
+    record either way."""
+
     kind: str = Field(min_length=1, max_length=40)
     detail: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
     standards: list[Standard] = Field(default_factory=list, max_length=MAX_STANDARDS)
+    document_number: str | None = Field(default=None, max_length=100)
+    issuer: str | None = Field(default=None, max_length=200)
+    expires_on: date | None = None  # before an order's ship date: a mismatch
+
+    _optional = field_validator("document_number", "issuer")(_optional_text)
 
 
 def _one_document_per_kind(documents: list[SupplierDocumentIn] | None):

@@ -143,3 +143,42 @@ def test_nothing_is_saved_when_the_ai_fails(client, lan, file_storage):
     headers, supplier_id = lan
     assert upload(client, headers, supplier_id).status_code == 503
     assert supplier_files(file_storage) == []
+
+
+def test_editing_a_supplier_keeps_typed_and_uploaded_document_fields(client, lan, fake_gemini):
+    headers, supplier_id = lan
+    fake_gemini.answers["supplier_document_reading"] = read_as()
+    draft = upload(client, headers, supplier_id).json()["data"]
+    expires = draft["extracted"]["expiresOn"]
+    client.post(
+        f"/api/v1/supplier-documents/{draft['id']}/confirm",
+        headers=headers,
+        json={
+            "kind": "geolocation",
+            "detail": "Plots",
+            "documentNumber": "GEO-118",
+            "expiresOn": expires,
+        },
+    )
+    supplier = next(
+        s
+        for s in client.get("/api/v1/trade-map", headers=headers).json()["data"]["suppliers"]
+        if s["id"] == supplier_id
+    )
+    # The edit form sends every document back, as typed fields.
+    documents = [
+        {k: d[k] for k in ("kind", "detail", "standards", "documentNumber", "issuer", "expiresOn")}
+        for d in supplier["documents"]
+    ]
+    edited = client.patch(
+        f"/api/v1/suppliers/{supplier_id}",
+        headers=headers,
+        json={"place": "Dong Xoai", "documents": documents},
+    )
+    assert edited.status_code == 200, edited.text
+    kept = next(d for d in edited.json()["data"]["documents"] if d["kind"] == "geolocation")
+    assert (kept["documentNumber"], kept["expiresOn"], kept["fromUpload"]) == (
+        "GEO-118",
+        expires,
+        True,
+    )

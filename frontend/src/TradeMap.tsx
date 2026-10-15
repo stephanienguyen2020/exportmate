@@ -2831,7 +2831,14 @@ function DeleteRecord({
   );
 }
 
-type DocumentDraft = { on: boolean; detail: string; standards: string };
+type DocumentDraft = {
+  on: boolean;
+  detail: string;
+  standards: string;
+  number: string;
+  issuer: string;
+  expiresOn: string;
+};
 
 function SupplierForm({
   group,
@@ -2870,6 +2877,9 @@ function SupplierForm({
               on: !!doc,
               detail: doc?.detail ?? "",
               standards: doc?.standards.join(", ") ?? "",
+              number: doc?.documentNumber ?? "",
+              issuer: doc?.issuer ?? "",
+              expiresOn: doc?.expiresOn ?? "",
             },
           ];
         }),
@@ -2915,6 +2925,9 @@ function SupplierForm({
             .split(",")
             .map((s) => s.trim())
             .filter(Boolean),
+          documentNumber: documents[kind].number.trim() || null,
+          issuer: documents[kind].issuer.trim() || null,
+          expiresOn: documents[kind].expiresOn || null,
         })),
     };
     run(async () => {
@@ -3013,6 +3026,35 @@ function SupplierForm({
                     }
                     placeholder="Test standards, comma-separated (optional)"
                   />
+                  <input
+                    aria-label={`${label}: document number`}
+                    maxLength={100}
+                    value={doc.number}
+                    onChange={(e) =>
+                      editDocument(kind, { number: e.target.value })
+                    }
+                    placeholder="Document number (optional)"
+                  />
+                  <input
+                    aria-label={`${label}: issuer`}
+                    maxLength={200}
+                    value={doc.issuer}
+                    onChange={(e) =>
+                      editDocument(kind, { issuer: e.target.value })
+                    }
+                    placeholder="Issued by (optional)"
+                  />
+                  <label className="tm-doc-expiry">
+                    Expires on (optional)
+                    <input
+                      type="date"
+                      aria-label={`${label}: expires on`}
+                      value={doc.expiresOn}
+                      onChange={(e) =>
+                        editDocument(kind, { expiresOn: e.target.value })
+                      }
+                    />
+                  </label>
                 </>
               )}
             </div>
