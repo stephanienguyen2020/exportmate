@@ -1,0 +1,155 @@
+{
+  "_note": "A second fictional demo company (Vietnam Google AI Builder Furniture) that makes furniture in Vietnam for the United States: onboarding answers, About company profile, suppliers with their documents, sites, 16 orders and 4 playbook rules. Loaded by `python -m app.seed_demo_data --company us-furniture --email <another user>`. Each supplier's documents are chosen against the US checklist in reference.json, and each order's status is the result that checklist gives (exposed = a document missing, not the accepted standard or expired by the ship date, needs_data = no supplier record). Coordinates are [longitude, latitude]. Province names follow Vietnam's July 2025 mergers.",
+  "owner": "Mr. Minh",
+  "company": {
+    "companyName": "Vietnam Google AI Builder Furniture",
+    "businessRole": "Manufacturer",
+    "origin": "Vietnam",
+    "destination": "United States",
+    "currency": "USD",
+    "description": "Vietnam Google AI Builder Furniture makes indoor and outdoor wooden furniture in Dong Nai, Vietnam, for US retailers and online furniture brands. We buy rubberwood, plantation acacia, hardwood plywood and cabinet carcasses from Vietnamese suppliers, assemble and finish in our Nhon Trach factory, and ship full containers from Cai Mep to US West and East Coast ports."
+  },
+  "profile": {
+    "description": "Vietnam Google AI Builder Furniture makes indoor and outdoor wooden furniture in Dong Nai, Vietnam, for US retailers and online furniture brands. We buy rubberwood, plantation acacia, hardwood plywood and cabinet carcasses from Vietnamese suppliers, assemble and finish in our Nhon Trach factory, and ship full containers from Cai Mep to US West and East Coast ports.",
+    "products": "Dining tables and chairs, upholstered chairs and sofas, bed frames, sideboards and bookcases, kitchen cabinet sets, acacia outdoor chairs and loungers, hardwood plywood panels for US cabinet makers.",
+    "materials": "Rubberwood (Vietnam), plantation acacia and eucalyptus (Vietnam), hardwood plywood with okoume face veneer (Gabon) and acacia core (Vietnam), MDF, upholstery foam and fabric.",
+    "certifications": "FSC Chain of Custody (FSC Mix), VNTLAS timber legality, amfori BSCI social audit.",
+    "website": "https://vietnam-ai-builder-furniture.example",
+    "foundedYear": 2014,
+    "teamSize": "201-500",
+    "transit": []
+  },
+  "suppliers": [
+    {
+      "name": "Tan Uyen Rubberwood",
+      "place": "Tan Uyen, Ho Chi Minh City",
+      "country": "VN",
+      "at": [106.79, 11.06],
+      "supplies": "Rubberwood dining tables, chairs, bed frames and case goods",
+      "documents": [
+        { "kind": "legality", "detail": "VNTLAS legality dossier" },
+        { "kind": "species", "detail": "Hevea brasiliensis · Vietnam" },
+        {
+          "kind": "formaldehyde",
+          "detail": "TSCA Title VI certificate, Feb 2026",
+          "standards": ["TSCA Title VI"],
+          "expiresOn": "2027-01-31"
+        },
+        { "kind": "chain", "detail": "FSC Mix" }
+      ]
+    },
+    {
+      "name": "Phu Cat Acacia",
+      "place": "Phu Cat, Gia Lai",
+      "country": "VN",
+      "at": [109.05, 14.0],
+      "supplies": "FSC acacia outdoor chairs and loungers",
+      "documents": [
+        { "kind": "legality", "detail": "VNTLAS legality dossier" },
+        { "kind": "species", "detail": "Acacia mangium × auriculiformis · Vietnam" },
+        { "kind": "chain", "detail": "FSC 100%" }
+      ]
+    },
+    {
+      "name": "Bien Hoa Upholstery Works",
+      "place": "Bien Hoa, Dong Nai",
+      "country": "VN",
+      "at": [106.84, 10.96],
+      "supplies": "Upholstered dining chairs and sofa frames",
+      "documents": [{ "kind": "legality", "detail": "VNTLAS legality dossier" }]
+    },
+    {
+      "name": "Long An Panel Co.",
+      "place": "Duc Hoa, Tay Ninh",
+      "country": "VN",
+      "at": [106.42, 10.88],
+      "supplies": "Kitchen cabinet carcasses and doors (MDF and plywood)",
+      "documents": [
+        { "kind": "legality", "detail": "VNTLAS legality dossier" },
+        { "kind": "species", "detail": "Acacia mangium, Eucalyptus urophylla · Vietnam" },
+        {
+          "kind": "formaldehyde",
+          "detail": "Test report for EU buyers, Feb 2026",
+          "standards": ["EN 717-1", "CARB Phase 2"]
+        }
+      ]
+    },
+    {
+      "name": "Kon Tum Veneer Mill",
+      "place": "Kon Tum, Quang Ngai",
+      "country": "VN",
+      "at": [108.0, 14.35],
+      "supplies": "Hardwood plywood, okoume face on acacia core",
+      "documents": [
+        { "kind": "legality", "detail": "VNTLAS legality dossier" },
+        {
+          "kind": "species",
+          "detail": "Acacia mangium core · Vietnam; Aucoumea klaineana face · Gabon"
+        },
+        {
+          "kind": "formaldehyde",
+          "detail": "TSCA Title VI certificate, Apr 2026",
+          "standards": ["TSCA Title VI"],
+          "expiresOn": "2027-04-30"
+        }
+      ]
+    }
+  ],
+  "sites": [
+    {
+      "key": "factory",
+      "kind": "factory",
+      "name": "Nhon Trach factory",
+      "shortName": "Factory",
+      "place": "Nhon Trach, Dong Nai",
+      "country": "VN",
+      "at": [106.92, 10.73],
+      "note": "Assembly, finishing and packing. Warehouse for finished goods.",
+      "isRouteOrigin": true
+    },
+    {
+      "key": "cai-mep",
+      "kind": "port",
+      "name": "Cai Mep terminal",
+      "shortName": "Cai Mep",
+      "place": "Phu My, Ho Chi Minh City",
+      "country": "VN",
+      "at": [107.03, 10.53],
+      "note": "Deep-water port with direct services to US West and East Coast ports."
+    },
+    {
+      "key": "cat-lai",
+      "kind": "warehouse",
+      "name": "Cat Lai consolidation warehouse",
+      "shortName": "Cat Lai CFS",
+      "place": "Thu Duc, Ho Chi Minh City",
+      "country": "VN",
+      "at": [106.79, 10.76],
+      "note": "Part loads (LCL) for smaller US buyers."
+    }
+  ],
+  "orders": [
+    { "id": "PO-3101", "product": "Rubberwood dining table · 6-seat", "supplier": "Tan Uyen Rubberwood", "destination": "Los Angeles, US", "value": 38400, "shipDate": "2026-10-23", "hsCode": "9403.60", "status": "clear" },
+    { "id": "PO-3102", "product": "Rubberwood dining chair", "supplier": "Tan Uyen Rubberwood", "destination": "Savannah, US", "value": 26800, "shipDate": "2026-10-29", "hsCode": "9401.69", "status": "clear" },
+    { "id": "PO-3103", "product": "FSC acacia folding garden chair", "supplier": "Phu Cat Acacia", "destination": "Houston, US", "value": 22150, "shipDate": "2026-11-04", "hsCode": "9401.69", "status": "clear" },
+    { "id": "PO-3104", "product": "Upholstered dining chair · linen", "supplier": "Bien Hoa Upholstery Works", "destination": "Long Beach, US", "value": 41250, "shipDate": "2026-11-06", "hsCode": "9401.61", "status": "exposed" },
+    { "id": "PO-3105", "product": "Shaker kitchen cabinet set", "supplier": "Long An Panel Co.", "destination": "Savannah, US", "value": 58600, "shipDate": "2026-11-12", "hsCode": "9403.40", "status": "exposed" },
+    { "id": "PO-3106", "product": "Okoume-faced hardwood plywood · 18 mm", "supplier": "Kon Tum Veneer Mill", "destination": "Norfolk, US", "value": 29900, "shipDate": "2026-11-18", "hsCode": "4412.33", "status": "exposed" },
+    { "id": "PO-3107", "product": "Rubberwood bed frame · queen", "supplier": "Tan Uyen Rubberwood", "destination": "New York, US", "value": 44700, "shipDate": "2026-11-20", "hsCode": "9403.50", "status": "clear" },
+    { "id": "PO-3108", "product": "FSC acacia chaise lounger", "supplier": "Phu Cat Acacia", "destination": "Charleston, US", "value": 24300, "shipDate": "2026-11-25", "hsCode": "9401.69", "status": "clear" },
+    { "id": "PO-3109", "product": "Rattan-wrapped accent chair", "supplier": "Hiep Phuoc Rattan", "destination": "Oakland, US", "value": 18750, "shipDate": "2026-12-02", "hsCode": "9401.59", "status": "needs_data" },
+    { "id": "PO-3110", "product": "Two-seat upholstered sofa", "supplier": "Bien Hoa Upholstery Works", "destination": "Seattle, US", "value": 47900, "shipDate": "2026-12-09", "hsCode": "9401.61", "status": "exposed" },
+    { "id": "PO-3111", "product": "Rubberwood sideboard", "supplier": "Tan Uyen Rubberwood", "destination": "Charleston, US", "value": 31600, "shipDate": "2026-12-11", "hsCode": "9403.60", "status": "clear" },
+    { "id": "PO-3112", "product": "Kitchen cabinet set · white oak doors", "supplier": "Long An Panel Co.", "destination": "Houston, US", "value": 63200, "shipDate": "2026-12-29", "hsCode": "9403.40", "status": "exposed" },
+    { "id": "PO-3113", "product": "Upholstered rubberwood dining chair", "supplier": "Tan Uyen Rubberwood", "destination": "Los Angeles, US", "value": 39800, "shipDate": "2027-01-08", "hsCode": "9401.61", "status": "clear" },
+    { "id": "PO-3114", "product": "Kitchen cabinet set · painted", "supplier": "Long An Panel Co.", "destination": "New York, US", "value": 61400, "shipDate": "2027-01-15", "hsCode": "9403.40", "status": "exposed" },
+    { "id": "PO-3115", "product": "Acacia-core hardwood plywood · 12 mm", "supplier": "Kon Tum Veneer Mill", "destination": "Long Beach, US", "value": 27350, "shipDate": "2027-01-20", "hsCode": "4412.33", "status": "exposed" },
+    { "id": "PO-3116", "product": "Rubberwood bookcase", "supplier": "Tan Uyen Rubberwood", "destination": "Savannah, US", "value": 19850, "shipDate": "2027-02-03", "hsCode": "9403.60", "status": "exposed" }
+  ],
+  "rules": [
+    { "text": "Flag any order where the projected margin drops below 10% after US duties.", "category": "Threshold" },
+    { "text": "Recheck the Section 232 rate on every upholstered seating and kitchen cabinet order that ships on or after 1 January 2027.", "category": "Policy" },
+    { "text": "Never ship hardwood plywood to the US without the supplier's core-veneer origin certification on file.", "category": "Policy" },
+    { "text": "Give Long An Panel Co. until 30 November 2026 to send a TSCA Title VI certificate.", "category": "Supplier" }
+  ]
+}

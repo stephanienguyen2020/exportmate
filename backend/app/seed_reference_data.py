@@ -1,7 +1,7 @@
 """Load the shared trade-map reference data into Postgres.
 
-Markets, countries, ports, document kinds, per-market requirement checklists, cost defaults
-and sample satellite observations, from the JSON files in app/seed_data/. Each market requirement cites
+Markets, countries, ports, document kinds, order statuses, per-market requirement checklists,
+cost defaults and sample satellite observations, from the JSON files in app/seed_data/. Each market requirement cites
 an official text (regulation_sources.json): the seed downloads each text once into a shared
 regulation document. A market requirement whose text can't be downloaded is left out until
 the next run.
@@ -27,6 +27,7 @@ from app.core.config import get_settings
 from app.core.errors import AppError
 from app.core.logging import configure_logging
 from app.database.queries import hs_codes as hs_queries
+from app.database.queries import orders as order_queries
 from app.database.queries import regulations as regulation_queries
 from app.database.queries import trade_map as map_queries
 from app.database.session import open_session
@@ -110,9 +111,30 @@ def seed_shared_regulations(db: Session) -> tuple[dict[str, uuid.UUID], list[str
     return document_ids, saved_paths
 
 
+def seed_order_statuses(db: Session) -> int:
+    """How each order status is named and shown, and which ones a person may set by hand."""
+    statuses = load_seed_file("reference.json")["orderStatuses"]
+    order_queries.upsert_order_statuses(
+        db,
+        [
+            {
+                "code": s["code"],
+                "label": s["label"],
+                "description": s["description"],
+                "tone": s["tone"],
+                "manual": s["manual"],
+                "sort_order": i,
+            }
+            for i, s in enumerate(statuses)
+        ],
+    )
+    return len(statuses)
+
+
 def seed_reference_data(db: Session) -> dict[str, int]:
     reference = load_seed_file("reference.json")
     document_ids, saved_paths = seed_shared_regulations(db)
+    order_status_count = seed_order_statuses(db)
     map_queries.upsert_document_kinds(
         db,
         [
@@ -239,6 +261,7 @@ def seed_reference_data(db: Session) -> dict[str, int]:
     regulation_service.commit_or_delete_saved_files(db, saved_paths)
     counts = {
         "official_texts": len(document_ids),
+        "order_statuses": order_status_count,
         "document_kinds": len(reference["documentKinds"]),
         "markets": len(reference["markets"]),
         "countries": len(reference["countries"]),

@@ -14,7 +14,9 @@ from app.database.models import AuditEvent, Role
 from app.database.session import open_session
 from app.schemas.reports import ReportContent
 from app.seed_reference_data import seed_reference_data
+from app.services import news_matches as news_service
 from app.services import reports as report_service
+from app.services import trade_map as trade_map_service
 
 TODAY = date(2026, 10, 15)
 # PO-6 ships after the US Section 232 change on 1 Jan 2027; PO-2 ships before it.
@@ -63,6 +65,7 @@ def fixed_world(monkeypatch: pytest.MonkeyPatch) -> dict:
         return calls["news"]
 
     monkeypatch.setattr(report_service, "today_utc", lambda: TODAY)
+    monkeypatch.setattr(trade_map_service, "today_utc", lambda: TODAY)
     monkeypatch.setattr(report_service, "fetch_news_alerts", fake_news)
     report_api.report_email_limiter._hits.clear()
     return calls
@@ -134,6 +137,35 @@ def test_order_report_lists_checks_sources_and_csv_row(client, lan):
     assert saved.headers["content-disposition"].startswith("attachment;")
 
 
+def test_rule_watch_lists_checklist_changes_with_the_orders_they_reach(client, lan, monkeypatch):
+    response = client.get("/api/v1/trade-map/changes?days=90", headers=lan)
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assert data["start"] == "2026-10-15" and data["until"] == "2027-01-13"
+    assert data["days"] == 90
+    tariff = next(c for c in data["changes"] if c["requirementKey"] == "tariff")
+    assert tariff["on"] == "2027-01-01" and tariff["kind"] == "changes"
+    assert tariff["market"] == "US" and tariff["orderIds"] == ["PO-6"]
+    assert tariff["source"]["documentId"] and tariff["source"]["quote"]
+    # The same lines as the company report's "changes" section.
+    report = create(client, lan, kind="company", days=90)
+    assert {
+        f"change-{c['market']}-{c['requirementKey']}-{c['kind']}" for c in data["changes"]
+    } == set(rows(report["content"], "changes"))
+
+    # Without `days`, the window is the RULE_WATCH_DAYS setting.
+    monkeypatch.setenv("RULE_WATCH_DAYS", "30")
+    get_settings.cache_clear()
+    try:
+        shorter = client.get("/api/v1/trade-map/changes", headers=lan).json()["data"]
+    finally:
+        monkeypatch.delenv("RULE_WATCH_DAYS")
+        get_settings.cache_clear()
+    assert shorter["days"] == 30 and shorter["until"] == "2026-11-14"
+    assert all(c["on"] <= "2026-11-14" for c in shorter["changes"])
+    assert client.get("/api/v1/trade-map/changes?days=0", headers=lan).status_code == 422
+
+
 def test_company_report_covers_what_is_happening_and_what_it_affects(client, lan, fixed_world):
     report = create(client, lan, kind="company", days=90)
     content = report["content"]
@@ -182,6 +214,22 @@ def test_company_report_covers_what_is_happening_and_what_it_affects(client, lan
 
     pdf = client.get(f"/api/v1/report-drafts/{report['id']}/pdf", headers=lan)
     assert pdf.status_code == 200 and pdf.content.startswith(b"%PDF-")
+
+
+def test_company_report_names_the_orders_people_confirmed_an_alert_affects(
+    client, lan, monkeypatch
+):
+    monkeypatch.setattr(news_service, "fetch_news_alerts", lambda authorization: NEWS)
+    monkeypatch.setattr(news_service, "fetch_news_stock", lambda authorization: [])
+    for order_id, verdict in (("PO-1", "relevant"), ("PO-3", "relevant"), ("PO-6", "not_relevant")):
+        response = client.put(
+            f"/api/v1/news-matches/a1/orders/{order_id}", headers=lan, json={"verdict": verdict}
+        )
+        assert response.status_code == 200, response.text
+    news = section(create(client, lan, kind="company", days=90)["content"], "news")
+    plywood, freight = (r["cells"][4] for r in news["rows"])
+    assert plywood.endswith("\nConfirmed for orders PO-1, PO-3")
+    assert "Confirmed" not in freight
 
 
 def test_company_report_says_when_news_watch_is_down(client, lan, fixed_world):

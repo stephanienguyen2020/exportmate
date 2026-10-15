@@ -1,0 +1,110 @@
+/* Above the chat launcher (z-index 1000) so it can be pointed at. */
+.tour {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+}
+.tour-shade {
+  position: absolute;
+  inset: 0;
+}
+.tour-shade.full {
+  background: #13291ebf;
+}
+.tour-spotlight {
+  position: fixed;
+  border-radius: 6px;
+  box-shadow:
+    0 0 0 2px var(--lime),
+    0 0 0 9999px #13291ebf;
+  pointer-events: none;
+  transition:
+    left 0.25s ease,
+    top 0.25s ease,
+    width 0.25s ease,
+    height 0.25s ease;
+}
+.tour-spotlight.round {
+  border-radius: 50%;
+}
+.tour-card {
+  position: fixed;
+  width: 340px;
+  max-width: calc(100vw - 32px);
+  background: var(--paper);
+  color: var(--green);
+  padding: 22px 24px 20px;
+  box-shadow: 0 20px 80px #0004;
+  border-top: 3px solid var(--lime);
+}
+.tour-card.centered {
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+.tour-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: -6px -8px 0 0;
+}
+.tour-head .eyebrow {
+  font:
+    9px "DM Mono",
+    monospace;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+.tour-card h2 {
+  font-size: 24px;
+  line-height: 1.15;
+  margin: 10px 0 8px;
+}
+.tour-card p {
+  font-size: 13px;
+  line-height: 1.65;
+  margin: 0;
+}
+.tour-dots {
+  display: flex;
+  gap: 5px;
+  margin: 18px 0 16px;
+}
+.tour-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--line);
+}
+.tour-dots i.on {
+  background: var(--green);
+  width: 16px;
+  border-radius: 3px;
+}
+.tour-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.tour-skip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 0;
+  padding: 8px 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.tour-skip:hover {
+  color: var(--green);
+}
+.tour-actions .btn {
+  gap: 10px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tour-spotlight {
+    transition: none;
+  }
+}

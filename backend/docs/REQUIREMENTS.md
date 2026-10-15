@@ -76,7 +76,8 @@ The first 6 digits are the same in every country; digits after that differ by co
 - A **user** works in a **company** (tenant) with a role: `owner`, `editor`, `viewer`. v1: one company per user (open question 8).
 - Every action happens inside the user's company. Another company's records act as if they don't exist.
   - Example: user A in company 1 opens order PO-2291 of company 2 → not found.
-- `viewer` reads. `editor` also imports, uploads and edits rules. `owner` also edits the company, approves and sends messages, and (later) manages members.
+- `viewer` reads. `editor` also imports, uploads and edits rules. `owner` also edits the company, approves and sends messages, and manages members.
+- **Team (built):** an owner invites an email address with a role; the person signs in (or signs up) with that address and joins instead of onboarding. Invitations expire after 14 days and can be renewed or withdrawn. Owners change roles and remove members; anyone can leave. A company always keeps at least one owner, and a user is in one company at a time. Every change is in the activity log.
 
 ## 4. Features
 
@@ -317,7 +318,7 @@ Each phase ends with: tests green, deployed, frontend working against it.
 | Who | Does |
 | --- | --- |
 | **Operator** (our staff, later) | Maintains the shared rule library: adds official texts, reviews extracted requirements. |
-| Company **owner** | Everything an editor does, plus edits the company and its cost settings, and approves outgoing messages (phase 3). Later: reviews requirements drafted from the company's own regulations. |
+| Company **owner** | Everything an editor does, plus edits the company and its cost settings, approves outgoing messages (phase 3), reviews requirements drafted from the company's own regulations, invites people and manages roles. |
 | Company **editor** | Imports orders, edits the playbook, suppliers and sites, uploads the company's own regulations and supplier documents (and confirms what AI read), runs analysis, emails reports. Later: confirms AI-suggested HS codes, manages watch sources. |
 | Company **viewer** | Reads, and prepares reports (only the author sees a draft). |
 

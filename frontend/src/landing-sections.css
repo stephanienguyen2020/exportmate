@@ -578,14 +578,13 @@
   color: #879076;
   margin-top: 14px;
 }
-.contact-clear {
-  font:
-    9px "DM Mono",
-    monospace;
-  text-decoration: underline;
-  margin-top: 14px;
-  padding: 0;
-  color: #65745b;
+/* The bot trap: off-screen, so people never see or fill it in. */
+.contact-website {
+  position: absolute;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
 }
 .site-bottom {
   max-width: 1800px;

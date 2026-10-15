@@ -1,3 +1,5 @@
+import csv
+import io
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -228,6 +230,30 @@ def test_audit_log_is_for_owners_and_pages(client, lan):
         e["user"] is None or e["user"]["email"] == "mai@example.com"
         for e in client.get("/api/v1/audit-events", headers=other).json()["data"]
     )
+
+
+def test_audit_log_downloads_as_csv(client, lan):
+    analyse(client, lan)
+    editor = add_member(client, "lan@example.com", "ed@example.com", Role.editor)
+    assert client.get("/api/v1/audit-events/export", headers=editor).status_code == 403
+    response = client.get("/api/v1/audit-events/export", headers=lan)
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"].startswith("text/csv")
+    assert 'attachment; filename="exportmate-activity-' in response.headers["content-disposition"]
+    rows = list(csv.reader(io.StringIO(response.content.decode("utf-8-sig"))))
+    assert rows[0][:4] == ["time_utc", "person", "email", "action"]
+    every = client.get("/api/v1/audit-events?limit=200", headers=lan).json()["data"]
+    assert [row[3] for row in rows[1:]] == [e["action"] for e in every]
+    assert rows[1][2] == "lan@example.com"
+
+    imports = client.get("/api/v1/audit-events/export?objectType=import", headers=lan)
+    assert {row[4] for row in csv.reader(io.StringIO(imports.text))} - {"object_type"} == {"import"}
+
+
+def test_csv_cells_that_look_like_formulas_open_as_text():
+    assert audit_service._csv_cell("=HYPERLINK(1)") == "'=HYPERLINK(1)"
+    assert audit_service._csv_cell("-1") == "'-1"
+    assert audit_service._csv_cell("Ask them today.") == "Ask them today."
 
 
 def test_contact_form(client, outbox, monkeypatch):

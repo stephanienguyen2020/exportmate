@@ -174,7 +174,7 @@ def onboard(client: TestClient, email: str, company: str = "Binh Duong Wood Co."
 
 
 def add_member(client: TestClient, owner_email: str, email: str, role: Role) -> dict:
-    """Put `email` into the owner's company with `role` (no invite API yet)."""
+    """Put `email` into the owner's company with `role`, skipping the invitation."""
     headers = auth_header(email)
     client.get("/api/v1/me", headers=headers)  # creates the user row
     with open_session() as db:

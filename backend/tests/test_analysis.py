@@ -114,6 +114,7 @@ def test_run_reports_each_order(client, lan):
     detail = client.get("/api/v1/orders/PO-1", headers=lan).json()["data"]
     assert [e["requirementKey"] for e in detail["exposures"]] == ["geolocation"]
     assert detail["exposures"][0]["reportId"] == late["id"]
+    assert detail["latestReportId"] == late["id"]
 
 
 def test_company_cost_settings_change_the_numbers(client, lan):
