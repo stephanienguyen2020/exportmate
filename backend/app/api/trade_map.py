@@ -26,10 +26,11 @@ def get_trade_map(ctx: ViewerContext, db: Db):
 def get_checklist_changes(
     ctx: ViewerContext,
     db: Db,
-    days: Annotated[int, Query(ge=1, le=365)] = 90,
+    days: Annotated[int | None, Query(ge=1, le=365)] = None,
 ):
     """Checklist lines in the markets of the company's open orders that take effect or change
-    in the next `days` days, with the open orders shipping on or after each date."""
+    in the next `days` days (default RULE_WATCH_DAYS), with the open orders shipping on or
+    after each date."""
     return success_response(trade_map_service.build_checklist_changes(db, ctx, days))
 
 

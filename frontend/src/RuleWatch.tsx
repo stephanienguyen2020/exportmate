@@ -13,7 +13,6 @@ import {
 import { errorMessage } from "./auth";
 
 const GAPS = new Set<CheckStatus>(["missing", "mismatch"]);
-const WINDOW_DAYS = 90;
 const LABELS: Record<CheckStatus, string> = {
   on_file: "on file",
   missing: "missing",
@@ -64,14 +63,14 @@ const formatDay = (day: string) =>
     timeZone: "UTC",
   });
 
-/** Checklist lines that take effect or change in the next WINDOW_DAYS days. */
+/** Checklist lines that take effect or change within the backend's Rule watch window. */
 function ComingUp({ onOrder }: { onOrder: (id: string) => void }) {
   const [data, setData] = useState<ChecklistChanges | null>(null);
   const [error, setError] = useState("");
   useEffect(() => {
     const controller = new AbortController();
     api
-      .checklistChanges(WINDOW_DAYS, controller.signal)
+      .checklistChanges(controller.signal)
       .then(setData)
       .catch((e) => {
         if (!controller.signal.aborted) setError(errorMessage(e));
@@ -82,7 +81,7 @@ function ComingUp({ onOrder }: { onOrder: (id: string) => void }) {
     <>
       <div className="section-heading">
         <h2>Coming up.</h2>
-        <span className="eyebrow">NEXT {WINDOW_DAYS} DAYS</span>
+        {data && <span className="eyebrow">NEXT {data.days} DAYS</span>}
       </div>
       {error ? (
         <section className="panel" role="alert">

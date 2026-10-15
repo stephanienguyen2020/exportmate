@@ -679,8 +679,12 @@ def list_checklist_changes(
     ]
 
 
-def build_checklist_changes(db: Session, ctx: CompanyContext, days: int) -> ChecklistChangesOut:
-    """Rule watch: what changes in the company's markets in the next `days` days."""
+def build_checklist_changes(
+    db: Session, ctx: CompanyContext, days: int | None
+) -> ChecklistChangesOut:
+    """Rule watch: what changes in the company's markets in the next `days` days (default
+    RULE_WATCH_DAYS)."""
+    days = days or get_settings().rule_watch_days
     today = today_utc()
     until = today + timedelta(days=days)
     gazetteer = load_gazetteer(db)
@@ -690,7 +694,7 @@ def build_checklist_changes(db: Session, ctx: CompanyContext, days: int) -> Chec
         if order.ship_date >= today
     ]
     changes = list_checklist_changes(db, ctx.company_id, open_orders, today, until)
-    return ChecklistChangesOut(start=today, until=until, changes=changes)
+    return ChecklistChangesOut(start=today, until=until, days=days, changes=changes)
 
 
 def _load_order(db: Session, ctx: CompanyContext, order_id: str) -> Order:

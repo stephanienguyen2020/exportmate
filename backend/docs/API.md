@@ -425,9 +425,9 @@ A what-if from the compare panel kept on record with a note: a proposal, not a c
 ```
 
 ### `GET /trade-map/changes` (viewer)
-`?days=90` (1–365, default 90). Checklist lines in force in the markets of the company's open orders (ship date today or later) that take effect (`effectiveOn`) or change (`changesOn`) between today and `until`, oldest first, each with the open orders to that market and HS prefix that ship on or after that day.
+`?days=` (optional, 1–365; default the `RULE_WATCH_DAYS` setting, 90). Checklist lines in force in the markets of the company's open orders (ship date today or later) that take effect (`effectiveOn`) or change (`changesOn`) between today and `until`, oldest first, each with the open orders to that market and HS prefix that ship on or after that day.
 ```json
-{"data": {"start": "2026-10-15", "until": "2027-01-13",
+{"data": {"start": "2026-10-15", "until": "2027-01-13", "days": 90,
   "changes": [{"on": "2027-01-01", "kind": "changes", "market": "US", "marketName": "United States",
     "requirementKey": "tariff", "title": "…", "whatChanges": "…", "orderIds": ["PO-6"],
     "source": {"documentId": "…", "quote": "…"}}]}}

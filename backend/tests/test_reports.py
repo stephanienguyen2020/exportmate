@@ -137,11 +137,12 @@ def test_order_report_lists_checks_sources_and_csv_row(client, lan):
     assert saved.headers["content-disposition"].startswith("attachment;")
 
 
-def test_rule_watch_lists_checklist_changes_with_the_orders_they_reach(client, lan):
+def test_rule_watch_lists_checklist_changes_with_the_orders_they_reach(client, lan, monkeypatch):
     response = client.get("/api/v1/trade-map/changes?days=90", headers=lan)
     assert response.status_code == 200, response.text
     data = response.json()["data"]
     assert data["start"] == "2026-10-15" and data["until"] == "2027-01-13"
+    assert data["days"] == 90
     tariff = next(c for c in data["changes"] if c["requirementKey"] == "tariff")
     assert tariff["on"] == "2027-01-01" and tariff["kind"] == "changes"
     assert tariff["market"] == "US" and tariff["orderIds"] == ["PO-6"]
@@ -152,7 +153,15 @@ def test_rule_watch_lists_checklist_changes_with_the_orders_they_reach(client, l
         f"change-{c['market']}-{c['requirementKey']}-{c['kind']}" for c in data["changes"]
     } == set(rows(report["content"], "changes"))
 
-    shorter = client.get("/api/v1/trade-map/changes?days=30", headers=lan).json()["data"]
+    # Without `days`, the window is the RULE_WATCH_DAYS setting.
+    monkeypatch.setenv("RULE_WATCH_DAYS", "30")
+    get_settings.cache_clear()
+    try:
+        shorter = client.get("/api/v1/trade-map/changes", headers=lan).json()["data"]
+    finally:
+        monkeypatch.delenv("RULE_WATCH_DAYS")
+        get_settings.cache_clear()
+    assert shorter["days"] == 30 and shorter["until"] == "2026-11-14"
     assert all(c["on"] <= "2026-11-14" for c in shorter["changes"])
     assert client.get("/api/v1/trade-map/changes?days=0", headers=lan).status_code == 422
 
