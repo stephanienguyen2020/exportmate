@@ -12,7 +12,9 @@ from app.api import (
     company_sites,
     cost_settings,
     health,
+    hs_suggestions,
     imports,
+    market_requirements,
     orders,
     playbook,
     regulations,
@@ -119,6 +121,8 @@ def create_app() -> FastAPI:
         cost_settings,
         analysis,
         supplier_documents,
+        market_requirements,
+        hs_suggestions,
     ):
         api.include_router(module.router)
     app.include_router(api)

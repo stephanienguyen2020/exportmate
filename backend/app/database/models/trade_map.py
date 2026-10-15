@@ -36,6 +36,13 @@ class RequirementLevel(str, enum.Enum):
     check = "check"  # something to recheck (e.g. a tariff category), not a document
 
 
+class RequirementStatus(str, enum.Enum):
+    draft = "draft"  # drafted by AI from a company's own regulation, waiting for the owner
+    reviewed = "reviewed"  # checked by a person (seed rows count as reviewed)
+    rejected = "rejected"  # the reviewer turned the draft down
+    replaced = "replaced"  # a later version of the same regulation took over
+
+
 class SupplierDocumentUploadStatus(str, enum.Enum):
     draft = "draft"  # read by AI, waiting for a person to confirm the fields
     confirmed = "confirmed"
@@ -98,15 +105,23 @@ class DocumentKind(Base):
 
 
 class MarketRequirement(Base):
-    """One line of a market's checklist. The same key in two markets is the same kind of
-    requirement, which is how a comparison knows what carries over.
+    """What one regulation version requires for one market. The same key in two markets is the
+    same kind of requirement, which is how a comparison knows what carries over.
 
-    Each market requirement cites the regulation document (one version of an official text)
-    that sets it, and the sentence in that document that says so (`source_quote`).
+    Each market requirement cites the regulation document (one version of a regulation) that
+    sets it, and the sentence in that document that says so (`source_quote`).
+
+    Shared (company_id null): from an official text, written in the seed, checked for every
+    company. Otherwise AI drafted it from one company's own regulation and it is checked only for
+    that company. Only `reviewed` ones are checked, and only once their version has no drafts
+    left; then the earlier versions' requirements become `replaced`.
     """
 
     __tablename__ = "market_requirements"
     id: Mapped[uuid.UUID] = id_column()
+    company_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), index=True
+    )
     market_code: Mapped[str] = mapped_column(
         ForeignKey("markets.code", ondelete="CASCADE"), index=True, nullable=False
     )
@@ -139,8 +154,23 @@ class MarketRequirement(Base):
     source_quote: Mapped[str] = mapped_column(Text, nullable=False)
     # A duty the text sets as a share of the order value, e.g. 25 for "25 percent ad valorem".
     duty_rate_percent: Mapped[Decimal | None] = mapped_column(Numeric(6, 2))
+    # False: the quote couldn't be found in the document's text (a scanned PDF has none), so the
+    # reviewer must check it against the file.
+    quote_verified: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
+    status: Mapped[RequirementStatus] = mapped_column(
+        pg_enum(RequirementStatus, "requirement_status"),
+        nullable=False,
+        default=RequirementStatus.reviewed,
+    )
+    reviewed_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    __table_args__ = (UniqueConstraint("market_code", "requirement_key"),)
+    __table_args__ = (
+        # One version states each requirement once per market.
+        UniqueConstraint("regulation_document_id", "market_code", "requirement_key"),
+    )
 
 
 class Supplier(Base):
