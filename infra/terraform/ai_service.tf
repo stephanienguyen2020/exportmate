@@ -99,7 +99,7 @@ resource "google_firestore_field" "answer_cache_ttl" {
 # called by scan.js): prompt injection and jailbreaks, and links to known-malicious sites.
 # Medium confidence and above; a withheld article is recorded with what matched.
 resource "google_model_armor_template" "untrusted_text" {
-  location    = var.region
+  location    = var.model_armor_region
   template_id = "exportmate-untrusted-text"
 
   filter_config {
