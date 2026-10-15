@@ -1396,3 +1396,117 @@ test("viewers read the analysis but can't start, review or message", async ({ pa
   await expect(page.getByRole("button", { name: "Save cost settings" })).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Activity log" })).toHaveCount(0);
 });
+
+// Which orders a news alert affects is the company's call: the backend suggests, owners and
+// editors confirm or reject with their own token, viewers only read.
+async function newsReviewFixture(page: Page) {
+  const reviews: { method: string; path: string; body: any; auth?: string }[] = [];
+  await page.route("**/api/impacts**", (route) =>
+    route.fulfill({
+      json: {
+        scan: null,
+        impacts: [
+          {
+            id: "eudr",
+            title: "EUDR guidance",
+            url: "https://news.example/eudr",
+            publisher: "EU press",
+            sourceName: "Timber news",
+            publishedAt: new Date().toISOString(),
+            severity: "high",
+            direction: "risk",
+            headline: "EU tightens plywood geolocation checks",
+            why: "Why it matters.",
+            action: "",
+            affected: [],
+            stockValueUsd: 0,
+            createdAt: new Date().toISOString(),
+          },
+        ],
+      },
+    }),
+  );
+  let review: any = null;
+  await page.route("**/api/v1/news-matches**", async (route) => {
+    const request = route.request();
+    const method = request.method();
+    if (method !== "GET") {
+      reviews.push({
+        method,
+        path: new URL(request.url()).pathname,
+        body: method === "PUT" ? request.postDataJSON() : null,
+        auth: request.headers().authorization,
+      });
+      review =
+        method === "PUT"
+          ? {
+              ...request.postDataJSON(),
+              reviewedBy: { id: "u1", name: "Lan" },
+              reviewedAt: new Date().toISOString(),
+            }
+          : null;
+      await route.fulfill({ json: { data: {}, meta: {} } });
+      return;
+    }
+    await route.fulfill({
+      json: {
+        data: {
+          newsAvailable: true,
+          matches: [
+            {
+              impactId: "eudr",
+              orderId: "PO-1",
+              product: "Acacia plywood",
+              destination: "Rotterdam, NL",
+              market: "EU",
+              shipDate: "2026-12-01",
+              suggested: true,
+              reason: "HS 4412 and ships to EU, like PLY-001 named in this alert.",
+              review,
+            },
+          ],
+        },
+        meta: {},
+      },
+    });
+  });
+  return reviews;
+}
+
+test("owners confirm which orders a news alert affects with their token", async ({
+  page,
+}) => {
+  await fixture(page);
+  const reviews = await newsReviewFixture(page);
+  await login(page);
+  await expect(page.getByText("CONNECTED WORKSPACE")).toBeVisible();
+  await page.goto("/#/workspace/news");
+  await page.getByRole("button", { name: /Orders this may affect/ }).click();
+  await page.getByRole("button", { name: "Add a note on PO-1" }).click();
+  await page.getByLabel("PO-1 (optional)").fill("Rotterdam lot");
+  await page.getByRole("button", { name: "PO-1: affects this order" }).click();
+  await expect(page.locator(".news-orders li.confirmed")).toContainText("Lan");
+  await page.getByRole("button", { name: "Undo the verdict on PO-1" }).click();
+  await expect(page.getByText("1 to review")).toBeVisible();
+  expect(reviews.map((r) => [r.method, r.path])).toEqual([
+    ["PUT", "/api/v1/news-matches/eudr/orders/PO-1"],
+    ["DELETE", "/api/v1/news-matches/eudr/orders/PO-1"],
+  ]);
+  expect(reviews[0].body).toEqual({ verdict: "relevant", note: "Rotterdam lot" });
+  expect(reviews.every((r) => r.auth === "Bearer dev:owner@example.com")).toBeTruthy();
+});
+
+test("viewers see suggested orders awaiting review without the buttons", async ({
+  page,
+}) => {
+  await fixture(page, { viewer: true });
+  const reviews = await newsReviewFixture(page);
+  await login(page);
+  await expect(page.getByText("CONNECTED WORKSPACE")).toBeVisible();
+  await page.goto("/#/workspace/news");
+  await page.getByRole("button", { name: /Orders this may affect/ }).click();
+  await expect(page.locator(".news-orders li")).toContainText("Awaiting review");
+  await expect(page.getByRole("button", { name: /affects this order/ })).toHaveCount(0);
+  await expect(page.getByLabel("Order to link")).toHaveCount(0);
+  expect(reviews).toHaveLength(0);
+});

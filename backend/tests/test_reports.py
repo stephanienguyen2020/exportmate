@@ -14,6 +14,7 @@ from app.database.models import AuditEvent, Role
 from app.database.session import open_session
 from app.schemas.reports import ReportContent
 from app.seed_reference_data import seed_reference_data
+from app.services import news_matches as news_service
 from app.services import reports as report_service
 
 TODAY = date(2026, 10, 15)
@@ -182,6 +183,22 @@ def test_company_report_covers_what_is_happening_and_what_it_affects(client, lan
 
     pdf = client.get(f"/api/v1/report-drafts/{report['id']}/pdf", headers=lan)
     assert pdf.status_code == 200 and pdf.content.startswith(b"%PDF-")
+
+
+def test_company_report_names_the_orders_people_confirmed_an_alert_affects(
+    client, lan, monkeypatch
+):
+    monkeypatch.setattr(news_service, "fetch_news_alerts", lambda authorization: NEWS)
+    monkeypatch.setattr(news_service, "fetch_news_stock", lambda authorization: [])
+    for order_id, verdict in (("PO-1", "relevant"), ("PO-3", "relevant"), ("PO-6", "not_relevant")):
+        response = client.put(
+            f"/api/v1/news-matches/a1/orders/{order_id}", headers=lan, json={"verdict": verdict}
+        )
+        assert response.status_code == 200, response.text
+    news = section(create(client, lan, kind="company", days=90)["content"], "news")
+    plywood, freight = (r["cells"][4] for r in news["rows"])
+    assert plywood.endswith("\nConfirmed for orders PO-1, PO-3")
+    assert "Confirmed" not in freight
 
 
 def test_company_report_says_when_news_watch_is_down(client, lan, fixed_world):

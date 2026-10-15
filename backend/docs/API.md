@@ -90,6 +90,10 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
 | `PATCH /report-drafts/{id}` | viewer (author) | Report editor: save (also before preview, download, email) |
 | `GET /report-drafts/{id}/pdf` | viewer (author) | Report editor: "Preview PDF", "Download PDF" |
 | `POST /report-drafts/{id}/email` | editor (author) | Report editor: "Email report" |
+| **News watch and orders** | | |
+| `GET /news-matches` | viewer | News watch, Alerts tab: "Orders this may affect" on each alert, and the "Orders" filter |
+| `PUT /news-matches/{impactId}/orders/{orderId}` | editor | News watch alert: "Affects this order" / "Not relevant", "Link order" |
+| `DELETE /news-matches/{impactId}/orders/{orderId}` | editor | News watch alert: "Undo" |
 | **Supplier messages and report actions** | | |
 | `POST /reports/{id}/review` | owner | Order page: "Reviewed: OK to contact the supplier" |
 | `POST /reports/{id}/feedback` | viewer | Order page: "Useful" / "Not useful" |
@@ -538,7 +542,7 @@ Content shape (camelCase): `{title, subtitle, summary, sections: [{id, layout: "
   "edits": {"header": false, "sections": 0, "rowsEdited": 0, "rowsAdded": 0, "rowsRemoved": 0}}}
 ```
 - Order: order facts, the document checklist exactly as `GET /trade-map` checks it, what the order's latest analysis found (`analysis`: next step, estimated cost, review state, playbook rules fired, missing data; `costs`: each cost line with its formula and basis, and unpriced duties), cited sources with quotes, the CSV row. Preparing a report never starts an analysis (that changes order statuses and needs an editor); without one the sections say "Not analysed yet", and they say so when the checklist has changed since the analysis. `404` for another company's order.
-- Company: at a glance; checklist lines in the markets the company ships to that take effect or change in the next `days`, with the open orders shipping on or after that date; News watch alerts (high and medium, last `days`), read from the AI service's `GET /api/impacts` with the caller's token (`AI_SERVICE_URL`; if it can't be reached the section says so); floods within the check radius of suppliers and sites (last `days`); regulation versions added in the last `days` and the open orders whose checklists cite that regulation; open orders with document gaps; suppliers to follow up; sources.
+- Company: at a glance; checklist lines in the markets the company ships to that take effect or change in the next `days`, with the open orders shipping on or after that date; News watch alerts (high and medium, last `days`), read from the AI service's `GET /api/impacts` with the caller's token (`AI_SERVICE_URL`; if it can't be reached the section says so), each naming the orders someone confirmed it affects (`/news-matches`); floods within the check radius of suppliers and sites (last `days`); regulation versions added in the last `days` and the open orders whose checklists cite that regulation; open orders with document gaps; suppliers to follow up; sources.
 
 ### `GET /report-drafts` (viewer)
 The caller's 30 most recently updated reports (summary fields only).
@@ -564,6 +568,26 @@ The PDF of the saved content, `inline` for the preview; `?download=true` makes i
 - `sandbox: true` means `RESEND_API_KEY` isn't set: built and audited, not delivered.
 - Writes a `report.emailed` audit event with the recipients, note and edit counts (logs only carry counts).
 - `422 invalid_input` (bad addresses), `422 email_rejected`, `429 rate_limited` (`REPORT_EMAILS_PER_HOUR`, default 20 per user), `502 email_failed`, `503 email_unavailable`.
+
+## News watch and orders
+
+News watch (the AI service) matches each article to items in its sample stock, not to orders. The backend suggests which of the company's orders an alert may affect, and people decide (`news_order_reviews`, `services/news_matches.py`). An order is suggested when it hasn't shipped, shares an HS heading (first four digits) with an item the alert names (stock from the AI service's `GET /api/inventory`), and ships to one of that item's markets (`EU`, `US`…; items with no export market, such as raw material, match on the heading alone). A suggestion is a guess until an owner or editor confirms or rejects it, and only confirmed links reach reports. Alerts and stock are read with the caller's token. A review keeps a copy of the alert's headline and link, so it outlives the alert.
+
+### `GET /news-matches` (viewer)
+```json
+{"data": {"newsAvailable": true, "matches": [
+  {"impactId": "a1b2…", "orderId": "PO-2291", "product": "Acacia plywood · 18 mm", "destination": "Rotterdam, NL",
+   "market": "EU", "shipDate": "2026-10-27", "suggested": true,
+   "reason": "HS 4412 and ships to EU, like PLY-001 Acacia plywood 18 mm named in this alert.",
+   "review": {"verdict": "relevant", "note": "Our EU lots.", "reviewedBy": {"id": "…", "name": "Lan"}, "reviewedAt": "…"}}]}}
+```
+One entry per alert and order: every current suggestion (with its verdict, or `review: null` while it awaits one), plus orders a person linked or reviewed that are no longer suggested (shipped, HS code changed). Only alerts News watch returns now are listed. `newsAvailable: false` and no matches when the AI service can't be reached.
+
+### `PUT /news-matches/{impactId}/orders/{orderId}` (editor)
+`{"verdict": "relevant" | "not_relevant", "note": "…"}` (note optional, ≤500). `orderId` is the order's own ID. Works for any order of the company, suggested or not: an order that wasn't suggested is stored with `suggested: false`. A new verdict replaces the last one, whoever gave it. Returns the match. Audited as `news.reviewed`. `404` for an alert News watch doesn't show this company or an order that isn't the company's; `503` if News watch can't be reached.
+
+### `DELETE /news-matches/{impactId}/orders/{orderId}` (editor)
+Removes the verdict: a suggestion goes back to awaiting review; a linked order is unlinked. Audited as `news.review_cleared`. `404` if there is no verdict.
 
 ## Supplier messages
 

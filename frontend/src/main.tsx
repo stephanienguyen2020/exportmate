@@ -1149,7 +1149,7 @@ function App() {
                     </section>
                   </div>
                   <ErrorBoundary fallback={null}>
-                    <NewsHighlights live={live} />
+                    <NewsHighlights live={live} orders={orders} />
                   </ErrorBoundary>
                   <div className="section-heading order-section">
                     <h2>Orders on the move.</h2>
@@ -1580,6 +1580,7 @@ function App() {
               {route === "news" && (
                 <NewsWatchPage
                   live={live}
+                  editable={editable}
                   sourcesLocked={
                     !live
                       ? "Sign in to a company workspace to add or switch off sources."

@@ -1,5 +1,6 @@
 """News alerts from the AI service (ai/server, GET /api/impacts), read with the caller's token
-so the company's own sources and switched-off ones apply. The backend stores none of it."""
+so the company's own sources and switched-off ones apply, and the sample stock they name
+(GET /api/inventory). The backend stores none of it."""
 
 import json
 import logging
@@ -15,8 +16,7 @@ _LOCAL = re.compile(r"^http://(127\.0\.0\.1|localhost)(:\d+)?$")
 log = logging.getLogger(__name__)
 
 
-def fetch_news_alerts(authorization: str | None) -> list[dict] | None:
-    """The company's recent alerts, or None when the AI service can't be reached."""
+def _fetch_list(path: str, key: str, authorization: str | None) -> list[dict] | None:
     base = get_settings().ai_service_url.rstrip("/")
     # The caller's token only ever goes to HTTPS, or to this machine in development.
     if not (base.startswith("https://") or _LOCAL.match(base)):
@@ -25,14 +25,24 @@ def fetch_news_alerts(authorization: str | None) -> list[dict] | None:
     headers = {"Accept": "application/json"}
     if authorization:
         headers["Authorization"] = authorization
-    request = urllib.request.Request(f"{base}/api/impacts", headers=headers)
+    request = urllib.request.Request(f"{base}{path}", headers=headers)
     try:
         with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
-            impacts = json.loads(response.read()).get("impacts")
+            items = json.loads(response.read()).get(key)
     except (urllib.error.URLError, TimeoutError, ValueError) as error:
         log.warning("news_alerts.unavailable", extra={"error_type": type(error).__name__})
         return None
-    if not isinstance(impacts, list):
+    if not isinstance(items, list):
         log.warning("news_alerts.unexpected_response")
         return None
-    return [i for i in impacts if isinstance(i, dict)]
+    return [i for i in items if isinstance(i, dict)]
+
+
+def fetch_news_alerts(authorization: str | None) -> list[dict] | None:
+    """The company's recent alerts, or None when the AI service can't be reached."""
+    return _fetch_list("/api/impacts", "impacts", authorization)
+
+
+def fetch_news_stock(authorization: str | None) -> list[dict] | None:
+    """The sample stock items alerts name (SKU, HS code, markets), or None when unreachable."""
+    return _fetch_list("/api/inventory", "items", authorization)

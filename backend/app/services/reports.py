@@ -34,6 +34,7 @@ from app.core.news_alerts import fetch_news_alerts
 from app.database.models import ReportDraft, ReportKind
 from app.database.queries import analysis as analysis_queries
 from app.database.queries import audit as audit_queries
+from app.database.queries import news_reviews as news_queries
 from app.database.queries import orders as order_queries
 from app.database.queries import regulations as regulation_queries
 from app.database.queries import reports as report_queries
@@ -451,7 +452,13 @@ def _change_section(
     )
 
 
-def _news_section(alerts: list[dict] | None, since: date, facts: _CompanyFacts) -> ReportSection:
+def _news_section(
+    alerts: list[dict] | None,
+    since: date,
+    facts: _CompanyFacts,
+    confirmed: dict[str, list[str]] | None = None,
+) -> ReportSection:
+    """`confirmed`: alert ID → the orders a person confirmed it affects in News watch."""
     rows = []
     if alerts is not None:
         recent = []
@@ -474,6 +481,10 @@ def _news_section(alerts: list[dict] | None, since: date, facts: _CompanyFacts) 
             stock_text = join_limited(names, 3) or "No stock item named"
             if isinstance(stock, int | float) and stock:
                 stock_text += f" · USD {stock:,.0f} in stock"
+            alert_id = str(alert.get("id") or alert.get("articleId") or "")
+            orders = (confirmed or {}).get(alert_id, [])
+            if orders:
+                stock_text += f"\nConfirmed for orders {join_limited(orders, 5)}"
             # A last line holding only a URL becomes a link in the PDF (see cell_link).
             source = "\n".join(
                 str(p) for p in (alert.get("publisher") or "Source", alert.get("url")) if p
@@ -501,7 +512,8 @@ def _news_section(alerts: list[dict] | None, since: date, facts: _CompanyFacts) 
         layout="table",
         heading="News alerts",
         note="High and medium alerts from News watch in this window. An AI model matches each "
-        "article to your stock list (sample stock in this prototype), not to orders.",
+        "article to your stock list (sample stock in this prototype); orders are named only "
+        "where someone in your company confirmed in News watch that the alert affects them.",
         empty="News watch could not be reached when this report was generated."
         if alerts is None
         else "No high or medium alert in this window.",
@@ -525,7 +537,12 @@ def build_company_report_content(
     facts = _CompanyFacts(open_orders=len(open_orders))
 
     changes = _change_section(db, ctx, open_orders, market_names, today, until, citations, facts)
-    news = _news_section(fetch_news_alerts(authorization), since, facts)
+    news = _news_section(
+        fetch_news_alerts(authorization),
+        since,
+        facts,
+        news_queries.list_confirmed_news_by_impact(db, ctx.company_id),
+    )
 
     # Floods near the company's suppliers and sites.
     supplier_orders = {
