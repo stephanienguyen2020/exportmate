@@ -60,7 +60,7 @@ The chat UI lives in [`frontend/ai/chat/`](frontend/ai/chat/), News watch in [`f
 
 ### Google Cloud resources
 
-Everything runs in one project, `skilful-scarab-511320-q9`, defined in [`infra/terraform`](infra/terraform/) (`ai_service.tf`, `build.tf`). Until the move in [`infra/terraform/README.md`](infra/terraform/README.md#moving-the-ai-service-from-exportmate-app) is finished, the live AI service and its data are still in `exportmate-app`.
+Everything runs in one project, `skilful-scarab-511320-q9`, defined in [`infra/terraform`](infra/terraform/) (`ai_service.tf`, `build.tf`). Until the move in [`infra/terraform/README.md`](infra/terraform/README.md#moving-the-ai-service-from-exportmate-app) is finished, the website's AI service and its data are still in `exportmate-app`; the new one here already serves the backend's company reports.
 
 | Resource | Name |
 | --- | --- |
