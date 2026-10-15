@@ -1284,7 +1284,12 @@ test("the order's report: owner review, feedback, and a supplier email approved 
   ).toBeVisible();
   await expect(report.getByText("Ask the supplier by 10 Dec 2026")).toBeVisible();
   await expect(report.getByText("Plot-level geolocation")).toBeVisible();
-  await expect(report.getByText("14 days × EUR 85.71 · Your delay cost per day")).toBeVisible();
+  // The row shows the amount; hovering it shows the sum and the setting it came from.
+  await expect(report.getByText("14 days × EUR 85.71")).toHaveCount(0);
+  await report.getByText("€1,199.94", { exact: true }).first().hover();
+  const why = page.getByRole("tooltip");
+  await expect(why).toContainText("14 days × EUR 85.71 = €1,199.94");
+  await expect(why).toContainText("Your cost setting: Your delay cost per day.");
   await expect(report.getByText("Not priced")).toBeVisible();
   await expect(report.getByText("Server policy")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Original CSV row" })).toBeVisible();
