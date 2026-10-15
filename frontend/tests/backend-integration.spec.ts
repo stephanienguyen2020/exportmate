@@ -32,6 +32,14 @@ const order = {
   status: "needs_data",
 };
 const uploaded = { ...order, id: "IMPORTED-1", status: "awaiting_analysis" };
+// As the backend's order_statuses table names them; "Cleared to ship" isn't a built-in label,
+// so the tests can tell the workspace reads them from the API.
+const orderStatuses = [
+  { code: "awaiting_analysis", label: "Awaiting analysis", description: "Not checked yet.", tone: "amber", manual: true },
+  { code: "clear", label: "Cleared to ship", description: "Every document is on file.", tone: "green", manual: true },
+  { code: "exposed", label: "Action needed", description: "A document is missing.", tone: "red", manual: true },
+  { code: "needs_data", label: "Needs data", description: "Couldn't be checked.", tone: "amber", manual: false },
+];
 const reportContent = (title: string) => ({
   title,
   subtitle: "Order compliance report · API Company",
@@ -334,6 +342,8 @@ async function fixture(
     costSetting("supplier_lead_days", "Supplier lead time", "days", 14),
   ];
   let requirements: any[] = [];
+  let serverStatus = order.status;
+  const statusChanges: any[] = [];
   let me = structuredClone(account);
   if (options.viewer) me.role = "viewer";
   if (options.onboarding) {
@@ -388,7 +398,7 @@ async function fixture(
         ? committed
           ? [uploaded]
           : []
-        : [order];
+        : [{ ...order, status: serverStatus }];
       meta = url.searchParams.has("cursor") ? {} : { nextCursor: "page-two" };
     } else if (path === "/overview")
       data = {
@@ -403,9 +413,37 @@ async function fixture(
         nearestAffectedShipDate: null,
         sourcesCheckedAt: null,
       };
-    else if (path === "/orders/SERVER-1")
+    else if (path === "/order-statuses") data = orderStatuses;
+    else if (path === "/orders/SERVER-1/status" && method === "PATCH") {
+      if (!String(body.note || "").trim()) {
+        await route.fulfill({
+          status: 422,
+          json: { error: { code: "validation_error", message: "Add a note." } },
+        });
+        return;
+      }
+      statusChanges.unshift({
+        id: `change-${statusChanges.length + 1}`,
+        fromStatus: serverStatus,
+        toStatus: body.status,
+        source: "manual",
+        note: body.note,
+        runId: null,
+        changedBy: { id: "user-1", name: "Test Owner" },
+        changedAt: "2026-10-15T10:00:00Z",
+      });
+      serverStatus = body.status;
       data = {
-        order,
+        order: { ...order, status: serverStatus },
+        source: null,
+        exposures: [],
+        latestReportId: "report-1",
+        statusChanges,
+      };
+    } else if (path === "/orders/SERVER-1")
+      data = {
+        order: { ...order, status: serverStatus },
+        statusChanges,
         source: {
           importId: "import-1",
           rowNumber: 2,
@@ -1375,6 +1413,58 @@ test("the landing page's contact form sends the message to the backend", async (
     website: "",
   });
   expect(sent.auth).toBeUndefined();
+});
+
+test("owners change an order's status with a note; the labels come from the backend", async ({
+  page,
+}) => {
+  const requests = await fixture(page);
+  await login(page);
+  await expect(page.getByText("CONNECTED WORKSPACE")).toBeVisible();
+  await page.goto("/#/workspace/orders/SERVER-1");
+  const panel = page.getByRole("region", { name: "Status" });
+  await expect(panel.getByText("Couldn't be checked.")).toBeVisible();
+  await expect(panel.getByText("No status changes recorded yet.")).toBeVisible();
+  const select = panel.getByLabel("Change the status to");
+  // The current status, and one the backend doesn't allow by hand, aren't offered.
+  await expect(select.locator("option")).toHaveText([
+    "Choose a status…",
+    "Awaiting analysis",
+    "Cleared to ship",
+    "Action needed",
+  ]);
+  await select.selectOption({ label: "Cleared to ship" });
+  const save = panel.getByRole("button", { name: "Change status" });
+  await expect(save).toBeDisabled();
+  await panel.getByLabel("Note: why (required)").fill("   ");
+  await expect(save).toBeDisabled();
+  await panel
+    .getByLabel("Note: why (required)")
+    .fill("Buyer confirmed the plot geolocation by email.");
+  await save.click();
+  await expect(page.getByText("SERVER-1 is now “Cleared to ship”.")).toBeVisible();
+  const patch = requests.find((r) => r.method === "PATCH" && r.path === "/orders/SERVER-1/status");
+  expect(patch?.body).toEqual({
+    status: "clear",
+    note: "Buyer confirmed the plot geolocation by email.",
+  });
+  expect(patch?.auth).toBe("Bearer dev:owner@example.com");
+  const history = panel.getByRole("listitem");
+  await expect(history).toHaveCount(1);
+  await expect(history).toContainText("Needs data → Cleared to ship");
+  await expect(history).toContainText("Changed by Test Owner");
+  await expect(history).toContainText("Buyer confirmed the plot geolocation by email.");
+  await expect(panel.getByText("Every document is on file.")).toBeVisible();
+  await expect(panel.getByLabel("Change the status to").locator("option")).not.toContainText([
+    "Cleared to ship",
+  ]);
+
+  await page.goto("/#/workspace/orders");
+  await page.getByRole("button", { name: "Cleared to ship", exact: true }).click();
+  await expect(
+    page.getByRole("table").getByText("Cleared to ship", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "SERVER-1", exact: true })).toBeVisible();
 });
 
 test("viewers read the analysis but can't start, review or message", async ({ page }) => {

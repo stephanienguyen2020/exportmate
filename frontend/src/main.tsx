@@ -79,6 +79,7 @@ import {
   type Overview,
   type ImportPreview,
   type OrderDetail,
+  type OrderStatusOption,
   type RuleFields,
 } from "./api";
 import { errorMessage } from "./auth";
@@ -94,6 +95,7 @@ import {
 } from "./Playbook";
 const RegulationsPage = lazy(() => import("./Regulations"));
 const OrderAnalysis = lazy(() => import("./Analysis"));
+const OrderStatusPanel = lazy(() => import("./OrderStatus"));
 const RunPanel = lazy(() =>
   import("./Analysis").then((m) => ({ default: m.RunPanel })),
 );
@@ -158,6 +160,8 @@ function App() {
   const uploadVersion = useRef(0);
   const [serverDetail, setServerDetail] = useState<OrderDetail | null>(null);
   const [detailError, setDetailError] = useState("");
+  // Signed in: each status's label, colour and whether it may be set by hand, from the database.
+  const [statusOptions, setStatusOptions] = useState<OrderStatusOption[]>([]);
   const editable =
     !live || account?.role === "owner" || account?.role === "editor";
   const workspaceLoad = useRef<AbortController | null>(null);
@@ -177,15 +181,19 @@ function App() {
         navigate("onboarding");
         return;
       }
-      const [nextOrders, nextRules, nextOverview] = await Promise.all([
-        api.orders(signal),
-        api.rules(signal),
-        api.overview(signal),
-      ]);
+      const [nextOrders, nextRules, nextOverview, nextStatuses] =
+        await Promise.all([
+          api.orders(signal),
+          api.rules(signal),
+          api.overview(signal),
+          // Without them the workspace still works, with the built-in labels.
+          api.orderStatuses(signal).catch(() => []),
+        ]);
       if (signal.aborted) return;
       setOrders(nextOrders);
       setRules(nextRules);
       setOverview(nextOverview);
+      setStatusOptions(nextStatuses);
     } catch (error) {
       if (signal.aborted) return;
       if (error instanceof ApiError && error.code === "onboarding_required")
@@ -592,20 +600,29 @@ function App() {
   const costMoney = (n: number) => money(n, sampleCosts.maker.currency);
   // "$2,400" needs "USD" after it; "SGD 14,800" already names its currency.
   const riskCurrency = riskDisplay.includes(currency) ? "" : currency;
-  const status = (o: Order) => (
-    <span
-      className={`status ${o.risk ? "red" : isClear(o) ? "green" : "amber"}`}
-    >
-      <i />
-      {o.risk
-        ? "Action needed"
-        : isClear(o)
-          ? "In the clear"
-          : o.status === "needs_data"
-            ? "Needs data"
-            : "Awaiting analysis"}
-    </span>
-  );
+  const statusOption = (code?: string) =>
+    live ? statusOptions.find((s) => s.code === code) : undefined;
+  // The filter that lists exposed orders, named as the database names it when signed in.
+  const actionFilter = statusOption("exposed")?.label || "Action needed";
+  const status = (o: Order) => {
+    const option = statusOption(o.status);
+    return (
+      <span
+        className={`status ${option ? option.tone : o.risk ? "red" : isClear(o) ? "green" : "amber"}`}
+      >
+        <i />
+        {option
+          ? option.label
+          : o.risk
+            ? "Action needed"
+            : isClear(o)
+              ? "In the clear"
+              : o.status === "needs_data"
+                ? "Needs data"
+                : "Awaiting analysis"}
+      </span>
+    );
+  };
   const orderTable = (items: Order[]) => (
     <div className="table-scroll">
       <table className="orders-table">
@@ -818,7 +835,7 @@ function App() {
               aria-label="View alerts"
               onClick={() => {
                 go("orders");
-                setFilter("Action needed");
+                setFilter(actionFilter);
               }}
             >
               <Bell size={18} />
@@ -1035,7 +1052,7 @@ function App() {
                     <button
                       className="text-link"
                       onClick={() => {
-                        setFilter("Action needed");
+                        setFilter(actionFilter);
                         go("orders");
                       }}
                     >
@@ -1199,9 +1216,13 @@ function App() {
                     <div className="tabs">
                       {[
                         "All orders",
-                        "Action needed",
-                        "In the clear",
-                        ...(live ? ["Awaiting analysis", "Needs data"] : []),
+                        ...(live && statusOptions.length
+                          ? statusOptions.map((s) => s.label)
+                          : [
+                              "Action needed",
+                              "In the clear",
+                              ...(live ? ["Awaiting analysis", "Needs data"] : []),
+                            ]),
                       ].map((f) => (
                         <button
                           key={f}
@@ -1227,7 +1248,11 @@ function App() {
                     orders.filter(
                       (o) =>
                         (filter === "All orders" ||
-                          (filter === "Action needed"
+                          (live && statusOptions.length
+                            ? statusOptions.some(
+                                (s) => s.label === filter && s.code === o.status,
+                              )
+                            : filter === "Action needed"
                             ? o.risk
                             : filter === "Awaiting analysis"
                               ? isPending(o)
@@ -1313,6 +1338,33 @@ function App() {
                         </Button>
                       </div>
                     </section>
+                  )}
+                  {live && serverDetail && (
+                    <Suspense
+                      fallback={
+                        <section className="panel" role="status">
+                          Loading the status…
+                        </section>
+                      }
+                    >
+                      <OrderStatusPanel
+                        key={serverDetail.order.id}
+                        detail={serverDetail}
+                        options={statusOptions}
+                        role={account?.role ?? null}
+                        notify={setToast}
+                        onChanged={async (next) => {
+                          const id = next.order.id;
+                          if (
+                            location.hash.endsWith(
+                              "/orders/" + encodeURIComponent(id),
+                            )
+                          )
+                            setServerDetail(next);
+                          await refreshOrders();
+                        }}
+                      />
+                    </Suspense>
                   )}
                   {live && serverDetail && (
                     <Suspense
@@ -1686,7 +1738,7 @@ function App() {
                       <button
                         className="text-link"
                         onClick={() => {
-                          setFilter("Action needed");
+                          setFilter(actionFilter);
                           go("orders");
                         }}
                       >

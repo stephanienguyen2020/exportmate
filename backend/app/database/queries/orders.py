@@ -3,9 +3,17 @@ from collections.abc import Iterable
 from datetime import date
 
 from sqlalchemy import func, or_, select, tuple_
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from app.database.models import ImportRow, Order, OrderStatus
+from app.database.models import (
+    ImportRow,
+    Order,
+    OrderStatus,
+    OrderStatusChange,
+    OrderStatusDefinition,
+    User,
+)
 
 
 def _escape_like(text: str) -> str:
@@ -65,10 +73,12 @@ def list_company_orders(db: Session, company_id: uuid.UUID) -> list[Order]:
     )
 
 
-def get_order_by_external_id(db: Session, company_id: uuid.UUID, external_id: str) -> Order | None:
-    return db.scalar(
-        select(Order).where(Order.company_id == company_id, Order.external_id == external_id)
-    )
+def get_order_by_external_id(
+    db: Session, company_id: uuid.UUID, external_id: str, *, lock: bool = False
+) -> Order | None:
+    """`lock` holds the row until commit, so two status changes can't both read the old one."""
+    stmt = select(Order).where(Order.company_id == company_id, Order.external_id == external_id)
+    return db.scalar(stmt.with_for_update() if lock else stmt)
 
 
 def get_import_row(db: Session, row_id: uuid.UUID) -> ImportRow | None:
@@ -148,3 +158,39 @@ def list_import_row_positions(
         select(ImportRow.id, ImportRow.import_id, ImportRow.row_number).where(ImportRow.id.in_(ids))
     ).all()
     return {row_id: (import_id, row_number) for row_id, import_id, row_number in rows}
+
+
+def upsert_order_statuses(db: Session, rows: list[dict]) -> None:
+    if not rows:
+        return
+    stmt = insert(OrderStatusDefinition).values(rows)
+    updates = {c: stmt.excluded[c] for c in rows[0] if c != "code"}
+    db.execute(stmt.on_conflict_do_update(index_elements=["code"], set_=updates))
+
+
+def list_order_statuses(db: Session) -> list[OrderStatusDefinition]:
+    return list(
+        db.scalars(select(OrderStatusDefinition).order_by(OrderStatusDefinition.sort_order))
+    )
+
+
+def get_order_status_definition(db: Session, code: OrderStatus) -> OrderStatusDefinition | None:
+    return db.get(OrderStatusDefinition, code)
+
+
+def add_status_changes(db: Session, changes: list[OrderStatusChange]) -> None:
+    db.add_all(changes)
+    db.flush()
+
+
+def list_order_status_changes(
+    db: Session, order_id: uuid.UUID
+) -> list[tuple[OrderStatusChange, User]]:
+    """Newest first, each with the person who made it (or started the run that did)."""
+    rows = db.execute(
+        select(OrderStatusChange, User)
+        .join(User, OrderStatusChange.changed_by == User.id)
+        .where(OrderStatusChange.order_id == order_id)
+        .order_by(OrderStatusChange.changed_at.desc(), OrderStatusChange.id.desc())
+    ).all()
+    return [(change, user) for change, user in rows]

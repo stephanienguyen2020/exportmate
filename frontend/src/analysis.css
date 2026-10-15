@@ -4,6 +4,7 @@
 .an-report,
 .an-hs,
 .an-messages,
+.an-status,
 .co-panel {
   display: grid;
   gap: 12px;
@@ -14,6 +15,7 @@
 .an-report h2,
 .an-hs h2,
 .an-messages h2,
+.an-status h2,
 .co-panel h2 {
   margin: 6px 0 0;
   font-size: 22px;
@@ -22,13 +24,15 @@
 .an-report p,
 .an-hs p,
 .an-messages p,
+.an-status p,
 .co-panel p {
   font-size: 12px;
   line-height: 1.7;
   color: #6f7f63;
   margin: 0;
 }
-.an-report h3 {
+.an-report h3,
+.an-status h3 {
   font-size: 16px;
   margin: 14px 0 0;
 }
@@ -404,4 +408,61 @@
   .pb-row {
     grid-template-columns: 1fr;
   }
+}
+
+/* Order status: change by hand with a note, and the history of changes */
+.an-status-form {
+  display: grid;
+  gap: 6px;
+  max-width: 560px;
+  min-width: 0;
+}
+.an-status-form label {
+  font-size: 11px;
+  color: #7d8c70;
+}
+.an-status-form select,
+.an-status-form textarea {
+  border: 1px solid #d1d8c9;
+  padding: 9px 11px;
+  background: #fafbf5;
+  color: var(--green);
+  font-size: 12px;
+  min-width: 0;
+}
+.an-status-form textarea {
+  line-height: 1.7;
+  resize: vertical;
+}
+.an-status-form small {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.an-status-form .btn {
+  justify-self: start;
+}
+.an-status-history {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0;
+}
+.an-status-history li {
+  display: grid;
+  gap: 4px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.an-status-history small {
+  font-size: 11px;
+  color: var(--muted);
+}
+.an-status-history q {
+  font-style: italic;
+  color: #5d6c52;
 }
