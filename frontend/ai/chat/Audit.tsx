@@ -1,12 +1,13 @@
 import React from "react";
 import {
   Bell,
+  Bookmark,
+  BookOpen,
   Brain,
   Building2,
   Calculator,
   CircleAlert,
   CircleCheck,
-  BookOpen,
   ClipboardList,
   Database,
   Download,
@@ -16,11 +17,12 @@ import {
   Search,
   ShieldAlert,
   ShieldCheck,
+  Users,
 } from "lucide-react";
 import { downloadJson, type Audit, type AuditStep } from "./agent-client";
 
 const TOOL_LABELS: Record<string, [React.ElementType, string]> = {
-  search_knowledge: [Search, "Searched the vector index"],
+  search_knowledge: [Search, "Searched the knowledge base"],
   query_inventory: [Database, "Queried the stock list"],
   get_alerts: [Bell, "Read news alerts"],
   calculate: [Calculator, "Calculated"],
@@ -40,6 +42,8 @@ const ERROR_KINDS: Record<string, string> = {
   unavailable: "data store unavailable",
 };
 
+// quick_answer → "Quick answer", stock_specialist → "Stock specialist".
+export const agentName = (agent = "") => (agent ? agent[0].toUpperCase() + agent.slice(1).replace(/_/g, " ") : "Assistant");
 const seconds = (ms = 0) => `${(ms / 1000).toFixed(1)}s`;
 const dateTime = (iso: string) => `${iso.slice(0, 16).replace("T", " ")} UTC`;
 const usd = (n: number) =>
@@ -62,6 +66,10 @@ export function describeStep(step: AuditStep): { icon: React.ElementType; label:
   }
   if (step.kind === "draft") return { icon: FilePen, label: "Drafted an answer" };
   if (step.kind === "review") return { icon: ShieldCheck, label: "Auditor sent the draft back", detail: step.problems?.join(" ") };
+  if (step.kind === "memory")
+    return { icon: Bookmark, label: step.count ? `Recalled ${step.count} memor${step.count === 1 ? "y" : "ies"}` : "No memories recalled" };
+  if (step.kind === "delegate")
+    return { icon: Users, label: `${agentName(step.agent)} reported`, detail: step.error ? `failed: ${step.error}` : step.request };
   if (step.kind === "cache") return { icon: History, label: "Reused an earlier answer", detail: step.answeredAt && `answered ${dateTime(step.answeredAt)}` };
   return { icon: FilePen, label: "Wrote the final answer" };
 }
@@ -82,12 +90,31 @@ function Step({ step }: { step: AuditStep }) {
       <div>
         <div className="audit-step-head">
           <strong>{step.kind === "tool" ? step.name : label}</strong>
+          {step.agent && step.kind !== "delegate" && <span className="audit-agent">{agentName(step.agent)}</span>}
           <span>
             +{seconds(step.at)}
             {step.latencyMs != null && ` · ${seconds(step.latencyMs)}`}
           </span>
         </div>
         {step.kind !== "tool" && !!step.attempts && <p className="audit-note">Model call retried ({step.attempts} attempts).</p>}
+        {step.kind === "memory" && !!step.facts?.length && (
+          <ul className="audit-problems">
+            {step.facts.map((f, i) => (
+              <li key={i}>{f}</li>
+            ))}
+          </ul>
+        )}
+        {step.kind === "delegate" && (
+          <>
+            {step.request && <p className="audit-note">Asked: {step.request}</p>}
+            {step.excerpt && (
+              <details>
+                <summary>Report</summary>
+                <p className="audit-thought">{step.excerpt}</p>
+              </details>
+            )}
+          </>
+        )}
         {step.kind === "cache" && (
           <p className="audit-note">
             The same question was answered {step.answeredAt ? dateTime(step.answeredAt) : "earlier"} against the same stock, news and sources, so
@@ -217,9 +244,9 @@ export function AuditView({ audit }: { audit: Audit }) {
           <>
             <dt>Router</dt>
             <dd>
-              {audit.route.tier}
-              {audit.route.reasons.length > 0 && ` (${audit.route.reasons.join(", ")})`}
-              {audit.route.escalated && " · revised on the complex model after the auditor's review"}
+              {agentName(audit.route.agent || (audit.route.tier === "complex" ? "analyst" : "quick_answer"))} ({audit.route.tier}
+              {audit.route.reasons.length > 0 && `: ${audit.route.reasons.join(", ")}`})
+              {audit.route.escalated && " · revised by the analyst on the complex model after the auditor's review"}
             </dd>
           </>
         )}

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build the AI service image on Cloud Build, then roll it out to the Cloud Run
-# service and the one-off job. Infra (Firestore, service account, service, job,
+# service, the one-off job and the agents' Agent Runtime instance. Infra (Firestore, service account, service, job,
 # scheduler) comes from infra/terraform; run `terraform apply` first.
 #
 # Usage (from anywhere):  PROJECT_ID=my-project ai/server/deploy.sh
@@ -24,6 +24,14 @@ gcloud run jobs update exportmate-ai-task --project "$PROJECT_ID" --region "$REG
 
 echo "==> Deploying service"
 gcloud run services update exportmate-ai --project "$PROJECT_ID" --region "$REGION" --image "$IMAGE"
+
+# The agents on Agent Runtime run the same image (runtime.js). AGENTS=0 skips them; GATEWAY binds
+# them to the egress Agent Gateway (infra/agent-platform/govern.sh).
+if [[ "${AGENTS:-1}" != 0 ]]; then
+  echo "==> Updating the agents on Agent Runtime"
+  GOOGLE_CLOUD_PROJECT="$PROJECT_ID" RAG_BUCKET="${RAG_BUCKET:-$PROJECT_ID-kb}" \
+    uv run --project platform python platform/runtime.py deploy --image "$IMAGE" ${GATEWAY:+--gateway "$GATEWAY"}
+fi
 
 URL="$(gcloud run services describe exportmate-ai --project "$PROJECT_ID" --region "$REGION" --format='value(status.url)')"
 echo "==> Done: $URL/ (health check; Cloud Run reserves /healthz)"

@@ -639,6 +639,61 @@
   gap: 10px;
   margin-bottom: 12px;
 }
+
+/* Account › What the assistant remembers (frontend/ai/chat/Memories.tsx). */
+.ac-memories {
+  margin-top: 28px;
+}
+.ac-memory-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.ac-memory-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 0;
+  border-bottom: 1px solid #dce3d2;
+  font-size: 13px;
+}
+.ac-memory-list li > svg {
+  flex: none;
+  margin-top: 2px;
+  color: #345136;
+}
+.ac-memory-list li > span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.ac-memory-list small {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+  color: #839474;
+}
+.ac-memory-forget {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #dce3d2;
+  background: none;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: #5b6a5c;
+  cursor: pointer;
+}
+.ac-memory-forget:hover:not(:disabled) {
+  border-color: #a33a2b;
+  color: #a33a2b;
+}
+.ac-memory-forget:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
 /* Onboarding: invitations to join a company (GET /me/invites) above the wizard. */
 .ac-invites {
   border-bottom: 1px solid #d8dece;
