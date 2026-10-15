@@ -12,6 +12,7 @@ place; checklist lines removed from the file are removed from the database.
 """
 
 import argparse
+import hashlib
 import logging
 import math
 import re
@@ -21,9 +22,11 @@ from datetime import date
 
 from sqlalchemy.orm import Session
 
+from app.core import gemini
 from app.core.config import get_settings
 from app.core.errors import AppError
 from app.core.logging import configure_logging
+from app.database.queries import hs_codes as hs_queries
 from app.database.queries import regulations as regulation_queries
 from app.database.queries import trade_map as map_queries
 from app.database.session import open_session
@@ -191,7 +194,7 @@ def seed_reference_data(db: Session) -> dict[str, int]:
             for i, r in enumerate(items)
             if r["source"] in document_ids
         ]
-        map_queries.replace_market_requirements(db, market_code, rows)
+        map_queries.replace_shared_market_requirements(db, market_code, rows)
         requirement_count += len(rows)
 
     map_queries.upsert_cost_defaults(
@@ -248,12 +251,51 @@ def seed_reference_data(db: Session) -> dict[str, int]:
     return counts
 
 
+def seed_hs_headings(db: Session) -> dict[str, int]:
+    """Load the official tariff lines (seed_data/hs_headings.json) and embed the new or changed
+    ones. If embedding fails (no AI access), the lines still load: HS suggestions then search
+    them by words, and the next run embeds them."""
+    headings = load_seed_file("hs_headings.json")["headings"]
+    hs_queries.upsert_hs_headings(
+        db,
+        [
+            {
+                "code": h["code"],
+                "digits": h["code"].replace(".", ""),
+                "level": len(h["code"].replace(".", "")),
+                "description": h["description"],
+                "text_hash": hashlib.sha256(h["description"].encode()).hexdigest(),
+            }
+            for h in headings
+        ],
+    )
+    missing = hs_queries.list_headings_without_embedding(db)
+    embedded = 0
+    if missing:
+        try:
+            vectors = gemini.embed_texts([h.description for h in missing], "RETRIEVAL_DOCUMENT")
+            hs_queries.set_heading_embeddings(
+                db, {h.code: v for h, v in zip(missing, vectors, strict=True)}
+            )
+            embedded = len(missing)
+        except AppError as error:
+            log.warning(
+                "seed.hs_embedding_failed", extra={"missing": len(missing), "error": error.code}
+            )
+    db.commit()
+    total, with_embedding = hs_queries.count_hs_headings(db)
+    counts = {"hs_headings": total, "hs_embedded_now": embedded, "hs_embedded": with_embedding}
+    log.info("seed.hs_headings_loaded", extra=counts)
+    return counts
+
+
 def main() -> None:
     argparse.ArgumentParser(description=__doc__.splitlines()[0]).parse_args()
     settings = get_settings()
     configure_logging(settings.log_level, settings.resolved_log_format)
     with open_session() as db:
         counts = seed_reference_data(db)
+        counts |= seed_hs_headings(db)
     print("Reference data loaded: " + ", ".join(f"{v} {k}" for k, v in counts.items()))
 
 

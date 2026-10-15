@@ -44,6 +44,13 @@ def test_missing_columns_stop_parsing():
     assert parsed.rows == []
 
 
+def test_empty_hs_code_is_allowed():
+    """The order is imported without a code; analysis marks it needs_data and AI can suggest one."""
+    parsed = parse(HEADER + "PO-1,Oak dining table,Binh Phu,NL,100,2026-10-27,\n")
+    assert parsed.errors == []
+    assert parsed.rows[0].order["hs_code"] == ""
+
+
 def test_row_errors_name_the_row_and_field():
     parsed = parse(
         HEADER

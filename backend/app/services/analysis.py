@@ -317,7 +317,8 @@ def analyse_order(
     missing_data = []
     if not order.hs_code:
         missing_data.append(
-            "Add the HS code: without it only the requirements for every product are checked."
+            "Add the HS code, or ask for a suggested one: without it only the requirements for every "
+            "product are checked."
         )
     if not placement.market:
         missing_data.append(f"No checklist for {order.destination}: we can't say it is clear.")
@@ -501,7 +502,7 @@ def start_run(db: Session, ctx: CompanyContext, order_ids: list[str] | None) -> 
             s.model_dump(mode="json")
             for s in _run_steps(
                 analyses,
-                len(map_queries.list_market_requirements(db)),
+                len(map_queries.list_requirements_in_force(db, ctx.company_id)),
                 rules,
                 revision,
             )
@@ -555,7 +556,7 @@ def _analyse_orders(
     db: Session, ctx: CompanyContext, orders: list[Order], settings: dict[str, CostSettingOut]
 ) -> list[OrderAnalysis]:
     gazetteer = trade_map_service.load_gazetteer(db)
-    requirements = trade_map_service.requirements_by_market(db)
+    requirements = trade_map_service.requirements_by_market(db, ctx.company_id)
     sources = trade_map_service.load_requirement_sources(db, requirements)
     suppliers = map_queries.list_company_suppliers(db, ctx.company_id)
     by_key = {s.name_key: s for s in suppliers}

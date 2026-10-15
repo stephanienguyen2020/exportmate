@@ -31,7 +31,7 @@ Example end-to-end:
 | Reports: an order's checklist report, or a company report (what is happening: checklist changes, news alerts, floods near suppliers, new regulation versions; what it affects: orders with gaps, suppliers). Edit anything, preview the PDF (edits marked), email it to up to five addresses (Resend, sandbox without a key); sent reports are locked | Built |
 | Rule library: shared official texts and the company's own uploads, with versions | Built |
 | Analysis: match rules to orders, compute cost, report with citations, block reports that fail checks | Built (backend only) |
-| Rule extraction (AI drafts a company's requirements, the owner reviews) and HS code suggestions | Phase 2, later (with retrieval) |
+| Rule extraction (AI drafts a company's requirements from its own regulation, the owner reviews) and HS code suggestions (from past orders and the official tariff) | Built (backend only) |
 | Supplier documents uploaded as files (AI reads, a person confirms) | Built (backend only) |
 | Actions: draft message → approve → send once (sandbox email) | Phase 3 (email delivery through Resend is built for reports) |
 | Overview numbers for the dashboard | Built (except "sources checked at") |
@@ -47,7 +47,7 @@ Example end-to-end:
 
 **Products are matched by HS code, not by name.**
 - "Acacia plywood 18 mm", "Ván ép keo" and "Plywood AC-18" all have HS `4412.33`, so they count as the same product.
-- An order without an HS code is `needs_data`. The AI may suggest a code from the product name; the user confirms it (later: today the CSV requires a code, §8.4).
+- An order without an HS code is `needs_data`. The AI suggests codes from the company's past orders and the official tariff lines closest to the product name; the user confirms one.
 
 **HS codes are a tree. A rule on a parent code covers every child under it.**
 
@@ -114,6 +114,7 @@ Columns as in the template: `id,product,supplier,destination,value,shipDate,hsCo
 
 Rules:
 - HS codes stay text (`0401.10` stays `0401.10`, not `401.1`). Dates are `YYYY-MM-DD`. Currencies are ISO 4217 codes.
+- An `hsCode` cell may be empty (the column must be there): the order is `needs_data` until a code is added or a suggested one accepted (§8.4).
 - Keep the original file and every row, so a report can cite "import 7, row 2".
 - The same file uploaded again is flagged as a duplicate (a warning, not an error).
 - Uploads never committed are deleted after 30 days.
@@ -153,7 +154,7 @@ The playbook is the company's own instructions, the way a manager briefs a new e
 - **Later:** the editor types the sentence and AI fills in the form. The editor reviews it before saving ("I understood: WHEN … THEN …. Correct?"). The AI runs only when the rule is saved, never during analysis, so results can be repeated and cited.
 
 ### 4.5 Regulations (rule library)
-**Status: built.** Drafting and review of a company's own requirements: phase 2, later (it needs PDF text and search inside long texts).
+**Status: built.** Drafting and review of a company's own requirements: backend only.
 
 **Terms**
 - **Regulation**: one rule, e.g. "EU Deforestation Regulation", official ID `32023R1115`. Its documents are its versions.
@@ -168,12 +169,12 @@ The playbook is the company's own instructions, the way a manager briefs a new e
 | Added by | the seed now; the crawler (J1) and the operator later | the company's editors (upload) |
 | Seen by | every company: read and download | only that company |
 | New versions | seed / crawler / operator only. A company can't add one | the company's editors |
-| Drives the checklists | yes: market requirements cite them | not yet (open question 25) |
+| Drives the checklists | yes: market requirements cite them | yes, once the owner reviews the requirements AI drafted from it; only for that company |
 
 **Use cases**
 1. *Built.* Ms. Lan opens the trade map. PO-2291 to Rotterdam shows "Plot-level geolocation: missing". The check names its source, EUDR Art. 9(1)(d), and she downloads the official text.
 2. *Built.* She uploads a news article about an EUDR delay. It becomes her company's regulation, v1. Other companies don't see it; the checklists don't change.
-3. *Later.* Her buyer sends a sourcing policy ("FSC for all solid wood"). She uploads it as a company regulation (built) and asks for drafts. AI drafts "EU · FSC chain of custody · supplier document `chain`" with the quote. She (the owner) approves it. From then on her orders to the EU are checked for it; other companies never see it.
+3. *Built (backend).* Her buyer sends a sourcing policy ("FSC for all solid wood") as a PDF. She uploads it as a company regulation and asks for drafts. AI drafts "EU · FSC chain of custody · supplier document `chain`" with the quote, which code finds in the PDF's text. She (the owner) approves it. From then on her orders to the EU are checked for it; other companies never see it. A scanned PDF has no text: AI reads the image and the quote is marked unchecked until she confirms it.
 4. *Later.* EUR-Lex publishes a new consolidated EUDR. The crawler stores it as v2 of the shared regulation; the extraction agent drafts its market requirements; a reviewer approves them; they replace v1's. The map now shows a newly missing document on PO-2304.
 
 **Uploading** (company regulations)
@@ -192,7 +193,7 @@ The playbook is the company's own instructions, the way a manager briefs a new e
   | Field | Now | Later |
   | --- | --- | --- |
   | Source (which version) | The seed downloads the official text | The crawler stores the new version (J1) |
-  | The requirement and its quote | Written by hand in the seed, copied from the downloaded text and checked | Drafted by the extraction agent (J3), quote checked against the document's text (PDFs too), long texts searched by section first; the owner (company versions) or the operator (shared) reviews (`draft` → `reviewed` / `rejected`) |
+  | The requirement and its quote | Shared: written by hand in the seed, copied from the downloaded text and checked. Company: drafted by AI from the version's text (PDF, HTML, plain text; long texts cut down to the closest sections), each quote checked against the text; the owner reviews (`draft` → `reviewed` / `rejected`) | Shared: drafted by the extraction agent (J3) from crawled versions; the operator reviews |
 
 - Only reviewed requirements are checked and raise alerts (seed requirements count as reviewed). A new version gets its own requirements; once none is left as a draft (and at least one is reviewed), they replace the previous version's. Until then the previous version's stay in use. Comparing the two lists shows what was added, changed or removed ([AI_IDEAS.md](AI_IDEAS.md) G). A report records the version it checked against.
 
@@ -269,7 +270,7 @@ A map of the company's own export activity: its suppliers, sites and markets, an
 | Phase | Delivers | Status |
 | --- | --- | --- |
 | 1. Foundation | Auth, companies and roles, profile and onboarding, orders, CSV import, playbook, overview. Frontend on the API for these. | Done |
-| 2. Analysis | Rule library with versions, shared official texts, trade map (with "what if" and supplier/site editing), checked playbook rules, cost settings, runs (match → cost → playbook → plan → auditor), analysis reports with citations, shareable order and company reports (PDF, email), supplier document upload with OCR. Later, with retrieval: extraction + review, HS code suggestions | Backend built and tested (except extraction and HS suggestions). Not yet deployed; frontend screens for analysis, cost settings, checked rules and document upload missing |
+| 2. Analysis | Rule library with versions, shared official texts, trade map (with "what if" and supplier/site editing), checked playbook rules, cost settings, runs (match → cost → playbook → plan → auditor), analysis reports with citations, shareable order and company reports (PDF, email), supplier document upload with OCR, requirement drafting + review, HS code suggestions with retrieval | Backend built and tested. Not yet deployed; frontend screens for analysis, cost settings, checked rules, document upload, requirement review and HS suggestions missing |
 | 3. Actions | Draft → approve → send once (sandbox email), delivery status, feedback, contact form, audit log screen | Later. Email sending through Resend is built (report drafts) |
 | 4. Connect + automate | Chat reads orders and the playbook through the backend (built: `query_orders`, `get_playbook`), chat reads analysis reports, analysis runs on events (open question 20), scheduled source watching (crawler) and "sources checked at", following shared regulations, buyer tenant, Excel import | Later, except chat reading orders and the playbook |
 
@@ -297,13 +298,13 @@ Each phase ends with: tests green, deployed, frontend working against it.
 | 16 | Conditions that aren't HS codes | **Partly built:** a line can start on a date (`effectiveOn`, compared with the ship date) and be route-sensitive (origin proofs). Matching is otherwise HS code + destination (3). Later: origin country, company size, order value thresholds, wood species; some need data we don't have. |
 | 17 | ~~Markets vs countries~~ | **Decided:** a market groups countries; the destination text is parsed (§4.9). |
 | 18 | ~~Which documents does a rule require?~~ | **Decided:** a market requirement is the obligation; it names a document kind and cites its regulation version (§4.5). |
-| 19 | Supplier document storage | Uploaded certificates: file + record + embedding for search. Which vector store: Firestore (like `ai/server`) or `pgvector`? |
+| 19 | ~~Vector store~~ | **Decided:** `pgvector` in the backend's Postgres for the official HS headings (embedded once at seed time). Past orders use word similarity (`pg_trgm`); sections of a long regulation are embedded in memory while drafting, never stored. Supplier documents aren't searched yet. `ai/server` keeps Firestore vector search for its own index. |
 | 20 | When do checks re-run? | **Decided for phase 2:** only when an editor clicks "Analyse" (`POST /runs`). **Direction:** analysis runs on events (CSV import, a supplier document confirmed, a rule or regulation change, a daily expiry check), the shareable order report and the chat read its latest report. |
 | 21 | Language | Vietnamese UI, Vietnamese documents for OCR, English rules. Translate in reports? |
 | 22 | ~~How do we test AI quality?~~ | **Decided:** a developer test set, not a user feature. About 20 cases with known answers per AI job (supplier document reading now; extraction and HS code suggestion when built), e.g. "Oak dining table" → HS 9403.60. Not built yet for the backend. Run by hand before changing a prompt or the model; a case that passed and now fails blocks the change. Same approach as `ai/server/eval/`. |
 | 23 | Where does crawling live? | **Leaning `ai/server`**: it already has per-company news sources (shared built-ins a company can switch off, plus its own feeds). Still open: does a backend `watch_sources` table replace this, or does the backend read sources from `ai/server`? |
 | 24 | Operator role | Platform staff (us) who maintain the shared library and review extracted requirements. A flag on users, or a separate admin app? **Not in phase 2:** the seed is reviewed as code (10). |
-| 25 | A company's own requirements | **Direction decided:** market requirements that belong to one company (drafted by AI from its own regulation, reviewed by the owner), checked next to the shared ones (§4.5 use case 3); built with extraction. Later: companies **follow** shared regulations, request missing ones, and matching checks only followed ones. |
+| 25 | A company's own requirements | **Built:** market requirements can belong to one company (drafted by AI from its own regulation, reviewed by the owner) and are checked next to the shared ones (§4.5 use case 3). Later: companies **follow** shared regulations, request missing ones, and matching checks only followed ones. |
 
 ## 7. Roles
 
@@ -323,7 +324,7 @@ Everything not marked **built** is a goal. We can pitch the whole path, labelled
 | Level | Sources | Rule text | Matching | Status |
 | --- | --- | --- | --- | --- |
 | 0 | News feeds in `ai/server` (Timber Trades Journal, VnExpress, EU press releases, Google News searches). Shared built-in feeds, which a company can switch off for itself, plus feeds a company adds for itself. | — | `ai/server` maps articles to its 31 SKUs (AI) | **Built** (`ai/server`) |
-| 1 | + Shared official texts (seed) and the company's own uploads (official text or article) | Consolidated text as the next version; requirements written by hand in the seed | Trade map and analysis document checks (code) ✓. Next: AI drafts a company's requirements; AI suggests HS codes for orders without one (both with retrieval); 6-digit HS prefix + exceptions | **Partly built** |
+| 1 | + Shared official texts (seed) and the company's own uploads (official text or article) | Consolidated text as the next version; shared requirements written by hand in the seed; the company's own drafted by AI and reviewed | Trade map and analysis document checks (code); AI suggests HS codes for orders without one. Next: 6-digit HS prefix + exceptions | **Built**, except HS exceptions |
 | 2 | + Crawler (J1): per-company watch list + official APIs (US Federal Register, EUR-Lex) | Extraction agent drafts requirements, a person reviews | Same | Phase 4 |
 | 3 (stretch) | + Agent goes from a news article to the official text (Gemini grounding with Google Search, EUR-Lex search); a person confirms | Agent spots amendments and drafts merged conditions; a person reviews. Version detection without the uploader picking (below) | + AI flags CSV codes that don't fit the product; 8–10 digit national codes when a rule names them | Goal |
 | 4 (stretch) | + Vietnamese official sources, more markets | Same | Same | Goal. Started: checklists already cover food, textiles and some electronics headings |
@@ -346,10 +347,11 @@ A wrong automatic link would compare unrelated texts and raise wrong alerts, so 
 | --- | --- |
 | Regulation | **Built.** Title, optional official ID (unique per company, and among shared ones), owning company or none (shared) |
 | Regulation document | **Built.** One version: number, title, source URL, file, content hash (a file can be in a regulation only once). The company comes from the regulation. Later: kind (official text / article), fetched date for crawled files |
-| Market requirement | **Built.** One requirement in a market's checklist: level, document kind, accepted standards, HS prefixes, duty rate, start date (`effective_on`), a stated change (`changes_on`, `change_note`), route-sensitive, the regulation version it comes from, its quote. Later, for extraction: the company for a company's own, `draft` → `reviewed` → `replaced`, HS exclude |
+| Market requirement | **Built.** One requirement in a market's checklist: level, document kind, accepted standards, HS prefixes, duty rate, start date (`effective_on`), a stated change (`changes_on`, `change_note`), route-sensitive, the regulation version it comes from, its quote and whether the quote was found in the text, the company for a company's own, `draft` → `reviewed` / `rejected` → `replaced`. Later: HS exclude |
 | Watch source | Later. Company (or shared), URL, kind (`rss`, `federal_register`, `eurlex`, `page`), enabled, last checked |
 | Followed regulation | Later. Which company follows which shared regulation |
-| HS code suggestion | Later. Order, suggested code, description, reason, confidence, `pending` / `accepted` / `rejected`, who decided |
+| HS code suggestion | **Built.** Order, suggested code, its official description, reason, what it was based on (past orders, tariff lines), `pending` / `accepted` / `rejected`, who decided. Later: confidence |
+| HS heading | **Built.** The official 4- and 6-digit tariff lines of the chapters the checklists cover (USITC HTS, `seed_data/hs_headings.json`, built by `scripts/build_hs_headings.py`), with an embedding of each description. Only the official source changes it: re-build for a new HS edition (HS 2027 takes effect on 1 January 2027; orders shipping after it will need their codes mapped). A company's confirmed codes teach its own examples (past orders), never this list |
 | Analysis run and report | **Built.** Run: status, step summaries, playbook revision and cost settings used. Report per order: state, order status, blocked, and its content as JSON |
 | Cost default / company cost setting | **Built.** Key, label, unit (`days` or a currency), value |
 | Supplier document upload | **Built.** File in Cloud Storage, what AI read, `draft` → `confirmed`. A supplier document (typed or confirmed) has number, issuer, expiry and the upload it came from |
@@ -368,8 +370,8 @@ For each enabled watch source: fetch new items → skip ones already seen (by ha
 3. (Level 3) AI: search for the official text (Google Search grounding, EUR-Lex). Show the top candidates with links.
 4. Output: an alert, "EU timber rule update may affect 2 of your orders; suggested official text: [link], confirm?"
 
-**J3 Extract from official text** (phase 2, later)
-1. Read the text (PDF text extracted, so quotes can be checked). Long texts: search for the sections about wood, HS 44/94 and origin first, and send only those.
+**J3 Extract from official text** (built for a company's own versions: `POST /regulation-documents/{id}/requirements`; the owner reviews. Shared versions wait for the crawler)
+1. Read the text (PDF text extracted, so quotes can be checked; a scanned PDF goes to AI as a file and its quotes are marked unchecked). Long texts: keep the sections closest in meaning to an exporter's obligations, and send only those.
 2. AI (fixed output schema): market requirements for the new version (market, level, document kind, HS codes, start date), with the exact clause quoted for each.
 3. Saved as `draft`. The operator (or the owner, for a company's own version) reviews and edits → `reviewed`; they then replace the previous version's requirements.
 4. Compare with the previous version's requirements → list what changed → queue J4.
@@ -377,19 +379,18 @@ For each enabled watch source: fetch new items → skip ones already seen (by ha
 **J4 Match orders** (code only, no AI; built as analysis runs, §4.6)
 For each reviewed requirement × each company order: 6-digit prefix + exceptions + market + date → `clear` / `exposed` / `needs_data`. Only orders whose status changed raise an alert.
 
-**J5 Suggest HS code** (when an order has no code; phase 2, later)
-1. Retrieve: the company's past orders with similar product names that have a code, and the HS headings whose wording matches.
+**J5 Suggest HS code** (when an order has no code; built)
+1. Retrieve: the company's past orders with similar product names that have a code (word similarity), and the official tariff lines closest in meaning (embeddings).
 2. AI: top 3 codes from those, each with a description, a reason and what it was based on.
-3. Needs empty `hsCode` cells allowed in the CSV (today the column is required).
-4. Saved as `pending`. The order stays `needs_data`.
-5. The editor accepts one → the order gets the code → J4 runs for that order.
+3. Code keeps real tariff lines and the citations AI was shown. Saved as `pending`. The order stays `needs_data`.
+4. The editor accepts one → the order gets the code → J4 runs for that order.
 
 ### 8.4 HS code cases
 
 | Case | What happens |
 | --- | --- |
 | CSV has a code | Use it. No AI. |
-| CSV code is empty | Not possible yet (the CSV requires a code). With J5: AI suggests; the editor confirms; then matching runs. |
+| CSV code is empty | J5 suggests; the editor confirms; then matching runs. |
 | CSV code looks wrong for the product (e.g. "Milk powder" + 4412.33) | Level 3: AI flags "code doesn't look like the product". The CSV value stays; the editor decides. |
 | Excel/PDF import (later) | Same as an empty code. |
 

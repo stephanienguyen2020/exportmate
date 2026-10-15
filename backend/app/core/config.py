@@ -48,8 +48,13 @@ class Settings(BaseSettings):
     gemini_model: str = "gemini-2.5-flash"
     gemini_location: str = "global"
     gemini_timeout_seconds: int = 90
+    # Embeddings for HS heading and document search; same model as ai/server's vector index.
+    embedding_model: str = "gemini-embedding-001"
     # Per user per hour.
     supplier_document_uploads_per_hour: int = 60
+    # Each one is an AI call.
+    requirement_drafts_per_hour: int = 20
+    hs_suggestions_per_hour: int = 60
     analysis_runs_per_hour: int = 60
 
     @model_validator(mode="after")

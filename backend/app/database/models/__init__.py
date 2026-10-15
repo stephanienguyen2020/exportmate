@@ -9,6 +9,12 @@ from app.database.models.analysis import (
 )
 from app.database.models.audit import AuditEvent
 from app.database.models.base import Base
+from app.database.models.hs_code import (
+    EMBEDDING_DIMENSIONS,
+    HsCodeSuggestion,
+    HsHeading,
+    HsSuggestionStatus,
+)
 from app.database.models.order import Import, ImportRow, ImportStatus, Order, OrderStatus
 from app.database.models.playbook import PlaybookRevision, PlaybookRule
 from app.database.models.regulation import Regulation, RegulationDocument
@@ -25,6 +31,7 @@ from app.database.models.trade_map import (
     ObservationKind,
     Port,
     RequirementLevel,
+    RequirementStatus,
     SatelliteObservation,
     SiteKind,
     Supplier,
@@ -34,6 +41,7 @@ from app.database.models.trade_map import (
 )
 
 __all__ = [
+    "EMBEDDING_DIMENSIONS",
     "AnalysisReport",
     "AnalysisRun",
     "AuditEvent",
@@ -44,6 +52,9 @@ __all__ = [
     "CostDefault",
     "Country",
     "DocumentKind",
+    "HsCodeSuggestion",
+    "HsHeading",
+    "HsSuggestionStatus",
     "Import",
     "ImportRow",
     "ImportStatus",
@@ -63,6 +74,7 @@ __all__ = [
     "ReportKind",
     "ReportState",
     "RequirementLevel",
+    "RequirementStatus",
     "Role",
     "RunStatus",
     "SatelliteObservation",
