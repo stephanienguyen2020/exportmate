@@ -16,6 +16,6 @@ Backend features that are built and tested but that the frontend doesn't use yet
 
 **Suggested order:** 1 and 2 first (they make analysis visible), then 3 and 5, then 4 and 6, then 7 (the largest; it needs an owner account to test).
 
-**Not frontend, still open:** apply Terraform (the backend's Vertex AI role and `GOOGLE_CLOUD_PROJECT`) and deploy; the AI test set (REQUIREMENTS.md open question 22).
+**Not frontend, still open:** the AI test set (REQUIREMENTS.md open question 22). The backend with all of the above is deployed (15 October 2026).
 
 Update this list as screens are built; remove a row once its screen uses the endpoint.
