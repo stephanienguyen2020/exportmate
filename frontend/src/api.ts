@@ -496,6 +496,7 @@ export type ChecklistChange = {
 export type ChecklistChanges = {
   start: string;
   until: string;
+  days: number; // the window the backend used (RULE_WATCH_DAYS unless asked)
   changes: ChecklistChange[];
 };
 export type MapOrder = {
@@ -995,10 +996,11 @@ export const api = {
   },
   tradeMap: (signal?: AbortSignal) =>
     request<TradeMap>("/trade-map", { signal }).then((r) => r.data),
-  checklistChanges: (days: number, signal?: AbortSignal) =>
-    request<ChecklistChanges>(`/trade-map/changes?days=${days}`, {
-      signal,
-    }).then((r) => r.data),
+  // The window is the backend's RULE_WATCH_DAYS setting.
+  checklistChanges: (signal?: AbortSignal) =>
+    request<ChecklistChanges>("/trade-map/changes", { signal }).then(
+      (r) => r.data,
+    ),
   createSupplier: (supplier: SupplierInput) =>
     request<SupplierRecord>("/suppliers", {
       method: "POST",

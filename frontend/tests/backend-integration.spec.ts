@@ -890,12 +890,13 @@ test("rule watch shows the company's own requirements, not the sample scenario",
   page,
 }) => {
   await fixture(page);
-  await page.route("**/api/v1/trade-map/changes?days=90", (route) =>
+  await page.route("**/api/v1/trade-map/changes", (route) =>
     route.fulfill({
       json: {
         data: {
           start: "2026-10-15",
-          until: "2027-01-13",
+          until: "2027-02-12",
+          days: 120,
           changes: [
             {
               on: "2026-12-30",
@@ -933,6 +934,8 @@ test("rule watch shows the company's own requirements, not the sample scenario",
     "page",
   );
   await expect(page.getByRole("heading", { name: "Coming up." })).toBeVisible();
+  // The window is the one the backend reports, not a frontend constant.
+  await expect(page.getByText("NEXT 120 DAYS")).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Due-diligence statement reference" }),
   ).toBeVisible();

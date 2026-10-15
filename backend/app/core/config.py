@@ -69,6 +69,8 @@ class Settings(BaseSettings):
     # A saved solution is offered for later orders for this many days (or until the day before
     # its requirement's stated change, or until the requirement cites another version).
     solution_valid_days: int = 90
+    # How far ahead Rule watch looks for checklist lines that take effect or change.
+    rule_watch_days: int = 90
 
     @model_validator(mode="after")
     def no_dev_auth_in_production(self):

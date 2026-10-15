@@ -170,6 +170,7 @@ class ChecklistChangeOut(CamelCaseModel):
 class ChecklistChangesOut(CamelCaseModel):
     start: date
     until: date
+    days: int  # the window, `until` minus `start`
     changes: list[ChecklistChangeOut]
 
 
