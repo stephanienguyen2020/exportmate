@@ -1199,17 +1199,35 @@ export const api = {
       body: JSON.stringify({ verdict, note }),
     }).then((r) => r.data),
   async auditEvents(
-    filter: { objectType?: string; userId?: string; cursor?: string | null },
+    filter: { objectType?: string; userId?: string; limit?: number },
     signal?: AbortSignal,
   ) {
-    const query = new URLSearchParams({ limit: "50" });
+    const query = new URLSearchParams({ limit: String(filter.limit ?? 50) });
     if (filter.objectType) query.set("objectType", filter.objectType);
     if (filter.userId) query.set("userId", filter.userId);
-    if (filter.cursor) query.set("cursor", filter.cursor);
     const page = await request<AuditEvent[]>(`/audit-events?${query}`, {
       signal,
     });
-    return { events: page.data, nextCursor: page.meta.nextCursor ?? null };
+    return { events: page.data, more: Boolean(page.meta.nextCursor) };
+  },
+  // The whole log with the same filters, as a CSV file.
+  async downloadAuditEvents(filter: { objectType?: string; userId?: string }) {
+    const query = new URLSearchParams();
+    if (filter.objectType) query.set("objectType", filter.objectType);
+    if (filter.userId) query.set("userId", filter.userId);
+    const response = await authenticatedResponse(`/audit-events/export?${query}`);
+    const filename =
+      /filename="([^"]+)"/.exec(
+        response.headers.get("content-disposition") || "",
+      )?.[1] || "exportmate-activity.csv";
+    const url = URL.createObjectURL(await response.blob());
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
   },
   newsMatches: (signal?: AbortSignal) =>
     request<{ newsAvailable: boolean; matches: NewsMatch[] }>("/news-matches", {
