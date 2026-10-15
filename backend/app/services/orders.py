@@ -4,6 +4,7 @@ import json
 import logging
 from datetime import UTC, date, datetime
 
+from pydantic.alias_generators import to_camel
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -18,8 +19,9 @@ from app.database.models import (
     User,
 )
 from app.database.queries import audit as audit_queries
+from app.database.queries import hs_codes as hs_queries
 from app.database.queries import orders as order_queries
-from app.schemas.analysis import OrderDetailOut
+from app.schemas.analysis import OrderDetailOut, OrderUpdatedOut
 from app.schemas.orders import (
     OrderOut,
     OrderStatusBulkChangeIn,
@@ -27,6 +29,7 @@ from app.schemas.orders import (
     OrderStatusChangeIn,
     OrderStatusChangeOut,
     OrderStatusOut,
+    OrderUpdate,
     SourceRowOut,
     StatusChangerOut,
 )
@@ -88,6 +91,82 @@ def get_order_detail(db: Session, ctx: CompanyContext, external_id: str) -> Orde
             for change, user in order_queries.list_order_status_changes(db, order.id)
         ],
     )
+
+
+def _audit_value(value: object) -> object:
+    return value.isoformat() if isinstance(value, date) else value
+
+
+def update_order(
+    db: Session, ctx: CompanyContext, external_id: str, payload: OrderUpdate
+) -> OrderUpdatedOut:
+    """Change an order's fields (not its id), then analyse it again: its latest report was
+    made from the old facts. The change is audited field by field; nothing is saved or run
+    when no field differs."""
+    order = order_queries.get_order_by_external_id(db, ctx.company_id, external_id, lock=True)
+    if not order:
+        raise not_found_error("Order")
+    changes = {}
+    for name in sorted(payload.model_fields_set):
+        before, after = getattr(order, name), getattr(payload, name)
+        if before != after:
+            changes[name] = (before, after)
+            setattr(order, name, after)
+    if not changes:
+        db.rollback()  # releases the row lock
+        return OrderUpdatedOut(detail=get_order_detail(db, ctx, external_id), run=None)
+    if order.hs_code and "hs_code" in changes:
+        # Suggestions waiting for a decision no longer apply once a person typed the code.
+        hs_queries.reject_pending_hs_suggestions(db, order.id, ctx.user.id, datetime.now(UTC))
+    audit_queries.record_audit_event(
+        db,
+        company_id=ctx.company_id,
+        user_id=ctx.user.id,
+        action="order.updated",
+        object_type="order",
+        object_id=order.external_id,
+        data={
+            to_camel(name): {"from": _audit_value(a), "to": _audit_value(b)}
+            for name, (a, b) in changes.items()
+        },
+    )
+    db.commit()
+    log.info(
+        "order.updated",
+        extra={
+            "company_id": str(ctx.company_id),
+            "order_id": str(order.id),
+            "fields": sorted(changes),
+        },
+    )
+    # Saved either way: if the run fails, it is recorded as failed and the order waits for
+    # "Analyse orders", as after an import.
+    try:
+        run = analysis_service.start_run(db, ctx, [order.external_id])
+    except AppError:
+        run = None
+    return OrderUpdatedOut(detail=get_order_detail(db, ctx, external_id), run=run)
+
+
+def delete_order(db: Session, ctx: CompanyContext, external_id: str) -> None:
+    """Remove an order with everything recorded about it (see order_queries.delete_order).
+    The audit log keeps what the order was; saved solutions stay, without the report they were
+    written from. The id is free again, so a CSV can bring the order back."""
+    order = order_queries.get_order_by_external_id(db, ctx.company_id, external_id, lock=True)
+    if not order:
+        raise not_found_error("Order")
+    audit_queries.record_audit_event(
+        db,
+        company_id=ctx.company_id,
+        user_id=ctx.user.id,
+        action="order.deleted",
+        object_type="order",
+        object_id=order.external_id,
+        data=OrderOut.from_order(order).model_dump(mode="json", by_alias=True, exclude={"id"}),
+    )
+    order_queries.delete_order(db, order)
+    db.commit()
+    log.info("order.deleted", extra={"company_id": str(ctx.company_id), "order_id": str(order.id)})
 
 
 def _status_change_out(change: OrderStatusChange, user: User) -> OrderStatusChangeOut:

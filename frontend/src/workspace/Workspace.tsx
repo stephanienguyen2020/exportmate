@@ -120,6 +120,7 @@ const routes: Record<string, Page> = {
         order={order}
         ws={ws}
         buyer={buyer}
+        notify={notify}
         onMessage={(o) => openDialog({ kind: "message", order: o })}
         onEvidence={(o) => openDialog({ kind: "evidence", order: o })}
       />

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import EditorContext, ViewerContext
 from app.database.models import OrderStatus
 from app.database.session import get_db
-from app.schemas.analysis import OrderDetailOut
+from app.schemas.analysis import OrderDetailOut, OrderUpdatedOut
 from app.schemas.common import SuccessResponse, success_response
 from app.schemas.orders import (
     OrderOut,
@@ -14,6 +14,7 @@ from app.schemas.orders import (
     OrderStatusBulkChangeOut,
     OrderStatusChangeIn,
     OrderStatusOut,
+    OrderUpdate,
 )
 from app.schemas.overview import OverviewOut
 from app.services import orders as order_service
@@ -50,6 +51,22 @@ def change_order_statuses(payload: OrderStatusBulkChangeIn, ctx: EditorContext, 
 @router.get("/orders/{order_id}", response_model=SuccessResponse[OrderDetailOut])
 def get_order(order_id: str, ctx: ViewerContext, db: Db):
     return success_response(order_service.get_order_detail(db, ctx, order_id))
+
+
+@router.patch("/orders/{order_id}", response_model=SuccessResponse[OrderUpdatedOut])
+def update_order(order_id: str, payload: OrderUpdate, ctx: EditorContext, db: Db):
+    """Change an order's fields, not its id (owners and editors). Audited as `order.updated`;
+    the order is then analysed again, as `POST /runs` with its id would."""
+    return success_response(order_service.update_order(db, ctx, order_id, payload))
+
+
+@router.delete("/orders/{order_id}", response_model=SuccessResponse[dict])
+def delete_order(order_id: str, ctx: EditorContext, db: Db):
+    """Remove an order with its status history, analysis reports, supplier messages, HS code
+    suggestions, saved what-ifs and news reviews (owners and editors). Audited as
+    `order.deleted` with what the order was."""
+    order_service.delete_order(db, ctx, order_id)
+    return success_response({"deleted": True})
 
 
 @router.patch("/orders/{order_id}/status", response_model=SuccessResponse[OrderDetailOut])

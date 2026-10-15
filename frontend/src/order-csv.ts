@@ -1,5 +1,6 @@
-// Orders CSV checks for the browser-only demo. Same rules as the backend
-// (backend/app/services/order_csv.py), so both accept and reject the same files.
+// Orders CSV checks for the browser-only demo, also used by the form that edits one order.
+// Same rules as the backend (backend/app/services/order_csv.py, and its OrderUpdate schema),
+// so both accept and reject the same files and changes.
 import type { Order } from "./data";
 
 export const REQUIRED_COLUMNS = [
@@ -13,12 +14,14 @@ export const REQUIRED_COLUMNS = [
 ];
 // The hsCode column must be there, but a cell may be empty (the order then needs data).
 const OPTIONAL_VALUES = new Set(["hsCode"]);
-const MAX_LENGTHS: Record<string, number> = {
+export const MAX_LENGTHS: Record<string, number> = {
   id: 100,
   product: 300,
   supplier: 300,
   destination: 200,
 };
+// An order's currency when its row names none (the demo company's).
+export const DEFAULT_CURRENCY = "USD";
 export const MAX_IMPORT_ROWS = 10_000;
 // Vercel functions accept request bodies up to about 4.5 MB, so every layer uses 4 MB.
 export const MAX_UPLOAD_MB = 4;
@@ -48,12 +51,42 @@ const validValue = (n: number) =>
   n < 1e12 &&
   Math.abs(n * 100 - Math.round(n * 100)) < 1e-6;
 
+/** What is wrong with one order's cells, column by column, in the order the backend checks. */
+export function orderCellErrors(
+  cell: (column: string) => string,
+  defaultCurrency = DEFAULT_CURRENCY,
+): { column: string; message: string }[] {
+  const errors: { column: string; message: string }[] = [];
+  const fail = (column: string, message: string) =>
+    errors.push({ column, message });
+  for (const column of REQUIRED_COLUMNS)
+    if (!OPTIONAL_VALUES.has(column) && !cell(column))
+      fail(column, `${column} is required.`);
+  for (const [column, limit] of Object.entries(MAX_LENGTHS))
+    if (cell(column).length > limit)
+      fail(column, `${column} is longer than ${limit} characters.`);
+  if (cell("value") && !validValue(parseValue(cell("value"))))
+    fail("value", "value must be a positive number with at most 2 decimals.");
+  const shipDate = cell("shipDate");
+  if (shipDate && !validDate(shipDate))
+    fail("shipDate", "use a valid YYYY-MM-DD ship date.");
+  const hsCode = cell("hsCode");
+  if (hsCode && !HS_CODE.test(hsCode))
+    fail("hsCode", "hsCode must look like 4412.33 (digits, optional dots).");
+  if (!isCurrency((cell("currency") || defaultCurrency).toUpperCase()))
+    fail("currency", "currency must be a 3-letter code like USD.");
+  return errors;
+}
+
+/** "24,000.50" → 24000.5, as the backend reads a value cell. */
+export const parseValue = (text: string) => Number(text.replace(/,/g, ""));
+
 /** Checks parsed CSV rows; returns the valid orders and one message per problem. */
 export function validateOrderCsv(
   fields: string[] | undefined,
   rows: Record<string, string | undefined>[],
   existingIds: Set<string>,
-  defaultCurrency = "USD",
+  defaultCurrency = DEFAULT_CURRENCY,
 ): { orders: Order[]; errors: string[] } {
   const headers = (fields || []).map((h) => h.trim());
   const missing = REQUIRED_COLUMNS.filter((c) => !headers.includes(c));
@@ -77,24 +110,8 @@ export function validateOrderCsv(
     const cell = (key: string) => (raw[key] ?? "").trim();
     const before = errors.length;
     const fail = (message: string) => errors.push(`Row ${line}: ${message}`);
-    for (const column of REQUIRED_COLUMNS)
-      if (!OPTIONAL_VALUES.has(column) && !cell(column))
-        fail(`${column} is required.`);
-    for (const [column, limit] of Object.entries(MAX_LENGTHS))
-      if (cell(column).length > limit)
-        fail(`${column} is longer than ${limit} characters.`);
-    const value = Number(cell("value").replace(/,/g, ""));
-    if (cell("value") && !validValue(value))
-      fail("value must be a positive number with at most 2 decimals.");
-    const shipDate = cell("shipDate");
-    if (shipDate && !validDate(shipDate))
-      fail("use a valid YYYY-MM-DD ship date.");
-    const hsCode = cell("hsCode");
-    if (hsCode && !HS_CODE.test(hsCode))
-      fail("hsCode must look like 4412.33 (digits, optional dots).");
-    const currency = (cell("currency") || defaultCurrency).toUpperCase();
-    if (!isCurrency(currency))
-      fail("currency must be a 3-letter code like USD.");
+    for (const { message } of orderCellErrors(cell, defaultCurrency))
+      fail(message);
     const id = cell("id");
     if (id && (seen.has(id) || existingIds.has(id)))
       fail(`order ${id} already exists.`);
@@ -105,10 +122,10 @@ export function validateOrderCsv(
         product: cell("product"),
         supplier: cell("supplier"),
         destination: cell("destination"),
-        value,
-        shipDate,
-        hsCode,
-        currency,
+        value: parseValue(cell("value")),
+        shipDate: cell("shipDate"),
+        hsCode: cell("hsCode"),
+        currency: (cell("currency") || defaultCurrency).toUpperCase(),
         risk: false,
       });
   });

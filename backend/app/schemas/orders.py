@@ -2,10 +2,12 @@ import uuid
 from datetime import date, datetime
 from typing import Annotated, Literal
 
-from pydantic import Field, StringConstraints
+from pydantic import Field, StringConstraints, field_validator, model_validator
 
+from app.core.currencies import is_currency
 from app.database.models import Order, OrderStatus, OrderStatusDefinition
 from app.schemas.common import CamelCaseModel
+from app.services.order_csv import HS_CODE_PATTERN, MAX_LENGTHS, MAX_VALUE
 
 
 class OrderOut(CamelCaseModel):
@@ -32,6 +34,59 @@ class OrderOut(CamelCaseModel):
             hs_code=order.hs_code,
             status=order.status,
         )
+
+
+def _order_text(column: str):
+    """A required text field of an order, as long as a CSV cell of that column may be."""
+    return Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=MAX_LENGTHS[column])
+    ]
+
+
+OrderProduct = _order_text("product")
+OrderSupplier = _order_text("supplier")
+OrderDestination = _order_text("destination")
+
+
+class OrderUpdate(CamelCaseModel):
+    """Changes only the fields sent, with the same rules as a CSV row (services/order_csv.py).
+    The order's id can't change: reports, solutions and the audit log name the order by it."""
+
+    product: OrderProduct | None = None
+    supplier: OrderSupplier | None = None
+    destination: OrderDestination | None = None
+    # Hundredths of the currency unit, as OrderOut gives it.
+    value_minor: int | None = Field(default=None, gt=0, lt=int(MAX_VALUE * 100))
+    currency: str | None = None
+    ship_date: date | None = None
+    hs_code: str | None = None  # "" clears it: analysis then asks for the code
+
+    @field_validator("currency")
+    @classmethod
+    def _known_currency(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip().upper()
+        if not is_currency(value):
+            raise ValueError("Use an ISO currency code like USD.")
+        return value
+
+    @field_validator("hs_code")
+    @classmethod
+    def _hs_code_shape(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        if value and not HS_CODE_PATTERN.match(value):
+            raise ValueError("Use an HS code like 4412.33 (digits, optional dots).")
+        return value
+
+    @model_validator(mode="after")
+    def _sent_fields_stay_set(self):
+        for name in self.model_fields_set:
+            if getattr(self, name) is None:
+                raise ValueError(f"{name} can't be cleared")
+        return self
 
 
 class SourceRowOut(CamelCaseModel):
