@@ -13,6 +13,7 @@ locals {
     # cycle: the AI service already points at this backend.
     AI_SERVICE_URL       = local.ai_url
     GOOGLE_CLOUD_PROJECT = var.project_id # Vertex AI project for Gemini
+    CONTACT_INBOX        = var.contact_inbox
   }
 }
 

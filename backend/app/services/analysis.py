@@ -60,7 +60,7 @@ from app.schemas.cost_settings import CostSettingOut
 from app.schemas.orders import OrderOut
 from app.schemas.trade_map import RequirementCheckOut, RequirementSourceOut
 from app.services import cost_settings as cost_service
-from app.services import rule_checks
+from app.services import report_review, rule_checks
 from app.services import trade_map as trade_map_service
 
 log = logging.getLogger(__name__)
@@ -633,7 +633,16 @@ def get_report(db: Session, ctx: CompanyContext, report_id: uuid.UUID) -> Report
     report = analysis_queries.get_company_report(db, ctx.company_id, report_id)
     if not report:
         raise not_found_error("Report")
-    return report_out(report)
+    return report_with_actions_out(db, ctx, report)
+
+
+def report_with_actions_out(db: Session, ctx: CompanyContext, report: AnalysisReport) -> ReportOut:
+    """The report, its owner review, feedback, and whether a supplier message can follow."""
+    out = report_out(report)
+    out.review = report_review.review_out(db, report)
+    out.message_blocked_reason = report_review.message_blocked_reason(db, report)
+    out.feedback = report_review.feedback_out(db, ctx, report.id)
+    return out
 
 
 def latest_exposures(db: Session, order: Order) -> list[ExposureOut]:

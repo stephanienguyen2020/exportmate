@@ -1,4 +1,3 @@
-import re
 import uuid
 from datetime import datetime
 from typing import Annotated, Literal
@@ -6,11 +5,9 @@ from typing import Annotated, Literal
 from pydantic import Field, field_validator, model_validator
 
 from app.database.models import ReportKind
-from app.schemas.common import CamelCaseModel
+from app.schemas.common import CamelCaseModel, is_email_address
 
 MAX_REPORT_RECIPIENTS = 5
-# One address, no display name: what a person types into a "To" field.
-_EMAIL = re.compile(r"^[^@\s,;<>\"()]+@[^@\s,;<>\"()]+\.[A-Za-z]{2,}$")
 
 CellText = Annotated[str, Field(max_length=4000)]
 Tone = Literal["gap", "warn"]
@@ -119,7 +116,7 @@ class ReportEmailIn(CamelCaseModel):
         cleaned: list[str] = []
         for address in value:
             address = address.strip()
-            if len(address) > 254 or not _EMAIL.match(address):
+            if not is_email_address(address):
                 raise ValueError(f"Not an email address: {address[:60]}")
             if address.lower() not in (a.lower() for a in cleaned):
                 cleaned.append(address)

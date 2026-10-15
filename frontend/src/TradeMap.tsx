@@ -130,6 +130,8 @@ type SupplierGroup = {
   place: string | null;
   at: LonLat | null;
   supplies: string | null;
+  contactName: string | null;
+  contactEmail: string | null;
   documents: MapSupplier["documents"];
   rows: Row[];
 };
@@ -490,6 +492,8 @@ function TradeMapView({
         place: s.place,
         at: s.location ? lonLat(s.location) : null,
         supplies: s.supplies,
+        contactName: s.contactName ?? null,
+        contactEmail: s.contactEmail ?? null,
         documents: s.documents,
         rows: s.orderIds.map((id) => byId.get(id)!).filter(Boolean),
       }))
@@ -827,6 +831,8 @@ function TradeMapView({
           place: null,
           at: null,
           supplies: null,
+          contactName: null,
+          contactEmail: null,
           documents: null,
           rows: [],
         }
@@ -2866,6 +2872,8 @@ function SupplierForm({
   const [place, setPlace] = useState(record?.place ?? "");
   const [country, setCountry] = useState(record?.country ?? "");
   const [supplies, setSupplies] = useState(record?.supplies ?? "");
+  const [contactName, setContactName] = useState(record?.contactName ?? "");
+  const [contactEmail, setContactEmail] = useState(record?.contactEmail ?? "");
   const [documents, setDocuments] = useState<Record<string, DocumentDraft>>(
     () =>
       Object.fromEntries(
@@ -2916,6 +2924,8 @@ function SupplierForm({
       country: country || null,
       location: pin ? { latitude: pin.at[1], longitude: pin.at[0] } : null,
       supplies: supplies.trim() || null,
+      contactName: contactName.trim() || null,
+      contactEmail: contactEmail.trim() || null,
       documents: documentKinds
         .filter(({ kind }) => documents[kind].on)
         .map(({ kind }) => ({
@@ -2987,6 +2997,23 @@ function SupplierForm({
         value={supplies}
         onChange={(e) => setSupplies(e.target.value)}
         placeholder="Acacia plywood, rubberwood panels"
+      />
+      <label htmlFor="tm-supplier-contact-name">Contact person (optional)</label>
+      <input
+        id="tm-supplier-contact-name"
+        maxLength={200}
+        value={contactName}
+        onChange={(e) => setContactName(e.target.value)}
+        placeholder="Nguyen Van Minh"
+      />
+      <label htmlFor="tm-supplier-contact-email">Contact email (optional)</label>
+      <input
+        id="tm-supplier-contact-email"
+        type="email"
+        maxLength={254}
+        value={contactEmail}
+        onChange={(e) => setContactEmail(e.target.value)}
+        placeholder="sales@supplier.com"
       />
       <fieldset className="tm-doc-fields">
         <legend>Documents on file</legend>

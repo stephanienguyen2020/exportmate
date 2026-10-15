@@ -19,6 +19,11 @@ from app.database.models.order import Import, ImportRow, ImportStatus, Order, Or
 from app.database.models.playbook import PlaybookRevision, PlaybookRule
 from app.database.models.regulation import Regulation, RegulationDocument
 from app.database.models.report import ReportDraft, ReportKind
+from app.database.models.supplier_message import (
+    ReportFeedback,
+    SupplierMessage,
+    SupplierMessageStatus,
+)
 from app.database.models.trade_map import (
     CompanyCostSetting,
     CompanySite,
@@ -71,6 +76,7 @@ __all__ = [
     "Regulation",
     "RegulationDocument",
     "ReportDraft",
+    "ReportFeedback",
     "ReportKind",
     "ReportState",
     "RequirementLevel",
@@ -83,5 +89,7 @@ __all__ = [
     "SupplierDocument",
     "SupplierDocumentUpload",
     "SupplierDocumentUploadStatus",
+    "SupplierMessage",
+    "SupplierMessageStatus",
     "User",
 ]

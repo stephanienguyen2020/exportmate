@@ -5,7 +5,7 @@ from typing import Annotated, Literal
 from pydantic import Field, StringConstraints, field_validator, model_validator
 
 from app.database.models import ObservationConfidence, RequirementLevel, SiteKind
-from app.schemas.common import CamelCaseModel
+from app.schemas.common import CamelCaseModel, is_email_address
 from app.schemas.orders import OrderOut
 
 CheckStatus = Literal["on_file", "missing", "mismatch", "prepare", "check", "unknown"]
@@ -97,6 +97,8 @@ class MapSupplierOut(CamelCaseModel):
     country: str | None
     location: GeoPoint | None
     supplies: str | None
+    contact_name: str | None = None
+    contact_email: str | None = None  # supplier messages are pre-filled with it
     documents: list[SupplierDocumentOut] | None  # None: no supplier record to check against
     order_ids: list[str]
 
@@ -186,6 +188,15 @@ MAX_SUPPLIER_DOCUMENTS = 20
 MAX_STANDARDS = 10
 
 
+def _optional_email(value: str | None) -> str | None:
+    value = (value or "").strip()
+    if not value:
+        return None
+    if not is_email_address(value):
+        raise ValueError("Not an email address")
+    return value
+
+
 def _optional_text(value: str | None) -> str | None:
     """Blank optional text is stored as null."""
     if value is None:
@@ -235,11 +246,14 @@ class SupplierIn(CamelCaseModel):
     country: CountryCode | None = None
     location: GeoPointIn | None = None
     supplies: str | None = Field(default=None, max_length=1000)
+    contact_name: str | None = Field(default=None, max_length=200)
+    contact_email: str | None = Field(default=None, max_length=254)
     documents: list[SupplierDocumentIn] = Field(
         default_factory=list, max_length=MAX_SUPPLIER_DOCUMENTS
     )
 
-    _optional = field_validator("place", "supplies")(_optional_text)
+    _optional = field_validator("place", "supplies", "contact_name")(_optional_text)
+    _email = field_validator("contact_email")(_optional_email)
     _country = field_validator("country")(_country_code)
     _documents = field_validator("documents")(_one_document_per_kind)
 
@@ -255,11 +269,14 @@ class SupplierUpdate(CamelCaseModel):
     country: CountryCode | None = None
     location: GeoPointIn | None = None
     supplies: str | None = Field(default=None, max_length=1000)
+    contact_name: str | None = Field(default=None, max_length=200)
+    contact_email: str | None = Field(default=None, max_length=254)
     documents: list[SupplierDocumentIn] | None = Field(
         default=None, max_length=MAX_SUPPLIER_DOCUMENTS
     )
 
-    _optional = field_validator("place", "supplies")(_optional_text)
+    _optional = field_validator("place", "supplies", "contact_name")(_optional_text)
+    _email = field_validator("contact_email")(_optional_email)
     _country = field_validator("country")(_country_code)
     _documents = field_validator("documents")(_one_document_per_kind)
 
@@ -276,6 +293,8 @@ class SupplierOut(CamelCaseModel):
     country: str | None
     location: GeoPoint | None
     supplies: str | None
+    contact_name: str | None
+    contact_email: str | None
     documents: list[SupplierDocumentOut]
 
 

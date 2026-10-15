@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     resend_api_key: str = ""
     report_email_from: str = "ExportMate <reports@exportmate.app>"
     report_emails_per_hour: int = 20
+    # The public contact form (POST /contact) is emailed here; empty: the form is switched off.
+    contact_inbox: str = ""
+    contact_messages_per_hour: int = 5  # per visitor IP, counted per instance
     # AI service origin; company reports read its news alerts with the caller's token.
     ai_service_url: str = "http://127.0.0.1:8080"
     # Gemini on Vertex AI (core/gemini.py), in the project above.
@@ -53,6 +56,7 @@ class Settings(BaseSettings):
     # Per user per hour.
     supplier_document_uploads_per_hour: int = 60
     # Each one is an AI call.
+    supplier_message_drafts_per_hour: int = 30
     requirement_drafts_per_hour: int = 20
     hs_suggestions_per_hour: int = 60
     analysis_runs_per_hour: int = 60
