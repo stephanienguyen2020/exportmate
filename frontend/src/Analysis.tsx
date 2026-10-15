@@ -1,6 +1,6 @@
 // Phase 2/3 analysis screens for a signed-in company: the run panel on the Orders page and,
 // on an order's page, its latest analysis report, the owner's review, feedback, HS code
-// suggestions and supplier messages. Every number and quote comes from the backend.
+// suggestions, suggested solutions (Solutions.tsx) and supplier messages. Every number and quote comes from the backend.
 import { useEffect, useRef, useState } from "react";
 import {
   Check,
@@ -24,6 +24,7 @@ import {
 } from "./api";
 import { errorMessage } from "./auth";
 import { RegulationCitation } from "./Regulations";
+import Solutions from "./Solutions";
 import "./analysis.css";
 
 type Role = "owner" | "editor" | "viewer" | null;
@@ -329,6 +330,7 @@ export default function OrderAnalysis({
           />
         )}
       </section>
+      {report && <Solutions report={report} role={role} notify={notify} />}
       {report && (
         <SupplierMessages
           orderId={orderId}

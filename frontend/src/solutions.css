@@ -1,0 +1,110 @@
+/* Suggested solutions on an order's analysis report (Solutions.tsx). Shares the an-* look. */
+.an-solutions {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  margin-bottom: 22px;
+}
+.an-solutions h2 {
+  margin: 6px 0 0;
+  font-size: 22px;
+}
+.an-solutions p {
+  font-size: 12px;
+  line-height: 1.7;
+  color: #6f7f63;
+  margin: 0;
+}
+.sol-case {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+  min-width: 0;
+}
+.sol-case h3 {
+  font-size: 16px;
+  margin: 0;
+}
+.sol-case h3 small {
+  font-size: 11px;
+  color: var(--red);
+  font-weight: 400;
+  margin-left: 8px;
+}
+.sol-case .an-details summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sol-card {
+  border: 1px solid var(--line);
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  margin-top: 8px;
+}
+.sol-card.default {
+  border-color: #b9c7a9;
+  background: #fbfcf7;
+}
+.sol-card.expired {
+  background: #f6f4ef;
+}
+.sol-card.expired .sol-summary,
+.sol-card.expired ol {
+  color: var(--muted);
+}
+.an-solutions .sol-summary {
+  font-size: 13px;
+  color: var(--green);
+}
+.sol-expired {
+  color: var(--red) !important;
+  background: #f6e9e4;
+}
+.sol-notes {
+  display: grid;
+  gap: 8px;
+  font-size: 12px;
+  border-top: 1px dashed var(--line);
+  padding-top: 10px;
+  min-width: 0;
+}
+.sol-notes blockquote {
+  margin: 0;
+  padding: 8px 12px;
+  border-left: 3px solid #b9c7a9;
+  background: #f4f6ee;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.sol-notes blockquote small {
+  display: block;
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+.sol-notes form {
+  display: grid;
+  gap: 6px;
+}
+.sol-notes label {
+  font-size: 11px;
+  color: #7d8c70;
+}
+.sol-notes textarea {
+  border: 1px solid #d1d8c9;
+  padding: 9px 11px;
+  background: #fafbf5;
+  color: var(--green);
+  font-size: 12px;
+  line-height: 1.6;
+  resize: vertical;
+  width: 100%;
+  min-width: 0;
+}
+.sol-notes form .btn {
+  justify-self: start;
+}

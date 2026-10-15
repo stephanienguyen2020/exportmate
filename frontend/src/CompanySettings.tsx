@@ -221,6 +221,7 @@ const OBJECT_TYPES: [string, string][] = [
   ["analysis_report", "Analysis reports"],
   ["hs_code_suggestion", "HS code suggestions"],
   ["supplier_message", "Supplier messages"],
+  ["solution", "Suggested solutions"],
   ["report", "Shared reports"],
   ["supplier", "Suppliers"],
   ["supplier_document_upload", "Supplier certificates"],
