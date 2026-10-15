@@ -87,6 +87,7 @@ import { errorMessage } from "./auth";
 import ErrorBoundary from "./ErrorBoundary";
 import { MAX_UPLOAD_MB, validateOrderCsv } from "./order-csv";
 import CompanyRuleWatch from "./RuleWatch";
+import WorkspaceSearch from "./Search";
 import { CostWhy } from "./CostWhy";
 import {
   RuleBuilder,
@@ -794,6 +795,16 @@ function App() {
             </strong>
           </div>
           <div className="top-actions">
+            <WorkspaceSearch
+              live={live}
+              pages={nav as [string, string][]}
+              orders={orders}
+              rules={rules}
+              onNavigate={(path) => {
+                setMobile(false);
+                go(path);
+              }}
+            />
             <span className="demo-badge">
               {live ? "CONNECTED WORKSPACE" : "DEMO WORKSPACE"}
             </span>
