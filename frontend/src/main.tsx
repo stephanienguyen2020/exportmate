@@ -36,6 +36,7 @@ import {
   Newspaper,
   Map as MapIcon,
   ClipboardList,
+  CircleHelp,
 } from "lucide-react";
 import {
   initialOrders,
@@ -67,6 +68,7 @@ import {
   placeCode,
 } from "./account-store";
 import ChatPage, { ChatWidget } from "../ai/chat/Chat";
+import Tour, { tourDone } from "./Tour";
 import NewsWatchPage, { NewsHighlights } from "../ai/news/NewsWatch";
 import {
   api,
@@ -77,12 +79,25 @@ import {
   type Overview,
   type ImportPreview,
   type OrderDetail,
+  type RuleFields,
 } from "./api";
 import { errorMessage } from "./auth";
 import ErrorBoundary from "./ErrorBoundary";
 import { MAX_UPLOAD_MB, validateOrderCsv } from "./order-csv";
 import CompanyRuleWatch from "./RuleWatch";
+import {
+  RuleBuilder,
+  RuleConditionsEditor,
+  describeRule,
+  emptyRuleDraft,
+  ruleBody,
+} from "./Playbook";
 const RegulationsPage = lazy(() => import("./Regulations"));
+const OrderAnalysis = lazy(() => import("./Analysis"));
+const RunPanel = lazy(() =>
+  import("./Analysis").then((m) => ({ default: m.RunPanel })),
+);
+const CompanySettings = lazy(() => import("./CompanySettings"));
 const TradeMapPage = lazy(() => import("./TradeMap"));
 const ReportsPage = lazy(() => import("./Reports"));
 const nav = [
@@ -180,6 +195,15 @@ function App() {
       if (!signal.aborted) setLoading(false);
     }
   }
+  // After an analysis: statuses and counts change, but the page stays as it is.
+  async function refreshOrders() {
+    const [nextOrders, nextOverview] = await Promise.all([
+      api.orders(),
+      api.overview(),
+    ]);
+    setOrders(nextOrders);
+    setOverview(nextOverview);
+  }
   async function mutate(action: () => Promise<void>) {
     if (mutationRef.current) return;
     mutationRef.current = true;
@@ -261,6 +285,14 @@ function App() {
   );
   const [buyer, setBuyer] = useState(false);
   const [mobile, setMobile] = useState(false);
+  const [touring, setTouring] = useState(false);
+  // First visit: the tour opens once the workspace has loaded.
+  const tourOffered = useRef(false);
+  useEffect(() => {
+    if (tourOffered.current || (live && (loading || loadError))) return;
+    tourOffered.current = true;
+    if (!tourDone()) setTouring(true);
+  }, [live, loading, loadError]);
   const [toast, setToastState] = useState<{
     text: string;
     error: boolean;
@@ -286,6 +318,18 @@ function App() {
     return () => clearTimeout(t);
   }, [confirmDelete]);
   const [category, setCategory] = useState("Policy");
+  const [ruleFields, setRuleFields] = useState<RuleFields | null>(null);
+  const [newRule, setNewRule] = useState(emptyRuleDraft);
+  useEffect(() => {
+    if (!live || route !== "playbook" || ruleFields) return;
+    const controller = new AbortController();
+    // Without the fields, rules can still be written in words; the builder just stays hidden.
+    api
+      .ruleFields(controller.signal)
+      .then((fields) => !controller.signal.aborted && setRuleFields(fields))
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [live, route, ruleFields]);
   const [preview, setPreview] = useState<Order[]>([]);
   const [importErrors, setImportErrors] = useState<string[]>([]);
   const [fileName, setFileName] = useState("");
@@ -418,9 +462,8 @@ function App() {
       : names.join(" and ");
   const startDemo = () => {
     if (live) {
-      setToast(
-        "The rule-change simulation is available in the sample demo. Your server records are unchanged.",
-      );
+      // Signed-in companies analyse their own orders from the Orders page.
+      go("orders");
       return;
     }
     setOrders((v) => v.map((o) => ({ ...o, risk: false })));
@@ -532,7 +575,9 @@ function App() {
       setServerImport(null);
       setPreview([]);
       setFileName("");
-      setToast(`${result.ordersCreated} orders imported. Awaiting analysis.`);
+      setToast(
+        `${result.ordersCreated} orders imported. Analyse them from the Orders page.`,
+      );
       await refreshWorkspace();
     }
     setPreview([]);
@@ -659,6 +704,7 @@ function App() {
                 }
                 href={"#/workspace/" + path}
                 key={path}
+                data-tour={"nav-" + path}
                 onClick={() => path === "orders" && setFilter("All orders")}
               >
                 <Icon size={18} />
@@ -735,6 +781,7 @@ function App() {
             {!live && (
               <div
                 className="perspective"
+                data-tour="perspective"
                 role="group"
                 aria-label="See the demo as the maker or the buyer"
               >
@@ -754,6 +801,18 @@ function App() {
                 </button>
               </div>
             )}
+            <button
+              className="icon-btn"
+              data-tour="help"
+              aria-label="Show the workspace tour"
+              title="Show the workspace tour"
+              onClick={() => {
+                setMobile(false);
+                setTouring(true);
+              }}
+            >
+              <CircleHelp size={18} />
+            </button>
             <button
               className="notification icon-btn"
               aria-label="View alerts"
@@ -840,7 +899,8 @@ function App() {
                         </button>
                       )}
                       <button className="text-link" onClick={startDemo}>
-                        Run demo <ArrowUpRight size={18} />
+                        {live ? "Analyse orders" : "Run demo"}{" "}
+                        <ArrowUpRight size={18} />
                       </button>
                     </div>
                   </section>
@@ -1010,7 +1070,7 @@ function App() {
                       </h3>
                       <p>
                         {live
-                          ? "Each order's document checklist for its market is on the trade map. Prepare a compliance report from an order's page."
+                          ? "Analyse your orders from the Orders page to check each one against its market checklist, your cost settings and your playbook. Each order's page shows what was found."
                           : exposed.length
                             ? `${listNames(exposedSuppliers)} must provide ${sampleObligation.requirement} records for ${plural(exposed.length, "EU-bound order")}.`
                             : "Run the sample rule change to see how ExportMate connects a new obligation to your open orders."}
@@ -1113,6 +1173,16 @@ function App() {
                       </Button>
                     }
                   />
+                  {live && (
+                    <Suspense fallback={null}>
+                      <RunPanel
+                        editable={editable}
+                        pending={pendingOrders.length}
+                        onFinished={refreshOrders}
+                        notify={setToast}
+                      />
+                    </Suspense>
+                  )}
                   <div className="summary-strip">
                     <span>
                       <b>{orders.length}</b> open orders
@@ -1244,9 +1314,41 @@ function App() {
                       </div>
                     </section>
                   )}
+                  {live && serverDetail && (
+                    <Suspense
+                      fallback={
+                        <section className="panel" role="status">
+                          Loading the analysis…
+                        </section>
+                      }
+                    >
+                      <OrderAnalysis
+                        key={serverDetail.order.id}
+                        orderId={serverDetail.order.id}
+                        hsCode={serverDetail.order.hsCode}
+                        latestReportId={serverDetail.latestReportId ?? null}
+                        role={account?.role ?? null}
+                        notify={setToast}
+                        onChanged={async () => {
+                          const id = serverDetail.order.id;
+                          const [next] = await Promise.all([
+                            api.detail(id),
+                            refreshOrders(),
+                          ]);
+                          // Only if the visitor is still on this order.
+                          if (
+                            location.hash.endsWith(
+                              "/orders/" + encodeURIComponent(id),
+                            )
+                          )
+                            setServerDetail(next);
+                        }}
+                      />
+                    </Suspense>
+                  )}
                   {live ? (
                     <section className="panel">
-                      <h2>Source and analysis</h2>
+                      <h2>Source</h2>
                       {detailError ? (
                         <p role="alert">{detailError}</p>
                       ) : !serverDetail ? (
@@ -1255,8 +1357,8 @@ function App() {
                         <>
                           <p>
                             The document checklist for this order's market is
-                            on the trade map, and the compliance report above
-                            collects it with the official texts.
+                            also on the trade map, and the compliance report
+                            above collects it with the official texts to share.
                           </p>
                           {serverDetail.source ? (
                             <>
@@ -1472,7 +1574,7 @@ function App() {
               )}
               {route.split("/")[0] === "regulations" && (
                 <Suspense fallback={<section className="panel" role="status">Loading regulations…</section>}>
-                  <RegulationsPage key={route} live={live} editable={editable} path={route.slice("regulations".length)} />
+                  <RegulationsPage key={route} live={live} editable={editable} owner={account?.role === "owner"} path={route.slice("regulations".length)} />
                 </Suspense>
               )}
               {route === "news" && (
@@ -1738,9 +1840,21 @@ function App() {
                         <>
                           <p>
                             {live
-                              ? "Checked and ready. Imported orders show as awaiting analysis on the Orders page; their market checklists are on the trade map."
+                              ? "Checked and ready. Imported orders wait for analysis: start it from the Orders page. Their market checklists are on the trade map."
                               : `Checked in your browser. On import, each order is checked against the sample rule change (${sampleObligation.title.toLowerCase()}).`}
                           </p>
+                          {preview.some((o) => !o.hsCode) && (
+                            <p className="notice" role="note">
+                              {plural(
+                                preview.filter((o) => !o.hsCode).length,
+                                "row",
+                              )}{" "}
+                              without an HS code.{" "}
+                              {live
+                                ? "They import as needing data; on each order's page you can ask for a code suggestion."
+                                : "Their market checks need one."}
+                            </p>
+                          )}
                           <div className="table-scroll">
                             <table>
                               <thead>
@@ -1749,6 +1863,7 @@ function App() {
                                   <th>Product</th>
                                   <th>Destination</th>
                                   <th>Value</th>
+                                  <th>HS code</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -1758,6 +1873,15 @@ function App() {
                                     <td>{o.product}</td>
                                     <td>{o.destination}</td>
                                     <td>{money(o.value, o.currency)}</td>
+                                    <td>
+                                      {o.hsCode || (
+                                        <small className="muted">
+                                          {live
+                                            ? "No HS code: you can ask for a suggestion after import"
+                                            : "No HS code: the order will need one"}
+                                        </small>
+                                      )}
+                                    </td>
                                   </tr>
                                 ))}
                               </tbody>
@@ -1835,7 +1959,7 @@ function App() {
                   <div className="notice">
                     <Settings2 size={18} />
                     {live
-                      ? "Rules are saved to your company playbook. The ExportMate assistant follows the ones switched on when it advises you; order statuses don't use them yet."
+                      ? "Rules are saved to your company playbook. The ExportMate assistant follows the ones switched on when it advises you. Analysis also checks every switched-on rule with conditions against each order."
                       : "Rules are saved in this browser. The ExportMate assistant follows the ones switched on when it advises you."}
                   </div>
                   <div className="playbook-grid">
@@ -1855,8 +1979,49 @@ function App() {
                           key={r.id}
                         >
                           <div>
-                            <span className="eyebrow">{r.category}</span>
+                            <span className="eyebrow">
+                              {r.category}
+                              {live && (
+                                <span
+                                  className={"pb-badge" + (r.checked ? "" : " off")}
+                                >
+                                  {r.checked ? "CHECKED" : "NOT CHECKED"}
+                                </span>
+                              )}
+                            </span>
                             <p>{r.text}</p>
+                            {live && r.checked && (
+                              <p className="pb-conditions">
+                                {describeRule(r, ruleFields)}
+                              </p>
+                            )}
+                            {live && editable && ruleFields && (
+                              <RuleConditionsEditor
+                                rule={r}
+                                fields={ruleFields}
+                                currency={account?.company?.currency || "USD"}
+                                busy={busy}
+                                onSave={async (body) => {
+                                  let saved = false;
+                                  await mutate(async () => {
+                                    const updated = await api.updateRule(
+                                      r.id,
+                                      body,
+                                    );
+                                    setRules((v) =>
+                                      v.map((x) => (x.id === r.id ? updated : x)),
+                                    );
+                                    setToast(
+                                      updated.checked
+                                        ? "Conditions saved. Analysis checks this rule from now on."
+                                        : "Conditions removed. The rule is stored only.",
+                                    );
+                                    saved = true;
+                                  });
+                                  return saved;
+                                }}
+                              />
+                            )}
                           </div>
                           <button
                             className={"toggle " + (r.enabled ? "on" : "")}
@@ -1939,15 +2104,30 @@ function App() {
                         e.preventDefault();
                         if (!ruleText.trim()) return;
                         if (live) {
+                          let checks;
+                          try {
+                            checks = ruleFields
+                              ? ruleBody(newRule, ruleFields)
+                              : { when: null, then: null };
+                          } catch (error) {
+                            setToast((error as Error).message, true);
+                            return;
+                          }
                           void mutate(async () => {
                             const rule = await api.addRule({
                               text: ruleText.trim(),
                               category,
                               enabled: true,
+                              ...checks,
                             });
                             setRules((v) => [...v, rule]);
                             setRuleText("");
-                            setToast("Rule saved to your playbook.");
+                            setNewRule(emptyRuleDraft());
+                            setToast(
+                              rule.checked
+                                ? "Rule saved. Analysis checks it on every order."
+                                : "Rule saved to your playbook.",
+                            );
                           });
                           return;
                         }
@@ -1987,6 +2167,16 @@ function App() {
                         onChange={(e) => setRuleText(e.target.value)}
                         placeholder="For example: Tell me if an order’s margin falls below 8%."
                       />
+                      {live && ruleFields && (
+                        <RuleBuilder
+                          idPrefix="new-rule"
+                          fields={ruleFields}
+                          draft={newRule}
+                          currency={account?.company?.currency || "USD"}
+                          disabled={busy || !editable}
+                          onChange={setNewRule}
+                        />
+                      )}
                       <Button
                         type="submit"
                         disabled={busy || !editable || !ruleText.trim()}
@@ -2008,6 +2198,11 @@ function App() {
                     if (me) setAccount(me);
                   }}
                 />
+              )}
+              {route === "account" && live && account && (
+                <Suspense fallback={null}>
+                  <CompanySettings role={account.role} notify={setToast} />
+                </Suspense>
               )}
               {live && route.startsWith("orders/") && !detail && (
                 <p role="status">{detailError || "Loading order…"}</p>
@@ -2033,12 +2228,13 @@ function App() {
             <span>Trade, with perspective.</span>
             <span>
               {live
-                ? "COMPANY DATA · EXPOSURE ANALYSIS PENDING"
+                ? "COMPANY DATA · ANALYSED AGAINST YOUR MARKET CHECKLISTS"
                 : "FICTIONAL DEMO DATA · NO LIVE MONITORING"}
             </span>
           </footer>
         </main>
       </div>
+      {touring && <Tour live={live} onClose={() => setTouring(false)} />}
       {toast && (
         <div
           className={"toast" + (toast.error ? " error" : "")}

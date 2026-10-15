@@ -51,17 +51,17 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
 | **Playbook** | | |
 | `GET /playbook/rules` | viewer | Every workspace load; `ai/server` chat (`get_playbook`) |
 | `POST /playbook/rules` | editor | Playbook: add rule |
-| `PATCH /playbook/rules/{id}` | editor | Playbook: on/off toggle |
+| `PATCH /playbook/rules/{id}` | editor | Playbook: on/off toggle, "Save conditions" |
 | `DELETE /playbook/rules/{id}` | editor | Playbook: delete |
-| `GET /playbook/fields` | viewer | Not yet (playbook rule form) |
+| `GET /playbook/fields` | viewer | Playbook: WHEN/THEN builder (add rule, "Add conditions") |
 | **Trade map, suppliers and sites** | | |
 | `GET /trade-map` | viewer | Trade map; `ai/server` chat (`query_orders`) |
 | `GET /trade-map/compare` | viewer | Trade map: "What if" panel |
 | `POST /suppliers` | editor | Trade map: "Add supplier" / "Add a supplier record" |
 | `PATCH /suppliers/{id}` | editor | Trade map: "Edit supplier" |
 | `DELETE /suppliers/{id}` | editor | Trade map: "Delete supplier" |
-| `POST /suppliers/{id}/documents` | editor | Not yet (supplier panel) |
-| `POST /supplier-documents/{id}/confirm` | editor | Not yet (supplier panel) |
+| `POST /suppliers/{id}/documents` | editor | Trade map supplier panel: "Upload certificate" |
+| `POST /supplier-documents/{id}/confirm` | editor | Trade map supplier panel: "Confirm certificate" |
 | `POST /sites` | editor | Trade map: "Add site" |
 | `PATCH /sites/{id}` | editor | Trade map: "Edit site" |
 | `DELETE /sites/{id}` | editor | Trade map: "Delete site" |
@@ -71,18 +71,18 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
 | `GET /regulation-documents/{id}/file` | viewer | Regulation library |
 | `GET /regulations` | viewer | Regulation library |
 | `GET /regulations/{id}` | viewer | Regulation library |
-| `POST /regulation-documents/{id}/requirements` | editor | Not yet (requirement review) |
-| `GET /regulations/{id}/requirements` | viewer | Not yet (requirement review, regulation page) |
-| `PATCH /market-requirements/{id}` | owner | Not yet (requirement review) |
+| `POST /regulation-documents/{id}/requirements` | editor | Regulation page: "Draft requirements" (company regulations) |
+| `GET /regulations/{id}/requirements` | viewer | Regulation page: market requirements of a version |
+| `PATCH /market-requirements/{id}` | owner | Regulation page: requirement Edit, Approve, Reject |
 | **Analysis** | | |
-| `GET /company/cost-settings` | viewer | Not yet (settings, report cost lines) |
-| `PATCH /company/cost-settings` | owner | Not yet (settings) |
-| `POST /runs` | editor | Not yet ("Analyse", replacing the simulated five-agent review) |
-| `GET /runs/{id}` | viewer | Not yet (run panel) |
-| `GET /reports/{id}` | viewer | Not yet (report view) |
-| `GET /orders/{id}/hs-suggestions` | viewer | Not yet (order detail, `needs_data`) |
-| `POST /orders/{id}/hs-suggestions` | editor | Not yet (order detail) |
-| `POST /hs-suggestions/{id}/accept`, `/reject` | editor | Not yet (order detail) |
+| `GET /company/cost-settings` | viewer | Account: cost settings |
+| `PATCH /company/cost-settings` | owner | Account: "Save cost settings", "Reset to default" |
+| `POST /runs` | editor | Orders: "Analyse orders"; order page: "Analyse this order" / "Analyse again" |
+| `GET /runs/{id}` | viewer | Not used: `POST /runs` returns the finished run |
+| `GET /reports/{id}` | viewer | Order page: analysis report (`latestReportId`) |
+| `GET /orders/{id}/hs-suggestions` | viewer | Order page of an order without an HS code |
+| `POST /orders/{id}/hs-suggestions` | editor | Order page: "Suggest HS code" |
+| `POST /hs-suggestions/{id}/accept`, `/reject` | editor | Order page: "Accept", "Reject" |
 | **Shareable reports** | | |
 | `POST /report-drafts` | viewer | Order detail: "Prepare report"; Reports: "Generate company report" |
 | `GET /report-drafts` | viewer | Reports: your reports |
@@ -91,17 +91,17 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
 | `GET /report-drafts/{id}/pdf` | viewer (author) | Report editor: "Preview PDF", "Download PDF" |
 | `POST /report-drafts/{id}/email` | editor (author) | Report editor: "Email report" |
 | **Supplier messages and report actions** | | |
-| `POST /reports/{id}/review` | owner | Not yet (report view: "Reviewed: OK to contact the supplier") |
-| `POST /reports/{id}/feedback` | viewer | Not yet (report view) |
-| `POST /supplier-messages` | editor | Not yet (order detail: "Draft email to supplier") |
-| `GET /orders/{id}/supplier-messages` | viewer | Not yet (order detail) |
-| `GET /supplier-messages/{id}` | viewer | Not yet (message editor) |
-| `PATCH /supplier-messages/{id}` | editor | Not yet (message editor) |
-| `POST /supplier-messages/{id}/approve` | owner | Not yet (message editor: "Approve") |
-| `POST /supplier-messages/{id}/send` | owner | Not yet (message editor: "Send") |
+| `POST /reports/{id}/review` | owner | Order page: "Reviewed: OK to contact the supplier" |
+| `POST /reports/{id}/feedback` | viewer | Order page: "Useful" / "Not useful" |
+| `POST /supplier-messages` | editor | Order page: "Draft email to supplier" |
+| `GET /orders/{id}/supplier-messages` | viewer | Order page: supplier messages |
+| `GET /supplier-messages/{id}` | viewer | Not used: the order's list has every message |
+| `PATCH /supplier-messages/{id}` | editor | Order page message: "Save changes" |
+| `POST /supplier-messages/{id}/approve` | owner | Order page message: "Approve" |
+| `POST /supplier-messages/{id}/send` | owner | Order page message: "Send" (one `Idempotency-Key` per message) |
 | **Audit log and contact** | | |
-| `GET /audit-events` | owner | Not yet (audit log screen) |
-| `POST /contact` | none (rate limited) | Not yet (landing page "Get in touch" saves to the browser only) |
+| `GET /audit-events` | owner | Account: activity log (filters, "Load more") |
+| `POST /contact` | none (rate limited) | Landing page "Get in touch" (no token) |
 | [Planned](#planned) | | Later and phase 4 |
 
 "Every workspace load" means `refreshWorkspace()` in `frontend/src/main.tsx`. It runs on entering the workspace, after a commit, and on "Retry". It calls `GET /me`, then `GET /orders`, `GET /playbook/rules` and `GET /overview` in parallel. The browser-only demo session calls none of these: it uses localStorage.
@@ -201,9 +201,10 @@ On every workspace load, `api.orders()` reads every page (`limit=200`) until `ne
   "source": {"importId": "…", "rowNumber": 2, "rowHash": "…",
              "raw": {"id": "PO-2291", "product": "…", "value": "24000", "…": "…"}},
   "exposures": [{"reportId": "…", "requirementKey": "geolocation", "title": "Plot-level geolocation",
-                  "status": "missing", "note": "Not on file from Binh Phu Wood.", "source": {…}}]}}
+                  "status": "missing", "note": "Not on file from Binh Phu Wood.", "source": {…}}],
+  "latestReportId": "…"}}
 ```
-`source` is the CSV row the order came from, or `null` for seeded orders. `exposures` are the `missing` and `mismatch` findings of the order's latest report (`GET /reports/{id}`); empty before its first run.
+`source` is the CSV row the order came from, or `null` for seeded orders. `exposures` are the `missing` and `mismatch` findings of the order's latest report (`GET /reports/{id}`); empty before its first run. `latestReportId` is that report (also for an order in the clear, which has no exposures), or `null` before its first run.
 Opening `#/workspace/orders/<id>` in a live session.
 
 ## CSV import

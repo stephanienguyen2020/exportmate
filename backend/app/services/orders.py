@@ -56,10 +56,12 @@ def get_order_detail(db: Session, ctx: CompanyContext, external_id: str) -> Orde
         source = SourceRowOut(
             import_id=row.import_id, row_number=row.row_number, raw=row.raw, row_hash=row.row_hash
         )
+    latest_report_id, exposures = analysis_service.latest_exposures(db, order)
     return OrderDetailOut(
         order=OrderOut.from_order(order),
         source=source,
-        exposures=analysis_service.latest_exposures(db, order),
+        exposures=exposures,
+        latest_report_id=latest_report_id,
     )
 
 

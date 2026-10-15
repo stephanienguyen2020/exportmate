@@ -83,6 +83,16 @@ async function fixture(page: Page, role = "owner", signedIn = true) {
         sourcesCheckedAt: null,
       };
     else if (path === "/regulations") data = records;
+    else if (path.endsWith("/requirements"))
+      data = {
+        regulationId: path.split("/")[2],
+        documentId: "doc-1",
+        versionNumber: 1,
+        previousVersionNumber: null,
+        inForce: false,
+        requirements: [],
+        changes: [],
+      };
     else if (path.startsWith("/regulations/")) {
       const record = records.find((item) => item.id === path.split("/")[2]);
       data = record && {

@@ -124,6 +124,185 @@ const tradeMap = {
   homeCountryIds: [],
   checkRadiusKm: 25,
 };
+const citation = tradeMap.orders[0].checks[0].source;
+const analysisReport = () => ({
+  id: "report-1",
+  runId: "run-1",
+  state: "needs_human_review",
+  orderStatus: "exposed",
+  blocked: false,
+  createdAt: "2026-10-15T08:00:00Z",
+  order,
+  orderSource: { importId: "import-1", rowNumber: 2 },
+  market: "EU",
+  findings: [
+    { ...tradeMap.orders[0].checks[0] },
+    {
+      requirementKey: "legality",
+      title: "Timber legality evidence",
+      level: "supplier",
+      status: "on_file",
+      note: "VNTLAS dossier",
+      source: citation,
+    },
+  ],
+  missingData: [],
+  daysUntilShip: 98,
+  costLines: [
+    {
+      kind: "delay",
+      label: "Possible delay while the records are gathered",
+      requirementKey: "eudr-geolocation",
+      quantity: 14,
+      unitAmountMinor: 8571,
+      baseAmountMinor: null,
+      ratePercent: null,
+      amountMinor: 119994,
+      currency: "EUR",
+      formula: "14 days × EUR 85.71",
+      basis: [{ type: "company_setting", label: "Your delay cost per day", settingKey: "delay_per_day" }],
+    },
+  ],
+  costTotals: { EUR: 119994 },
+  problemCostTotals: { EUR: 119994 },
+  unpricedCosts: [
+    {
+      kind: "duty",
+      label: "Import duty",
+      requirementKey: "duty",
+      reason: "The rate changes on 2027-01-01, on or before the ship date: recheck it.",
+      source: citation,
+    },
+  ],
+  rulesFired: [
+    {
+      ruleId: "rule-1",
+      text: "Server policy",
+      action: "owner_review",
+      note: "Check with the buyer first",
+      conditions: ["Market is European Union"],
+    },
+  ],
+  rulesNotChecked: 0,
+  suggestedAction: {
+    kind: "request_documents",
+    text: "Ask Server Supplier for the plot geolocation.",
+    requestBy: "2026-12-10",
+  },
+  audit: { passed: true, problems: [] },
+  review: null,
+  messageBlockedReason: "A playbook rule sent this report to the owner. It needs their review first.",
+  feedback: { useful: 0, notUseful: 0, mine: null, myNote: null },
+});
+const runSteps = ["relevance", "exposure", "cost", "playbook", "plan", "auditor"].map(
+  (name) => ({ name, summary: `${name} done` }),
+);
+const runOf = (reports: unknown[]) => ({
+  id: "run-1",
+  status: "done",
+  orderCount: reports.length,
+  steps: runSteps,
+  playbookRevision: 3,
+  costSettings: [],
+  error: null,
+  createdAt: "2026-10-15T08:00:00Z",
+  finishedAt: "2026-10-15T08:00:02Z",
+  reports,
+});
+const noCode = { ...order, id: "NOCODE-1", hsCode: "", product: "Oak dining chair" };
+const suggestion = (id: string, hsCode: string) => ({
+  id,
+  hsCode,
+  description: `Official wording of ${hsCode}`,
+  reason: `Why ${hsCode} fits`,
+  basedOn: [
+    { type: "order", ref: "PO-1", text: "Oak chair", hsCode: "9401.61" },
+    { type: "heading", ref: hsCode, text: "Wooden furniture" },
+  ],
+  status: "pending",
+  createdAt: "2026-10-15T08:00:00Z",
+  decidedAt: null,
+});
+const ruleFields = {
+  fields: [
+    {
+      key: "market",
+      label: "Market",
+      type: "text",
+      ops: { equals: "is", not_equals: "is not", contains: "contains" },
+      options: [{ value: "EU", label: "European Union" }],
+    },
+    {
+      key: "days_until_ship",
+      label: "Days until ship date",
+      type: "number",
+      ops: { less_than: "less than", greater_than: "more than", equals: "is" },
+      options: null,
+    },
+    {
+      key: "estimated_cost",
+      label: "Estimated cost of the problems (without duties)",
+      type: "money",
+      ops: { less_than: "less than", greater_than: "more than" },
+      options: null,
+    },
+  ],
+  actions: {
+    flag: "Add a note to the report",
+    owner_review: "Send the report to the owner (needs human review)",
+    block: "Block messages from this report",
+  },
+  noValueOps: ["is_empty", "is_not_empty"],
+};
+const costSetting = (key: string, label: string, unit: string, value: number) => ({
+  key,
+  label,
+  unit,
+  value,
+  source: "default",
+  defaultUnit: unit,
+  defaultValue: value,
+});
+const requirement = (id: string, title: string, quoteVerified: boolean) => ({
+  id,
+  marketCode: "EU",
+  requirementKey: id,
+  title,
+  level: "supplier",
+  documentKind: "legality",
+  acceptedStandards: [],
+  form: null,
+  hsPrefixes: ["9403"],
+  why: `${title} applies to wooden furniture.`,
+  sourceQuote: `Quote for ${title}.`,
+  quoteVerified,
+  effectiveOn: null,
+  dutyRatePercent: null,
+  status: "draft",
+  shared: false,
+  regulationDocumentId: "doc-c1",
+  reviewedAt: null,
+});
+const companyRegulation = {
+  id: "reg-company",
+  title: "Buyer timber policy",
+  officialId: null,
+  shared: false,
+  versionCount: 1,
+  createdAt: "2026-10-14T08:00:00Z",
+};
+const companyDocument = {
+  id: "doc-c1",
+  title: "Buyer timber policy 2026",
+  filename: "policy.pdf",
+  contentType: "application/pdf",
+  sizeBytes: 2048,
+  checksum: "abc",
+  sourceUrl: null,
+  regulationId: "reg-company",
+  versionNumber: 1,
+  createdAt: "2026-10-14T08:00:00Z",
+};
 async function fixture(
   page: Page,
   options: {
@@ -134,6 +313,7 @@ async function fixture(
 ) {
   const requests: {
     path: string;
+    query: string;
     method: string;
     body: any;
     auth: string | undefined;
@@ -144,6 +324,16 @@ async function fixture(
   ];
   let committed = false;
   const reports = new Map<string, any>();
+  const report: any = analysisReport();
+  const messages: any[] = [];
+  let suggestions: any[] = [];
+  let noCodeOrder: any = { ...noCode, status: "needs_data" };
+  let noCodeReport: string | null = null;
+  let settings = [
+    costSetting("delay_per_day", "Delay, per day", "USD", 35000),
+    costSetting("supplier_lead_days", "Supplier lead time", "days", 14),
+  ];
+  let requirements: any[] = [];
   let me = structuredClone(account);
   if (options.viewer) me.role = "viewer";
   if (options.onboarding) {
@@ -163,6 +353,7 @@ async function fixture(
     }
     requests.push({
       path,
+      query: url.search,
       method,
       body,
       auth: request.headers().authorization,
@@ -222,7 +413,191 @@ async function fixture(
           rowHash: "hash",
         },
         exposures: [],
+        latestReportId: "report-1",
       };
+    else if (path === "/orders/NOCODE-1")
+      data = {
+        order: noCodeOrder,
+        source: null,
+        exposures: [],
+        latestReportId: noCodeReport,
+      };
+    else if (path === "/runs" && method === "POST")
+      data = runOf([
+        {
+          id: "report-1",
+          orderId: "SERVER-1",
+          state: "needs_human_review",
+          orderStatus: "exposed",
+          blocked: false,
+          costTotals: { EUR: 119994 },
+        },
+      ]);
+    else if (path === "/reports/report-1") data = report;
+    else if (path === "/reports/report-2")
+      data = {
+        ...analysisReport(),
+        id: "report-2",
+        order: noCodeOrder,
+        state: "pass",
+        orderStatus: "clear",
+        findings: [],
+        costLines: [],
+        costTotals: {},
+        unpricedCosts: [],
+        rulesFired: [],
+        suggestedAction: { kind: "none", text: "Nothing to do for NOCODE-1.", requestBy: null },
+        messageBlockedReason: "Nothing is missing, so there is nothing to ask the supplier.",
+      };
+    else if (path === "/reports/report-1/review") {
+      report.review = {
+        reviewedBy: { id: "user-1", name: "Test Owner" },
+        reviewedAt: "2026-10-15T09:00:00Z",
+        note: body.note,
+      };
+      report.messageBlockedReason = null;
+      data = report;
+    } else if (path === "/reports/report-1/feedback")
+      data = { useful: body.useful ? 1 : 0, notUseful: body.useful ? 0 : 1, mine: body.useful, myNote: body.note };
+    else if (path === "/orders/SERVER-1/supplier-messages") data = messages;
+    else if (path === "/supplier-messages" && method === "POST") {
+      const message = {
+        id: "msg-1",
+        reportId: body.reportId,
+        orderId: "SERVER-1",
+        supplierId: "supplier-1",
+        status: "draft",
+        recipient: "sales@server-supplier.example",
+        subject: "SERVER-1: plot geolocation",
+        body: "Hello,\nPlease send the plot geolocation for SERVER-1.",
+        createdBy: { id: "user-1", name: "Test Owner" },
+        createdAt: "2026-10-15T09:01:00Z",
+        approvedBy: null,
+        approvedAt: null,
+        approvedByAuthor: false,
+        sentAt: null,
+        sandbox: null,
+        error: null,
+      };
+      messages.unshift(message);
+      await route.fulfill({ status: 201, json: { data: message, meta } });
+      return;
+    } else if (path === "/supplier-messages/msg-1") {
+      const { saveRecipientToSupplier: _, ...changes } = body;
+      Object.assign(messages[0], changes, { status: "draft" });
+      data = messages[0];
+    } else if (path === "/supplier-messages/msg-1/approve") {
+      Object.assign(messages[0], {
+        status: "approved",
+        approvedBy: { id: "user-1", name: "Test Owner" },
+        approvedAt: "2026-10-15T09:02:00Z",
+        approvedByAuthor: true,
+      });
+      data = messages[0];
+    } else if (path === "/supplier-messages/msg-1/send") {
+      Object.assign(messages[0], {
+        status: "sent",
+        sentAt: "2026-10-15T09:03:00Z",
+        sandbox: true,
+      });
+      data = messages[0];
+    } else if (path === "/orders/NOCODE-1/hs-suggestions") {
+      if (method === "POST") {
+        suggestions = [suggestion("hs-1", "9403.60"), suggestion("hs-2", "9401.61")];
+        await route.fulfill({ status: 201, json: { data: suggestions, meta } });
+        return;
+      }
+      data = suggestions;
+    } else if (path === "/hs-suggestions/hs-2/reject") {
+      suggestions[1] = { ...suggestions[1], status: "rejected" };
+      data = suggestions[1];
+    } else if (path === "/hs-suggestions/hs-1/accept") {
+      suggestions[0] = { ...suggestions[0], status: "accepted" };
+      noCodeOrder = { ...noCodeOrder, hsCode: "9403.60", status: "clear" };
+      noCodeReport = "report-2";
+      data = {
+        suggestion: suggestions[0],
+        order: noCodeOrder,
+        run: runOf([
+          {
+            id: "report-2",
+            orderId: "NOCODE-1",
+            state: "pass",
+            orderStatus: "clear",
+            blocked: false,
+            costTotals: {},
+          },
+        ]),
+      };
+    } else if (path === "/playbook/fields") data = ruleFields;
+    else if (path === "/company/cost-settings") {
+      if (method === "PATCH")
+        settings = settings.map((s) => {
+          const change = body.settings.find((c: any) => c.key === s.key);
+          if (!change) return s;
+          return change.value === null
+            ? { ...s, value: s.defaultValue, unit: s.defaultUnit, source: "default" }
+            : { ...s, value: change.value, unit: change.unit ?? s.unit, source: "company_setting" };
+        });
+      data = settings;
+    } else if (path === "/audit-events") {
+      const first = !url.searchParams.has("cursor");
+      data = [
+        {
+          id: first ? "ev-1" : "ev-2",
+          action: first ? "supplier_message.sent" : "import.committed",
+          objectType: first ? "supplier_message" : "import",
+          objectId: first ? "msg-1" : "import-1",
+          data: first ? { sandbox: true } : { orders: 1 },
+          user: { id: "user-1", name: "Test Owner", email: "owner@example.com" },
+          requestId: "req-1",
+          createdAt: "2026-10-15T09:03:00Z",
+        },
+      ];
+      meta = first ? { nextCursor: "page-2" } : {};
+    } else if (path === "/regulations") data = [{ ...companyRegulation, latestVersion: companyDocument }];
+    else if (path === "/regulations/reg-company")
+      data = { ...companyRegulation, latestVersion: companyDocument, versions: [companyDocument] };
+    else if (path === "/regulations/reg-company/requirements") {
+      const decided = requirements.length > 0 && requirements.every((r) => r.status !== "draft");
+      data = {
+        regulationId: "reg-company",
+        documentId: "doc-c1",
+        versionNumber: 1,
+        previousVersionNumber: null,
+        inForce: decided && requirements.some((r) => r.status === "reviewed"),
+        requirements,
+        changes: [],
+      };
+    } else if (path === "/regulation-documents/doc-c1/requirements") {
+      requirements = [
+        requirement("req-1", "Legality evidence", true),
+        requirement("req-2", "Species list", false),
+      ];
+      data = {
+        regulationId: "reg-company",
+        documentId: "doc-c1",
+        versionNumber: 1,
+        previousVersionNumber: null,
+        inForce: false,
+        requirements,
+        changes: [],
+        readAs: "text",
+        sectionsSelected: false,
+        dropped: { quote_not_in_document: 1 },
+      };
+    } else if (path.startsWith("/market-requirements/")) {
+      const id = path.split("/").pop();
+      requirements = requirements.map((r) =>
+        r.id === id
+          ? { ...r, ...body, quoteVerified: body.sourceQuote ? true : r.quoteVerified }
+          : r,
+      );
+      data = requirements.find((r) => r.id === id);
+    } else if (path === "/contact") {
+      await route.fulfill({ status: 202, json: { data: { received: true }, meta } });
+      return;
+    }
     else if (path === "/report-drafts" && method === "POST") {
       const id = `r-${reports.size + 1}`;
       const title =
@@ -273,7 +648,7 @@ async function fixture(
     else if (path === "/trade-map") data = tradeMap;
     else if (path === "/playbook/rules") {
       if (method === "POST") {
-        const rule = { ...body, id: "rule-2" };
+        const rule = { ...body, id: "rule-2", checked: !!body.when };
         rules.push(rule);
         data = rule;
       } else data = rules;
@@ -284,7 +659,9 @@ async function fixture(
         data = { deleted: true };
       } else {
         rules = rules.map((rule) =>
-          rule.id === id ? { ...rule, ...body } : rule,
+          rule.id === id
+            ? { ...rule, ...body, ...("when" in body ? { checked: !!body.when } : {}) }
+            : rule,
         );
         data = rules.find((rule) => rule.id === id);
       }
@@ -709,4 +1086,313 @@ test("a failed change shows an error toast, not a success one", async ({
   const toast = page.getByRole("alert").filter({ hasText: "Rule text is too long." });
   await expect(toast).toBeVisible();
   await expect(toast).toHaveClass(/error/);
+});
+
+test("analyses every order from the Orders page and shows each step", async ({ page }) => {
+  const requests = await fixture(page);
+  await login(page);
+  await expect(page.getByText("CONNECTED WORKSPACE")).toBeVisible();
+  await page.getByRole("button", { name: "Analyse orders" }).first().click();
+  await expect(page).toHaveURL(/#\/workspace\/orders$/);
+  const panel = page.getByRole("region", { name: "Analysis" });
+  await panel.getByRole("button", { name: "Analyse orders" }).click();
+  await expect(panel.getByText("auditor done")).toBeVisible();
+  await expect(panel.getByRole("link", { name: "SERVER-1" })).toHaveAttribute(
+    "href",
+    "#/workspace/orders/SERVER-1",
+  );
+  await expect(panel.getByText("Waiting for the owner's review")).toBeVisible();
+  await expect(panel.getByText("€1,199.94")).toBeVisible();
+  const runs = requests.filter((r) => r.path === "/runs");
+  expect(runs).toHaveLength(1);
+  expect(runs[0].body).toEqual({});
+  // Orders and the overview are read again, without reloading the page.
+  expect(requests.filter((r) => r.path === "/overview").length).toBeGreaterThan(1);
+});
+
+test("the order's report: owner review, feedback, and a supplier email approved and sent once", async ({
+  page,
+}) => {
+  const requests = await fixture(page);
+  await login(page);
+  await expect(page.getByText("CONNECTED WORKSPACE")).toBeVisible();
+  await page.goto("/#/workspace/orders/SERVER-1");
+  const report = page.getByRole("region", { name: "Analysis report" });
+  await expect(
+    report.getByRole("heading", { name: "Ask Server Supplier for the plot geolocation." }),
+  ).toBeVisible();
+  await expect(report.getByText("Ask the supplier by 10 Dec 2026")).toBeVisible();
+  await expect(report.getByText("Plot-level geolocation")).toBeVisible();
+  await expect(report.getByText("14 days × EUR 85.71 · Your delay cost per day")).toBeVisible();
+  await expect(report.getByText("Not priced")).toBeVisible();
+  await expect(report.getByText("Server policy")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Original CSV row" })).toBeVisible();
+
+  const messages = page.getByRole("region", { name: "Supplier messages" });
+  await expect(messages.getByRole("button", { name: "Draft email to supplier" })).toBeDisabled();
+  const review = report.getByRole("group", { name: "Owner review" });
+  await review.getByLabel("Note (optional)").fill("Buyer agreed.");
+  await review.getByRole("button", { name: "Reviewed: OK to contact the supplier" }).click();
+  await expect(report.getByText(/Reviewed by Test Owner .*: “Buyer agreed.”/)).toBeVisible();
+  expect(requests.find((r) => r.path === "/reports/report-1/review")?.body).toEqual({
+    note: "Buyer agreed.",
+  });
+
+  await report.getByRole("button", { name: "Useful", exact: true }).click();
+  await report.getByLabel("Feedback note (optional)").fill("Clear next step.");
+  await report.getByRole("button", { name: "Send feedback" }).click();
+  await expect(report.getByRole("button", { name: "Useful", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  expect(requests.find((r) => r.path === "/reports/report-1/feedback")?.body).toEqual({
+    useful: true,
+    note: "Clear next step.",
+  });
+
+  await messages.getByRole("button", { name: "Draft email to supplier" }).click();
+  await expect(messages.getByLabel("To")).toHaveValue("sales@server-supplier.example");
+  expect(requests.find((r) => r.path === "/supplier-messages")?.body).toEqual({
+    reportId: "report-1",
+  });
+  // Unsaved edits must be saved before approving.
+  await messages.getByLabel("Subject").fill("SERVER-1: geolocation, please");
+  await expect(messages.getByRole("button", { name: "Approve" })).toBeDisabled();
+  await messages.getByRole("button", { name: "Save changes" }).click();
+  await expect(messages.getByRole("button", { name: "Approve" })).toBeEnabled();
+  expect(
+    requests.find((r) => r.path === "/supplier-messages/msg-1" && r.method === "PATCH")?.body,
+  ).toEqual({
+    recipient: "sales@server-supplier.example",
+    subject: "SERVER-1: geolocation, please",
+    body: "Hello,\nPlease send the plot geolocation for SERVER-1.",
+    saveRecipientToSupplier: false,
+  });
+  await messages.getByRole("button", { name: "Approve" }).click();
+  await messages.getByRole("button", { name: "Send" }).dblclick();
+  await expect(
+    page.getByText(
+      "Sandbox: the message to sales@server-supplier.example was recorded but not delivered.",
+    ),
+  ).toBeVisible();
+  await expect(messages.getByText("Sent · sandbox")).toBeVisible();
+  await expect(messages.getByLabel("Subject")).toBeDisabled();
+  const sends = requests.filter((r) => r.path === "/supplier-messages/msg-1/send");
+  expect(sends).toHaveLength(1);
+  expect(sends[0].idempotencyKey).toMatch(/^[0-9a-f-]{36}$/);
+});
+
+test("an order without an HS code gets suggestions; accepting one analyses it again", async ({
+  page,
+}) => {
+  const requests = await fixture(page);
+  await login(page);
+  await expect(page.getByText("CONNECTED WORKSPACE")).toBeVisible();
+  await page.goto("/#/workspace/orders/NOCODE-1");
+  const panel = page.getByRole("region", { name: "HS code suggestions" });
+  await expect(panel.getByRole("heading", { name: "This order has no HS code." })).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Analysis report" }).getByText("Not analysed yet."),
+  ).toBeVisible();
+  await panel.getByRole("button", { name: "Suggest HS code" }).click();
+  await expect(panel.getByText("Official wording of 9403.60")).toBeVisible();
+  await expect(panel.getByText(/PO-1 \(Oak chair, 9401.61\); tariff line 9403.60/)).toBeVisible();
+  await panel.locator(".an-hs-card").nth(1).getByRole("button", { name: "Reject" }).click();
+  await expect(panel.getByText("Earlier suggestions: 9401.61 (rejected)")).toBeVisible();
+  await panel.getByRole("button", { name: "Accept 9403.60" }).click();
+  await expect(
+    page.getByText("NOCODE-1 now has HS code 9403.60 and was analysed again."),
+  ).toBeVisible();
+  // The page reloads the order: it has a code now, and its new report shows.
+  await expect(panel).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Nothing to do for NOCODE-1." })).toBeVisible();
+  expect(requests.map((r) => `${r.method} ${r.path}`)).toEqual(
+    expect.arrayContaining([
+      "POST /orders/NOCODE-1/hs-suggestions",
+      "POST /hs-suggestions/hs-2/reject",
+      "POST /hs-suggestions/hs-1/accept",
+      "GET /reports/report-2",
+    ]),
+  );
+});
+
+test("playbook rules get WHEN/THEN conditions that analysis checks", async ({ page }) => {
+  const requests = await fixture(page);
+  await login(page);
+  await expect(page.getByText("CONNECTED WORKSPACE")).toBeVisible();
+  await page.goto("/#/workspace/playbook");
+  await expect(page.getByText(/order statuses don't use them yet/)).toHaveCount(0);
+  await expect(page.getByText("NOT CHECKED")).toBeVisible();
+
+  await page.getByLabel("In your own words").fill("Owner reviews late EU orders");
+  const form = page.locator("form.add-rule");
+  await form.getByLabel("Add conditions, so analysis applies this rule to orders").check();
+  await expect(form.getByLabel("Condition 1: value")).toHaveValue("EU");
+  await form.getByRole("button", { name: "And another condition" }).click();
+  await form.getByLabel("Condition 2: field").selectOption("days_until_ship");
+  await form.getByLabel("Condition 2: comparison").selectOption("less_than");
+  await form.getByLabel("Condition 2: value").fill("21");
+  await form.getByRole("button", { name: "And another condition" }).click();
+  await form.getByLabel("Condition 3: field").selectOption("estimated_cost");
+  await form.getByLabel("Condition 3: comparison").selectOption("greater_than");
+  await form.getByLabel("Condition 3: amount").fill("2,000.50");
+  await form.getByLabel("Then").selectOption("owner_review");
+  await form.getByLabel("Note on the report (optional)").fill("Call the buyer");
+  await page.getByRole("button", { name: "Add to my playbook" }).click();
+  await expect(page.getByText("Rule saved. Analysis checks it on every order.")).toBeVisible();
+  expect(
+    requests.find((r) => r.path === "/playbook/rules" && r.method === "POST")?.body,
+  ).toEqual({
+    text: "Owner reviews late EU orders",
+    category: "Policy",
+    enabled: true,
+    when: [
+      { field: "market", op: "equals", value: "EU" },
+      { field: "days_until_ship", op: "less_than", value: 21 },
+      {
+        field: "estimated_cost",
+        op: "greater_than",
+        value: { amountMinor: 200050, currency: "USD" },
+      },
+    ],
+    then: { action: "owner_review", note: "Call the buyer" },
+  });
+  await expect(
+    page.getByText(
+      "When Market is European Union and Days until ship date less than 21 and Estimated cost of the problems (without duties) more than USD 2,000.50 → Send the report to the owner (needs human review) (“Call the buyer”)",
+    ),
+  ).toBeVisible();
+
+  // A stored rule gets conditions in place.
+  const stored = page.locator(".playbook-rule").first();
+  await stored.getByRole("button", { name: "Add conditions" }).click();
+  await stored.getByLabel("Add conditions, so analysis applies this rule to orders").check();
+  await stored.getByRole("button", { name: "Save conditions" }).click();
+  await expect(stored.getByText("CHECKED", { exact: true })).toBeVisible();
+  expect(
+    requests.find((r) => r.path === "/playbook/rules/rule-1" && r.method === "PATCH")?.body,
+  ).toEqual({
+    when: [{ field: "market", op: "equals", value: "EU" }],
+    then: { action: "flag", note: null },
+  });
+});
+
+test("owners change cost settings and read the activity log", async ({ page }) => {
+  const requests = await fixture(page);
+  await login(page);
+  await expect(page.getByText("CONNECTED WORKSPACE")).toBeVisible();
+  await page.goto("/#/workspace/account");
+  const costs = page.getByRole("region", { name: "Cost settings" });
+  await expect(costs.getByText("$350")).toBeVisible();
+  await costs.getByLabel("Delay, per day: your value").fill("420.5");
+  await costs.getByLabel("Delay, per day: currency").fill("EUR");
+  await costs.getByLabel("Supplier lead time: your value").fill("10");
+  await costs.getByRole("button", { name: "Save cost settings" }).click();
+  await expect(page.getByText("Cost settings saved.")).toBeVisible();
+  expect(
+    requests.find((r) => r.path === "/company/cost-settings" && r.method === "PATCH")?.body,
+  ).toEqual({
+    settings: [
+      { key: "delay_per_day", value: 42050, unit: "EUR" },
+      { key: "supplier_lead_days", value: 10 },
+    ],
+  });
+  await costs.getByRole("button", { name: "Reset to default" }).first().click();
+  await expect(page.getByText("Delay, per day is back to the default.")).toBeVisible();
+  expect(
+    requests.filter((r) => r.path === "/company/cost-settings" && r.method === "PATCH")[1].body,
+  ).toEqual({ settings: [{ key: "delay_per_day", value: null }] });
+
+  const log = page.getByRole("region", { name: "Activity log" });
+  await expect(log.getByText("supplier_message.sent")).toBeVisible();
+  await log.getByRole("button", { name: "Load more" }).click();
+  await expect(log.getByText("import.committed")).toBeVisible();
+  expect(
+    requests.filter((r) => r.path === "/audit-events").map((r) => r.query),
+  ).toEqual(["?limit=50", "?limit=50&cursor=page-2"]);
+  await log.getByLabel("Show").selectOption("supplier_message");
+  await log.getByLabel("Person").selectOption("user-1");
+  await expect
+    .poll(() => requests.filter((r) => r.path === "/audit-events").at(-1)?.query)
+    .toBe("?limit=50&objectType=supplier_message&userId=user-1");
+});
+
+test("editors draft a regulation's requirements; the owner edits, approves and rejects them", async ({
+  page,
+}) => {
+  const requests = await fixture(page);
+  await login(page);
+  await expect(page.getByText("CONNECTED WORKSPACE")).toBeVisible();
+  await page.goto("/#/workspace/regulations/reg-company");
+  const panel = page.getByRole("region", { name: "Market requirements" });
+  await expect(panel.getByText("No requirements drafted for this version yet.")).toBeVisible();
+  await expect(panel.getByText("NOT IN FORCE")).toBeVisible();
+  await panel.getByRole("button", { name: "Draft requirements" }).click();
+  await expect(panel.getByText("Dropped 1 for the quote wasn't in the document.")).toBeVisible();
+  await expect(panel.getByText("This quote wasn't found in the document's text.")).toHaveCount(1);
+  const [legality, species] = [
+    panel.locator(".reg-req").nth(0),
+    panel.locator(".reg-req").nth(1),
+  ];
+  await species.getByRole("button", { name: "Edit" }).click();
+  await species.getByLabel("Quote from the text").fill("Species must be listed.");
+  await species.getByLabel("HS code prefixes (comma-separated)").fill("9403, 9401");
+  await species.getByRole("button", { name: "Save draft" }).click();
+  await expect(panel.getByText("This quote wasn't found in the document's text.")).toHaveCount(0);
+  await species.getByRole("button", { name: "Reject" }).click();
+  await legality.getByRole("button", { name: "Approve" }).click();
+  await expect(panel.getByText("IN FORCE", { exact: true })).toBeVisible();
+  const patches = requests.filter((r) => r.path.startsWith("/market-requirements/"));
+  expect(patches.map((r) => [r.path, r.body.status])).toEqual([
+    ["/market-requirements/req-2", undefined],
+    ["/market-requirements/req-2", "rejected"],
+    ["/market-requirements/req-1", "reviewed"],
+  ]);
+  expect(patches[0].body).toMatchObject({
+    sourceQuote: "Species must be listed.",
+    hsPrefixes: ["9403", "9401"],
+    level: "supplier",
+    documentKind: "legality",
+  });
+});
+
+test("the landing page's contact form sends the message to the backend", async ({ page }) => {
+  const requests = await fixture(page);
+  await page.goto("/#/");
+  const form = page.locator("#contact form");
+  await form.getByLabel("Name").fill("Lan Nguyen");
+  await form.getByLabel("Work email").fill("lan@example.com");
+  await form.getByLabel("Company (optional)").fill("Binh Phu Wood");
+  await form.getByLabel("What are you working on?").fill("EU furniture orders.");
+  await form.getByRole("button", { name: "Send message" }).click();
+  await expect(form.getByText("Received. We'll reply to your email.")).toBeVisible();
+  const [sent] = requests.filter((r) => r.path === "/contact");
+  expect(sent.body).toEqual({
+    name: "Lan Nguyen",
+    email: "lan@example.com",
+    company: "Binh Phu Wood",
+    message: "EU furniture orders.",
+    website: "",
+  });
+  expect(sent.auth).toBeUndefined();
+});
+
+test("viewers read the analysis but can't start, review or message", async ({ page }) => {
+  await fixture(page, { viewer: true });
+  await login(page);
+  await expect(page.getByText("CONNECTED WORKSPACE")).toBeVisible();
+  await page.goto("/#/workspace/orders");
+  await expect(page.getByText("Owners and editors can start an analysis.")).toBeVisible();
+  await page.goto("/#/workspace/orders/SERVER-1");
+  const report = page.getByRole("region", { name: "Analysis report" });
+  await expect(report.getByText("Plot-level geolocation")).toBeVisible();
+  await expect(report.getByRole("button", { name: "Analyse again" })).toHaveCount(0);
+  await expect(report.getByRole("button", { name: /Reviewed: OK/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Draft email to supplier" })).toHaveCount(0);
+  await page.goto("/#/workspace/account");
+  await expect(
+    page.getByRole("region", { name: "Cost settings" }).locator("span.mono").first(),
+  ).toHaveText("$350.00");
+  await expect(page.getByRole("button", { name: "Save cost settings" })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Activity log" })).toHaveCount(0);
 });
