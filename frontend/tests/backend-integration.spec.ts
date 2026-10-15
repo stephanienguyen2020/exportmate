@@ -1260,6 +1260,13 @@ test("new accounts onboard through the API and the sample demo stays local", asy
 // only signed-in owners and editors may change them (with their own token).
 async function sourcesFixture(page: Page) {
   const changes: { method: string; auth: string | undefined }[] = [];
+  let scanRules = { maxAgeDays: 365, skipOld: true };
+  await page.route("**/api/scan-rules**", async (route) => {
+    const request = route.request();
+    changes.push({ method: `${request.method()} rules`, auth: request.headers().authorization });
+    scanRules = { ...scanRules, ...request.postDataJSON() };
+    await route.fulfill({ json: { scanRules } });
+  });
   let sources = [
     {
       id: "source-1",
@@ -1274,7 +1281,7 @@ async function sourcesFixture(page: Page) {
     const request = route.request();
     const method = request.method();
     if (method === "GET") {
-      await route.fulfill({ json: { sources } });
+      await route.fulfill({ json: { sources, scanRules } });
       return;
     }
     changes.push({ method, auth: request.headers().authorization });
@@ -1329,6 +1336,27 @@ test("owners add and switch off news sources with their token", async ({
   ).toBeTruthy();
 });
 
+test("owners switch off the age rule for their company with their token", async ({
+  page,
+}) => {
+  await fixture(page);
+  const changes = await sourcesFixture(page);
+  await login(page);
+  await expect(page.getByText("CONNECTED WORKSPACE")).toBeVisible();
+  await openSources(page);
+  const rule = page.getByRole("checkbox", { name: "Skip old articles" });
+  await expect(rule).toBeChecked();
+  await page.locator("label").filter({ has: rule }).click();
+  await expect(rule).not.toBeChecked();
+  expect(changes).toEqual([
+    { method: "PATCH rules", auth: "Bearer dev:owner@example.com" },
+  ]);
+  // The setting comes back from the AI service on the next visit.
+  await page.reload();
+  await page.getByRole("button", { name: "Sources", exact: true }).click();
+  await expect(rule).not.toBeChecked();
+});
+
 test("viewers and the sample demo can't change news sources", async ({
   page,
 }) => {
@@ -1342,6 +1370,9 @@ test("viewers and the sample demo can't change news sources", async ({
   ).toBeVisible();
   await expect(
     page.getByRole("checkbox", { name: "Read Timber news" }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("checkbox", { name: "Skip old articles" }),
   ).toBeDisabled();
   await expect(page.getByRole("button", { name: "Add source" })).toHaveCount(0);
   await page.goto("/#/logout");

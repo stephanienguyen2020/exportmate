@@ -87,7 +87,7 @@ Everything runs in one project, `skilful-scarab-511320-q9`, defined in [`infra/t
 gcloud auth application-default login
 cd ai/server && npm install
 npm run seed   # load synthetic stock and default sources, then rebuild the search index
-npm run scan   # run one news scan now (add --lookback=14 to re-read two weeks)
+npm run scan   # run one news scan now (--max-age=N sets the age rule for this run; 0 = any age)
 npm run index  # rebuild the RAG Engine index; `node rag.js "<query>"` runs a test search
 npm run dev    # API on :8080 (run `npm run dev` in frontend/ too)
 npm test       # harness unit tests; `npm run eval` runs the golden set (`--engine`: against the deployed agents)

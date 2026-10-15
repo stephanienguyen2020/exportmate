@@ -1,6 +1,12 @@
 // Help guides indexed for the assistant. Keep these in step with the app (docs/AI_GUIDE.md
 // describes the AI features in more detail); after changing them, run `npm run index`.
+import { MAX_AGE_DAYS } from "../access.js";
 import { STOCK_PROFILE, generateInventory } from "./inventory.js";
+
+// The scan's age rule (access.js), as the deployed service sets it.
+const AGE_RULE = MAX_AGE_DAYS
+  ? ` By default a scan skips articles published more than ${MAX_AGE_DAYS} days before it; owners and editors can switch that rule off under Sources, and then only their company sees alerts from older articles. Undated articles are always read.`
+  : "";
 
 export const GUIDES = [
   {
@@ -25,7 +31,7 @@ export const GUIDES = [
     id: "news-watch",
     title: "News watch and daily news scan",
     url: "#/workspace/news",
-    text: "News watch reads the approved news sources every day at 07:00 Vietnam time. Gemini on Vertex AI checks each new article's headline and summary against the stock list and raises alerts with severity (high, medium, low), direction (risk, opportunity, watch), the affected items with reasons and a next step. In a signed-in company workspace, alerts are about your own goods: what Account › About company says you make and what your orders ship (the Your goods tab); alerts for them start with the first scan after someone opens News watch, which also reads back over the last two weeks. The browser demo's alerts are about its sample stock (the Stock tab). Tabs: Alerts (filter by severity or opportunities), Your goods or Stock, and Sources. In a signed-in company workspace, owners and editors can press 'Scan now' (at most once every 10 minutes; a scan takes about a minute), switch sources on or off, and add their own source: any public RSS or Atom feed over HTTPS, tested before it is saved, up to 10 per company. Switching off a built-in source affects only your company, and a source you add is only read for your company. Built-in sources can be switched off but not deleted; your own sources can be removed. Viewers and the browser demo see sources read-only.",
+    text: `News watch reads the approved news sources every day at 07:00 Vietnam time. Gemini on Vertex AI checks each new article's headline and summary against the stock list and raises alerts with severity (high, medium, low), direction (risk, opportunity, watch), the affected items with reasons and a next step. In a signed-in company workspace, alerts are about your own goods: what Account › About company says you make and what your orders ship (the Your goods tab); alerts for them start with the first scan after someone opens News watch, which also reads back over the last two weeks. The browser demo's alerts are about its sample stock (the Stock tab). Tabs: Alerts (filter by severity or opportunities), Your goods or Stock, and Sources. In a signed-in company workspace, owners and editors can press 'Scan now' (at most once every 10 minutes; a scan takes about a minute), switch sources on or off, and add their own source: any public RSS or Atom feed over HTTPS, tested before it is saved, up to 10 per company. Switching off a built-in source affects only your company, and a source you add is only read for your company. Built-in sources can be switched off but not deleted; your own sources can be removed.${AGE_RULE} Viewers and the browser demo see sources read-only.`,
   },
   {
     id: "rule-watch",
