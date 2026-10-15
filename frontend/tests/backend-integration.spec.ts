@@ -311,6 +311,40 @@ const companyDocument = {
   versionNumber: 1,
   createdAt: "2026-10-14T08:00:00Z",
 };
+function solution(id: string, extra: Record<string, unknown> = {}) {
+  return {
+    id,
+    market: "EU",
+    requirementKey: "eudr-geolocation",
+    problemStatus: "missing",
+    summary: "Get the harvest plot geolocation from Server Supplier.",
+    steps: [
+      "Server Supplier: send the geolocation of every plot.",
+      "You: check the plots match SERVER-1 before shipping.",
+    ],
+    status: "suggested",
+    writtenFor: "SERVER-1",
+    basis: {
+      regulationTitle: "EU Deforestation Regulation",
+      documentId: "doc-1",
+      versionNumber: 2,
+      sourceUrl: null,
+      quote: "Article 9(1)(d): the geolocation of all plots of land",
+    },
+    validUntil: "2027-01-12",
+    expired: false,
+    expiredReason: null,
+    model: "gemini-2.5-flash",
+    createdBy: { id: "user-1", name: "Test Owner" },
+    createdAt: "2026-10-15T09:00:00Z",
+    reviewedBy: null,
+    reviewedAt: null,
+    supersedesId: null,
+    usedFor: 0,
+    notes: [],
+    ...extra,
+  };
+}
 async function fixture(
   page: Page,
   options: {
@@ -334,6 +368,37 @@ async function fixture(
   const reports = new Map<string, any>();
   const report: any = analysisReport();
   const messages: any[] = [];
+  const solutions: any[] = [
+    solution("sol-old", {
+      summary: "Ask for a map of the plots.",
+      expired: true,
+      expiredReason: "It was valid until 2026-09-30.",
+      status: "adopted",
+      notes: [
+        {
+          id: "note-1",
+          author: { id: "user-2", name: "Customs Broker" },
+          text: "We ask for GeoJSON, not a screenshot.",
+          createdAt: "2026-07-01T09:00:00Z",
+        },
+      ],
+    }),
+  ];
+  let solutionInUse = false;
+  const solutionCase = () => {
+    const valid = solutions.filter((s) => !s.expired && s.status !== "rejected");
+    return {
+      requirementKey: "eudr-geolocation",
+      title: "Plot-level geolocation",
+      problemStatus: "missing",
+      note: "Server Supplier has no plot geolocation on file.",
+      default: valid[0] ?? null,
+      inUse: solutionInUse && !!valid[0],
+      others: [],
+      expired: solutions.filter((s) => s.expired),
+      needsAnalysis: !valid[0],
+    };
+  };
   let suggestions: any[] = [];
   let noCodeOrder: any = { ...noCode, status: "needs_data" };
   let noCodeReport: string | null = null;
@@ -539,6 +604,44 @@ async function fixture(
         sandbox: true,
       });
       data = messages[0];
+    } else if (path === "/reports/report-1/solutions") {
+      if (method === "POST") {
+        solutions.unshift(solution("sol-new", { supersedesId: "sol-old" }));
+        await route.fulfill({ status: 201, json: { data: solutionCase(), meta } });
+        return;
+      }
+      data = [solutionCase()];
+    } else if (path === "/reports/report-2/solutions") data = [];
+    else if (path === "/solutions")
+      data = [
+        {
+          market: "EU",
+          requirementKey: "eudr-geolocation",
+          problemStatus: "missing",
+          title: "Plot-level geolocation",
+          inChecklist: true,
+          solutions: [...solutions].sort((x, y) => +x.expired - +y.expired),
+        },
+      ];
+    else if (path === "/solutions/sol-new/use") {
+      solutionInUse = true;
+      solutions[0].usedFor = 1;
+      data = solutionCase();
+    } else if (path === "/solutions/sol-new/notes") {
+      solutions[0].notes.push({
+        id: "note-2",
+        author: { id: "user-1", name: "Test Owner" },
+        text: body.text,
+        createdAt: "2026-10-15T09:05:00Z",
+      });
+      data = solutions[0];
+    } else if (path === "/solutions/sol-new/review") {
+      Object.assign(solutions[0], {
+        status: body.verdict,
+        reviewedBy: { id: "user-1", name: "Test Owner" },
+        reviewedAt: "2026-10-15T09:06:00Z",
+      });
+      data = solutions[0];
     } else if (path === "/orders/NOCODE-1/hs-suggestions") {
       if (method === "POST") {
         suggestions = [suggestion("hs-1", "9403.60"), suggestion("hs-2", "9401.61")];
@@ -1479,6 +1582,54 @@ test("owners change an order's status with a note; the labels come from the back
   await expect(page.getByRole("button", { name: "SERVER-1", exact: true })).toBeVisible();
 });
 
+test("problems get AI solutions; expired ones are for reference and get analysed again", async ({
+  page,
+}) => {
+  const requests = await fixture(page);
+  await login(page);
+  await expect(page.getByText("CONNECTED WORKSPACE")).toBeVisible();
+  await page.goto("/#/workspace/orders/SERVER-1");
+  const panel = page.getByRole("region", { name: "Suggested solutions" });
+  const problem = panel.getByRole("article", { name: "Plot-level geolocation" });
+  await expect(problem.getByText("The saved solutions for this problem expired.")).toBeVisible();
+  // The expired one is listed, but never as the answer and never usable.
+  await problem.getByText("Expired solutions (1), for reference only").click();
+  await expect(
+    problem.getByText("Not for use: It was valid until 2026-09-30."),
+  ).toBeVisible();
+  await expect(problem.getByText("We ask for GeoJSON, not a screenshot.")).toBeVisible();
+  await expect(problem.getByRole("button", { name: "Use for SERVER-1" })).toHaveCount(0);
+
+  await problem.getByRole("button", { name: "Analyse again" }).click();
+  await expect(
+    problem.getByText("Get the harvest plot geolocation from Server Supplier."),
+  ).toBeVisible();
+  expect(
+    requests.find((r) => r.path === "/reports/report-1/solutions" && r.method === "POST")?.body,
+  ).toEqual({ requirementKey: "eudr-geolocation" });
+
+  await problem.getByRole("button", { name: "Use for SERVER-1" }).click();
+  await expect(problem.getByText("Used for SERVER-1", { exact: true })).toBeVisible();
+  expect(requests.find((r) => r.path === "/solutions/sol-new/use")?.body).toEqual({
+    reportId: "report-1",
+  });
+
+  const card = problem.locator(".sol-card.default");
+  await card.getByLabel(/Add how you handle it/).fill("Our broker files it through TRACES.");
+  await card.getByRole("button", { name: "Add note" }).click();
+  await expect(card.getByText("Our broker files it through TRACES.")).toBeVisible();
+  expect(requests.find((r) => r.path === "/solutions/sol-new/notes")?.body).toEqual({
+    text: "Our broker files it through TRACES.",
+  });
+
+  await card.getByRole("button", { name: "Adopt for this problem" }).click();
+  await expect(card.getByText("Adopted", { exact: true })).toBeVisible();
+  expect(requests.find((r) => r.path === "/solutions/sol-new/review")?.body).toEqual({
+    verdict: "adopted",
+    note: null,
+  });
+});
+
 test("viewers read the analysis but can't start, review or message", async ({ page }) => {
   await fixture(page, { viewer: true });
   await login(page);
@@ -1491,6 +1642,12 @@ test("viewers read the analysis but can't start, review or message", async ({ pa
   await expect(report.getByRole("button", { name: "Analyse again" })).toHaveCount(0);
   await expect(report.getByRole("button", { name: /Reviewed: OK/ })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Draft email to supplier" })).toHaveCount(0);
+  const solutions = page.getByRole("region", { name: "Suggested solutions" });
+  await expect(solutions.getByText("Plot-level geolocation")).toBeVisible();
+  await expect(solutions.getByRole("button")).toHaveCount(0);
+  await expect(solutions.getByLabel(/Add how you handle it/)).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Status" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Change status" })).toHaveCount(0);
   await page.goto("/#/workspace/account");
   await expect(
     page.getByRole("region", { name: "Cost settings" }).locator("span.mono").first(),

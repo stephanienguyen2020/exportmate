@@ -30,6 +30,7 @@ from app.database.models.playbook import PlaybookRevision, PlaybookRule
 from app.database.models.regulation import Regulation, RegulationDocument
 from app.database.models.report import ReportDraft, ReportKind
 from app.database.models.scenario import OrderScenario, ScenarioKind
+from app.database.models.solution import Solution, SolutionNote, SolutionStatus, SolutionUse
 from app.database.models.supplier_message import (
     ReportFeedback,
     SupplierMessage,
@@ -103,6 +104,10 @@ __all__ = [
     "SatelliteObservation",
     "ScenarioKind",
     "SiteKind",
+    "Solution",
+    "SolutionNote",
+    "SolutionStatus",
+    "SolutionUse",
     "StatusChangeSource",
     "Supplier",
     "SupplierDocument",

@@ -64,7 +64,11 @@ class Settings(BaseSettings):
     requirement_drafts_per_hour: int = 20
     hs_suggestions_per_hour: int = 60
     scenario_suggestions_per_hour: int = 30
+    solution_suggestions_per_hour: int = 30
     analysis_runs_per_hour: int = 60
+    # A saved solution is offered for later orders for this many days (or until the day before
+    # its requirement's stated change, or until the requirement cites another version).
+    solution_valid_days: int = 90
 
     @model_validator(mode="after")
     def no_dev_auth_in_production(self):

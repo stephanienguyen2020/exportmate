@@ -1,9 +1,10 @@
 # ExportMate AI: how it works and how to use it
 
-ExportMate has two AI features:
+ExportMate has these AI features:
 
 - **The assistant** answers questions about stock, news alerts, your company, its orders and playbook rules, and how to use ExportMate. Every fact it gives carries a numbered citation, and every answer has an audit trail.
 - **News watch** reads approved news feeds every morning and raises alerts for the stock items each story could affect.
+- **Suggested solutions** (signed-in workspaces) propose how to fix each missing or wrong document an order's analysis found, and keep the answer, with your team's notes, for later orders with the same problem.
 
 Both run in one service ([`ai/server/`](../ai/server/)) on Google Cloud Run, using Gemini on Vertex AI and Firestore. This guide covers how to use them, what they can see, and how they work. For the engineering controls (policy, gateway, auditor, evals) and how to improve them, see [AGENT_HARNESS.md](AGENT_HARNESS.md).
 
@@ -137,6 +138,19 @@ Filter by severity or show only opportunities, search headlines, items and SKUs,
 | Scan now | No | No | Yes |
 
 News watch alerts also appear in the **News alerts** section of a company report (Reports page), which lists high and medium alerts from the report's period; in the PDF, each alert's publisher links to the article.
+
+## Using suggested solutions
+
+On an order's page (signed-in workspace, after an analysis), **Suggested solutions** lists each document the analysis found missing or wrong.
+
+- **Suggest a solution.** Owners and editors ask AI for a summary and steps. It works only from the report's facts, the regulation text the check cites, and your team's notes on earlier solutions to the same problem. A suggestion that states a number or link it wasn't given is thrown away ("didn't pass its checks"): try again.
+- **Saved for later orders.** A solution is offered for every later order with the same problem (same market, requirement and kind of gap). Solutions written for the same order, adopted ones, and ones written for the same HS heading or supplier come first.
+- **Notes.** Anyone who can edit adds how they actually handle it ("we ask for the GeoJSON file"). Notes stay for good, show with the solution, and the AI reads them the next time it writes a solution to that problem.
+- **Use, adopt, reject.** "Use for <order>" records which solution the order follows. "Adopt" makes it the first one offered for this problem; "Reject" means it is never offered as the answer.
+- **Expiry.** A solution is valid for 90 days, or until the day before the requirement's stated change, and expires at once if the requirement starts citing another version of its regulation or leaves the checklist. Expired solutions stay visible under "Expired solutions, for reference only", with the reason and their notes, but they are never the default and can't be used or adopted. "Analyse again" writes a new one, which reads the expired one and its notes and links back to it.
+- **Audit.** Every suggestion (with its full text and model), use, note and review is in the owner's activity log under "solution".
+
+Viewers can read solutions and notes but not change them. The browser-only demo doesn't have this feature.
 
 ## How it works
 

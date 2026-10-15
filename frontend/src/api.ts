@@ -223,6 +223,51 @@ export type SupplierMessage = {
   sandbox: boolean | null;
   error: string | null;
 };
+export type Solution = {
+  id: string;
+  market: string;
+  requirementKey: string;
+  problemStatus: string;
+  summary: string;
+  steps: string[];
+  status: "suggested" | "adopted" | "rejected";
+  writtenFor: string | null;
+  basis: {
+    regulationTitle: string;
+    documentId: string;
+    versionNumber: number;
+    sourceUrl: string | null;
+    quote: string;
+  };
+  validUntil: string;
+  expired: boolean;
+  expiredReason: string | null;
+  model: string;
+  createdBy: { id: string; name: string };
+  createdAt: string;
+  reviewedBy: { id: string; name: string } | null;
+  reviewedAt: string | null;
+  supersedesId: string | null;
+  usedFor: number;
+  notes: {
+    id: string;
+    author: { id: string; name: string };
+    text: string;
+    createdAt: string;
+  }[];
+};
+// One problem in a report. `default` is never expired or rejected.
+export type SolutionCase = {
+  requirementKey: string;
+  title: string;
+  problemStatus: string;
+  note: string;
+  default: Solution | null;
+  inUse: boolean;
+  others: Solution[];
+  expired: Solution[];
+  needsAnalysis: boolean;
+};
 export type SupplierMessageUpdate = {
   recipient?: string | null;
   subject?: string;
@@ -1124,6 +1169,35 @@ export const api = {
       `/supplier-messages/${encodeURIComponent(id)}/send`,
       { method: "POST", headers: { "Idempotency-Key": idempotencyKey } },
     ).then((r) => r.data),
+  reportSolutions: (reportId: string, signal?: AbortSignal) =>
+    request<SolutionCase[]>(
+      `/reports/${encodeURIComponent(reportId)}/solutions`,
+      { signal },
+    ).then((r) => r.data),
+  suggestSolution: (reportId: string, requirementKey: string) =>
+    request<SolutionCase>(
+      `/reports/${encodeURIComponent(reportId)}/solutions`,
+      { method: "POST", body: JSON.stringify({ requirementKey }) },
+    ).then((r) => r.data),
+  useSolution: (id: string, reportId: string) =>
+    request<SolutionCase>(`/solutions/${encodeURIComponent(id)}/use`, {
+      method: "POST",
+      body: JSON.stringify({ reportId }),
+    }).then((r) => r.data),
+  addSolutionNote: (id: string, text: string) =>
+    request<Solution>(`/solutions/${encodeURIComponent(id)}/notes`, {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    }).then((r) => r.data),
+  reviewSolution: (
+    id: string,
+    verdict: "adopted" | "rejected",
+    note: string | null,
+  ) =>
+    request<Solution>(`/solutions/${encodeURIComponent(id)}/review`, {
+      method: "POST",
+      body: JSON.stringify({ verdict, note }),
+    }).then((r) => r.data),
   async auditEvents(
     filter: { objectType?: string; userId?: string; cursor?: string | null },
     signal?: AbortSignal,

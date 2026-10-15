@@ -120,6 +120,12 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
 | `PATCH /supplier-messages/{id}` | editor | Order page message: "Save changes" |
 | `POST /supplier-messages/{id}/approve` | owner | Order page message: "Approve" |
 | `POST /supplier-messages/{id}/send` | owner | Order page message: "Send" (one `Idempotency-Key` per message) |
+| **Suggested solutions** | | |
+| `GET /reports/{id}/solutions` | viewer | Order page: "Suggested solutions" |
+| `POST /reports/{id}/solutions` | editor | Order page: "Suggest a solution", "Analyse again", "Ask AI for another" |
+| `POST /solutions/{id}/use` | editor | Order page solution: "Use for <order>" |
+| `POST /solutions/{id}/notes` | editor | Order page and Knowledge base solution: "Add note" |
+| `POST /solutions/{id}/review` | editor | Order page and Knowledge base solution: "Adopt for this problem", "Reject" |
 | **Audit log and contact** | | |
 | `GET /audit-events` | owner | Account: activity log (filters, "Load more") |
 | `POST /contact` | none (rate limited) | Landing page "Get in touch" (no token) |
@@ -709,6 +715,27 @@ Approves the exact recipient, subject and body (a SHA-256 is recorded). The owne
 
 ### `POST /supplier-messages/{id}/send` (owner)
 Sends once: the row is locked and an optional `Idempotency-Key` header is passed to Resend. Replies go to the sender's own email. `sandbox: true` without `RESEND_API_KEY` (nothing delivered). Sending doesn't change the order's status. `409 not_approved`, `409 message_sent`, `409 changed_since_approval`; email errors (`422 email_rejected`, `502 email_failed`, `503 email_unavailable`) leave it `failed` with `error`.
+
+## Suggested solutions
+
+How to fix each problem an analysis report found (a document `missing` or `mismatch`), saved for later orders (`services/solutions.py`). A problem matches earlier solutions by market, requirement key and problem status, for any order. Every write is in the audit log (object type `solution`: `solution.suggested` with the full text and model, `solution.used`, `solution.note_added` with the note, `solution.adopted`, `solution.rejected`).
+
+A solution expires the day after `validUntil` (`SOLUTION_VALID_DAYS` after it was written, default 90, or the day before the requirement's `changesOn`), when the requirement cites another regulation version, or when it leaves the checklist; `expiredReason` says which. Expired solutions are listed for reference but are never the default, and can't be used or adopted (`409 solution_expired`).
+
+### `GET /reports/{id}/solutions` (viewer)
+One entry per problem: `requirementKey`, `title`, `problemStatus`, `note`, `default` (the solution chosen for this order if still valid, else the best valid one: written from this report, adopted, same HS heading, same supplier, newest; never expired or rejected), `inUse`, `others` (other valid ones, rejected last), `expired`, `needsAnalysis` (no valid solution). Each solution has `summary`, `steps`, `status` (`suggested`, `adopted`, `rejected`), `writtenFor` (order ID), `basis` (regulation, document version and quote it was written from), `validUntil`, `expired`, `expiredReason`, `model`, `createdBy`, `reviewedBy`, `supersedesId`, `usedFor` (orders it was chosen for) and `notes` (oldest first). Empty when nothing is missing.
+
+### `POST /reports/{id}/solutions` (editor, rate limited, AI)
+`{"requirementKey": "geolocation"}`. Gemini writes a summary and up to 8 steps from the report's facts, the requirement's cited text, the company's notes on earlier solutions to the same problem and its expired solutions (marked outdated). Code checks every number in the answer appears in those facts and it links only to the regulation's address (`503 ai_unavailable` otherwise; nothing saved). A new solution after expired ones sets `supersedesId`. `422 not_a_problem`; `409 report_out_of_date` when the checklist changed since the report. Returns `201` with the problem's entry. `SOLUTION_SUGGESTIONS_PER_HOUR` (30).
+
+### `POST /solutions/{id}/use` (editor)
+`{"reportId": "…"}`: record that this solution is followed for that report's matching problem (the latest choice wins). `422 wrong_problem`, `409 solution_expired`, `409 solution_rejected`. Returns the problem's entry.
+
+### `POST /solutions/{id}/notes` (editor)
+`{"text": "…"}` (up to 2,000 characters): how the company handles this problem. Notes can't be edited or deleted, are allowed on expired solutions, and are given to the AI next time. Returns the solution.
+
+### `POST /solutions/{id}/review` (editor)
+`{"verdict": "adopted" | "rejected", "note": "…"}` (`note` optional, saved as a note). Adopted solutions are offered first; rejected ones are never the default. Returns the solution.
 
 ## Audit log
 
