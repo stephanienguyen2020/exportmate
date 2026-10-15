@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ExportMate: a trade-compliance prototype for small manufacturers (demo persona: a Vietnamese wood-products/furniture exporter). Three independently built parts:
 
 - **Frontend** (`frontend/`): React 19 + TypeScript + Vite SPA, deployed to Vercel (exportmate.vercel.app).
-- **Backend** (`backend/`): Python FastAPI + Postgres (Cloud SQL), Firebase Auth tokens, routes under `/api/v1`. Being built in phases; docs are in `backend/docs/`: `REQUIREMENTS.md` (scope, business rules, phases, open questions), `DECISIONS.md` (database, hosting, routing, auth, storage and why), `API.md` (every built and planned endpoint, where the frontend calls it; update it when changing a route), `AI_IDEAS.md` (AI ideas still to decide). Commands and layout: `backend/README.md`.
+- **Backend** (`backend/`): Python FastAPI + Postgres (Cloud SQL), Firebase Auth tokens, routes under `/api/v1`. Being built in phases; docs are in `backend/docs/`: `REQUIREMENTS.md` (scope, business rules, phases, open questions), `DECISIONS.md` (database, hosting, routing, auth, storage and why), `API.md` (every built and planned endpoint, where the frontend calls it; update it when changing a route), `AI_IDEAS.md` (AI ideas still to decide), `FRONTEND_GAPS.md` (built endpoints the frontend doesn't use yet). Commands and layout: `backend/README.md`.
 - **AI service** (`ai/server/`): a plain-JS Node ≥20 HTTP service (no framework, no build step) on Google Cloud Run that serves every `/api/*` route, backed by Firestore and Gemini on Vertex AI.
 
 ## Commands
