@@ -120,6 +120,79 @@ test("deleting a playbook rule needs a second click", async ({ page }) => {
   await expect(page.getByText(text, { exact: true })).toHaveCount(0);
 });
 
+test("demo rules can be added and switched off", async ({ page }) => {
+  await openDemo(page, "#/workspace/playbook");
+  const text = "Ask for a second quote above 20,000 USD.";
+  await page.getByLabel("Type of rule").selectOption("Threshold");
+  await page.getByLabel("In your own words").fill(text);
+  await page.getByRole("button", { name: "Add to my playbook" }).click();
+  await expect(page.getByText("Rule added to your local playbook.")).toBeVisible();
+  const toggle = page.getByRole("switch", { name: `Enable rule: ${text}` });
+  await expect(toggle).toHaveAttribute("aria-checked", "true");
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-checked", "false");
+  await page.reload();
+  await expect(toggle).toHaveAttribute("aria-checked", "false");
+});
+
+test("the rule-change walkthrough can't be closed until it finishes", async ({
+  page,
+}) => {
+  await openDemo(page);
+  await page.getByRole("button", { name: "Run demo" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toContainText("From change to clarity.");
+  await expect(page.getByRole("button", { name: "Close dialog" })).toBeDisabled();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("Now you know your next move.", {
+    timeout: 10_000,
+  });
+  await expect(dialog).toContainText("2 orders affected.");
+  await page.getByRole("button", { name: "Review your next move" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page).toHaveURL(/#\/workspace\/orders\/PO-/);
+  await expect(page.locator(".breadcrumb")).toContainText("Order impact");
+});
+
+test("the evidence dialog keeps focus inside and closes on Escape", async ({
+  page,
+}) => {
+  await openDemo(page, "#/workspace/orders/PO-2291");
+  const opener = page.getByRole("button", { name: /Review the source/ });
+  await opener.click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toContainText("Follow the evidence.");
+  for (let i = 0; i < 4; i++) await page.keyboard.press("Tab");
+  expect(
+    await page.evaluate(() =>
+      document.querySelector(".modal")?.contains(document.activeElement),
+    ),
+  ).toBe(true);
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(opener).toBeFocused();
+});
+
+test("the alerts bell opens the orders that need action", async ({ page }) => {
+  await openDemo(page, "#/workspace/data");
+  await page.getByRole("button", { name: "View alerts" }).click();
+  await expect(page).toHaveURL(/#\/workspace\/orders$/);
+  await expect(
+    page.getByRole("button", { name: "Action needed", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".orders-table tbody tr")).toHaveCount(2);
+});
+
+test("unknown workspace pages and orders say they weren't found", async ({
+  page,
+}) => {
+  for (const path of ["nope", "orders/NOPE-1", "news/extra", "constructor"]) {
+    await openDemo(page, "#/workspace/" + path);
+    await expect(page.getByText("We couldn’t find that page.")).toBeVisible();
+  }
+});
+
 test("signing out forgets the chat; sign-in pages have no chat button", async ({
   page,
 }) => {
