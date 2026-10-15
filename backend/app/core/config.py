@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     # The public contact form (POST /contact) is emailed here; empty: the form is switched off.
     contact_inbox: str = ""
     contact_messages_per_hour: int = 5  # per visitor IP, counted per instance
+    # Team invitations (services/members.py): the link in the email, and how long it is valid.
+    app_url: str = "https://exportmate.vercel.app"
+    member_invite_days: int = 14
+    member_invites_per_hour: int = 30  # per owner
     # AI service origin; company reports read its news alerts with the caller's token.
     ai_service_url: str = "http://127.0.0.1:8080"
     # Gemini on Vertex AI (core/gemini.py), in the project above.

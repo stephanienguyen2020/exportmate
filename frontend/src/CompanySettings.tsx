@@ -1,9 +1,10 @@
-// Account page, signed-in companies: the cost settings analysis uses (owners edit them) and
-// the activity log (owners only).
+// Account page, signed-in companies: the cost settings analysis uses (owners edit them), the
+// team (Team.tsx) and the activity log (owners only).
 import { useEffect, useMemo, useState } from "react";
 import { Loader2, RotateCcw } from "lucide-react";
 import { api, type AuditEvent, type CostSetting } from "./api";
 import { errorMessage } from "./auth";
+import Team from "./Team";
 import "./analysis.css";
 
 type Notify = (text: string, error?: boolean) => void;
@@ -30,6 +31,7 @@ export default function CompanySettings({
   return (
     <>
       <CostSettings owner={role === "owner"} notify={notify} />
+      <Team role={role} notify={notify} />
       {role === "owner" && <ActivityLog />}
     </>
   );
@@ -227,6 +229,8 @@ const OBJECT_TYPES: [string, string][] = [
   ["regulation_document", "Regulation documents"],
   ["market_requirement", "Market requirements"],
   ["company", "Company"],
+  ["member", "Team members"],
+  ["invite", "Invitations"],
 ];
 
 function ActivityLog() {

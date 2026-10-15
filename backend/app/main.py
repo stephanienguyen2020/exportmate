@@ -16,6 +16,7 @@ from app.api import (
     hs_suggestions,
     imports,
     market_requirements,
+    members,
     news_matches,
     orders,
     playbook,
@@ -129,6 +130,7 @@ def create_app() -> FastAPI:
         supplier_messages,
         audit_log,
         news_matches,
+        members,
     ):
         api.include_router(module.router)
     app.include_router(api)
