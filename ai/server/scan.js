@@ -2,7 +2,6 @@
 // could affect, in the browser demo's sample stock and in each company's own goods (goods.js),
 // and store the results in Firestore. Runs from POST /api/scan (Cloud Scheduler or the UI) or
 // `npm run scan`.
-import crypto from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { GoogleGenAI, Type } from "@google/genai";
 import { db, PROJECT, inventory, sources, articles, impacts, scans, companySources, goodsByCompany, list } from "./db.js";
@@ -13,16 +12,17 @@ import { asData, findInjection } from "./guard.js";
 import { armor } from "./armor.js";
 import { version } from "./policy.js";
 import { log } from "./log.js";
-import { isShared, itemVisible } from "./access.js";
+import { MAX_AGE_DAYS, itemVisible } from "./access.js";
+import { collectCandidates, errorText } from "./candidates.js";
 import { decide } from "./relevance.js";
 import { STOCK_PROFILE } from "./seed/inventory.js";
-import { GEMINI_LOCATION, SCAN_MODEL } from "./models.js";
+import { GEMINI_LOCATION, SCAN_MODEL, SCAN_THINKING, thinkingConfig } from "./models.js";
 
-// Articles are assessed once: step 2 skips any article an earlier scan already analysed.
+// Articles are assessed once: step 2 skips any article an earlier scan already analysed, so a
+// scan reads every article in the feeds it hasn't seen, back to the age rule (access.js). Articles
+// Gemini couldn't assess stay unseen, so the next scan retries them however long the gap.
 export const MODEL = SCAN_MODEL;
 const LOCATION = GEMINI_LOCATION;
-const LOOKBACK_DAYS = 3; // daily runs overlap a little so nothing is missed
-const FIRST_RUN_LOOKBACK_DAYS = 14;
 const MAX_NEW_ARTICLES = 80;
 export const BATCH = 16;
 // A company's first scan after its goods are known also reads back over this much stored news.
@@ -32,7 +32,6 @@ const MAX_BACKFILL_ARTICLES = 48;
 const MAX_COMPANIES = 100;
 
 const ai = new GoogleGenAI({ vertexai: true, project: PROJECT, location: LOCATION });
-const hash = (s) => crypto.createHash("sha1").update(s).digest("hex").slice(0, 20);
 
 const SCHEMA = {
   type: Type.OBJECT,
@@ -131,7 +130,7 @@ ${RULES}`;
         responseMimeType: "application/json",
         responseSchema: SCHEMA,
         maxOutputTokens: 16384,
-        thinkingConfig: { thinkingLevel: "MEDIUM" },
+        thinkingConfig: thinkingConfig(MODEL, SCAN_THINKING),
       },
     }),
   );
@@ -140,9 +139,10 @@ ${RULES}`;
 
 // Gemini's verdict on each article in `list` against `items`, BATCH articles per call. A batch
 // that fails is logged and skipped; `onVerdict(article, assessment, index in its batch)`.
-// Returns how many articles went unassessed.
+// Returns how many articles went unassessed and the first error, as a sentence.
 async function assessAll(list, items, profile, scanId, onVerdict) {
   let failed = 0;
+  let error = null;
   for (let i = 0; i < list.length; i += BATCH) {
     const batch = list.slice(i, i + BATCH);
     let results;
@@ -150,13 +150,14 @@ async function assessAll(list, items, profile, scanId, onVerdict) {
       results = await assess(batch, items, profile);
     } catch (e) {
       failed += batch.length;
+      error ??= errorText(e);
       log("ERROR", "scan.batch_failed", { scanId, articles: batch.length, companyId: profile.companyId, error: String(e?.message || e) });
       continue;
     }
     const byIndex = new Map(results.map((r) => [r.index, r]));
     batch.forEach((a, n) => byIndex.has(n) && onVerdict(a, byIndex.get(n), n));
   }
-  return failed;
+  return { failed, error };
 }
 
 // The alert for an article and Gemini's assessment `r`, with decide()'s affected items. A
@@ -176,6 +177,7 @@ function alertOf(a, r, affected, scanId, companyId) {
     sourceIds: a.sourceIds,
     sourceCompanyIds: a.sourceCompanyIds,
     publishedAt: a.publishedAt,
+    ageDays: a.ageDays,
     severity: r.severity || "low",
     direction: r.direction || "watch",
     headline: r.headline || a.title,
@@ -197,21 +199,23 @@ async function recentArticles() {
 }
 
 /**
- * Each company's own goods against the articles it can see (its sources, access.js): this
- * scan's new articles, and on its first scan the recent stored ones too. Returns the alerts.
+ * Each company's own goods against the articles it can see (its sources and age rule, access.js):
+ * this scan's new articles, and on its first scan the recent stored ones too. Returns the alerts.
  */
 async function scanCompanies(scanId, fresh) {
   const lists = (await list(goodsByCompany.orderBy("updatedAt", "desc").limit(MAX_COMPANIES))).filter((g) => g.items?.length);
-  if (!lists.length) return { companies: 0, found: [], failed: 0 };
-  const [allSources, switchedOff] = await Promise.all([list(sources), list(companySources)]);
+  if (!lists.length) return { companies: 0, found: [], failed: 0, error: null };
+  const [allSources, settings] = await Promise.all([list(sources), list(companySources)]);
   const sourcesById = new Map(allSources.map((s) => [s.id, s]));
-  const disabled = new Map(switchedOff.map((c) => [c.id, c.disabled || []]));
+  const settingsOf = new Map(settings.map((c) => [c.id, c]));
   const freshIds = new Set(fresh.map((a) => a.id));
   let backlog = null;
   const found = [];
   let failed = 0;
+  let error = null;
   for (const goods of lists) {
-    const access = { companyId: goods.id, disabled: disabled.get(goods.id) || [] };
+    const own = settingsOf.get(goods.id);
+    const access = { companyId: goods.id, disabled: own?.disabled || [], ...(own?.skipOld === false ? { skipOld: false } : {}) };
     let reading = fresh;
     if (!goods.backfilledAt) {
       backlog ??= await recentArticles();
@@ -220,53 +224,39 @@ async function scanCompanies(scanId, fresh) {
     reading = reading.filter((a) => itemVisible(a, sourcesById, access));
     const profile = { ...goods.profile, companyId: goods.id };
     const bySku = new Map(goods.items.map((i) => [i.sku, i]));
-    failed += await assessAll(reading, goods.items, profile, scanId, (a, r, n) => {
+    const result = await assessAll(reading, goods.items, profile, scanId, (a, r, n) => {
       const { relevant, affected } = decide(a, r, n, bySku, profile);
       if (relevant) found.push(alertOf(a, r, affected, scanId, goods.id));
     });
+    failed += result.failed;
+    error ??= result.error;
     if (!goods.backfilledAt) await goodsByCompany.doc(goods.id).set({ backfilledAt: new Date().toISOString() }, { merge: true });
   }
-  return { companies: lists.length, found, failed };
+  return { companies: lists.length, found, failed, error };
 }
 
-export async function runScan({ trigger = "manual", lookbackDays } = {}) {
+// `maxAgeDays`: the age rule for this scan (0 reads articles of any age).
+export async function runScan({ trigger = "manual", maxAgeDays = MAX_AGE_DAYS } = {}) {
   const scanRef = scans.doc();
   const startedAt = new Date().toISOString();
   await scanRef.set({ startedAt, trigger, status: "running", model: MODEL, policyVersion: SCAN_POLICY_VERSION });
 
   try {
-    const [srcs, items, previous] = await Promise.all([
+    const [srcs, items, ruleOff] = await Promise.all([
       list(sources.where("enabled", "==", true)),
       list(inventory),
-      scans.where("status", "==", "done").limit(1).get(),
+      maxAgeDays > 0 ? list(companySources.where("skipOld", "==", false)) : [],
     ]);
-    const lookback = lookbackDays ?? (previous.empty ? FIRST_RUN_LOOKBACK_DAYS : LOOKBACK_DAYS);
-    const since = Date.now() - lookback * 86_400_000;
+    // Companies that switched the age rule off, as accesses (access.js readsOld).
+    const oldReaders = ruleOff.map((c) => ({ companyId: c.id, disabled: c.disabled || [], skipOld: false }));
 
-    // 1. Fetch every enabled source in parallel.
+    // 1. Fetch every enabled source in parallel, and keep the articles the age rule allows.
     const fetched = await Promise.allSettled(srcs.map((s) => fetchFeed(s.url)));
-    const sourceStatus = [];
-    const candidates = new Map();
-    fetched.forEach((r, n) => {
-      const s = srcs[n];
+    const sourceStatus = fetched.map((r, n) => {
       const ok = r.status === "fulfilled";
-      sourceStatus.push({ id: s.id, name: s.name, ok, count: ok ? r.value.length : 0, error: ok ? null : String(r.reason?.message || r.reason) });
-      if (!ok) return;
-      // Every source that carried an article is kept with it, with its owner (null when shared),
-      // so a company only sees articles and alerts from sources it can see (access.js).
-      const owner = isShared(s) ? null : s.companyId;
-      for (const a of r.value) {
-        if (a.publishedAt && Date.parse(a.publishedAt) < since) continue;
-        const id = hash(a.url);
-        const known = candidates.get(id);
-        if (!known)
-          candidates.set(id, { ...a, id, sourceId: s.id, sourceName: s.name, sourceIds: [s.id], sourceCompanyIds: [owner] });
-        else if (!known.sourceIds.includes(s.id)) {
-          known.sourceIds.push(s.id);
-          known.sourceCompanyIds.push(owner);
-        }
-      }
+      return { id: srcs[n].id, name: srcs[n].name, ok, count: ok ? r.value.length : 0, error: ok ? null : String(r.reason?.message || r.reason) };
     });
+    const { candidates, tooOld } = collectCandidates(fetched, srcs, { at: Date.parse(startedAt), maxAgeDays, oldReaders });
 
     // 2. Skip articles analysed in earlier scans.
     const ids = [...candidates.keys()];
@@ -307,11 +297,12 @@ export async function runScan({ trigger = "manual", lookbackDays } = {}) {
     // 4. Ask Gemini, in batches, which sample stock each article touches. Articles of a batch
     // that fails stay unrecorded, so the next scan retries them.
     const bySku = new Map(items.map((i) => [i.sku, i]));
-    await assessAll(fresh, items, STOCK_PROFILE, scanRef.id, (a, r, n) => {
+    const sample = await assessAll(fresh, items, STOCK_PROFILE, scanRef.id, (a, r, n) => {
       const { relevant, affected, otherCommodity } = decide(a, r, n, bySku);
       analysed.push({ ...a, relevant, ...(otherCommodity ? { filteredOut: "other_commodity" } : {}) });
       if (relevant) found.push(alertOf(a, r, affected, scanRef.id));
     });
+    const { failed } = sample;
     // 4b. The same articles (and on a company's first scan, recent ones) against each company's goods.
     const sampleAlerts = found.length;
     const companyScan = await scanCompanies(scanRef.id, fresh);
@@ -346,13 +337,19 @@ export async function runScan({ trigger = "manual", lookbackDays } = {}) {
           .catch((e) => log("WARNING", "scan.source_status_skipped", { scanId: scanRef.id, sourceId: s.id, error: String(e?.message || e) })),
       ),
     );
+    // A scan that had articles to assess and got no answer for any of them failed, even though
+    // it fetched the feeds; one that lost some batches is done and says how many.
+    const assessed = fresh.length - failed;
     const summary = {
-      status: "done",
+      status: fresh.length && !assessed ? "failed" : "done",
       finishedAt: now,
-      lookbackDays: lookback,
+      maxAgeDays: maxAgeDays || null,
       sources: sourceStatus,
       articlesFetched: candidates.size,
+      articlesTooOld: tooOld,
       articlesAnalysed: analysed.length,
+      articlesFailed: failed,
+      ...(sample.error ? { error: `Gemini couldn't assess ${failed} of ${fresh.length} articles: ${sample.error.slice(0, 300)}` } : {}),
       articlesWithheld: analysed.filter((a) => a.withheld).length,
       articlesUnscreened: unscreened.length,
       modelArmor: armor.enabled,
@@ -361,10 +358,11 @@ export async function runScan({ trigger = "manual", lookbackDays } = {}) {
       companiesScanned: companyScan.companies,
       companyImpacts,
       companyArticlesFailed: companyScan.failed,
+      ...(companyScan.error ? { companyError: companyScan.error.slice(0, 300) } : {}),
       indexed: indexed?.embedded ?? null,
     };
     await scanRef.update(summary);
-    log("INFO", "scan.completed", { scanId: scanRef.id, trigger, ...summary, sources: undefined });
+    log(summary.status === "failed" ? "ERROR" : failed || companyScan.failed ? "WARNING" : "INFO", "scan.completed", { scanId: scanRef.id, trigger, ...summary, sources: undefined });
     return { id: scanRef.id, startedAt, ...summary };
   } catch (e) {
     await scanRef.update({ status: "failed", finishedAt: new Date().toISOString(), error: String(e.message || e) });
@@ -373,7 +371,7 @@ export async function runScan({ trigger = "manual", lookbackDays } = {}) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const arg = process.argv.find((a) => a.startsWith("--lookback="));
-  const result = await runScan({ trigger: "cli", lookbackDays: arg ? Number(arg.split("=")[1]) : undefined });
+  const arg = process.argv.find((a) => a.startsWith("--max-age="));
+  const result = await runScan({ trigger: "cli", ...(arg ? { maxAgeDays: Number(arg.split("=")[1]) } : {}) });
   console.log(JSON.stringify(result, null, 2));
 }

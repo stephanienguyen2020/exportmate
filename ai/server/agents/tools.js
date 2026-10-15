@@ -441,7 +441,7 @@ export const REGISTRY = {
           ref: citeScan(refs, last),
           finishedAt: last.finishedAt,
           trigger: last.trigger,
-          lookbackDays: last.lookbackDays,
+          maxAgeDays: last.maxAgeDays,
           articlesFetched: last.articlesFetched,
           articlesAnalysed: last.articlesAnalysed,
           alertsRaised: last.impactsFound,

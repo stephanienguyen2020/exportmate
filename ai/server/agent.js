@@ -135,6 +135,7 @@ export async function runAgent({
         // Remembered preferences can change an answer, so a remembered user's answers are their own.
         userKey: remembers(userKey) ? userKey : null,
         disabled: access.disabled,
+        skipOld: access.skipOld,
         dataVersion: await dataVersion(company, access, session),
         policyVersion: POLICY_VERSION,
         models: MODELS,
