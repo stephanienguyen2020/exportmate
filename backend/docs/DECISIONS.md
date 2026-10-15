@@ -51,7 +51,7 @@ Cloud Run over an always-on VM:
 - Pay per use; near 0 when idle. A VM costs 24/7 and we patch the OS.
 - `ai/server` already runs there: same deploy flow.
 
-One catch: Cloud Run only reliably gives CPU while a request is open, so work after the response (FastAPI `BackgroundTasks`) can stall. Plan for runs (phase 2): starting a run saves it and enqueues a Cloud Task that calls an internal endpoint on the same service; that request does the work (up to 60 min), saving progress as it goes. Locally the internal endpoint is called directly.
+One catch: Cloud Run only reliably gives CPU while a request is open, so work after the response (FastAPI `BackgroundTasks`) can stall. Phase 2 runs need no AI and finish inside `POST /runs`, so they don't queue. When a step waits on AI (the phase 3 message draft), starting a run will save it and enqueue a Cloud Task that calls an internal endpoint on the same service; that request does the work (up to 60 min), saving progress as it goes. Locally the internal endpoint is called directly.
 
 Choose a VM only if we later need long-lived connections or constant heavy load.
 
@@ -81,6 +81,7 @@ Local: `AUTH_MODE=dev` accepts `Bearer dev:<email>` (no Firebase). Production re
 
 - One private, versioned bucket: `exportmate-regulation-documents-dev`. Company uploads under `companies/<id>/`, shared official texts under `shared/regulation-documents/`. Used locally too (`gcloud auth application-default login`); tests use an in-memory fake.
 - Postgres keeps the row (title, source URL, SHA-256 hash, path). Files are never overwritten (`if_generation_match=0`).
+- Supplier documents uploaded as files go under `companies/<id>/supplier-documents/`.
 - Order: save the file, then commit the row. A failed commit deletes the file again; the bucket's versioning keeps it recoverable. The backend's role on the bucket is `objectUser` (create, read, delete objects).
 - CSV imports are the exception: small files, kept in Postgres with their rows (`imports.content`).
 
@@ -90,7 +91,15 @@ Local: `AUTH_MODE=dev` accepts `Bearer dev:<email>` (no Firebase). Production re
 - `seed_reference_data` (run by every deploy) downloads a text only when no document with that `sourceUrl` is stored, so a deploy normally downloads nothing. A failed download skips that text and the market requirements citing it, and is retried next deploy. Per-read timeout 60 s; files up to 50 MB.
 - EU texts come from the EU Publications Office (`publications.europa.eu/resource/celex/<CELEX>` with an `Accept` header), because EUR-Lex blocks scripts.
 
-## 9. Limits
+## 9. AI: Gemini on Vertex AI
 
-- Uploads: 4 MB (the Vercel function accepts about 4.5 MB), 60 per user per hour per upload type. Counted in memory per Cloud Run instance, so it stops runaway scripts but isn't a quota.
+- The backend calls Gemini through `app/core/gemini.py`. Today one step uses it: reading uploaded supplier documents. Drafting a company's market requirements and suggesting HS codes will use it too, once they have retrieval (PDF text, past orders, HS headings). Plain SDK calls (`google-genai`), no agent framework (REQUIREMENTS.md open question 6): code runs the steps in a fixed order, and the AI only reads or writes text inside one.
+- Every call asks for JSON in a fixed shape (`response_schema`, temperature 0). Code checks the answer before saving (known document kinds, dates that parse), and a person reviews it before it counts.
+- Uploaded files are untrusted: the prompt says to ignore instructions inside them. Prompts and answers are never logged; logs carry the task name, model and duration.
+- Settings: `GOOGLE_CLOUD_PROJECT` (required), `GEMINI_MODEL` (default `gemini-2.5-flash`), `GEMINI_LOCATION` (`global`). The backend's service account has `roles/aiplatform.user`. Without a project, AI routes return `503 ai_not_configured`; a failed call returns `503 ai_unavailable` and nothing is saved. Tests replace `generate_json` with a fake.
+- Analysis, matching, costs and playbook rules are code, never AI, so the same input always gives the same answer.
+
+## 10. Limits
+
+- Uploads: 4 MB (the Vercel function accepts about 4.5 MB), 60 per user per hour per upload type. Analysis runs: 60. Counted in memory per Cloud Run instance, so it stops runaway scripts but isn't a quota.
 - CSV: 10,000 rows. Uncommitted imports are deleted after 30 days (`python -m app.cleanup_imports`).

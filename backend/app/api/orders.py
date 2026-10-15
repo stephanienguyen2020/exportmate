@@ -6,8 +6,9 @@ from sqlalchemy.orm import Session
 from app.core.auth import ViewerContext
 from app.database.models import OrderStatus
 from app.database.session import get_db
+from app.schemas.analysis import OrderDetailOut
 from app.schemas.common import SuccessResponse, success_response
-from app.schemas.orders import OrderDetailOut, OrderOut
+from app.schemas.orders import OrderOut
 from app.schemas.overview import OverviewOut
 from app.services import orders as order_service
 

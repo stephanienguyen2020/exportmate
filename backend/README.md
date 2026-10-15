@@ -87,7 +87,7 @@ PROJECT_ID=<project> backend/deploy.sh   # build image, run migrations, roll out
 | `app/database/models/` | Tables | One file per area. |
 | `app/database/queries/` | Accessors | The only place that builds SQL. Never commits. |
 | `app/schemas/` | Request/response models | snake_case in Python, camelCase in JSON. |
-| `app/core/` | Config, auth, errors, request ID | |
+| `app/core/` | Config, auth, errors, request ID, Cloud Storage, Gemini (`gemini.py`) | |
 
 Every company-scoped route takes a `ViewerContext` / `EditorContext` / `OwnerContext`. The company always comes from the caller's membership, never from the request. Another company's records return `404`.
 
