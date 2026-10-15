@@ -24,7 +24,7 @@ Example end-to-end:
 | --- | --- |
 | Accounts: sign up, sign in, sign out everywhere, email verification, password reset | Built |
 | Company and profile: onboarding, About company (the AI assistant's company profile), account settings | Built |
-| Orders: list, search, filter, detail | Built |
+| Orders: list, search, filter, detail, edit, remove | Built |
 | CSV import: upload → validate → preview → commit | Built |
 | Playbook rules: list, add, toggle, delete; checked rules (WHEN/THEN) | Built (checked rules: backend only) |
 | Trade map: orders, suppliers and sites on a map; document checks per market; "what if" another market, ship date or route; add, edit and delete suppliers (with their documents) and sites | Built |
@@ -99,6 +99,7 @@ Firebase handles sign up, sign in, email verification and password reset emails,
 - Status: `awaiting_analysis`, `clear`, `exposed` (`needs_data` is retired: missing data makes an order `exposed`; it stays only in earlier status history). New and imported orders start as `awaiting_analysis`, never `clear`; an import analyses its orders as soon as it is committed.
 - List: filter by status, search by text, sorted by ship date, paged.
 - Detail: the order, the CSV row it came from, and its exposures and reports.
+- Edit and remove (owners and editors): every field but the order ID can be changed, with the CSV's rules; the change is audited field by field and the order is analysed again. Removing an order removes its history, reports, supplier messages, HS code suggestions and saved what-ifs; the audit log keeps what it was.
 
 ### 4.3 CSV import
 **Status: built.**

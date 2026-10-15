@@ -55,6 +55,8 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
 | `GET /overview` | viewer | Dashboard |
 | `GET /orders` | viewer | Every workspace load |
 | `GET /orders/{id}` | viewer | Order detail page |
+| `PATCH /orders/{id}` | editor | Order page: "Edit order", "Save changes" |
+| `DELETE /orders/{id}` | editor | Order page: "Remove order", then "Remove <id>" |
 | `PATCH /orders/{id}/status` | editor | Order page: Status panel, "Change status" |
 | `PATCH /orders/status` | editor | Orders page: tick orders, "Change N orders" |
 | `GET /order-statuses` | viewer | Every workspace load (badges, Orders filter tabs, Status panel) |
@@ -273,6 +275,21 @@ On every workspace load, `api.orders()` reads every page (`limit=200`) until `ne
 `statusChanges` is the order's status history, newest first: changes by hand (`source: "manual"`, always with a `note`) and by analysis runs (`"analysis"`, with the `runId`; `changedBy` started the run). A run that leaves a status as it was adds nothing. Orders keep no entry for their first status (from the import or the seed).
 `source` is the CSV row the order came from, or `null` for seeded orders. `exposures` are the `missing` and `mismatch` findings of the order's latest report (`GET /reports/{id}`); empty before its first run. `latestReportId` is that report (also for an order in the clear, which has no exposures), or `null` before its first run.
 Opening `#/workspace/orders/<id>` in a live session.
+
+### `PATCH /orders/{id}` (editor)
+```json
+{"supplier": "An Cuong Wood", "valueMinor": 5100050, "currency": "EUR", "shipDate": "2026-11-14"}
+```
+Changes only the fields sent: `product`, `supplier`, `destination`, `valueMinor`, `currency`, `shipDate`, `hsCode`, with the rules of a CSV row (required text up to the CSV's lengths, a positive value below the CSV's limit, an ISO currency, an HS code like `4412.33` or `""` to clear it). The order's `id` can't change (reports, solutions and the audit log name the order by it), and a sent `id` is ignored. A field can't be cleared with `null` (422). The CSV row it came from (`source`) stays as imported.
+```json
+{"data": {"detail": {…as GET /orders/{id}…}, "run": {…as POST /runs…}}}
+```
+The fields that differ are saved and audited as `order.updated` (`{"supplier": {"from": "Binh Phu Wood", "to": "An Cuong Wood"}, …}`), then the order is analysed again as `POST /runs` with its id would, since its latest report was made from the old facts: the run's status change, if any, is in `statusChanges`. `run` is `null` when the analysis failed (the change is saved; "Analyse again" tries again) and when no field differed (nothing saved, audited or run). Typing an HS code rejects that order's HS code suggestions still waiting for a decision. Errors: 422 with `fieldErrors` for a field that breaks a rule, 404 for another company's order. An order whose id is literally `status` can't be edited (`PATCH /orders/status` is the bulk status change).
+The order's page (owners and editors): "Edit order" turns its facts into a form with the same checks as the CSV in the browser; "Save changes" sends only the fields that changed.
+
+### `DELETE /orders/{id}` (editor)
+Removes the order → `{"deleted": true}`. Its status history, analysis reports (with their supplier messages, report feedback and solution uses), HS code suggestions, saved what-ifs and news reviews go with it. Saved solutions stay in the knowledge base, without the report they were written from. Audited as `order.deleted`, with the order as it was (every field of `GET /orders` but `id`, which is the event's object). The id is free again, so importing the row again brings the order back as a new order. 404 for another company's order (or one already removed).
+The order's page (owners and editors): "Remove order", which says what goes with it, then "Remove <id>"; the workspace goes back to the Orders page.
 
 ### `PATCH /orders/{id}/status` (editor)
 ```json
