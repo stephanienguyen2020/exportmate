@@ -20,7 +20,9 @@ import {
   type Account,
   type AnalysisRun,
   type Overview,
+  type OrderChange,
   type OrderStatusOption,
+  type OrderUpdated,
   type RuleFields,
 } from "../api";
 import { errorMessage } from "../auth";
@@ -58,6 +60,13 @@ type Source = {
   commitImport(
     checked: CheckedImport,
   ): Promise<{ created: number; added: Order[] | null; run: AnalysisRun | null }>;
+  // The order as changed: the backend saves it and analyses it again (`updated`); the demo
+  // checks it against the sample rule change.
+  updateOrder(
+    order: Order,
+    change: OrderChange,
+  ): Promise<{ order: Order; updated: OrderUpdated | null }>;
+  deleteOrder(id: string): Promise<void>;
 };
 
 const apiSource: Source = {
@@ -87,6 +96,13 @@ const apiSource: Source = {
   async commitImport(checked) {
     const result = await api.commit(checked.id!);
     return { created: result.ordersCreated, added: null, run: result.run };
+  },
+  async updateOrder(order, change) {
+    const updated = await api.updateOrder(order.id, change);
+    return { order: asOrder(updated.detail.order), updated };
+  },
+  deleteOrder: async (id) => {
+    await api.deleteOrder(id);
   },
 };
 
@@ -143,6 +159,11 @@ const demoSource: Source = {
     added: checked.preview.map(withSampleRisk),
     run: null,
   }),
+  updateOrder: async (order, change) => ({
+    order: withSampleRisk({ ...order, ...change }),
+    updated: null,
+  }),
+  deleteOrder: async () => undefined,
 };
 
 // Risk is worked out again on load, so orders saved by older versions are checked too.
@@ -294,6 +315,12 @@ export function useWorkspace(notify: Notify) {
 
   const replaceRule = (rule: Rule) =>
     setRules((v) => v.map((x) => (x.id === rule.id ? rule : x)));
+  // After one order changed or went: the list is already up to date, the counts and value at
+  // risk come from the backend. If that read fails they catch up on the next load.
+  const refreshOverview = () =>
+    live
+      ? api.overview().then(setOverview, () => undefined)
+      : Promise.resolve();
 
   // The demo checks every order against the sample rule change, so none waits for analysis.
   const isClear = (o: Order) => (live ? o.status === "clear" : !o.risk);
@@ -374,6 +401,20 @@ export function useWorkspace(notify: Notify) {
       if (added) setOrders((v) => [...v, ...added]);
       else await refresh();
       return result;
+    },
+    // Owners and editors (and the demo) change an order's details; signed in, the result
+    // carries the order's page after its new analysis.
+    async saveOrder(order: Order, change: OrderChange) {
+      const result = await source.updateOrder(order, change);
+      setOrders((v) => v.map((o) => (o.id === order.id ? result.order : o)));
+      void refreshOverview();
+      return result.updated;
+    },
+    async removeOrder(id: string) {
+      await source.deleteOrder(id);
+      setOrders((v) => v.filter((o) => o.id !== id));
+      setSent((v) => v.filter((x) => x !== id));
+      void refreshOverview();
     },
     markSent(id: string) {
       setSent((v) => [...new Set([...v, id])]);

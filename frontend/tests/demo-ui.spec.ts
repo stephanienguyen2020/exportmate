@@ -252,6 +252,37 @@ test("an imported order is checked against the sample rule change", async ({
   );
 });
 
+test("a demo order can be edited, checked again and removed", async ({
+  page,
+}) => {
+  await openDemo(page, "#/workspace/orders/PO-2291");
+  await expect(
+    page.getByText("Binh Phu Wood has no geolocation record for this lot."),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Edit order" }).click();
+  const form = page.getByRole("form", { name: "Edit PO-2291" });
+  // A supplier whose geolocation record is on file clears the sample rule change.
+  await form.getByLabel("SUPPLIER").fill("An Cuong Wood");
+  await form.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByText("PO-2291 saved and checked again.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "In the clear." })).toBeVisible();
+  await expect(page.locator(".detail-meta")).toContainText("An Cuong Wood");
+
+  await page.getByRole("button", { name: "Remove order" }).click();
+  await page
+    .getByRole("group", { name: "Remove PO-2291" })
+    .getByRole("button", { name: "Remove PO-2291" })
+    .click();
+  await expect(page.getByText("PO-2291 removed.")).toBeVisible();
+  await expect(page).toHaveURL(/#\/workspace\/orders$/);
+  await expect(page.getByRole("button", { name: "PO-2304", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "PO-2291", exact: true })).toHaveCount(0);
+  const saved = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("em-orders") || "[]").map((o: { id: string }) => o.id),
+  );
+  expect(saved).not.toContain("PO-2291");
+});
+
 test("the overview's figures come from the orders and today's date", async ({
   page,
 }) => {

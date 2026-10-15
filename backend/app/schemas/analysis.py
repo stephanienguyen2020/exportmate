@@ -184,3 +184,12 @@ class OrderDetailOut(CamelCaseModel):
     exposures: list[ExposureOut]  # problems the latest report found; empty before any run
     latest_report_id: uuid.UUID | None = None  # the order's latest report; None before any run
     status_changes: list[OrderStatusChangeOut] = Field(default_factory=list)  # newest first
+
+
+class OrderUpdatedOut(CamelCaseModel):
+    """PATCH /orders/{id}: the order as GET /orders/{id} gives it, after its analysis."""
+
+    detail: OrderDetailOut
+    # The analysis of the changed order; null when nothing changed or the analysis failed (the
+    # change is saved either way, and "Analyse orders" tries again).
+    run: RunOut | None

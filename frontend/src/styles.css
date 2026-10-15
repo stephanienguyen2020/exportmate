@@ -952,6 +952,85 @@ footer > span:last-child {
   font-size: 13px;
   font-weight: 500;
 }
+/* Order page: edit an order's details or remove it (workspace/OrderFacts.tsx) */
+.order-facts-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 24px;
+  margin: -12px 0 28px;
+}
+.order-facts-actions .text-link {
+  gap: 6px;
+}
+.order-facts-actions .btn {
+  gap: 8px;
+}
+.order-remove-link {
+  color: #7d8773;
+}
+.order-remove-link:hover {
+  color: var(--red);
+}
+.btn.order-remove {
+  background: var(--red);
+}
+.order-remove-confirm {
+  margin: -12px 0 28px;
+  padding: 14px 16px;
+  background: #f6ece8;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.order-remove-confirm .order-facts-actions,
+.order-edit .order-facts-actions {
+  margin: 14px 0 0;
+}
+.order-edit {
+  padding: 24px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 28px;
+}
+.order-edit-fields {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px 20px;
+}
+.order-edit-fields label {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+}
+.order-edit-fields label:first-child {
+  grid-column: span 2;
+}
+.order-edit-fields small {
+  font:
+    9px "DM Mono",
+    monospace;
+  color: #87917c;
+}
+.order-edit-fields input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #d1d8c9;
+  border-radius: 2px;
+  padding: 9px 11px;
+  background: #fafbf5;
+  color: var(--green);
+  font-size: 12px;
+}
+.order-edit-fields input[aria-invalid="true"] {
+  border-color: var(--red);
+}
+.order-edit-fields em {
+  font-style: normal;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--red);
+}
 .detail-grid {
   display: grid;
   grid-template-columns: 1.6fr 1fr;
@@ -2197,6 +2276,9 @@ footer > span:last-child {
   .detail-meta {
     grid-template-columns: repeat(2, 1fr);
     row-gap: 22px;
+  }
+  .order-edit-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .panel {
     padding: 22px;

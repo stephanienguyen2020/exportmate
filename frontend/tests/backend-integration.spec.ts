@@ -410,6 +410,9 @@ async function fixture(
   ];
   let requirements: any[] = [];
   let serverStatus = order.status;
+  // SERVER-1 as edited (PATCH /orders/SERVER-1), and whether it was removed.
+  let serverEdits: Record<string, unknown> = {};
+  let serverRemoved = false;
   let uploadedStatus = uploaded.status;
   const statusChanges: any[] = [];
   let me = structuredClone(account);
@@ -466,7 +469,9 @@ async function fixture(
         ? committed || options.twoOrders
           ? [{ ...uploaded, status: uploadedStatus }]
           : []
-        : [{ ...order, status: serverStatus }];
+        : serverRemoved
+          ? []
+          : [{ ...order, ...serverEdits, status: serverStatus }];
       meta = url.searchParams.has("cursor") ? {} : { nextCursor: "page-two" };
     } else if (path === "/overview")
       data = {
@@ -538,9 +543,25 @@ async function fixture(
         latestReportId: "report-1",
         statusChanges,
       };
+    } else if (path === "/orders/SERVER-1" && method === "PATCH") {
+      serverEdits = { ...serverEdits, ...body };
+      serverStatus = "exposed";
+      data = {
+        detail: {
+          order: { ...order, ...serverEdits, status: serverStatus },
+          statusChanges,
+          source: null,
+          exposures: [],
+          latestReportId: "report-1",
+        },
+        run: runOf([]),
+      };
+    } else if (path === "/orders/SERVER-1" && method === "DELETE") {
+      serverRemoved = true;
+      data = { deleted: true };
     } else if (path === "/orders/SERVER-1")
       data = {
-        order: { ...order, status: serverStatus },
+        order: { ...order, ...serverEdits, status: serverStatus },
         statusChanges,
         source: {
           importId: "import-1",
@@ -1753,6 +1774,66 @@ test("owners change an order's status with a note; the labels come from the back
     page.getByRole("table").getByText("Cleared to ship", { exact: true }),
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "SERVER-1", exact: true })).toBeVisible();
+});
+
+test("owners edit an order's details, then remove the order", async ({ page }) => {
+  const requests = await fixture(page);
+  await login(page);
+  await expect(page.getByText("CONNECTED WORKSPACE")).toBeVisible();
+  await page.goto("/#/workspace/orders/SERVER-1");
+  await page.getByRole("button", { name: "Edit order" }).click();
+  const form = page.getByRole("form", { name: "Edit SERVER-1" });
+  const save = form.getByRole("button", { name: "Save changes" });
+  // Nothing changed yet, then the CSV's rules: a required field and the HS code's shape.
+  await expect(save).toBeDisabled();
+  await form.getByLabel("PRODUCT").fill("  ");
+  await expect(form.getByText("product is required.")).toBeVisible();
+  await form.getByLabel("PRODUCT").fill("API plywood, 18 mm");
+  await form.getByLabel("HS CODE").fill("44.12");
+  await expect(form.getByText("hsCode must look like 4412.33")).toBeVisible();
+  await expect(save).toBeDisabled();
+  await form.getByLabel("HS CODE").fill("4412.33");
+  await form.getByLabel("ORDER VALUE").fill("2,000.50");
+  await form.getByLabel("CURRENCY").fill("usd");
+  await save.click();
+  await expect(page.getByText("SERVER-1 saved and analysed again: Action needed.")).toBeVisible();
+  const patch = requests.find((r) => r.method === "PATCH" && r.path === "/orders/SERVER-1");
+  // Only the fields that changed, the value in hundredths.
+  expect(patch?.body).toEqual({
+    product: "API plywood, 18 mm",
+    hsCode: "4412.33",
+    currency: "USD",
+    valueMinor: 200050,
+  });
+  expect(patch?.auth).toBe("Bearer dev:owner@example.com");
+  await expect(form).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "SERVER-1." })).toBeVisible();
+  await expect(page.getByText("API plywood, 18 mm · Rotterdam")).toBeVisible();
+  await expect(page.locator(".detail-meta")).toContainText("$2,001");
+  await expect(page.locator(".detail-meta")).toContainText("4412.33");
+
+  await page.getByRole("button", { name: "Remove order" }).click();
+  const confirm = page.getByRole("group", { name: "Remove SERVER-1" });
+  await expect(confirm).toContainText("The activity log keeps a record");
+  await confirm.getByRole("button", { name: "Keep it" }).click();
+  expect(requests.some((r) => r.method === "DELETE")).toBe(false);
+  await page.getByRole("button", { name: "Remove order" }).click();
+  await confirm.getByRole("button", { name: "Remove SERVER-1" }).click();
+  await expect(page.getByText("SERVER-1 removed.")).toBeVisible();
+  await expect(page).toHaveURL(/#\/workspace\/orders$/);
+  expect(
+    requests.filter((r) => r.method === "DELETE").map((r) => r.path),
+  ).toEqual(["/orders/SERVER-1"]);
+  await expect(page.getByRole("button", { name: "SERVER-1", exact: true })).toHaveCount(0);
+});
+
+test("viewers can't edit or remove an order", async ({ page }) => {
+  await fixture(page, { viewer: true });
+  await login(page);
+  await page.goto("/#/workspace/orders/SERVER-1");
+  await expect(page.getByRole("heading", { name: "SERVER-1." })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Edit order" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Remove order" })).toHaveCount(0);
 });
 
 test("owners tick several orders and change their status with one note", async ({ page }) => {
