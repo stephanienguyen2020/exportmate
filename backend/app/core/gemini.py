@@ -12,6 +12,7 @@ from functools import lru_cache
 from typing import TypeVar
 
 from google import genai
+from google.auth import exceptions as google_auth_errors
 from google.genai import errors as genai_errors
 from google.genai import types
 from pydantic import BaseModel, ValidationError
@@ -37,6 +38,12 @@ def _client() -> genai.Client:
         location=settings.gemini_location,
         http_options=types.HttpOptions(timeout=settings.gemini_timeout_seconds * 1000),
     )
+
+
+def _no_credentials(error: google_auth_errors.GoogleAuthError, task: str) -> AppError:
+    """No usable Google credentials (locally: `gcloud auth application-default login`)."""
+    log.warning("gemini.no_credentials", extra={"task": task, "error": type(error).__name__})
+    return AppError(503, "ai_not_configured", "AI is not set up on this server.")
 
 
 def generate_json(
@@ -65,6 +72,8 @@ def generate_json(
             ),
         )
         result = schema.model_validate_json(response.text or "")
+    except google_auth_errors.GoogleAuthError as error:
+        raise _no_credentials(error, task)
     except (genai_errors.APIError, ValidationError, ValueError) as error:
         log.warning(
             "gemini.failed",
@@ -98,6 +107,8 @@ def embed_texts(texts: list[str], task_type: str) -> list[list[float]]:
                 ),
             )
             vectors += [e.values for e in response.embeddings]
+    except google_auth_errors.GoogleAuthError as error:
+        raise _no_credentials(error, "embedding")
     except genai_errors.APIError as error:
         log.warning(
             "gemini.embedding_failed",

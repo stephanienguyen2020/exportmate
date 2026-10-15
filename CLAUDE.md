@@ -26,7 +26,7 @@ npm run preview
 AI service (`ai/server/`, needs `gcloud auth application-default login`; talks to the real Firestore of `GOOGLE_CLOUD_PROJECT`, default `exportmate-app` until the move to `skilful-scarab-511320-q9` in `infra/terraform/README.md` is finished):
 
 ```sh
-npm run dev       # node --watch on :8080
+npm run dev       # node --watch on :8080; reads ai/server/.env if present (.env.example: AGENT_RUNTIME = a dev instance turns on Sessions + Memory Bank locally)
 npm run seed      # upsert synthetic inventory + default news sources, then rebuild the vector index
 npm run scan      # run one news scan now (--lookback=14 to re-read two weeks)
 npm run index     # rebuild the RAG Engine index (RAG_BUCKET); `node rag.js "<query>"` runs a test search
@@ -56,7 +56,7 @@ uv run pytest tests/test_imports.py -k commit      # single test
 uv run ruff check . && uv run ruff format .
 ```
 
-Locally `AUTH_MODE=dev` accepts `Authorization: Bearer dev:<email>` instead of a Firebase token.
+Locally `AUTH_MODE=dev` accepts `Authorization: Bearer dev:<email>` instead of a Firebase token. The backend's Gemini steps need `GOOGLE_CLOUD_PROJECT` in `backend/.env` (locally the AI service's project) and Google credentials; without either they answer `503 ai_not_configured`. `./dev.sh` (repository root) runs Postgres, the backend, the AI service and Vite together, and runs the reference seed, which embeds HS headings once AI is reachable.
 
 ## Architecture
 
