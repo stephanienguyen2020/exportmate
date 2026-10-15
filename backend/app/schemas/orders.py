@@ -49,6 +49,7 @@ class OrderStatusOut(CamelCaseModel):
     description: str
     tone: str  # green, amber or red
     manual: bool  # an owner or editor may set it by hand
+    retired: bool  # no longer given to orders; only earlier status changes name it
 
     @classmethod
     def from_definition(cls, definition: OrderStatusDefinition) -> "OrderStatusOut":
@@ -58,6 +59,7 @@ class OrderStatusOut(CamelCaseModel):
             description=definition.description,
             tone=definition.tone,
             manual=definition.manual,
+            retired=definition.retired,
         )
 
 

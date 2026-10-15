@@ -2,8 +2,9 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from conftest import add_member, import_orders, onboard
+from sqlalchemy import delete
 
-from app.database.models import Role
+from app.database.models import AnalysisReport, Role
 from app.database.queries import users as user_queries
 from app.database.session import open_session
 from app.schemas.analysis import CostLineOut, ReportContentOut
@@ -20,7 +21,8 @@ def ship_in(days: int) -> str:
 
 # PO-1 to the EU, 10 days out, from a supplier without plot geolocation: exposed and late.
 # PO-2 kitchen cabinets to the US: clear, but the Section 232 duty applies.
-# PO-3 to a country with no checklist, PO-4 from a supplier with no record: both need data.
+# PO-3 to a country with no checklist, PO-4 from a supplier with no record: both need action,
+# and the action is the data to add.
 ORDERS = (
     "id,product,supplier,destination,value,shipDate,hsCode\n"
     f'PO-1,Oak dining table,Binh Phu Wood,"Rotterdam, NL",48100,{ship_in(10)},9403.60\n'
@@ -55,6 +57,32 @@ def reports_by_order(client, headers, run_data) -> dict[str, dict]:
     }
 
 
+def test_an_import_analyses_its_orders(client):
+    headers = onboard(client, "lan@example.com")
+    with open_session() as db:
+        seed_reference_data(db)
+        user = user_queries.get_user_by_firebase_uid(db, "dev:lan@example.com")
+        _, company = user_queries.get_user_company_membership(db, user.id)
+        seed_company_map_data(db, company.id)
+    uploaded = client.post(
+        "/api/v1/imports", headers=headers, files={"file": ("orders.csv", ORDERS, "text/csv")}
+    ).json()["data"]
+    response = client.post(f"/api/v1/imports/{uploaded['id']}/commit", headers=headers)
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assert data["ordersCreated"] == 4
+    assert data["run"]["status"] == "done"
+    statuses = {r["orderId"]: r["orderStatus"] for r in data["run"]["reports"]}
+    assert statuses == {
+        "PO-1": "exposed",
+        "PO-2": "clear",
+        "PO-3": "exposed",
+        "PO-4": "exposed",
+    }
+    orders = client.get("/api/v1/orders", headers=headers).json()["data"]
+    assert {o["id"]: o["status"] for o in orders} == statuses
+
+
 def test_run_reports_each_order(client, lan):
     data = run(client, lan)
     assert data["status"] == "done"
@@ -66,7 +94,7 @@ def test_run_reports_each_order(client, lan):
         "plan",
         "auditor",
     ]
-    assert data["steps"][1]["summary"].startswith("1 exposed, 1 clear, 2 need data.")
+    assert data["steps"][1]["summary"].startswith("3 exposed (2 missing data), 1 clear.")
     reports = reports_by_order(client, lan, data)
 
     late = reports["PO-1"]
@@ -95,9 +123,10 @@ def test_run_reports_each_order(client, lan):
     assert duty["basis"][0]["source"]["officialId"] == "Proclamation 10976"
     assert cabinets["suggestedAction"]["kind"] == "recheck_landed_cost"
 
-    assert reports["PO-3"]["state"] == "needs_data"
+    assert (reports["PO-3"]["state"], reports["PO-3"]["orderStatus"]) == ("pass", "exposed")
     assert reports["PO-3"]["missingData"][0].startswith("No checklist for Dubai AE")
-    assert reports["PO-4"]["orderStatus"] == "needs_data"
+    assert reports["PO-3"]["messageBlockedReason"].startswith("Complete the order's data")
+    assert reports["PO-4"]["orderStatus"] == "exposed"
     assert reports["PO-4"]["missingData"] == [
         "Add Song Be Timber to the suppliers, with their documents."
     ]
@@ -108,8 +137,8 @@ def test_run_reports_each_order(client, lan):
     assert overview["countsByStatus"] == {
         "awaiting_analysis": 0,
         "clear": 1,
-        "exposed": 1,
-        "needs_data": 2,
+        "exposed": 3,
+        "needs_data": 0,
     }
     detail = client.get("/api/v1/orders/PO-1", headers=lan).json()["data"]
     assert [e["requirementKey"] for e in detail["exposures"]] == ["geolocation"]
@@ -251,6 +280,10 @@ def test_the_order_report_repeats_the_latest_analysis(client, lan):
         assert response.status_code == 201, response.text
         return {s["id"]: s for s in response.json()["data"]["content"]["sections"]}
 
+    # The import analysed its orders; without any report the order report says so.
+    with open_session() as db:
+        db.execute(delete(AnalysisReport))
+        db.commit()
     before = sections("PO-1")
     assert before["analysis"]["note"].startswith("Not analysed yet")
     assert before["costs"]["rows"] == []

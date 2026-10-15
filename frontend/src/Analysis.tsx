@@ -146,15 +146,21 @@ function useAction(notify: Notify) {
 export function RunPanel({
   editable,
   pending,
+  lastRun,
   onFinished,
   notify,
 }: {
   editable: boolean;
   pending: number;
+  // A run started elsewhere (the CSV import), shown until this panel starts its own.
+  lastRun: AnalysisRun | null;
   onFinished: () => Promise<void>;
   notify: Notify;
 }) {
-  const [run, setRun] = useState<AnalysisRun | null>(null);
+  const [run, setRun] = useState<AnalysisRun | null>(lastRun);
+  useEffect(() => {
+    if (lastRun) setRun(lastRun);
+  }, [lastRun]);
   const { busy, act } = useAction(notify);
   const start = () =>
     act("run", async () => {
@@ -224,7 +230,16 @@ export function RunPanel({
                         {report.orderId}
                       </a>
                     </td>
-                    <td>{ORDER_STATUS[report.orderStatus]}</td>
+                    <td>
+                      {ORDER_STATUS[report.orderStatus]}
+                      {report.missingData.length > 0 && (
+                        <ul className="an-missing">
+                          {report.missingData.map((reason) => (
+                            <li key={reason}>{reason}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </td>
                     <td>
                       <StateBadge state={report.state} />
                       {report.blocked && (

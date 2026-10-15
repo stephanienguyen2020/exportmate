@@ -33,7 +33,7 @@ def message_blocked_reason(db: Session, report: AnalysisReport) -> str | None:
         return "A newer analysis of this order exists: draft from that one."
     if report.blocked:
         return "A playbook rule blocks messages from this report."
-    if report.state == ReportState.needs_data:
+    if report.state == ReportState.needs_data or content.missing_data:
         return "Complete the order's data first, then run the analysis again."
     if report.state == ReportState.rejected or not content.audit.passed:
         return "The report failed its checks: run the analysis again."

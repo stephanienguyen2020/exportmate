@@ -33,12 +33,13 @@ const order = {
 };
 const uploaded = { ...order, id: "IMPORTED-1", status: "awaiting_analysis" };
 // As the backend's order_statuses table names them; "Cleared to ship" isn't a built-in label,
-// so the tests can tell the workspace reads them from the API.
+// so the tests can tell the workspace reads them from the API. Needs data is retired: orders
+// analysed before still carry it, but it is never a filter or a choice.
 const orderStatuses = [
-  { code: "awaiting_analysis", label: "Awaiting analysis", description: "Not checked yet.", tone: "amber", manual: true },
-  { code: "clear", label: "Cleared to ship", description: "Every document is on file.", tone: "green", manual: true },
-  { code: "exposed", label: "Action needed", description: "A document is missing.", tone: "red", manual: true },
-  { code: "needs_data", label: "Needs data", description: "Couldn't be checked.", tone: "amber", manual: false },
+  { code: "awaiting_analysis", label: "Awaiting analysis", description: "Not checked yet.", tone: "amber", manual: true, retired: false },
+  { code: "clear", label: "Cleared to ship", description: "Every document is on file.", tone: "green", manual: true, retired: false },
+  { code: "exposed", label: "Action needed", description: "A document is missing.", tone: "red", manual: true, retired: false },
+  { code: "needs_data", label: "Needs data", description: "No longer used.", tone: "amber", manual: false, retired: true },
 ];
 const reportContent = (title: string) => ({
   title,
@@ -566,6 +567,7 @@ async function fixture(
           orderStatus: "exposed",
           blocked: false,
           costTotals: { EUR: 119994 },
+          missingData: [],
         },
       ]);
     else if (path === "/reports/report-1") data = report;
@@ -699,6 +701,7 @@ async function fixture(
             orderStatus: "clear",
             blocked: false,
             costTotals: {},
+            missingData: [],
           },
         ]),
       };
@@ -870,7 +873,20 @@ async function fixture(
       };
     else if (path === "/imports/import-1/commit") {
       committed = true;
-      data = { ordersCreated: 1 };
+      data = {
+        ordersCreated: 1,
+        run: runOf([
+          {
+            id: "report-3",
+            orderId: "IMPORTED-1",
+            state: "pass",
+            orderStatus: "exposed",
+            blocked: false,
+            costTotals: {},
+            missingData: ["Add Test to the suppliers, with their documents."],
+          },
+        ]),
+      };
     } else if (path === "/me/logout") data = { signedOut: true };
     else {
       await route.fulfill({
@@ -904,6 +920,9 @@ test("loads paginated API data, preserves statuses/currency, and reads source ev
   await expect(
     page.getByRole("table").getByText("Needs data", { exact: true }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Needs data", exact: true }),
+  ).toHaveCount(0);
   await expect(page.getByText("API plywood", { exact: true })).toBeVisible();
   await expect(page.getByText("PO-2291", { exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "SERVER-1", exact: true }).click();
@@ -1132,6 +1151,11 @@ test("persists playbook mutations, commits imports once, and saves account setti
     page.getByRole("button", { name: "IMPORTED-1", exact: true }),
   ).toBeVisible();
   expect(requests.filter((r) => r.path.endsWith("/commit"))).toHaveLength(1);
+  // The import analysed the order, and the Orders page says what it still needs.
+  await expect(page.getByText(/1 order imported and analysed\./)).toBeVisible();
+  await expect(
+    page.getByText("Add Test to the suppliers, with their documents."),
+  ).toBeVisible();
   expect(
     requests.find((r) => r.path === "/imports/import-1" && r.method === "GET"),
   ).toBeTruthy();
@@ -1687,7 +1711,7 @@ test("owners change an order's status with a note; the labels come from the back
   await expect(page.getByText("CONNECTED WORKSPACE")).toBeVisible();
   await page.goto("/#/workspace/orders/SERVER-1");
   const panel = page.getByRole("region", { name: "Status" });
-  await expect(panel.getByText("Couldn't be checked.")).toBeVisible();
+  await expect(panel.getByText("No longer used.")).toBeVisible();
   await expect(panel.getByText("No status changes recorded yet.")).toBeVisible();
   const select = panel.getByLabel("Change the status to");
   // The current status, and one the backend doesn't allow by hand, aren't offered.

@@ -11,7 +11,7 @@ export const GUIDES = [
     id: "orders",
     title: "Orders and order detail",
     url: "#/workspace/orders",
-    text: "Orders lists your open orders with search and filters: All orders, Action needed and In the clear, plus Awaiting analysis and Needs data in a signed-in workspace. 'Import orders' opens the Data room. In a signed-in workspace, an order's page shows its supplier, ship date, value and HS code, the CSV row it was imported from, a link to the trade map to see what would change in another market, and 'Prepare report' for a compliance report. Its document checklist for its market is on the trade map. In the browser demo, an order affected by the sample rule change shows its impact: a cost estimate, the evidence, a simulated five-stage review and a supplier message you can edit and confirm; nothing is actually sent.",
+    text: "Orders lists your open orders with search and filters: All orders, Action needed and In the clear, plus Awaiting analysis in a signed-in workspace. An order missing data (HS code, market checklist or supplier record) is Action needed, and its next step says what to add. 'Import orders' opens the Data room, and importing analyses the new orders straight away. In a signed-in workspace, an order's page shows its supplier, ship date, value and HS code, the CSV row it was imported from, a link to the trade map to see what would change in another market, and 'Prepare report' for a compliance report. Its document checklist for its market is on the trade map. In the browser demo, an order affected by the sample rule change shows its impact: a cost estimate, the evidence, a simulated five-stage review and a supplier message you can edit and confirm; nothing is actually sent.",
   },
   {
     id: "trade-map",

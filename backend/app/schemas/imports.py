@@ -2,6 +2,7 @@ import uuid
 from datetime import date, datetime
 
 from app.database.models import ImportStatus
+from app.schemas.analysis import RunOut
 from app.schemas.common import CamelCaseModel
 
 
@@ -38,3 +39,6 @@ class ImportOut(CamelCaseModel):
 class CommitOut(CamelCaseModel):
     import_id: uuid.UUID
     orders_created: int
+    # The analysis of the new orders, run as part of the commit. None when it failed: the
+    # orders stay saved, awaiting analysis, and "Analyse orders" runs it again.
+    run: RunOut | None
