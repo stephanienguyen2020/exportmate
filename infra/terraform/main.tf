@@ -2,17 +2,22 @@
 
 locals {
   apis = [
+    "agentregistry.googleapis.com", # Agent Registry (infra/agent-platform/govern.sh)
     "aiplatform.googleapis.com",
     "artifactregistry.googleapis.com",
     "cloudbuild.googleapis.com",
     "cloudresourcemanager.googleapis.com",
     "cloudscheduler.googleapis.com",
+    "compute.googleapis.com", # Agent Gateway
+    "iap.googleapis.com",     # Agent Gateway egress policies
     "firebase.googleapis.com",
     "firestore.googleapis.com",
     "iam.googleapis.com",
     "identitytoolkit.googleapis.com",
     "logging.googleapis.com",
     "modelarmor.googleapis.com",
+    "networksecurity.googleapis.com", # Agent Gateway authorization policies
+    "networkservices.googleapis.com", # Agent Gateway
     "run.googleapis.com",
     "secretmanager.googleapis.com",
     "serviceusage.googleapis.com",

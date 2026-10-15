@@ -505,6 +505,14 @@ a.chat-cite:hover {
   color: #8a9384;
   white-space: nowrap;
 }
+/* Which agent made the step, next to its title. */
+.audit-step-head .audit-agent {
+  margin-right: auto;
+  padding: 0 5px;
+  border: 1px solid #d5dccb;
+  border-radius: 3px;
+  color: #5b6a5c;
+}
 .audit details {
   margin-top: 4px;
 }

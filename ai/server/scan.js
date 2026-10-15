@@ -14,11 +14,11 @@ import { version } from "./policy.js";
 import { log } from "./log.js";
 import { isShared } from "./access.js";
 import { decide } from "./relevance.js";
-import { SCAN_MODEL } from "./models.js";
+import { GEMINI_LOCATION, SCAN_MODEL } from "./models.js";
 
 // Articles are assessed once: step 2 skips any article an earlier scan already analysed.
 export const MODEL = SCAN_MODEL;
-const LOCATION = process.env.GOOGLE_CLOUD_LOCATION || "global";
+const LOCATION = GEMINI_LOCATION;
 const LOOKBACK_DAYS = 3; // daily runs overlap a little so nothing is missed
 const FIRST_RUN_LOOKBACK_DAYS = 14;
 const MAX_NEW_ARTICLES = 80;
