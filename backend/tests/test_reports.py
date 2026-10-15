@@ -14,7 +14,9 @@ from app.database.models import AuditEvent, Role
 from app.database.session import open_session
 from app.schemas.reports import ReportContent
 from app.seed_reference_data import seed_reference_data
+from app.services import news_matches as news_service
 from app.services import reports as report_service
+from app.services import trade_map as trade_map_service
 
 TODAY = date(2026, 10, 15)
 # PO-6 ships after the US Section 232 change on 1 Jan 2027; PO-2 ships before it.
@@ -63,6 +65,7 @@ def fixed_world(monkeypatch: pytest.MonkeyPatch) -> dict:
         return calls["news"]
 
     monkeypatch.setattr(report_service, "today_utc", lambda: TODAY)
+    monkeypatch.setattr(trade_map_service, "today_utc", lambda: TODAY)
     monkeypatch.setattr(report_service, "fetch_news_alerts", fake_news)
     report_api.report_email_limiter._hits.clear()
     return calls
@@ -84,7 +87,7 @@ def lan(client, reference) -> dict:
 
 
 def create(client, headers, **body) -> dict:
-    response = client.post("/api/v1/reports", headers=headers, json=body)
+    response = client.post("/api/v1/report-drafts", headers=headers, json=body)
     assert response.status_code == 201, response.text
     return response.json()["data"]
 
@@ -109,7 +112,14 @@ def test_order_report_lists_checks_sources_and_csv_row(client, lan):
         "rowsAdded": 0,
         "rowsRemoved": 0,
     }
-    assert [s["id"] for s in content["sections"]] == ["order", "checklist", "sources", "origin"]
+    assert [s["id"] for s in content["sections"]] == [
+        "order",
+        "checklist",
+        "analysis",
+        "costs",
+        "sources",
+        "origin",
+    ]
     checklist = section(content, "checklist")["rows"]
     geolocation = next(r for r in checklist if r["id"] == "check-geolocation")
     assert geolocation["cells"][1] == "Missing" and geolocation["tone"] == "gap"
@@ -119,12 +129,41 @@ def test_order_report_lists_checks_sources_and_csv_row(client, lan):
     assert refs == {r[0] for r in rows(content, "sources").values()}
     assert rows(content, "origin")["csv-0"] == ["id", "PO-1"]
 
-    preview = client.get(f"/api/v1/reports/{report['id']}/pdf", headers=lan)
+    preview = client.get(f"/api/v1/report-drafts/{report['id']}/pdf", headers=lan)
     assert preview.status_code == 200
     assert preview.content.startswith(b"%PDF-")
     assert preview.headers["content-disposition"].startswith("inline;")
-    saved = client.get(f"/api/v1/reports/{report['id']}/pdf?download=true", headers=lan)
+    saved = client.get(f"/api/v1/report-drafts/{report['id']}/pdf?download=true", headers=lan)
     assert saved.headers["content-disposition"].startswith("attachment;")
+
+
+def test_rule_watch_lists_checklist_changes_with_the_orders_they_reach(client, lan, monkeypatch):
+    response = client.get("/api/v1/trade-map/changes?days=90", headers=lan)
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assert data["start"] == "2026-10-15" and data["until"] == "2027-01-13"
+    assert data["days"] == 90
+    tariff = next(c for c in data["changes"] if c["requirementKey"] == "tariff")
+    assert tariff["on"] == "2027-01-01" and tariff["kind"] == "changes"
+    assert tariff["market"] == "US" and tariff["orderIds"] == ["PO-6"]
+    assert tariff["source"]["documentId"] and tariff["source"]["quote"]
+    # The same lines as the company report's "changes" section.
+    report = create(client, lan, kind="company", days=90)
+    assert {
+        f"change-{c['market']}-{c['requirementKey']}-{c['kind']}" for c in data["changes"]
+    } == set(rows(report["content"], "changes"))
+
+    # Without `days`, the window is the RULE_WATCH_DAYS setting.
+    monkeypatch.setenv("RULE_WATCH_DAYS", "30")
+    get_settings.cache_clear()
+    try:
+        shorter = client.get("/api/v1/trade-map/changes", headers=lan).json()["data"]
+    finally:
+        monkeypatch.delenv("RULE_WATCH_DAYS")
+        get_settings.cache_clear()
+    assert shorter["days"] == 30 and shorter["until"] == "2026-11-14"
+    assert all(c["on"] <= "2026-11-14" for c in shorter["changes"])
+    assert client.get("/api/v1/trade-map/changes?days=0", headers=lan).status_code == 422
 
 
 def test_company_report_covers_what_is_happening_and_what_it_affects(client, lan, fixed_world):
@@ -153,6 +192,7 @@ def test_company_report_covers_what_is_happening_and_what_it_affects(client, lan
         "Freight rates ease",
     ]
     assert section(content, "news")["rows"][0]["tone"] == "gap"
+    assert section(content, "news")["rows"][0]["cells"][5] == "EU press\nhttps://example.org/eudr"
 
     assert section(content, "floods")["rows"], "the sample flood is near a demo supplier"
     assert section(content, "versions")["rows"], "the seed added official texts just now"
@@ -172,8 +212,24 @@ def test_company_report_covers_what_is_happening_and_what_it_affects(client, lan
     assert glance["glance-news"][1] == "2 high or medium (1 high)"
     assert "Between 17 Jul 2026 and 13 Jan 2027" in content["summary"]
 
-    pdf = client.get(f"/api/v1/reports/{report['id']}/pdf", headers=lan)
+    pdf = client.get(f"/api/v1/report-drafts/{report['id']}/pdf", headers=lan)
     assert pdf.status_code == 200 and pdf.content.startswith(b"%PDF-")
+
+
+def test_company_report_names_the_orders_people_confirmed_an_alert_affects(
+    client, lan, monkeypatch
+):
+    monkeypatch.setattr(news_service, "fetch_news_alerts", lambda authorization: NEWS)
+    monkeypatch.setattr(news_service, "fetch_news_stock", lambda authorization: [])
+    for order_id, verdict in (("PO-1", "relevant"), ("PO-3", "relevant"), ("PO-6", "not_relevant")):
+        response = client.put(
+            f"/api/v1/news-matches/a1/orders/{order_id}", headers=lan, json={"verdict": verdict}
+        )
+        assert response.status_code == 200, response.text
+    news = section(create(client, lan, kind="company", days=90)["content"], "news")
+    plywood, freight = (r["cells"][4] for r in news["rows"])
+    assert plywood.endswith("\nConfirmed for orders PO-1, PO-3")
+    assert "Confirmed" not in freight
 
 
 def test_company_report_says_when_news_watch_is_down(client, lan, fixed_world):
@@ -199,7 +255,7 @@ def test_everything_can_be_edited_and_the_edits_are_counted(client, lan):
     section(content, "origin")["included"] = False
 
     response = client.patch(
-        f"/api/v1/reports/{report['id']}", headers=lan, json={"content": content}
+        f"/api/v1/report-drafts/{report['id']}", headers=lan, json={"content": content}
     )
     assert response.status_code == 200, response.text
     updated = response.json()["data"]
@@ -212,11 +268,11 @@ def test_everything_can_be_edited_and_the_edits_are_counted(client, lan):
         "rowsAdded": 1,
         "rowsRemoved": 2,  # one line and one section left out
     }
-    pdf = client.get(f"/api/v1/reports/{report['id']}/pdf", headers=lan)
+    pdf = client.get(f"/api/v1/report-drafts/{report['id']}/pdf", headers=lan)
     assert pdf.status_code == 200
 
     # The list shows the edited title.
-    listed = client.get("/api/v1/reports", headers=lan).json()["data"]
+    listed = client.get("/api/v1/report-drafts", headers=lan).json()["data"]
     assert [r["title"] for r in listed] == ["PO-1 for our buyer"]
 
 
@@ -265,7 +321,7 @@ def test_report_structure_cannot_change(client, lan, change, code):
     content = report["content"]
     change(content)
     response = client.patch(
-        f"/api/v1/reports/{report['id']}", headers=lan, json={"content": content}
+        f"/api/v1/report-drafts/{report['id']}", headers=lan, json={"content": content}
     )
     assert response.status_code == 422
     assert response.json()["error"]["code"] == code
@@ -274,16 +330,16 @@ def test_report_structure_cannot_change(client, lan, change, code):
 def test_drafts_belong_to_their_author(client, lan):
     report = create(client, lan, kind="order", orderId="PO-1")
     colleague = add_member(client, "lan@example.com", "minh@example.com", Role.editor)
-    assert client.get(f"/api/v1/reports/{report['id']}", headers=colleague).status_code == 404
-    assert client.get("/api/v1/reports", headers=colleague).json()["data"] == []
+    assert client.get(f"/api/v1/report-drafts/{report['id']}", headers=colleague).status_code == 404
+    assert client.get("/api/v1/report-drafts", headers=colleague).json()["data"] == []
 
     other = onboard(client, "an@example.com", "Other Co.")
-    assert client.get(f"/api/v1/reports/{report['id']}/pdf", headers=other).status_code == 404
+    assert client.get(f"/api/v1/report-drafts/{report['id']}/pdf", headers=other).status_code == 404
     response = client.post(
-        "/api/v1/reports", headers=other, json={"kind": "order", "orderId": "PO-1"}
+        "/api/v1/report-drafts", headers=other, json={"kind": "order", "orderId": "PO-1"}
     )
     assert response.status_code == 404
-    response = client.post("/api/v1/reports", headers=other, json={"kind": "order"})
+    response = client.post("/api/v1/report-drafts", headers=other, json={"kind": "order"})
     assert response.status_code == 422
 
 
@@ -291,10 +347,10 @@ def test_editor_emails_the_report_once_and_it_locks(client, lan, outbox):
     report = create(client, lan, kind="order", orderId="PO-1")
     content = report["content"]
     content["summary"] = "Edited summary for the buyer."
-    client.patch(f"/api/v1/reports/{report['id']}", headers=lan, json={"content": content})
+    client.patch(f"/api/v1/report-drafts/{report['id']}", headers=lan, json={"content": content})
 
     response = client.post(
-        f"/api/v1/reports/{report['id']}/email",
+        f"/api/v1/report-drafts/{report['id']}/email",
         headers=lan,
         json={
             "to": [" Buyer@Example.com ", "buyer@example.com", "qa@example.org"],
@@ -314,13 +370,15 @@ def test_editor_emails_the_report_once_and_it_locks(client, lan, outbox):
     assert "Edited summary for the buyer." in sent.text
     assert "contains edits by lan" in sent.text
 
-    after = client.get(f"/api/v1/reports/{report['id']}", headers=lan).json()["data"]
+    after = client.get(f"/api/v1/report-drafts/{report['id']}", headers=lan).json()["data"]
     assert after["sentTo"] == ["Buyer@Example.com", "qa@example.org"] and after["sentAt"]
     again = client.post(
-        f"/api/v1/reports/{report['id']}/email", headers=lan, json={"to": ["x@example.com"]}
+        f"/api/v1/report-drafts/{report['id']}/email", headers=lan, json={"to": ["x@example.com"]}
     )
     assert again.status_code == 409
-    edit = client.patch(f"/api/v1/reports/{report['id']}", headers=lan, json={"content": content})
+    edit = client.patch(
+        f"/api/v1/report-drafts/{report['id']}", headers=lan, json={"content": content}
+    )
     assert edit.status_code == 409
     assert len(outbox.outbox) == 1
 
@@ -334,9 +392,13 @@ def test_editor_emails_the_report_once_and_it_locks(client, lan, outbox):
 def test_viewers_preview_but_cannot_email(client, lan, outbox):
     viewer = add_member(client, "lan@example.com", "viewer@example.com", Role.viewer)
     report = create(client, viewer, kind="order", orderId="PO-1")
-    assert client.get(f"/api/v1/reports/{report['id']}/pdf", headers=viewer).status_code == 200
+    assert (
+        client.get(f"/api/v1/report-drafts/{report['id']}/pdf", headers=viewer).status_code == 200
+    )
     response = client.post(
-        f"/api/v1/reports/{report['id']}/email", headers=viewer, json={"to": ["a@example.com"]}
+        f"/api/v1/report-drafts/{report['id']}/email",
+        headers=viewer,
+        json={"to": ["a@example.com"]},
     )
     assert response.status_code == 403
     assert outbox.outbox == []
@@ -354,7 +416,9 @@ def test_viewers_preview_but_cannot_email(client, lan, outbox):
 )
 def test_bad_recipients_are_422(client, lan, outbox, to):
     report = create(client, lan, kind="order", orderId="PO-1")
-    response = client.post(f"/api/v1/reports/{report['id']}/email", headers=lan, json={"to": to})
+    response = client.post(
+        f"/api/v1/report-drafts/{report['id']}/email", headers=lan, json={"to": to}
+    )
     assert response.status_code == 422
     assert "to" in response.json()["error"]["fieldErrors"]
     assert outbox.outbox == []
@@ -367,10 +431,14 @@ def test_report_emails_are_rate_limited(client, lan, outbox, monkeypatch):
     get_settings.cache_clear()
     try:
         ok = client.post(
-            f"/api/v1/reports/{first['id']}/email", headers=lan, json={"to": ["a@example.com"]}
+            f"/api/v1/report-drafts/{first['id']}/email",
+            headers=lan,
+            json={"to": ["a@example.com"]},
         )
         limited = client.post(
-            f"/api/v1/reports/{second['id']}/email", headers=lan, json={"to": ["a@example.com"]}
+            f"/api/v1/report-drafts/{second['id']}/email",
+            headers=lan,
+            json={"to": ["a@example.com"]},
         )
     finally:
         monkeypatch.delenv("REPORT_EMAILS_PER_HOUR")
@@ -384,3 +452,12 @@ def test_report_filename_is_safe():
     assert report_service.report_filename("PO-2291 · Acacia") == "exportmate-PO-2291-Acacia.pdf"
     assert report_service.report_filename('a"/\\b') == "exportmate-a-b.pdf"
     assert report_service.report_filename("···") == "exportmate-report.pdf"
+
+
+def test_a_trailing_url_renders_as_a_link():
+    assert report_service.cell_link("HKTDC Research\nhttps://news.example/a?b=1") == (
+        "HKTDC Research ›",
+        "https://news.example/a?b=1",
+    )
+    assert report_service.cell_link("See https://x.example") == ("See https://x.example", None)
+    assert report_service.cell_link("\nhttps://x.example") == ("\nhttps://x.example", None)

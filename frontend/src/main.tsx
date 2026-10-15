@@ -33,9 +33,9 @@ import {
   Trash2,
   UserRound,
   LogOut,
-  Newspaper,
   Map as MapIcon,
   ClipboardList,
+  CircleHelp,
 } from "lucide-react";
 import {
   initialOrders,
@@ -46,6 +46,7 @@ import {
   makerCost,
   placeName,
   readSaved,
+  sampleCostWhy,
   sampleCosts,
   sampleGap,
   sampleObligation,
@@ -67,6 +68,7 @@ import {
   placeCode,
 } from "./account-store";
 import ChatPage, { ChatWidget } from "../ai/chat/Chat";
+import Tour, { tourDone } from "./Tour";
 import NewsWatchPage, { NewsHighlights } from "../ai/news/NewsWatch";
 import {
   api,
@@ -77,26 +79,56 @@ import {
   type Overview,
   type ImportPreview,
   type OrderDetail,
+  type OrderStatusOption,
+  type RuleFields,
 } from "./api";
 import { errorMessage } from "./auth";
 import ErrorBoundary from "./ErrorBoundary";
 import { MAX_UPLOAD_MB, validateOrderCsv } from "./order-csv";
 import CompanyRuleWatch from "./RuleWatch";
+import WorkspaceSearch from "./Search";
+import { CostWhy } from "./CostWhy";
+import {
+  RuleBuilder,
+  RuleConditionsEditor,
+  describeRule,
+  emptyRuleDraft,
+  ruleBody,
+} from "./Playbook";
 const RegulationsPage = lazy(() => import("./Regulations"));
+const OrderAnalysis = lazy(() => import("./Analysis"));
+const OrderStatusPanel = lazy(() => import("./OrderStatus"));
+const RunPanel = lazy(() =>
+  import("./Analysis").then((m) => ({ default: m.RunPanel })),
+);
+const CompanySettings = lazy(() => import("./CompanySettings"));
 const TradeMapPage = lazy(() => import("./TradeMap"));
 const ReportsPage = lazy(() => import("./Reports"));
-const nav = [
-  ["", "Overview"],
-  ["orders", "Orders"],
-  ["map", "Trade map"],
+const KnowledgeBasePage = lazy(() => import("./KnowledgeBase"));
+// The pages of the "Rules & news" tab. Each keeps its own route, so deep links still work.
+const ruleTabs: [string, string][] = [
   ["news", "News watch"],
   ["rules", "Rule watch"],
   ["regulations", "Regulations"],
+  ["playbook", "Playbook"],
+  ["knowledge", "Knowledge base"],
+];
+const nav: [string, string][] = [
+  ["", "Overview"],
+  ["orders", "Orders"],
+  ["map", "Trade map"],
+  ["news", "Rules & news"],
   ["reports", "Reports"],
   ["data", "Data room"],
-  ["playbook", "Playbook"],
   ["account", "Account"],
 ];
+// Every page a search or a typed route can reach.
+const pages = [...nav.filter(([p]) => p !== "news"), ...ruleTabs];
+const ruleTabOf = (route: string) =>
+  ruleTabs.find(([p]) => p === route.split("/")[0]);
+/** The sidebar item a route belongs to. */
+const navSection = (route: string) =>
+  ruleTabOf(route) ? "news" : route.split("/")[0];
 const initialsOf = (text: string) =>
   text
     .trim()
@@ -143,6 +175,8 @@ function App() {
   const uploadVersion = useRef(0);
   const [serverDetail, setServerDetail] = useState<OrderDetail | null>(null);
   const [detailError, setDetailError] = useState("");
+  // Signed in: each status's label, colour and whether it may be set by hand, from the database.
+  const [statusOptions, setStatusOptions] = useState<OrderStatusOption[]>([]);
   const editable =
     !live || account?.role === "owner" || account?.role === "editor";
   const workspaceLoad = useRef<AbortController | null>(null);
@@ -162,15 +196,19 @@ function App() {
         navigate("onboarding");
         return;
       }
-      const [nextOrders, nextRules, nextOverview] = await Promise.all([
-        api.orders(signal),
-        api.rules(signal),
-        api.overview(signal),
-      ]);
+      const [nextOrders, nextRules, nextOverview, nextStatuses] =
+        await Promise.all([
+          api.orders(signal),
+          api.rules(signal),
+          api.overview(signal),
+          // Without them the workspace still works, with the built-in labels.
+          api.orderStatuses(signal).catch(() => []),
+        ]);
       if (signal.aborted) return;
       setOrders(nextOrders);
       setRules(nextRules);
       setOverview(nextOverview);
+      setStatusOptions(nextStatuses);
     } catch (error) {
       if (signal.aborted) return;
       if (error instanceof ApiError && error.code === "onboarding_required")
@@ -179,6 +217,15 @@ function App() {
     } finally {
       if (!signal.aborted) setLoading(false);
     }
+  }
+  // After an analysis: statuses and counts change, but the page stays as it is.
+  async function refreshOrders() {
+    const [nextOrders, nextOverview] = await Promise.all([
+      api.orders(),
+      api.overview(),
+    ]);
+    setOrders(nextOrders);
+    setOverview(nextOverview);
   }
   async function mutate(action: () => Promise<void>) {
     if (mutationRef.current) return;
@@ -261,6 +308,14 @@ function App() {
   );
   const [buyer, setBuyer] = useState(false);
   const [mobile, setMobile] = useState(false);
+  const [touring, setTouring] = useState(false);
+  // First visit: the tour opens once the workspace has loaded.
+  const tourOffered = useRef(false);
+  useEffect(() => {
+    if (tourOffered.current || (live && (loading || loadError))) return;
+    tourOffered.current = true;
+    if (!tourDone()) setTouring(true);
+  }, [live, loading, loadError]);
   const [toast, setToastState] = useState<{
     text: string;
     error: boolean;
@@ -286,6 +341,24 @@ function App() {
     return () => clearTimeout(t);
   }, [confirmDelete]);
   const [category, setCategory] = useState("Policy");
+  const [ruleFields, setRuleFields] = useState<RuleFields | null>(null);
+  const [newRule, setNewRule] = useState(emptyRuleDraft);
+  useEffect(() => {
+    if (!live || route !== "playbook" || ruleFields) return;
+    const controller = new AbortController();
+    // Without the fields, rules can still be written in words; the builder just stays hidden.
+    api
+      .ruleFields(controller.signal)
+      .then((fields) => !controller.signal.aborted && setRuleFields(fields))
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [live, route, ruleFields]);
+  // On a phone the Rules & news tab bar scrolls sideways: keep the current tab in view.
+  useEffect(() => {
+    document
+      .querySelector(".section-tabs a.active")
+      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [route]);
   const [preview, setPreview] = useState<Order[]>([]);
   const [importErrors, setImportErrors] = useState<string[]>([]);
   const [fileName, setFileName] = useState("");
@@ -418,9 +491,8 @@ function App() {
       : names.join(" and ");
   const startDemo = () => {
     if (live) {
-      setToast(
-        "The rule-change simulation is available in the sample demo. Your server records are unchanged.",
-      );
+      // Signed-in companies analyse their own orders from the Orders page.
+      go("orders");
       return;
     }
     setOrders((v) => v.map((o) => ({ ...o, risk: false })));
@@ -532,7 +604,9 @@ function App() {
       setServerImport(null);
       setPreview([]);
       setFileName("");
-      setToast(`${result.ordersCreated} orders imported. Awaiting analysis.`);
+      setToast(
+        `${result.ordersCreated} orders imported. Analyse them from the Orders page.`,
+      );
       await refreshWorkspace();
     }
     setPreview([]);
@@ -547,20 +621,29 @@ function App() {
   const costMoney = (n: number) => money(n, sampleCosts.maker.currency);
   // "$2,400" needs "USD" after it; "SGD 14,800" already names its currency.
   const riskCurrency = riskDisplay.includes(currency) ? "" : currency;
-  const status = (o: Order) => (
-    <span
-      className={`status ${o.risk ? "red" : isClear(o) ? "green" : "amber"}`}
-    >
-      <i />
-      {o.risk
-        ? "Action needed"
-        : isClear(o)
-          ? "In the clear"
-          : o.status === "needs_data"
-            ? "Needs data"
-            : "Awaiting analysis"}
-    </span>
-  );
+  const statusOption = (code?: string) =>
+    live ? statusOptions.find((s) => s.code === code) : undefined;
+  // The filter that lists exposed orders, named as the database names it when signed in.
+  const actionFilter = statusOption("exposed")?.label || "Action needed";
+  const status = (o: Order) => {
+    const option = statusOption(o.status);
+    return (
+      <span
+        className={`status ${option ? option.tone : o.risk ? "red" : isClear(o) ? "green" : "amber"}`}
+      >
+        <i />
+        {option
+          ? option.label
+          : o.risk
+            ? "Action needed"
+            : isClear(o)
+              ? "In the clear"
+              : o.status === "needs_data"
+                ? "Needs data"
+                : "Awaiting analysis"}
+      </span>
+    );
+  };
   const orderTable = (items: Order[]) => (
     <div className="table-scroll">
       <table className="orders-table">
@@ -644,21 +727,19 @@ function App() {
               Globe2,
               Package,
               MapIcon,
-              Newspaper,
               ShieldCheck,
-              FileText,
               ClipboardList,
               Upload,
-              Settings2,
               UserRound,
             ][i];
             return (
               <a
                 className={
-                  (route.split("/")[0] === path ? "active " : "") + "nav-item"
+                  (navSection(route) === path ? "active " : "") + "nav-item"
                 }
                 href={"#/workspace/" + path}
                 key={path}
+                data-tour={"nav-" + path}
                 onClick={() => path === "orders" && setFilter("All orders")}
               >
                 <Icon size={18} />
@@ -666,7 +747,7 @@ function App() {
                 {path === "orders" && (
                   <span className="nav-count">{orders.length}</span>
                 )}
-                {path === "rules" && !live && exposed.length > 0 && (
+                {path === "news" && !live && exposed.length > 0 && (
                   <span className="nav-dot" />
                 )}
               </a>
@@ -724,17 +805,30 @@ function App() {
             <strong>
               {detail
                 ? "Order impact"
-                : nav.find(([p]) => p === route.split("/")[0])?.[1] ||
-                  "Overview"}
+                : ruleTabOf(route)
+                  ? `Rules & news / ${ruleTabOf(route)![1]}`
+                  : nav.find(([p]) => p === route.split("/")[0])?.[1] ||
+                    "Overview"}
             </strong>
           </div>
           <div className="top-actions">
+            <WorkspaceSearch
+              live={live}
+              pages={pages}
+              orders={orders}
+              rules={rules}
+              onNavigate={(path) => {
+                setMobile(false);
+                go(path);
+              }}
+            />
             <span className="demo-badge">
               {live ? "CONNECTED WORKSPACE" : "DEMO WORKSPACE"}
             </span>
             {!live && (
               <div
                 className="perspective"
+                data-tour="perspective"
                 role="group"
                 aria-label="See the demo as the maker or the buyer"
               >
@@ -755,11 +849,23 @@ function App() {
               </div>
             )}
             <button
+              className="icon-btn"
+              data-tour="help"
+              aria-label="Show the workspace tour"
+              title="Show the workspace tour"
+              onClick={() => {
+                setMobile(false);
+                setTouring(true);
+              }}
+            >
+              <CircleHelp size={18} />
+            </button>
+            <button
               className="notification icon-btn"
               aria-label="View alerts"
               onClick={() => {
                 go("orders");
-                setFilter("Action needed");
+                setFilter(actionFilter);
               }}
             >
               <Bell size={18} />
@@ -780,8 +886,8 @@ function App() {
               <a
                 key={p}
                 href={"#/workspace/" + p}
-                className={route.split("/")[0] === p ? "active" : ""}
-                aria-current={route.split("/")[0] === p ? "page" : undefined}
+                className={navSection(route) === p ? "active" : ""}
+                aria-current={navSection(route) === p ? "page" : undefined}
                 onClick={() => {
                   setMobile(false);
                   if (p === "orders") setFilter("All orders");
@@ -840,7 +946,8 @@ function App() {
                         </button>
                       )}
                       <button className="text-link" onClick={startDemo}>
-                        Run demo <ArrowUpRight size={18} />
+                        {live ? "Analyse orders" : "Run demo"}{" "}
+                        <ArrowUpRight size={18} />
                       </button>
                     </div>
                   </section>
@@ -923,7 +1030,38 @@ function App() {
                         <ArrowUpRight size={15} />
                       </span>
                       <div className="metric-value">
-                        {riskDisplay}
+                        <CostWhy
+                          why={
+                            live ? (
+                              "The full values of the orders marked as needing action, added up per currency, from your orders."
+                            ) : buyer ? (
+                              <>
+                                <span>
+                                  <b>
+                                    {plural(exposed.length, "order")} ×{" "}
+                                    {money(sampleCosts.buyer.margin, sampleCosts.buyer.currency)}
+                                  </b>
+                                </span>
+                                <span>{sampleCostWhy.margin}</span>
+                              </>
+                            ) : (
+                              <>
+                                <span>
+                                  <b>
+                                    {plural(exposed.length, "order")} × (
+                                    {costMoney(sampleCosts.maker.documentation)} +{" "}
+                                    {sampleCosts.maker.delayDays} days ×{" "}
+                                    {costMoney(sampleCosts.maker.delayPerDay)})
+                                  </b>
+                                </span>
+                                <span>{sampleCostWhy.documentation}</span>
+                                <span>{sampleCostWhy.delay}</span>
+                              </>
+                            )
+                          }
+                        >
+                          {riskDisplay}
+                        </CostWhy>
                         <span>{live ? "by currency" : riskCurrency}</span>
                       </div>
                       <div className="metric-note">
@@ -975,7 +1113,7 @@ function App() {
                     <button
                       className="text-link"
                       onClick={() => {
-                        setFilter("Action needed");
+                        setFilter(actionFilter);
                         go("orders");
                       }}
                     >
@@ -1010,7 +1148,7 @@ function App() {
                       </h3>
                       <p>
                         {live
-                          ? "Each order's document checklist for its market is on the trade map. Prepare a compliance report from an order's page."
+                          ? "Analyse your orders from the Orders page to check each one against its market checklist, your cost settings and your playbook. Each order's page shows what was found."
                           : exposed.length
                             ? `${listNames(exposedSuppliers)} must provide ${sampleObligation.requirement} records for ${plural(exposed.length, "EU-bound order")}.`
                             : "Run the sample rule change to see how ExportMate connects a new obligation to your open orders."}
@@ -1089,7 +1227,7 @@ function App() {
                     </section>
                   </div>
                   <ErrorBoundary fallback={null}>
-                    <NewsHighlights live={live} />
+                    <NewsHighlights live={live} orders={orders} />
                   </ErrorBoundary>
                   <div className="section-heading order-section">
                     <h2>Orders on the move.</h2>
@@ -1113,6 +1251,16 @@ function App() {
                       </Button>
                     }
                   />
+                  {live && (
+                    <Suspense fallback={null}>
+                      <RunPanel
+                        editable={editable}
+                        pending={pendingOrders.length}
+                        onFinished={refreshOrders}
+                        notify={setToast}
+                      />
+                    </Suspense>
+                  )}
                   <div className="summary-strip">
                     <span>
                       <b>{orders.length}</b> open orders
@@ -1129,9 +1277,13 @@ function App() {
                     <div className="tabs">
                       {[
                         "All orders",
-                        "Action needed",
-                        "In the clear",
-                        ...(live ? ["Awaiting analysis", "Needs data"] : []),
+                        ...(live && statusOptions.length
+                          ? statusOptions.map((s) => s.label)
+                          : [
+                              "Action needed",
+                              "In the clear",
+                              ...(live ? ["Awaiting analysis", "Needs data"] : []),
+                            ]),
                       ].map((f) => (
                         <button
                           key={f}
@@ -1157,7 +1309,11 @@ function App() {
                     orders.filter(
                       (o) =>
                         (filter === "All orders" ||
-                          (filter === "Action needed"
+                          (live && statusOptions.length
+                            ? statusOptions.some(
+                                (s) => s.label === filter && s.code === o.status,
+                              )
+                            : filter === "Action needed"
                             ? o.risk
                             : filter === "Awaiting analysis"
                               ? isPending(o)
@@ -1244,9 +1400,68 @@ function App() {
                       </div>
                     </section>
                   )}
+                  {live && serverDetail && (
+                    <Suspense
+                      fallback={
+                        <section className="panel" role="status">
+                          Loading the status…
+                        </section>
+                      }
+                    >
+                      <OrderStatusPanel
+                        key={serverDetail.order.id}
+                        detail={serverDetail}
+                        options={statusOptions}
+                        role={account?.role ?? null}
+                        notify={setToast}
+                        onChanged={async (next) => {
+                          const id = next.order.id;
+                          if (
+                            location.hash.endsWith(
+                              "/orders/" + encodeURIComponent(id),
+                            )
+                          )
+                            setServerDetail(next);
+                          await refreshOrders();
+                        }}
+                      />
+                    </Suspense>
+                  )}
+                  {live && serverDetail && (
+                    <Suspense
+                      fallback={
+                        <section className="panel" role="status">
+                          Loading the analysis…
+                        </section>
+                      }
+                    >
+                      <OrderAnalysis
+                        key={serverDetail.order.id}
+                        orderId={serverDetail.order.id}
+                        hsCode={serverDetail.order.hsCode}
+                        latestReportId={serverDetail.latestReportId ?? null}
+                        role={account?.role ?? null}
+                        notify={setToast}
+                        onChanged={async () => {
+                          const id = serverDetail.order.id;
+                          const [next] = await Promise.all([
+                            api.detail(id),
+                            refreshOrders(),
+                          ]);
+                          // Only if the visitor is still on this order.
+                          if (
+                            location.hash.endsWith(
+                              "/orders/" + encodeURIComponent(id),
+                            )
+                          )
+                            setServerDetail(next);
+                        }}
+                      />
+                    </Suspense>
+                  )}
                   {live ? (
                     <section className="panel">
-                      <h2>Source and analysis</h2>
+                      <h2>Source</h2>
                       {detailError ? (
                         <p role="alert">{detailError}</p>
                       ) : !serverDetail ? (
@@ -1255,8 +1470,8 @@ function App() {
                         <>
                           <p>
                             The document checklist for this order's market is
-                            on the trade map, and the compliance report above
-                            collects it with the official texts.
+                            also on the trade map, and the compliance report
+                            above collects it with the official texts to share.
                           </p>
                           {serverDetail.source ? (
                             <>
@@ -1321,7 +1536,11 @@ function App() {
                         <h3>The cost of waiting</h3>
                         <div className="cost-row">
                           <span>Documentation preparation</span>
-                          <b>{costMoney(sampleCosts.maker.documentation)}</b>
+                          <b>
+                            <CostWhy why={sampleCostWhy.documentation}>
+                              {costMoney(sampleCosts.maker.documentation)}
+                            </CostWhy>
+                          </b>
                         </div>
                         <div className="cost-row">
                           <span>
@@ -1329,30 +1548,39 @@ function App() {
                             × {costMoney(sampleCosts.maker.delayPerDay)}
                           </span>
                           <b>
-                            {costMoney(
-                              sampleCosts.maker.delayDays *
-                                sampleCosts.maker.delayPerDay,
-                            )}
+                            <CostWhy why={sampleCostWhy.delay}>
+                              {costMoney(
+                                sampleCosts.maker.delayDays *
+                                  sampleCosts.maker.delayPerDay,
+                              )}
+                            </CostWhy>
                           </b>
                         </div>
                         <div className="cost-row total">
                           <span>Estimated maker exposure</span>
                           <b>
-                            {costMoney(makerCost)} {sampleCosts.maker.currency}
+                            <CostWhy
+                              why={`The two lines above. ${sampleCostWhy.note}`}
+                            >
+                              {costMoney(makerCost)} {sampleCosts.maker.currency}
+                            </CostWhy>
                           </b>
                         </div>
                         <p className="fine-print">
                           Illustrative estimate from the demo's cost
-                          assumptions, not a tariff or guaranteed cost. Order
-                          value is not added to this estimate.
+                          assumptions, not a tariff or guaranteed cost; hover an
+                          amount to see where it comes from. Order value is not
+                          added to this estimate.
                         </p>
                         {buyer && (
                           <div className="notice">
                             Buyer scenario:{" "}
-                            {money(
-                              sampleCosts.buyer.margin,
-                              sampleCosts.buyer.currency,
-                            )}{" "}
+                            <CostWhy why={sampleCostWhy.margin}>
+                              {money(
+                                sampleCosts.buyer.margin,
+                                sampleCosts.buyer.currency,
+                              )}
+                            </CostWhy>{" "}
                             margin exposure per affected purchase order. This is
                             a separate sample estimate, not a currency
                             conversion.
@@ -1447,6 +1675,7 @@ function App() {
                   <TradeMapPage
                     key={route}
                     live={live}
+                    editable={editable}
                     focus={route.slice(4)}
                     toneOf={(o) =>
                       o.risk ? "red" : isClear(o) ? "green" : "amber"
@@ -1469,14 +1698,39 @@ function App() {
                   />
                 </Suspense>
               )}
+              {ruleTabOf(route) && (
+                <nav className="section-tabs" aria-label="Rules & news">
+                  {ruleTabs.map(([p, l]) => (
+                    <a
+                      key={p}
+                      href={"#/workspace/" + p}
+                      className={ruleTabOf(route)![0] === p ? "active" : ""}
+                      aria-current={
+                        ruleTabOf(route)![0] === p ? "page" : undefined
+                      }
+                    >
+                      {l}
+                      {p === "rules" && !live && exposed.length > 0 && (
+                        <span className="nav-dot" />
+                      )}
+                    </a>
+                  ))}
+                </nav>
+              )}
               {route.split("/")[0] === "regulations" && (
                 <Suspense fallback={<section className="panel" role="status">Loading regulations…</section>}>
-                  <RegulationsPage key={route} live={live} editable={editable} path={route.slice("regulations".length)} />
+                  <RegulationsPage key={route} live={live} editable={editable} owner={account?.role === "owner"} path={route.slice("regulations".length)} />
+                </Suspense>
+              )}
+              {route === "knowledge" && (
+                <Suspense fallback={<section className="panel" role="status">Loading knowledge base…</section>}>
+                  <KnowledgeBasePage live={live} editable={editable} notify={setToast} />
                 </Suspense>
               )}
               {route === "news" && (
                 <NewsWatchPage
                   live={live}
+                  editable={editable}
                   sourcesLocked={
                     !live
                       ? "Sign in to a company workspace to add or switch off sources."
@@ -1500,7 +1754,7 @@ function App() {
                     title="Rule watch."
                     description={
                       live
-                        ? "The requirements behind your orders' market checklists."
+                        ? "What changes soon in the markets you ship to, and what applies to your orders now."
                         : "Changes affecting your products and markets."
                     }
                     action={
@@ -1515,12 +1769,9 @@ function App() {
                   <div className="notice">
                     <ShieldCheck size={18} />
                     {live
-                      ? "Built from your orders' market checklists. ExportMate doesn't yet read new rule texts by itself; the official texts are in the regulation library."
+                      ? "Built from your orders' market checklists and the dates in each line's official text. ExportMate doesn't read new rule texts by itself yet: add a new version under Regulations and its dates show up here."
                       : "Sample rule-change scenario: one illustrative rule, checked against every order in this demo, including ones you import."}
                   </div>
-                  <a className="text-link" href="#/workspace/regulations">
-                    Open regulation library <ArrowUpRight size={16} />
-                  </a>
                   {live ? (
                     <CompanyRuleWatch
                       onOrder={(id) =>
@@ -1582,7 +1833,7 @@ function App() {
                       <button
                         className="text-link"
                         onClick={() => {
-                          setFilter("Action needed");
+                          setFilter(actionFilter);
                           go("orders");
                         }}
                       >
@@ -1737,9 +1988,21 @@ function App() {
                         <>
                           <p>
                             {live
-                              ? "Checked and ready. Imported orders show as awaiting analysis on the Orders page; their market checklists are on the trade map."
+                              ? "Checked and ready. Imported orders wait for analysis: start it from the Orders page. Their market checklists are on the trade map."
                               : `Checked in your browser. On import, each order is checked against the sample rule change (${sampleObligation.title.toLowerCase()}).`}
                           </p>
+                          {preview.some((o) => !o.hsCode) && (
+                            <p className="notice" role="note">
+                              {plural(
+                                preview.filter((o) => !o.hsCode).length,
+                                "row",
+                              )}{" "}
+                              without an HS code.{" "}
+                              {live
+                                ? "They import as needing data; on each order's page you can ask for a code suggestion."
+                                : "Their market checks need one."}
+                            </p>
+                          )}
                           <div className="table-scroll">
                             <table>
                               <thead>
@@ -1748,6 +2011,7 @@ function App() {
                                   <th>Product</th>
                                   <th>Destination</th>
                                   <th>Value</th>
+                                  <th>HS code</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -1757,6 +2021,15 @@ function App() {
                                     <td>{o.product}</td>
                                     <td>{o.destination}</td>
                                     <td>{money(o.value, o.currency)}</td>
+                                    <td>
+                                      {o.hsCode || (
+                                        <small className="muted">
+                                          {live
+                                            ? "No HS code: you can ask for a suggestion after import"
+                                            : "No HS code: the order will need one"}
+                                        </small>
+                                      )}
+                                    </td>
                                   </tr>
                                 ))}
                               </tbody>
@@ -1834,7 +2107,7 @@ function App() {
                   <div className="notice">
                     <Settings2 size={18} />
                     {live
-                      ? "Rules are saved to your company playbook. The ExportMate assistant follows the ones switched on when it advises you; order statuses don't use them yet."
+                      ? "Rules are saved to your company playbook. The ExportMate assistant follows the ones switched on when it advises you. Analysis also checks every switched-on rule with conditions against each order."
                       : "Rules are saved in this browser. The ExportMate assistant follows the ones switched on when it advises you."}
                   </div>
                   <div className="playbook-grid">
@@ -1854,8 +2127,49 @@ function App() {
                           key={r.id}
                         >
                           <div>
-                            <span className="eyebrow">{r.category}</span>
+                            <span className="eyebrow">
+                              {r.category}
+                              {live && (
+                                <span
+                                  className={"pb-badge" + (r.checked ? "" : " off")}
+                                >
+                                  {r.checked ? "CHECKED" : "NOT CHECKED"}
+                                </span>
+                              )}
+                            </span>
                             <p>{r.text}</p>
+                            {live && r.checked && (
+                              <p className="pb-conditions">
+                                {describeRule(r, ruleFields)}
+                              </p>
+                            )}
+                            {live && editable && ruleFields && (
+                              <RuleConditionsEditor
+                                rule={r}
+                                fields={ruleFields}
+                                currency={account?.company?.currency || "USD"}
+                                busy={busy}
+                                onSave={async (body) => {
+                                  let saved = false;
+                                  await mutate(async () => {
+                                    const updated = await api.updateRule(
+                                      r.id,
+                                      body,
+                                    );
+                                    setRules((v) =>
+                                      v.map((x) => (x.id === r.id ? updated : x)),
+                                    );
+                                    setToast(
+                                      updated.checked
+                                        ? "Conditions saved. Analysis checks this rule from now on."
+                                        : "Conditions removed. The rule is stored only.",
+                                    );
+                                    saved = true;
+                                  });
+                                  return saved;
+                                }}
+                              />
+                            )}
                           </div>
                           <button
                             className={"toggle " + (r.enabled ? "on" : "")}
@@ -1938,15 +2252,30 @@ function App() {
                         e.preventDefault();
                         if (!ruleText.trim()) return;
                         if (live) {
+                          let checks;
+                          try {
+                            checks = ruleFields
+                              ? ruleBody(newRule, ruleFields)
+                              : { when: null, then: null };
+                          } catch (error) {
+                            setToast((error as Error).message, true);
+                            return;
+                          }
                           void mutate(async () => {
                             const rule = await api.addRule({
                               text: ruleText.trim(),
                               category,
                               enabled: true,
+                              ...checks,
                             });
                             setRules((v) => [...v, rule]);
                             setRuleText("");
-                            setToast("Rule saved to your playbook.");
+                            setNewRule(emptyRuleDraft());
+                            setToast(
+                              rule.checked
+                                ? "Rule saved. Analysis checks it on every order."
+                                : "Rule saved to your playbook.",
+                            );
                           });
                           return;
                         }
@@ -1986,6 +2315,16 @@ function App() {
                         onChange={(e) => setRuleText(e.target.value)}
                         placeholder="For example: Tell me if an order’s margin falls below 8%."
                       />
+                      {live && ruleFields && (
+                        <RuleBuilder
+                          idPrefix="new-rule"
+                          fields={ruleFields}
+                          draft={newRule}
+                          currency={account?.company?.currency || "USD"}
+                          disabled={busy || !editable}
+                          onChange={setNewRule}
+                        />
+                      )}
                       <Button
                         type="submit"
                         disabled={busy || !editable || !ruleText.trim()}
@@ -2008,12 +2347,17 @@ function App() {
                   }}
                 />
               )}
+              {route === "account" && live && account && (
+                <Suspense fallback={null}>
+                  <CompanySettings role={account.role} notify={setToast} />
+                </Suspense>
+              )}
               {live && route.startsWith("orders/") && !detail && (
                 <p role="status">{detailError || "Loading order…"}</p>
               )}
               {!(live && route.startsWith("orders/")) &&
                 route !== "" &&
-                !nav.some(([p]) => p === route) &&
+                !pages.some(([p]) => p === route) &&
                 route.split("/")[0] !== "map" &&
                 route.split("/")[0] !== "regulations" &&
                 route.split("/")[0] !== "reports" &&
@@ -2032,12 +2376,13 @@ function App() {
             <span>Trade, with perspective.</span>
             <span>
               {live
-                ? "COMPANY DATA · EXPOSURE ANALYSIS PENDING"
+                ? "COMPANY DATA · ANALYSED AGAINST YOUR MARKET CHECKLISTS"
                 : "FICTIONAL DEMO DATA · NO LIVE MONITORING"}
             </span>
           </footer>
         </main>
       </div>
+      {touring && <Tour live={live} onClose={() => setTouring(false)} />}
       {toast && (
         <div
           className={"toast" + (toast.error ? " error" : "")}

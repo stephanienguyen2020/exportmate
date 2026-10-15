@@ -42,8 +42,35 @@ class Settings(BaseSettings):
     resend_api_key: str = ""
     report_email_from: str = "ExportMate <reports@exportmate.app>"
     report_emails_per_hour: int = 20
+    # The public contact form (POST /contact) is emailed here; empty: the form is switched off.
+    contact_inbox: str = ""
+    contact_messages_per_hour: int = 5  # per visitor IP, counted per instance
+    # Team invitations (services/members.py): the link in the email, and how long it is valid.
+    app_url: str = "https://exportmate.vercel.app"
+    member_invite_days: int = 14
+    member_invites_per_hour: int = 30  # per owner
     # AI service origin; company reports read its news alerts with the caller's token.
     ai_service_url: str = "http://127.0.0.1:8080"
+    # Gemini on Vertex AI (core/gemini.py), in the project above.
+    gemini_model: str = "gemini-2.5-flash"
+    gemini_location: str = "global"
+    gemini_timeout_seconds: int = 90
+    # Embeddings for HS heading and document search; same model as ai/server's vector index.
+    embedding_model: str = "gemini-embedding-001"
+    # Per user per hour.
+    supplier_document_uploads_per_hour: int = 60
+    # Each one is an AI call.
+    supplier_message_drafts_per_hour: int = 30
+    requirement_drafts_per_hour: int = 20
+    hs_suggestions_per_hour: int = 60
+    scenario_suggestions_per_hour: int = 30
+    solution_suggestions_per_hour: int = 30
+    analysis_runs_per_hour: int = 60
+    # A saved solution is offered for later orders for this many days (or until the day before
+    # its requirement's stated change, or until the requirement cites another version).
+    solution_valid_days: int = 90
+    # How far ahead Rule watch looks for checklist lines that take effect or change.
+    rule_watch_days: int = 90
 
     @model_validator(mode="after")
     def no_dev_auth_in_production(self):

@@ -1,6 +1,6 @@
 # ExportMate backend
 
-FastAPI + Postgres. Docs in [docs/](docs/): [requirements](docs/REQUIREMENTS.md), [technical decisions](docs/DECISIONS.md), [endpoints](docs/API.md), [AI ideas](docs/AI_IDEAS.md).
+FastAPI + Postgres. Docs in [docs/](docs/): [requirements](docs/REQUIREMENTS.md), [technical decisions](docs/DECISIONS.md), [endpoints](docs/API.md), [AI ideas](docs/AI_IDEAS.md), [frontend gaps](docs/FRONTEND_GAPS.md).
 
 ## Run locally
 
@@ -10,6 +10,7 @@ docker compose up -d                 # Postgres on 127.0.0.1:5433 (+ exportmate_
 uv sync
 uv run alembic upgrade head
 uv run python -m app.seed_demo_data --email lan@example.com   # demo company, 12 orders, 3 rules, map data
+uv run python -m app.seed_demo_data --company us-furniture --email minh@example.com   # furniture maker, Vietnam to the US
 uv run uvicorn app.main:app --reload --port 8000
 ```
 
@@ -17,7 +18,7 @@ All settings come from `backend/.env` (app, Alembic, seed and tests), whichever 
 
 Uploaded documents always go to the Cloud Storage bucket `REGULATION_DOCUMENT_BUCKET`, also when running locally: run `gcloud auth application-default login` once. Without it, uploads and downloads return `503 storage_not_configured`. Tests use an in-memory fake.
 
-Order reports are emailed through Resend when `RESEND_API_KEY` is set (sender `REPORT_EMAIL_FROM`, whose domain must be verified in Resend). Without a key they run in sandbox mode: the PDF is built and the send is audited, but nothing is delivered, and the API answers `sandbox: true`. Tests always use the sandbox.
+Company reports read News watch alerts from the AI service at `AI_SERVICE_URL` (default `http://127.0.0.1:8080`, HTTPS otherwise); if it isn't running, the report says News watch was unavailable. Reports are emailed through Resend when `RESEND_API_KEY` is set (sender `REPORT_EMAIL_FROM`, whose domain must be verified in Resend). Without a key they run in sandbox mode: the PDF is built and the send is audited, but nothing is delivered, and the API answers `sandbox: true`. Tests always use the sandbox.
 
 API docs: http://127.0.0.1:8000/api/v1/docs
 
@@ -39,6 +40,15 @@ uv run python -m app.cleanup_imports --older-than-days 30   # delete uploads nev
 
 The demo seed adds the demo company's suppliers, their documents and its sites
 (`app/seed_data/demo_company.json`, which also holds its About company profile). Observations are samples.
+
+`--company us-furniture` seeds a second fictional company, Vietnam Google AI Builder
+Furniture (`app/seed_data/us_furniture_company.json`): a Dong Nai furniture maker shipping 16 orders to
+US ports, with suppliers whose documents exercise every US checklist line (a missing species
+declaration, an EN 717-1/CARB formaldehyde test where TSCA Title VI is expected, plywood
+without the core-veneer certification, a TSCA certificate that expires before a ship date, a
+supplier with no records, and Section 232 orders before and after 1 January 2027). A user
+belongs to one company, so use another email than the Binh Duong demo's. The same orders
+are in `samples/orders-us-furniture.csv` for the upload flow.
 
 Each market requirement (one item of a market's checklist) cites an official text listed in `app/seed_data/regulation_sources.json` (EUDR, Lacey Act, ISPM 15, …). The reference seed downloads each text once (about 30 MB the first time) and stores it as a shared regulation in the bucket, so it needs internet and `REGULATION_DOCUMENT_BUCKET` (see above). A text that can't be downloaded is skipped with its market requirements, and added on the next run. Tests use a fake download.
 
@@ -87,7 +97,7 @@ PROJECT_ID=<project> backend/deploy.sh   # build image, run migrations, roll out
 | `app/database/models/` | Tables | One file per area. |
 | `app/database/queries/` | Accessors | The only place that builds SQL. Never commits. |
 | `app/schemas/` | Request/response models | snake_case in Python, camelCase in JSON. |
-| `app/core/` | Config, auth, errors, request ID | |
+| `app/core/` | Config, auth, errors, request ID, Cloud Storage, Gemini (`gemini.py`) | |
 
 Every company-scoped route takes a `ViewerContext` / `EditorContext` / `OwnerContext`. The company always comes from the caller's membership, never from the request. Another company's records return `404`.
 

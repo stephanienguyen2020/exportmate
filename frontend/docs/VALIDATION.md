@@ -117,3 +117,22 @@ Supersedes the fixture-based trade map checks above where they differ. Map data 
 - Audit trail: steps carry the agent that made them (Quick answer, Analyst, specialists); specialists' reports show as their own steps with the request and report; recalled memories show as a step; the router line names the answering agent. `npm run build` and the Playwright suite (39 tests) pass.
 - Account › What the assistant remembers (company workspaces): lists the user's Memory Bank memories and forgets one with its own token (`tests/backend-integration.spec.ts`); screenshots reviewed at 1280 px and 390 px, no overflow.
 - Live, against Agent Platform in `exportmate-app`: a preference stated in one browser session ("short bullet points", "plywood to the UK") is recalled in a new session and shapes the answer; a follow-up in the first session continues its Agent Platform session; another user's memory search finds nothing.
+
+### Workspace tour (15 October 2026)
+
+- First-visit walkthrough of the workspace: a welcome card, then a spotlight on each sidebar page (Overview to Playbook), the demo's Maker/Buyer switch, the assistant button and the ? that replays it. Skip, Back/Next, Escape and arrow keys; focus stays in the card and returns afterwards. Shown once per browser (`em-tour-done`); signed in it waits until the workspace has loaded. On phones the sidebar steps are centred cards.
+- Playwright (port 5199, since 5175 was in use): 54 passed, 1 skipped. New `tests/tour.spec.ts`: the tour opens on a first visit, places the card beside the item it describes, goes back, closes with Escape, stays closed after a reload and reopens from the ? button; at 390 px every step fits the screen and the last one spotlights the ? button. Screenshots at 1366 and 390 px checked.
+- Not exercised: a signed-in company workspace with a real backend.
+
+### Rules & news tab (15 October 2026)
+
+- News watch, Rule watch, Regulations and the Playbook share one sidebar item, "Rules & news", with a tab bar; their routes and deep links are unchanged. The workspace tour has one step for the four. Signed in, Rule watch starts with "Coming up" (`GET /trade-map/changes`; the window is the `RULE_WATCH_DAYS` setting, and the page shows the `days` the API returns): each checklist line that takes effect or changes, its date and market, what changes, the official text version, and the open orders it reaches (buttons to the map).
+- Backend: `test_rule_watch_lists_checklist_changes_with_the_orders_they_reach` (the US tariff change on 1 Jan 2027 reaches PO-6 only; the list equals the company report's changes section; `days` outside 1–365 is 422). Frontend: Playwright 61 passed, 1 skipped; the rule watch test covers the tab bar, the active sidebar item and "Coming up". Screenshots of News watch, Rule watch and the Playbook at 1366 and 390 px: no horizontal overflow, all four tabs fit at 390 px.
+
+### Knowledge base tab (15 October 2026)
+
+- A fifth Rules & news tab, "Knowledge base" (`#/workspace/knowledge`), lists every saved solution grouped by problem (market, requirement, missing or wrong) from `GET /solutions`: Valid / Expired / All, a market filter when there are several, and a search over steps, notes, orders and the cited text. Owners and editors add notes, adopt or reject there; a solution is used for an order only from that order's report. The browser demo shows a sign-in prompt. The order page's "Suggested solutions" panel links to it.
+- Backend: `test_the_knowledge_base_lists_every_solution_by_problem` (empty at first; the valid adopted solution before the expired one; the requirement's title; viewers can read; another company sees nothing). `tests/test_solutions.py`: 7 passed. Ruff clean.
+- Frontend: `npm run build` passes. Playwright (port 5179, since other sessions share 5175): 69 passed, 1 skipped. New test: the tab is current in the tab bar, the default Valid view is empty when only an expired solution exists, the Expired view shows it with its note and no "Use for" button, and search filters it.
+- At 390 px the five tabs are wider than the screen (420 px in 346 px): the bar scrolls sideways and now scrolls the current tab into view. No horizontal page overflow at 390 or 1366 px.
+- Not exercised: a real backend with saved solutions in the browser.

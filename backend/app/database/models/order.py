@@ -4,12 +4,16 @@ from datetime import date, datetime
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     LargeBinary,
     String,
+    Text,
     UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -23,6 +27,11 @@ class OrderStatus(str, enum.Enum):
     clear = "clear"
     exposed = "exposed"
     needs_data = "needs_data"
+
+
+class StatusChangeSource(str, enum.Enum):
+    manual = "manual"  # a person set it, with a note
+    analysis = "analysis"  # an analysis run set it
 
 
 class ImportStatus(str, enum.Enum):
@@ -88,4 +97,65 @@ class Order(Base):
     )
     source_row_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("import_rows.id"))
     created_at: Mapped[datetime] = created_column()
-    __table_args__ = (UniqueConstraint("company_id", "external_id"),)
+    __table_args__ = (
+        UniqueConstraint("company_id", "external_id"),
+        # Past orders with similar product names (HS code suggestions).
+        Index(
+            "ix_orders_product_trgm",
+            "product",
+            postgresql_using="gin",
+            postgresql_ops={"product": "gin_trgm_ops"},
+        ),
+    )
+
+
+class OrderStatusDefinition(Base):
+    """How each order status is named and shown, and whether a person may set it by hand.
+    Loaded from seed_data/reference.json by seed_reference_data; the frontend reads it from
+    GET /order-statuses."""
+
+    __tablename__ = "order_statuses"
+    code: Mapped[OrderStatus] = mapped_column(
+        pg_enum(OrderStatus, "order_status"), primary_key=True
+    )
+    label: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[str] = mapped_column(String(500), nullable=False)
+    tone: Mapped[str] = mapped_column(String(20), nullable=False)  # green, amber or red
+    manual: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class OrderStatusChange(Base):
+    """One change of an order's status: by a person (with a note) or by an analysis run."""
+
+    __tablename__ = "order_status_changes"
+    id: Mapped[uuid.UUID] = id_column()
+    company_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False
+    )
+    order_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("orders.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    from_status: Mapped[OrderStatus] = mapped_column(
+        pg_enum(OrderStatus, "order_status"), nullable=False
+    )
+    to_status: Mapped[OrderStatus] = mapped_column(
+        pg_enum(OrderStatus, "order_status"), nullable=False
+    )
+    source: Mapped[StatusChangeSource] = mapped_column(
+        pg_enum(StatusChangeSource, "status_change_source"), nullable=False
+    )
+    note: Mapped[str | None] = mapped_column(Text)
+    run_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("analysis_runs.id", ondelete="SET NULL")
+    )
+    changed_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    changed_at: Mapped[datetime] = created_column()
+    __table_args__ = (
+        CheckConstraint(
+            "source <> 'manual' OR note IS NOT NULL", name="manual_status_change_has_note"
+        ),
+        CheckConstraint(
+            "source <> 'analysis' OR run_id IS NOT NULL", name="analysis_status_change_has_run"
+        ),
+    )

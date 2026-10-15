@@ -3,11 +3,12 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.core.auth import ViewerContext
+from app.core.auth import EditorContext, ViewerContext
 from app.database.models import OrderStatus
 from app.database.session import get_db
+from app.schemas.analysis import OrderDetailOut
 from app.schemas.common import SuccessResponse, success_response
-from app.schemas.orders import OrderDetailOut, OrderOut
+from app.schemas.orders import OrderOut, OrderStatusChangeIn, OrderStatusOut
 from app.schemas.overview import OverviewOut
 from app.services import orders as order_service
 
@@ -35,6 +36,20 @@ def list_orders(
 @router.get("/orders/{order_id}", response_model=SuccessResponse[OrderDetailOut])
 def get_order(order_id: str, ctx: ViewerContext, db: Db):
     return success_response(order_service.get_order_detail(db, ctx, order_id))
+
+
+@router.patch("/orders/{order_id}/status", response_model=SuccessResponse[OrderDetailOut])
+def change_order_status(order_id: str, payload: OrderStatusChangeIn, ctx: EditorContext, db: Db):
+    """Set an order's status by hand, with a note saying why (owners and editors). Recorded in
+    the order's `statusChanges` and audited as `order.status_changed`."""
+    return success_response(order_service.change_order_status(db, ctx, order_id, payload))
+
+
+@router.get("/order-statuses", response_model=SuccessResponse[list[OrderStatusOut]])
+def list_order_statuses(ctx: ViewerContext, db: Db):
+    """Every order status with its label, description and colour, from the database; `manual`
+    marks those a person may set by hand."""
+    return success_response(order_service.list_order_statuses(db))
 
 
 @router.get("/overview", response_model=SuccessResponse[OverviewOut])

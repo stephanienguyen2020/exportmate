@@ -83,9 +83,7 @@ def test_new_supplier_is_matched_to_its_orders_and_checked(client, reference):
 def test_supplier_names_are_unique_per_company(client, reference):
     headers = onboard(client, "lan@example.com")
     assert client.post("/api/v1/suppliers", headers=headers, json=SUPPLIER).status_code == 201
-    again = client.post(
-        "/api/v1/suppliers", headers=headers, json={"name": "  dong nai   VENEER "}
-    )
+    again = client.post("/api/v1/suppliers", headers=headers, json={"name": "  dong nai   VENEER "})
     assert again.status_code == 409
     assert again.json()["error"]["code"] == "supplier_exists"
 
@@ -101,7 +99,12 @@ def test_supplier_names_are_unique_per_company(client, reference):
         ({"location": {"latitude": 95, "longitude": 106}}, "location.latitude"),
         ({"documents": [{"kind": "passport", "detail": "x"}]}, "documents"),
         (
-            {"documents": [{"kind": "legality", "detail": "a"}, {"kind": "legality", "detail": "b"}]},
+            {
+                "documents": [
+                    {"kind": "legality", "detail": "a"},
+                    {"kind": "legality", "detail": "b"},
+                ]
+            },
             "documents",
         ),
         ({"name": "   "}, "name"),
@@ -175,8 +178,7 @@ def test_viewers_cannot_change_places_and_companies_cannot_see_each_other(client
     site_id = client.post("/api/v1/sites", headers=headers, json=SITE).json()["data"]["id"]
     other = onboard(client, "minh@example.com", company="Other Co.")
     assert (
-        client.patch(f"/api/v1/suppliers/{supplier_id}", headers=other, json={}).status_code
-        == 404
+        client.patch(f"/api/v1/suppliers/{supplier_id}", headers=other, json={}).status_code == 404
     )
     assert client.delete(f"/api/v1/suppliers/{supplier_id}", headers=other).status_code == 404
     assert client.patch(f"/api/v1/sites/{site_id}", headers=other, json={}).status_code == 404

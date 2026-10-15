@@ -78,6 +78,7 @@ const mapData: TradeMap = {
       id: "supplier-1",
       name: "Sample supplier",
       place: "Vietnam",
+      country: "VN",
       location: { latitude: 11.54, longitude: 106.9 },
       supplies: "Sample goods",
       documents: [],
@@ -86,11 +87,13 @@ const mapData: TradeMap = {
   ],
   sites: [
     {
+      id: "site-1",
       key: "factory",
       kind: "factory",
       name: "Sample factory",
       shortName: "Factory",
       place: "Vietnam",
+      country: "VN",
       location: { latitude: 10.8, longitude: 106.7 },
       note: "Synthetic test location",
       isRouteOrigin: true,
@@ -133,7 +136,11 @@ const mapData: TradeMap = {
       ],
     },
   ],
-  documentKinds: [],
+  documentKinds: [{ kind: "legality", label: "Timber legality evidence" }],
+  countries: [
+    { code: "KH", numericCode: "116", name: "Cambodia" },
+    { code: "VN", numericCode: "704", name: "Vietnam" },
+  ],
   homeCountryIds: ["704"],
   checkRadiusKm: 25,
 };
@@ -144,9 +151,14 @@ async function openMap(
     fail?: boolean;
     hash?: string;
     origin?: string;
+    role?: "owner" | "viewer";
+    writes?: { method: string; path: string; body: any }[];
   } = {},
 ) {
   const comparisons: URL[] = [];
+  // Saved suppliers and sites show up when the map reloads.
+  const current: TradeMap = structuredClone(mapData);
+  const scenarios: Record<string, unknown>[] = [];
   await page.route("**/api/impacts**", (r) =>
     r.fulfill({ json: { impacts: [], scan: null } }),
   );
@@ -157,6 +169,7 @@ async function openMap(
     if (path === "/me")
       data = {
         ...account,
+        role: options.role ?? account.role,
         company: {
           ...account.company,
           origin: options.origin ?? account.company.origin,
@@ -183,7 +196,103 @@ async function openMap(
           status: 503,
           json: { error: { message: "Map service unavailable" } },
         });
-      data = { ...mapData, sites: options.noOrigin ? [] : mapData.sites };
+      data = { ...current, sites: options.noOrigin ? [] : current.sites };
+    } else if (path === "/suppliers/supplier-1/documents") {
+      options.writes?.push({ method: "POST", path, body: null });
+      data = {
+        id: "upload-1",
+        supplierId: "supplier-1",
+        filename: "fsc.pdf",
+        contentType: "application/pdf",
+        sizeBytes: 9,
+        status: "draft",
+        extracted: {
+          kind: "legality",
+          documentNumber: "SGS-COC-001234",
+          issuer: "SGS",
+          issuedOn: "2025-12-15",
+          expiresOn: "2026-12-15",
+          standards: ["FSC-STD-40-004"],
+          detail: "FSC chain of custody SGS-COC-001234",
+          notes: "The stamp is faint.",
+        },
+        createdAt: "2026-10-15T08:00:00Z",
+        confirmedAt: null,
+      };
+    } else if (path === "/supplier-documents/upload-1/confirm") {
+      const body = route.request().postDataJSON();
+      options.writes?.push({ method: "POST", path, body });
+      current.suppliers[0].documents = [
+        { ...body, label: "Timber legality evidence", fromUpload: true },
+      ];
+      data = {
+        id: "doc-1",
+        supplierId: "supplier-1",
+        uploadId: "upload-1",
+        ...body,
+      };
+    } else if (path === "/suppliers" || path.startsWith("/sites/")) {
+      const method = route.request().method();
+      const body = route.request().postDataJSON();
+      options.writes?.push({ method, path, body });
+      if (path === "/suppliers") {
+        data = { id: "supplier-2", ...body, documents: [] };
+        current.suppliers.push({
+          ...(data as TradeMap["suppliers"][number]),
+          orderIds: [],
+        });
+      } else {
+        data = { ...current.sites[0], ...body };
+        current.sites[0] = data as TradeMap["sites"][number];
+      }
+    } else if (path.startsWith("/trade-map/scenarios")) {
+      const method = route.request().method();
+      const body = route.request().postDataJSON();
+      if (method !== "GET") options.writes?.push({ method, path, body });
+      if (path === "/trade-map/scenarios/suggest")
+        data = {
+          summary: "A stop in Singapore asks for a fresh look at origin proof.",
+          nextSteps: [
+            {
+              text: "Ask the forwarder how the consignment stays unaltered.",
+              items: ["Proof of origin"],
+            },
+          ],
+          questions: [
+            { text: "Who pays any extra freight?", items: ["Freight cost"] },
+          ],
+          note: "A stop in Singapore asks for a fresh look at origin proof.\n\nNext steps:\n- Ask the forwarder how the consignment stays unaltered.",
+        };
+      else if (method === "POST") {
+        const label =
+          body.kind === "route"
+            ? `Route via ${body.target === "SG" ? "Singapore" : body.target}`
+            : `Market: ${body.target}`;
+        const kept = {
+          id: `scenario-${scenarios.length + 1}`,
+          ...body,
+          label,
+          comparison: {
+            kind: body.kind,
+            reuse: [],
+            reevaluate: [{ title: "Proof of origin", note: "" }],
+            unknown: [{ title: "Freight cost", note: "" }],
+            dropped: [],
+          },
+          createdBy: { id: "test-user", name: "Test Owner" },
+          updatedBy: { id: "test-user", name: "Test Owner" },
+          createdAt: "2026-10-15T08:00:00Z",
+          updatedAt: "2026-10-15T08:00:00Z",
+        };
+        scenarios.unshift(kept);
+        data = kept;
+      } else if (method === "DELETE") {
+        scenarios.splice(
+          scenarios.findIndex((s) => path.endsWith(`/${s.id}`)),
+          1,
+        );
+        data = { deleted: true };
+      } else data = scenarios;
     } else if (path === "/trade-map/compare") {
       comparisons.push(url);
       if (url.searchParams.get("shipDate")) {
@@ -220,6 +329,17 @@ async function openMap(
           via: url.searchParams.get("via"),
           viaName: "Singapore",
           distanceKm: 10800,
+          routePoints:
+            url.searchParams.get("via") === "direct"
+              ? [
+                  mapData.sites[0].location,
+                  mapData.orders[0].placement.location,
+                ]
+              : [
+                  mapData.sites[0].location,
+                  { latitude: 1.26, longitude: 103.84 },
+                  mapData.orders[0].placement.location,
+                ],
           reuse: [],
           reevaluate: [
             {
@@ -228,30 +348,28 @@ async function openMap(
               tag: "Changes",
             },
           ],
-          unknown: [
-            { title: "Freight cost", note: "No rate card is stored." },
-          ],
+          unknown: [{ title: "Freight cost", note: "No rate card is stored." }],
           dropped: [],
           assumptions: [
             "About 10800 km is the great-circle length via Singapore. It is not a voyage and not a freight quote.",
           ],
         };
       } else
-      data = {
-        orderId: order.id,
-        fromMarket: "EU",
-        toMarket: url.searchParams.get("market"),
-        reuse: [],
-        reevaluate: [
-          {
-            title: "Shipment declaration",
-            note: "Prepare evidence for this shipment",
-            tag: "Prepare",
-          },
-        ],
-        unknown: [],
-        dropped: ["Old market checklist item"],
-      };
+        data = {
+          orderId: order.id,
+          fromMarket: "EU",
+          toMarket: url.searchParams.get("market"),
+          reuse: [],
+          reevaluate: [
+            {
+              title: "Shipment declaration",
+              note: "Prepare evidence for this shipment",
+              tag: "Prepare",
+            },
+          ],
+          unknown: [],
+          dropped: ["Old market checklist item"],
+        };
     } else
       return route.fulfill({ status: 404, json: { error: { message: path } } });
     await route.fulfill({ json: { data, meta: {} } });
@@ -342,6 +460,34 @@ test("comparison preserves IDs containing delimiters and route visibility in bot
   await page.getByRole("button", { name: "Singapore", exact: true }).click();
   await expect(page.getByText(/not a freight quote/)).toBeVisible();
   expect(comparisons.at(-1)?.searchParams.get("via")).toBe("SG");
+  await expect(
+    page.getByText("Proposed route · Production → Singapore → Rotterdam"),
+  ).toBeVisible();
+  await expect(page.locator(".tm-arc.scenario.target")).toHaveCount(2);
+  await expect(page.locator(".tm-route-stop text")).toHaveText([
+    "Singapore",
+    "Rotterdam",
+  ]);
+  await page.getByRole("button", { name: "3D globe ↗" }).click();
+  await expect(globe.getByText("2 TRADE CONNECTIONS")).toBeVisible();
+  await expect(
+    globe.getByRole("button", { name: "Proposed stop: Singapore" }),
+  ).toBeAttached();
+  await page.getByRole("button", { name: "Routes", exact: true }).click();
+  await expect(page.getByText(/Proposed route ·/)).toHaveCount(0);
+  await expect(
+    globe.getByRole("button", { name: "Proposed stop: Singapore" }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Routes", exact: true }).click();
+  await page.getByRole("button", { name: "Direct", exact: true }).click();
+  await expect(
+    page.getByText("Proposed route · Production → Rotterdam"),
+  ).toBeVisible();
+  await expect(
+    globe.getByRole("button", { name: "Proposed stop: Singapore" }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Ship date", exact: true }).click();
+  await expect(page.getByText(/Proposed route ·/)).toHaveCount(0);
 });
 
 test("sample flood drafts remain explicitly fictional when copied out of the map", async ({
@@ -413,4 +559,245 @@ test("failed map reads never show sample data", async ({ page }) => {
   await openMap(page, { fail: true });
   await expect(page.getByText("Map service unavailable")).toBeVisible();
   await expect(page.locator(".tm-globe")).toHaveCount(0);
+});
+
+test("editors add a supplier from a map click or typed coordinates", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 1050 });
+  const writes: { method: string; path: string; body: any }[] = [];
+  await openMap(page, { writes });
+  await page.getByRole("button", { name: "Add supplier" }).click();
+  const form = page.locator(".tm-panel form");
+  await expect(form.locator("h2")).toHaveText("Add a supplier.");
+  // The form switches to the 2D map of the company's own area.
+  const canvas = page.getByRole("group", { name: "Trade map, Production" });
+  await expect(canvas).toBeVisible();
+  await canvas.click({ position: { x: 300, y: 200 } });
+  await expect(page.locator(".tm-pin")).toBeVisible();
+  await expect(form.getByLabel("Location (optional)")).toHaveValue(
+    /^-?\d+(\.\d+)?, -?\d+(\.\d+)?$/,
+  );
+
+  await form.getByLabel("Name").fill("Kampot Timber");
+  await form.getByLabel("Location (optional)").fill("abc");
+  await expect(form.getByText("Write latitude, then longitude")).toBeVisible();
+  await form.getByLabel("Location (optional)").fill("10.61, 104.18");
+  await form.getByLabel("Country").selectOption("KH");
+  await form.getByLabel("Timber legality evidence").check();
+  await form
+    .getByLabel("Timber legality evidence: what's on file")
+    .fill("Legality dossier");
+  await form.getByRole("button", { name: "Add supplier" }).click();
+
+  await expect(page.locator(".tm-panel h2")).toHaveText("Kampot Timber.");
+  expect(writes).toEqual([
+    {
+      method: "POST",
+      path: "/suppliers",
+      body: {
+        name: "Kampot Timber",
+        place: null,
+        country: "KH",
+        location: { latitude: 10.61, longitude: 104.18 },
+        supplies: null,
+        contactName: null,
+        contactEmail: null,
+        documents: [
+          {
+            kind: "legality",
+            detail: "Legality dossier",
+            standards: [],
+            documentNumber: null,
+            issuer: null,
+            expiresOn: null,
+          },
+        ],
+      },
+    },
+  ]);
+});
+
+test("editors edit a site and viewers see no edit controls", async ({
+  page,
+}) => {
+  const writes: { method: string; path: string; body: any }[] = [];
+  await openMap(page, { writes });
+  await page.getByRole("button", { name: /Sample factory/ }).click();
+  await page.getByRole("button", { name: "Edit site" }).click();
+  const form = page.locator(".tm-panel form");
+  await expect(form.getByLabel("Location")).toHaveValue("10.8, 106.7");
+  await expect(form.getByLabel("Order routes start here")).toBeChecked();
+  await form.getByLabel("Name").fill("Binh Duong factory");
+  await form.getByRole("button", { name: "Save site" }).click();
+  await expect(page.locator(".tm-panel h2")).toHaveText("Binh Duong factory.");
+  expect(writes).toEqual([
+    {
+      method: "PATCH",
+      path: "/sites/site-1",
+      body: expect.objectContaining({
+        name: "Binh Duong factory",
+        shortName: "Factory",
+        location: { latitude: 10.8, longitude: 106.7 },
+        isRouteOrigin: true,
+      }),
+    },
+  ]);
+
+  await page.getByRole("button", { name: "Edit site" }).click();
+  await page.getByRole("button", { name: "Delete site" }).click();
+  await expect(page.locator(".tm-confirm")).toContainText("Routes start here");
+  await page.getByRole("button", { name: "Keep it" }).click();
+  await expect(page.locator(".tm-confirm")).toHaveCount(0);
+});
+
+test("viewers can't add or edit places", async ({ page }) => {
+  await openMap(page, { role: "viewer" });
+  await expect(page.locator(".tm-panel h2")).toHaveText("Pick a place.");
+  await expect(page.getByRole("button", { name: "Add supplier" })).toHaveCount(
+    0,
+  );
+  await expect(page.getByRole("button", { name: "Add site" })).toHaveCount(0);
+  await page.getByRole("button", { name: /Sample factory/ }).click();
+  await expect(page.locator(".tm-panel h2")).toHaveText("Sample factory.");
+  await expect(page.getByRole("button", { name: "Edit site" })).toHaveCount(0);
+});
+
+test("editors upload a supplier certificate and confirm what AI read", async ({
+  page,
+}) => {
+  const writes: { method: string; path: string; body: any }[] = [];
+  await openMap(page, {
+    writes,
+    hash: "map/supplier/" + encodeURIComponent("Sample supplier"),
+  });
+  await expect(page.locator(".tm-panel h2")).toHaveText("Sample supplier.");
+  await page
+    .getByLabel("Upload a certificate for Sample supplier")
+    .setInputFiles({
+      name: "fsc.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from("%PDF-1.4 "),
+    });
+  const form = page.locator(".tm-upload-form");
+  await expect(
+    form.getByText("Hard to read: The stamp is faint."),
+  ).toBeVisible();
+  await expect(form.getByLabel("Document number (optional)")).toHaveValue(
+    "SGS-COC-001234",
+  );
+  await expect(form.getByLabel("Expires on (optional)")).toHaveValue(
+    "2026-12-15",
+  );
+  await form.getByLabel("Issued by (optional)").fill("SGS Vietnam");
+  await form.getByRole("button", { name: "Confirm certificate" }).click();
+  await expect(
+    page.getByText(/expires 2026-12-15 · from an uploaded certificate/),
+  ).toBeVisible();
+  expect(writes).toEqual([
+    { method: "POST", path: "/suppliers/supplier-1/documents", body: null },
+    {
+      method: "POST",
+      path: "/supplier-documents/upload-1/confirm",
+      body: {
+        kind: "legality",
+        detail: "FSC chain of custody SGS-COC-001234",
+        standards: ["FSC-STD-40-004"],
+        documentNumber: "SGS-COC-001234",
+        issuer: "SGS Vietnam",
+        expiresOn: "2026-12-15",
+      },
+    },
+  ]);
+});
+
+test("editors save a proposed route with a note, started from an AI suggestion", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const writes: { method: string; path: string; body: any }[] = [];
+  await openMap(page, { hash: "map/order/PO%7C42", writes });
+  await page
+    .getByRole("group", { name: "Market to compare with" })
+    .getByRole("button", { name: "United States" })
+    .click();
+  await page.getByRole("button", { name: "Route", exact: true }).click();
+  await page.getByRole("button", { name: "Singapore", exact: true }).click();
+  await expect(page.getByText(/not a freight quote/)).toBeVisible();
+  await expect(page.getByText(/None yet\. Compare a market/)).toBeVisible();
+
+  await page.getByRole("button", { name: "Suggest a note with AI" }).click();
+  const suggestion = page.getByLabel("AI suggestion");
+  await expect(
+    suggestion.getByText("Who pays any extra freight?"),
+  ).toBeVisible();
+  await expect(
+    suggestion.locator("em", { hasText: "Proof of origin" }),
+  ).toBeVisible();
+  expect(writes.at(-1)).toEqual({
+    method: "POST",
+    path: "/trade-map/scenarios/suggest",
+    body: { orderId: "PO|42", kind: "route", target: "SG" },
+  });
+  await page.getByRole("button", { name: "Use as note" }).click();
+  const note = page.getByLabel("Note (optional)");
+  await expect(note).toHaveValue(/^A stop in Singapore/);
+  await note.fill("Buyer prefers Singapore. Waiting on forwarder.");
+  await page.getByRole("button", { name: "Save what-if" }).click();
+  await expect(
+    page.getByText(/order, its status and its documents are unchanged/),
+  ).toBeVisible();
+  expect(writes.at(-1)?.body).toEqual({
+    orderId: "PO|42",
+    kind: "route",
+    target: "SG",
+    note: "Buyer prefers Singapore. Waiting on forwarder.",
+  });
+  const saved = page.getByRole("region", { name: "Saved what-ifs" });
+  await expect(
+    saved.getByRole("button", { name: "Route via Singapore", exact: true }),
+  ).toBeVisible();
+  await expect(
+    saved.getByText("Buyer prefers Singapore. Waiting on forwarder."),
+  ).toBeVisible();
+  await expect(
+    saved.getByText(/1 to re-evaluate, 1 unknown · saved/),
+  ).toBeVisible();
+  const width = await page.evaluate(() => document.documentElement.scrollWidth);
+  expect(width).toBeLessThanOrEqual(390);
+
+  // Opening another what-if and coming back to the saved one restores it.
+  await page.getByRole("button", { name: "Direct", exact: true }).click();
+  await expect(page.getByLabel("Note (optional)")).toHaveValue("");
+  await saved
+    .getByRole("button", { name: "Route via Singapore", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Singapore", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByLabel("Note (optional)")).toHaveValue(
+    "Buyer prefers Singapore. Waiting on forwarder.",
+  );
+  await expect(page.getByRole("button", { name: "Update" })).toBeVisible();
+
+  await saved
+    .getByRole("button", { name: "Delete Route via Singapore" })
+    .click();
+  await saved.getByRole("button", { name: "Delete", exact: true }).click();
+  await expect(saved.getByText("None yet.", { exact: false })).toBeVisible();
+});
+
+test("viewers see saved what-ifs but can't save", async ({ page }) => {
+  await openMap(page, { hash: "map/order/PO%7C42", role: "viewer" });
+  await page.getByRole("button", { name: "Route", exact: true }).click();
+  await page.getByRole("button", { name: "Singapore", exact: true }).click();
+  await expect(page.getByText(/not a freight quote/)).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Saved what-ifs" }),
+  ).toContainText("None yet.");
+  await expect(
+    page.getByRole("button", { name: "Suggest a note with AI" }),
+  ).toHaveCount(0);
+  await expect(page.getByLabel("Note (optional)")).toHaveCount(0);
 });

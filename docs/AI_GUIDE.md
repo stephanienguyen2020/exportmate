@@ -1,9 +1,10 @@
 # ExportMate AI: how it works and how to use it
 
-ExportMate has two AI features:
+ExportMate has these AI features:
 
 - **The assistant** answers questions about stock, news alerts, your company, its orders and playbook rules, and how to use ExportMate. Every fact it gives carries a numbered citation, and every answer has an audit trail.
 - **News watch** reads approved news feeds every morning and raises alerts for the stock items each story could affect.
+- **Suggested solutions** (signed-in workspaces) propose how to fix each missing or wrong document an order's analysis found, and keep the answer, with your team's notes, for later orders with the same problem.
 
 Both come from one service ([`ai/server/`](../ai/server/)): its API runs on Google Cloud Run, and the assistant itself is a team of agents on Gemini Enterprise Agent Platform (Agent Runtime, with Agent Platform Sessions, Memory Bank and RAG Engine), using Gemini and Firestore. This guide covers how to use them, what they can see, and how they work. For the engineering controls (policy, gateway, auditor, evals) and how to improve them, see [AGENT_HARNESS.md](AGENT_HARNESS.md).
 
@@ -119,7 +120,7 @@ The full-screen view at `#/chat` shows the audits of every answer in the convers
 
 ## Using News watch
 
-News watch is at `#/workspace/news`. The Overview page also shows the top three alerts.
+News watch is at `#/workspace/news`, the first tab of "Rules & news" in the sidebar (beside Rule watch, Regulations and the Playbook). The Overview page also shows the top three alerts.
 
 **Alerts tab.** Each alert card shows:
 
@@ -127,9 +128,11 @@ News watch is at `#/workspace/news`. The Overview page also shows the top three 
 - **Direction**: *risk*, *opportunity*, or *watch* (vague news, or something to verify).
 - The headline, why it matters, each affected SKU with the reason, the stock value exposed, one next step, and a link to the source article.
 
-Filter by severity or show only opportunities. Read the source before acting: alerts are assessed from each article's headline and summary, not the full text.
+- **Orders this may affect**: open orders that share an HS heading (the first four digits) with an item the alert names and ship to one of that item's markets. These are suggestions, not findings. An owner or editor marks each one **Affects this order** or **Not relevant**, with an optional note, can **Undo** a verdict, and can link an order that wasn't suggested. Viewers see the suggestions and verdicts. Company reports name only confirmed orders next to each alert. In the demo, verdicts stay in your browser.
 
-**Stock tab.** The sample inventory, with each item's geolocation status and how many alerts affect it. In a signed-in workspace, alerts are still matched against this sample stock, not your company's stock or orders, and the page says so.
+Filter by severity or show only opportunities, search headlines, items and SKUs, or narrow to one source, one stock item, alerts with orders to review, confirmed for an order or with no order, or articles from the past 7 or 30 days. Read the source before acting: alerts are assessed from each article's headline and summary, not the full text.
+
+**Stock tab.** The sample inventory, with each item's geolocation status and how many alerts affect it. In a signed-in workspace, alerts are still matched against this sample stock, not your company's stock, and the page says so; orders are only linked through the suggestions people review on the Alerts tab.
 
 **Sources tab.** The feeds News watch reads. Seven are built in (Timber Trades Journal, VnExpress International, the European Commission press corner and four Google News searches) and shared by every workspace. Owners and editors can:
 
@@ -145,7 +148,20 @@ Filter by severity or show only opportunities. Read the source before acting: al
 | Switch sources off or on, add or remove custom sources | No | No | Yes |
 | Scan now | No | No | Yes |
 
-News watch alerts also appear in the **News alerts** section of a company report (Reports page), which lists high and medium alerts from the report's period.
+News watch alerts also appear in the **News alerts** section of a company report (Reports page), which lists high and medium alerts from the report's period; in the PDF, each alert's publisher links to the article.
+
+## Using suggested solutions
+
+On an order's page (signed-in workspace, after an analysis), **Suggested solutions** lists each document the analysis found missing or wrong.
+
+- **Suggest a solution.** Owners and editors ask AI for a summary and steps. It works only from the report's facts, the regulation text the check cites, and your team's notes on earlier solutions to the same problem. A suggestion that states a number or link it wasn't given is thrown away ("didn't pass its checks"): try again.
+- **Saved for later orders.** A solution is offered for every later order with the same problem (same market, requirement and kind of gap). Solutions written for the same order, adopted ones, and ones written for the same HS heading or supplier come first.
+- **Notes.** Anyone who can edit adds how they actually handle it ("we ask for the GeoJSON file"). Notes stay for good, show with the solution, and the AI reads them the next time it writes a solution to that problem.
+- **Use, adopt, reject.** "Use for <order>" records which solution the order follows. "Adopt" makes it the first one offered for this problem; "Reject" means it is never offered as the answer.
+- **Expiry.** A solution is valid for 90 days, or until the day before the requirement's stated change, and expires at once if the requirement starts citing another version of its regulation or leaves the checklist. Expired solutions stay visible under "Expired solutions, for reference only", with the reason and their notes, but they are never the default and can't be used or adopted. "Analyse again" writes a new one, which reads the expired one and its notes and links back to it.
+- **Audit.** Every suggestion (with its full text and model), use, note and review is in the owner's activity log under "solution".
+
+Viewers can read solutions and notes but not change them. The browser-only demo doesn't have this feature.
 
 ## How it works
 
@@ -222,6 +238,8 @@ Everything is in asia-southeast1. On Agent Platform: the search index (RAG Engin
 | `audits` | One record per answer: question, steps, evidence, checks, citations, raw reasoning |
 | `answer_cache` | Which audits can be reused; entries expire after two days |
 | `eval_runs`, `scan_eval_runs` | Results of the assistant and scan evals |
+
+Agent Platform evaluation runs (`npm run eval:vertex`) are kept on Agent Platform › Evaluation in us-central1, in the evaluation experiment "ExportMate assistant", with their results in the project's Agent Platform staging bucket in Cloud Storage. They hold the golden cases' questions, tool results and answers, all synthetic or public data.
 
 **Privacy.** Questions and answers are stored as asked, without masking (in the audit and the Agent Platform session), so don't paste personal data or secrets into the chat. Memory Bank is told not to keep personal details, and you can remove anything it kept. Logs carry no question text and no tokens. Your sign-in token is only ever sent to the company backend. An audit made in a company workspace can only be read with a token from that company.
 

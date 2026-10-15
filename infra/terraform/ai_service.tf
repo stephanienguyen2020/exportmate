@@ -111,7 +111,7 @@ resource "google_firestore_field" "answer_cache_ttl" {
 # article is recorded with what matched. (The malicious-URL filter isn't offered in
 # asia-southeast1, so links are checked by guard.js only.)
 resource "google_model_armor_template" "untrusted_text" {
-  location    = var.region
+  location    = var.model_armor_region
   template_id = "exportmate-untrusted-text"
 
   filter_config {

@@ -75,6 +75,8 @@ def _supplier_out(db: Session, supplier: Supplier) -> SupplierOut:
         country=supplier.country_alpha2,
         location=location,
         supplies=supplier.supplies,
+        contact_name=supplier.contact_name,
+        contact_email=supplier.contact_email,
         documents=supplier_documents_out(documents, kinds),
     )
 
@@ -82,12 +84,22 @@ def _supplier_out(db: Session, supplier: Supplier) -> SupplierOut:
 def _save_documents(
     db: Session, supplier_id: uuid.UUID, documents: list[SupplierDocumentIn]
 ) -> None:
+    """Replace the list. A kind that stays keeps the upload it was confirmed from, so editing a
+    supplier never loses the link to the certificate file."""
+    uploads = {d.kind: d.upload_id for d in map_queries.list_supplier_documents(db, [supplier_id])}
     map_queries.replace_supplier_documents(
         db,
         supplier_id,
         [
             SupplierDocument(
-                supplier_id=supplier_id, kind=d.kind, detail=d.detail, standards=d.standards
+                supplier_id=supplier_id,
+                kind=d.kind,
+                detail=d.detail,
+                standards=d.standards,
+                document_number=d.document_number,
+                issuer=d.issuer,
+                expires_on=d.expires_on,
+                upload_id=uploads.get(d.kind),
             )
             for d in documents
         ],
@@ -133,6 +145,8 @@ def create_supplier(db: Session, ctx: CompanyContext, payload: SupplierIn) -> Su
         latitude=payload.location.latitude if payload.location else None,
         longitude=payload.location.longitude if payload.location else None,
         supplies=payload.supplies,
+        contact_name=payload.contact_name,
+        contact_email=payload.contact_email,
     )
     _flush_name(db, lambda: map_queries.add_supplier(db, supplier))
     _save_documents(db, supplier.id, payload.documents)
@@ -164,6 +178,10 @@ def update_supplier(
         supplier.place = payload.place
     if "supplies" in sent:
         supplier.supplies = payload.supplies
+    if "contact_name" in sent:
+        supplier.contact_name = payload.contact_name
+    if "contact_email" in sent:
+        supplier.contact_email = payload.contact_email
     if "location" in sent:
         supplier.latitude = payload.location.latitude if payload.location else None
         supplier.longitude = payload.location.longitude if payload.location else None

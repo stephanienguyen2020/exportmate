@@ -19,7 +19,7 @@ from app.schemas.reports import (
 )
 from app.services import reports as report_service
 
-router = APIRouter(prefix="/reports", tags=["reports"])
+router = APIRouter(prefix="/report-drafts", tags=["reports"])
 Db = Annotated[Session, Depends(get_db)]
 report_email_limiter = RateLimiter("report emails")
 

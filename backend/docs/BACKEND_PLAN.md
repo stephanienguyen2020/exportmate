@@ -1,5 +1,7 @@
 # ExportMate — backend implementation plan
 
+> The original plan (September 2026), kept for its reasoning. It is not kept up to date: what is built and what comes next is in [REQUIREMENTS.md](REQUIREMENTS.md) (§2 scope, §5 phases); how it is built is in [DECISIONS.md](DECISIONS.md). Some choices here changed: Postgres instead of Firestore, analysis steps as code.
+
 ## 1. Outcome and current state
 
 Connect the completed frontend to a multi-tenant service that ingests a firm's orders and materials, detects relevant regulatory changes, prices order-level exposure, and produces an auditable recommendation requiring human approval.

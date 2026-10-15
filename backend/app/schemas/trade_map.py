@@ -5,7 +5,7 @@ from typing import Annotated, Literal
 from pydantic import Field, StringConstraints, field_validator, model_validator
 
 from app.database.models import ObservationConfidence, RequirementLevel, SiteKind
-from app.schemas.common import CamelCaseModel
+from app.schemas.common import CamelCaseModel, is_email_address
 from app.schemas.orders import OrderOut
 
 CheckStatus = Literal["on_file", "missing", "mismatch", "prepare", "check", "unknown"]
@@ -84,6 +84,10 @@ class SupplierDocumentOut(CamelCaseModel):
     label: str
     detail: str
     standards: list[str]
+    document_number: str | None = None
+    issuer: str | None = None
+    expires_on: date | None = None  # before an order's ship date: a mismatch
+    from_upload: bool = False  # confirmed from an uploaded file (its file stays in storage)
 
 
 class MapSupplierOut(CamelCaseModel):
@@ -93,6 +97,8 @@ class MapSupplierOut(CamelCaseModel):
     country: str | None
     location: GeoPoint | None
     supplies: str | None
+    contact_name: str | None = None
+    contact_email: str | None = None  # supplier messages are pre-filled with it
     documents: list[SupplierDocumentOut] | None  # None: no supplier record to check against
     order_ids: list[str]
 
@@ -147,6 +153,27 @@ class TradeMapOut(CamelCaseModel):
     check_radius_km: float
 
 
+class ChecklistChangeOut(CamelCaseModel):
+    """A checklist line in a market the company ships to that takes effect or changes on `on`."""
+
+    on: date
+    kind: Literal["effective", "changes"]
+    market: str
+    market_name: str
+    requirement_key: str
+    title: str
+    what_changes: str
+    order_ids: list[str]  # open orders to that market shipping on or after `on`
+    source: RequirementSourceOut
+
+
+class ChecklistChangesOut(CamelCaseModel):
+    start: date
+    until: date
+    days: int  # the window, `until` minus `start`
+    changes: list[ChecklistChangeOut]
+
+
 class ComparisonItemOut(CamelCaseModel):
     title: str
     note: str
@@ -164,6 +191,8 @@ class MarketComparisonOut(CamelCaseModel):
     via_name: str | None = None
     # Great-circle kilometres for a route. Not a voyage and not a freight quote.
     distance_km: int | None = None
+    # Ordered origin, optional stop, destination. Empty when either endpoint is unknown.
+    route_points: list[GeoPoint] = Field(default_factory=list)
     reuse: list[ComparisonItemOut]
     reevaluate: list[ComparisonItemOut]
     unknown: list[ComparisonItemOut]
@@ -178,6 +207,15 @@ CountryCode = Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"
 Standard = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
 MAX_SUPPLIER_DOCUMENTS = 20
 MAX_STANDARDS = 10
+
+
+def _optional_email(value: str | None) -> str | None:
+    value = (value or "").strip()
+    if not value:
+        return None
+    if not is_email_address(value):
+        raise ValueError("Not an email address")
+    return value
 
 
 def _optional_text(value: str | None) -> str | None:
@@ -202,9 +240,17 @@ def _keep_required(model: CamelCaseModel, fields: tuple[str, ...]) -> None:
 
 
 class SupplierDocumentIn(CamelCaseModel):
+    """Typed in, or confirmed from an upload (POST /supplier-documents/{id}/confirm): the same
+    record either way."""
+
     kind: str = Field(min_length=1, max_length=40)
     detail: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
     standards: list[Standard] = Field(default_factory=list, max_length=MAX_STANDARDS)
+    document_number: str | None = Field(default=None, max_length=100)
+    issuer: str | None = Field(default=None, max_length=200)
+    expires_on: date | None = None  # before an order's ship date: a mismatch
+
+    _optional = field_validator("document_number", "issuer")(_optional_text)
 
 
 def _one_document_per_kind(documents: list[SupplierDocumentIn] | None):
@@ -221,11 +267,14 @@ class SupplierIn(CamelCaseModel):
     country: CountryCode | None = None
     location: GeoPointIn | None = None
     supplies: str | None = Field(default=None, max_length=1000)
+    contact_name: str | None = Field(default=None, max_length=200)
+    contact_email: str | None = Field(default=None, max_length=254)
     documents: list[SupplierDocumentIn] = Field(
         default_factory=list, max_length=MAX_SUPPLIER_DOCUMENTS
     )
 
-    _optional = field_validator("place", "supplies")(_optional_text)
+    _optional = field_validator("place", "supplies", "contact_name")(_optional_text)
+    _email = field_validator("contact_email")(_optional_email)
     _country = field_validator("country")(_country_code)
     _documents = field_validator("documents")(_one_document_per_kind)
 
@@ -241,11 +290,14 @@ class SupplierUpdate(CamelCaseModel):
     country: CountryCode | None = None
     location: GeoPointIn | None = None
     supplies: str | None = Field(default=None, max_length=1000)
+    contact_name: str | None = Field(default=None, max_length=200)
+    contact_email: str | None = Field(default=None, max_length=254)
     documents: list[SupplierDocumentIn] | None = Field(
         default=None, max_length=MAX_SUPPLIER_DOCUMENTS
     )
 
-    _optional = field_validator("place", "supplies")(_optional_text)
+    _optional = field_validator("place", "supplies", "contact_name")(_optional_text)
+    _email = field_validator("contact_email")(_optional_email)
     _country = field_validator("country")(_country_code)
     _documents = field_validator("documents")(_one_document_per_kind)
 
@@ -262,6 +314,8 @@ class SupplierOut(CamelCaseModel):
     country: str | None
     location: GeoPoint | None
     supplies: str | None
+    contact_name: str | None
+    contact_email: str | None
     documents: list[SupplierDocumentOut]
 
 
