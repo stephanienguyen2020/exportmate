@@ -72,6 +72,8 @@ class Settings(BaseSettings):
     solution_valid_days: int = 90
     # How far ahead Rule watch looks for checklist lines that take effect or change.
     rule_watch_days: int = 90
+    # The most orders one status change by hand may set at once (PATCH /orders/status).
+    max_status_change_orders: int = 500
 
     @model_validator(mode="after")
     def no_dev_auth_in_production(self):

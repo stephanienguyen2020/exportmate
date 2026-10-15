@@ -1,9 +1,10 @@
 // An order's status on its page for a signed-in company: what it is, who or which analysis
 // set it and why, and (owners and editors) a change by hand with a note. The statuses, their
 // labels and which may be set by hand come from the database (GET /order-statuses); every
-// change is saved on the order's history and in the audit log by the backend.
+// change is saved on the order's history and in the audit log by the backend. BulkStatusBar
+// does the same for the orders ticked on the Orders page, with one note for all of them.
 import { useState, type FormEvent } from "react";
-import { Loader2, PenLine } from "lucide-react";
+import { Loader2, PenLine, X } from "lucide-react";
 import {
   api,
   type OrderDetail,
@@ -169,5 +170,109 @@ function HistoryItem({
       </small>
       {change.note && <q>{change.note}</q>}
     </li>
+  );
+}
+
+// The orders ticked on the Orders page (owners and editors): one status and one note for all
+// of them. The backend changes all of them or none, and leaves alone those that already have
+// the status.
+export function BulkStatusBar({
+  ids,
+  options,
+  notify,
+  onChanged,
+  onClear,
+}: {
+  ids: string[];
+  options: OrderStatusOption[];
+  notify: (text: string, error?: boolean) => void;
+  onChanged: () => void | Promise<void>;
+  onClear: () => void;
+}) {
+  const choices = options.filter((o) => o.manual);
+  const [next, setNext] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const count = ids.length === 1 ? "1 order" : `${ids.length} orders`;
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    const option = choices.find((o) => o.code === next);
+    if (!option || !note.trim() || !ids.length || busy) return;
+    setBusy(true);
+    try {
+      const result = await api.changeOrderStatuses(
+        ids,
+        option.code,
+        note.trim(),
+      );
+      const changed = result.changed.length;
+      const already = result.unchanged.length;
+      notify(
+        `${changed === 1 ? "1 order is" : `${changed} orders are`} now “${option.label}”.` +
+          (already
+            ? ` ${already === 1 ? "1 already was" : `${already} already were`}.`
+            : ""),
+      );
+      setNext("");
+      setNote("");
+      await onChanged();
+    } catch (error) {
+      notify(errorMessage(error), true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form
+      className="panel an-bulk-status"
+      aria-label="Change the status of the selected orders"
+      onSubmit={save}
+    >
+      <b role="status">{count} selected</b>
+      <label>
+        <span>Change the status to</span>
+        <select value={next} onChange={(e) => setNext(e.target.value)} required>
+          <option value="">Choose a status…</option>
+          {choices.map((o) => (
+            <option key={o.code} value={o.code}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="an-bulk-note">
+        <span>Note: why (required)</span>
+        <input
+          maxLength={1000}
+          required
+          value={note}
+          placeholder="e.g. Buyer confirmed the plot geolocation by email on 14 Oct."
+          onChange={(e) => setNote(e.target.value)}
+        />
+      </label>
+      <button
+        className="btn"
+        disabled={busy || !next || !note.trim()}
+        type="submit"
+      >
+        {busy ? <Loader2 size={15} className="spin" /> : <PenLine size={15} />}
+        Change {count}
+      </button>
+      <button
+        className="text-link"
+        type="button"
+        disabled={busy}
+        onClick={onClear}
+      >
+        <X size={14} />
+        Clear selection
+      </button>
+      <small>
+        Each order's change and your note are saved on its history and in the
+        activity log. The next analysis of an order sets its status again.
+      </small>
+    </form>
   );
 }

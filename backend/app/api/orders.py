@@ -8,7 +8,13 @@ from app.database.models import OrderStatus
 from app.database.session import get_db
 from app.schemas.analysis import OrderDetailOut
 from app.schemas.common import SuccessResponse, success_response
-from app.schemas.orders import OrderOut, OrderStatusChangeIn, OrderStatusOut
+from app.schemas.orders import (
+    OrderOut,
+    OrderStatusBulkChangeIn,
+    OrderStatusBulkChangeOut,
+    OrderStatusChangeIn,
+    OrderStatusOut,
+)
 from app.schemas.overview import OverviewOut
 from app.services import orders as order_service
 
@@ -31,6 +37,14 @@ def list_orders(
     return success_response(
         [OrderOut.from_order(o) for o in orders], total=total, nextCursor=next_cursor
     )
+
+
+@router.patch("/orders/status", response_model=SuccessResponse[OrderStatusBulkChangeOut])
+def change_order_statuses(payload: OrderStatusBulkChangeIn, ctx: EditorContext, db: Db):
+    """Set several orders' status by hand with one note (owners and editors): all of them or
+    none. Each change is on its order's `statusChanges` and audited as `order.status_changed`;
+    orders that already have the status are returned as `unchanged`."""
+    return success_response(order_service.change_order_statuses(db, ctx, payload))
 
 
 @router.get("/orders/{order_id}", response_model=SuccessResponse[OrderDetailOut])

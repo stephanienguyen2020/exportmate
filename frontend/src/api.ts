@@ -54,6 +54,11 @@ export type OrderStatusChange = {
   changedBy: { id: string; name: string };
   changedAt: string;
 };
+// PATCH /orders/status: several orders set by hand with one note, all of them or none.
+export type OrderStatusBulkChange = {
+  changed: ApiOrder[];
+  unchanged: string[]; // ids of orders that already had the status
+};
 export type Overview = {
   totalOrders: number;
   countsByStatus: Record<string, number>;
@@ -883,6 +888,15 @@ export const api = {
     request<OrderDetail>(`/orders/${encodeURIComponent(id)}/status`, {
       method: "PATCH",
       body: JSON.stringify({ status, note }),
+    }).then((r) => r.data),
+  changeOrderStatuses: (
+    ids: string[],
+    status: ApiOrder["status"],
+    note: string,
+  ) =>
+    request<OrderStatusBulkChange>("/orders/status", {
+      method: "PATCH",
+      body: JSON.stringify({ orderIds: ids, status, note }),
     }).then((r) => r.data),
   reports: (signal?: AbortSignal) =>
     request<ReportSummary[]>("/report-drafts", { signal }).then((r) => r.data),

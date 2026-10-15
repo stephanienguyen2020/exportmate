@@ -81,6 +81,21 @@ def get_order_by_external_id(
     return db.scalar(stmt.with_for_update() if lock else stmt)
 
 
+def lock_orders_by_external_ids(
+    db: Session, company_id: uuid.UUID, external_ids: list[str]
+) -> list[Order]:
+    """The company's orders with these ids, held until commit. Locked in one fixed order so two
+    changes over overlapping orders wait for each other instead of deadlocking."""
+    return list(
+        db.scalars(
+            select(Order)
+            .where(Order.company_id == company_id, Order.external_id.in_(external_ids))
+            .order_by(Order.id)
+            .with_for_update()
+        )
+    )
+
+
 def get_import_row(db: Session, row_id: uuid.UUID) -> ImportRow | None:
     return db.get(ImportRow, row_id)
 
