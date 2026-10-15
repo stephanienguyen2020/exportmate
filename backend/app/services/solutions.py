@@ -13,6 +13,7 @@ status, written for any earlier order.
 3. Review: a person adopts a solution (offered first from then on) or rejects it (never the
    default).
 4. Use: a person records which solution they followed for an order's problem.
+5. Knowledge base: every saved solution, grouped by problem, for browsing outside an order.
 
 A solution expires on `valid_until` (SOLUTION_VALID_DAYS after it was written, or the day before
 the requirement's stated change), when the requirement cites another regulation version, or
@@ -57,6 +58,7 @@ from app.schemas.solutions import (
     SolutionDraft,
     SolutionNoteOut,
     SolutionOut,
+    SolutionProblemOut,
 )
 from app.schemas.trade_map import RequirementCheckOut
 from app.services import cost_settings as cost_service
@@ -81,6 +83,7 @@ class Library:
     uses: dict[uuid.UUID, int]
     # (market, requirement key) -> regulation document IDs in force for it now
     in_force: dict[tuple[str, str], set[uuid.UUID]]
+    titles: dict[tuple[str, str], str]  # (market, requirement key) -> its title in force
     documents: dict[uuid.UUID, SolutionBasisOut]  # quote empty; the solution keeps its own
     people: dict[uuid.UUID, PersonOut]
 
@@ -166,20 +169,27 @@ def _solution_out(solution: Solution, library: Library, today: date) -> Solution
 
 
 def _load_library(
-    db: Session, company_id: uuid.UUID, problems: list[tuple[str, str, str]]
+    db: Session,
+    company_id: uuid.UUID,
+    problems: list[tuple[str, str, str]],
+    solutions: list[Solution] | None = None,
 ) -> Library:
-    solutions = solution_queries.list_problem_solutions(db, company_id, problems)
+    """`solutions` defaults to every saved one for `problems`."""
+    if solutions is None:
+        solutions = solution_queries.list_problem_solutions(db, company_id, problems)
     ids = [s.id for s in solutions]
     notes: dict[uuid.UUID, list[SolutionNote]] = {}
     for note in solution_queries.list_solution_notes(db, ids):
         notes.setdefault(note.solution_id, []).append(note)
     markets_and_keys = {(market, key) for market, key, _ in problems}
     in_force: dict[tuple[str, str], set[uuid.UUID]] = {}
+    titles: dict[tuple[str, str], str] = {}
     for req in map_queries.list_requirements_in_force(db, company_id):
         if (req.market_code, req.requirement_key) in markets_and_keys:
             in_force.setdefault((req.market_code, req.requirement_key), set()).add(
                 req.regulation_document_id
             )
+            titles.setdefault((req.market_code, req.requirement_key), req.title)
     document_ids = {s.regulation_document_id for s in solutions}
     document_ids |= {d for ids_ in in_force.values() for d in ids_}
     documents = {
@@ -206,6 +216,7 @@ def _load_library(
         notes=notes,
         uses=solution_queries.count_solution_uses(db, ids),
         in_force=in_force,
+        titles=titles,
         documents=documents,
         people=people,
     )
@@ -301,6 +312,40 @@ def list_report_solutions(
     """Each problem in the report with its saved solutions."""
     report, content, order = _load_report(db, ctx, report_id)
     return _cases(db, ctx, report, content, order)
+
+
+def list_company_solutions(db: Session, ctx: CompanyContext) -> list[SolutionProblemOut]:
+    """The company's knowledge base: every saved solution, grouped by the problem it solves.
+    Problems with a valid adopted solution come first, then other valid ones, then those whose
+    solutions all expired; within a problem, valid before expired, adopted before suggested,
+    rejected last, newest first."""
+    solutions = solution_queries.list_company_solutions(db, ctx.company_id)
+    problems = list(
+        dict.fromkeys((s.market_code, s.requirement_key, s.problem_status) for s in solutions)
+    )
+    library = _load_library(db, ctx.company_id, problems, solutions)
+    today = _today()
+    order = {SolutionStatus.adopted: 0, SolutionStatus.suggested: 1, SolutionStatus.rejected: 2}
+    grouped: dict[tuple[str, str, str], list[SolutionOut]] = {p: [] for p in problems}
+    for solution in solutions:  # newest first, so the stable sort below keeps that
+        grouped[(solution.market_code, solution.requirement_key, solution.problem_status)].append(
+            _solution_out(solution, library, today)
+        )
+    out = []
+    for (market, key, status), items in grouped.items():
+        items.sort(key=lambda s: (s.expired, order[s.status]))
+        out.append(
+            SolutionProblemOut(
+                market=market,
+                requirement_key=key,
+                problem_status=status,
+                title=library.titles.get((market, key), key),
+                in_checklist=(market, key) in library.in_force,
+                solutions=items,
+            )
+        )
+    out.sort(key=lambda p: (p.solutions[0].expired, order[p.solutions[0].status]))
+    return out
 
 
 def _gap(content: ReportContentOut, requirement_key: str) -> RequirementCheckOut:

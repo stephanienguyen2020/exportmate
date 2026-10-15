@@ -1701,6 +1701,37 @@ test("problems get AI solutions; expired ones are for reference and get analysed
   });
 });
 
+test("the knowledge base lists every saved solution by problem, with filters", async ({
+  page,
+}) => {
+  const requests = await fixture(page);
+  await login(page);
+  await expect(page.getByText("CONNECTED WORKSPACE")).toBeVisible();
+  await page.goto("/#/workspace/knowledge");
+  await expect(page.getByRole("heading", { name: "Knowledge base." })).toBeVisible();
+  await expect(
+    page.getByRole("navigation", { name: "Rules & news" }).getByRole("link", {
+      name: "Knowledge base",
+    }),
+  ).toHaveAttribute("aria-current", "page");
+  // Only an expired solution is saved: the default "Valid" view has nothing to show.
+  await expect(page.getByText("No valid solutions match.")).toBeVisible();
+  await page.getByRole("tab", { name: "Expired" }).click();
+  const problem = page.getByRole("region", { name: "EU: Plot-level geolocation" });
+  await expect(problem.getByText("Ask for a map of the plots.")).toBeVisible();
+  await expect(problem.getByText("Not for use: It was valid until 2026-09-30.")).toBeVisible();
+  await expect(problem.getByText("We ask for GeoJSON, not a screenshot.")).toBeVisible();
+  // No order here: a solution is used from the order's report, never from the library.
+  await expect(problem.getByRole("button", { name: /Use for/ })).toHaveCount(0);
+  await expect(problem.getByLabel(/Add how you handle it/)).toBeVisible();
+
+  await page.getByLabel("Search solutions").fill("geojson");
+  await expect(problem).toBeVisible();
+  await page.getByLabel("Search solutions").fill("no such words");
+  await expect(page.getByText("No expired solutions match.")).toBeVisible();
+  expect(requests.filter((r) => r.path === "/solutions")).toHaveLength(1);
+});
+
 test("viewers read the analysis but can't start, review or message", async ({ page }) => {
   await fixture(page, { viewer: true });
   await login(page);

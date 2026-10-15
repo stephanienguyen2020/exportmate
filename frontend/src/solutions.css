@@ -108,3 +108,51 @@
 .sol-notes form .btn {
   justify-self: start;
 }
+/* Knowledge base (KnowledgeBase.tsx): the same cards, grouped by problem. */
+.kb-toolbar {
+  flex-wrap: wrap;
+}
+.kb-filters {
+  display: flex;
+  gap: 12px;
+  flex: 1 1 280px;
+  justify-content: flex-end;
+  min-width: 0;
+}
+.kb-filters .search {
+  flex: 0 1 320px;
+  min-width: 0;
+}
+.kb-filters .search input {
+  min-width: 0;
+  width: 100%;
+}
+.kb-filters select {
+  padding: 10px;
+  border: 1px solid var(--line);
+  color: var(--green);
+  background: var(--paper);
+}
+.kb-problem .sol-case {
+  border-top: 0;
+  padding-top: 0;
+}
+.kb-empty {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+}
+.kb-empty p {
+  font-size: 12px;
+  line-height: 1.7;
+  color: #6f7f63;
+  margin: 0;
+}
+@media (max-width: 640px) {
+  .kb-filters {
+    flex-direction: column;
+  }
+  .kb-filters .search {
+    flex: 1 1 auto;
+  }
+}

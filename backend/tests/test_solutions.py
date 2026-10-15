@@ -235,3 +235,29 @@ def test_roles_scoping_rejection_and_audit(client, lan):
     assert by_action["solution.rejected"]["data"] == {"from": "suggested", "to": "rejected"}
     assert by_action["solution.note_added"]["data"]["text"] == "Our buyer files this, not us."
     assert by_action["solution.rejected"]["user"]["email"] == "ed@example.com"
+
+
+def test_the_knowledge_base_lists_every_solution_by_problem(client, lan):
+    report_id = analyse(client, lan)["PO-1"]
+    assert client.get("/api/v1/solutions", headers=lan).json()["data"] == []
+    old = suggest(client, lan, report_id).json()["data"]["default"]
+    new = suggest(client, lan, report_id).json()["data"]["default"]
+    client.post(f"/api/v1/solutions/{old['id']}/review", headers=lan, json={"verdict": "adopted"})
+    set_solution(new["id"], valid_until=TODAY - timedelta(days=1))
+
+    viewer = add_member(client, "lan@example.com", "view@example.com", Role.viewer)
+    response = client.get("/api/v1/solutions", headers=viewer)
+    assert response.status_code == 200, response.text
+    (problem,) = response.json()["data"]
+    assert (problem["market"], problem["requirementKey"], problem["problemStatus"]) == (
+        "EU",
+        "geolocation",
+        "missing",
+    )
+    assert problem["title"] == "Plot-level geolocation" and problem["inChecklist"] is True
+    # The valid adopted one first, the expired one after it.
+    assert [s["id"] for s in problem["solutions"]] == [old["id"], new["id"]]
+    assert problem["solutions"][1]["expired"] is True
+
+    other = onboard(client, "mai@example.com", company="Other Co")
+    assert client.get("/api/v1/solutions", headers=other).json()["data"] == []

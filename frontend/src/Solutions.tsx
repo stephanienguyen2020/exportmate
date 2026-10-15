@@ -109,6 +109,9 @@ export default function Solutions({
           <span className="eyebrow">HOW TO SOLVE IT</span>
           <h2>Suggested solutions.</h2>
         </div>
+        <a className="text-link" href="#/workspace/knowledge">
+          All saved solutions
+        </a>
       </div>
       <p>
         AI suggests steps for each problem from the cited text and your team's
@@ -242,7 +245,8 @@ function SolutionCaseView({
   );
 }
 
-function SolutionCard({
+// Also listed in the knowledge base (KnowledgeBase.tsx), where there is no order to use it for.
+export function SolutionCard({
   solution,
   isDefault,
   inUse,
@@ -257,11 +261,11 @@ function SolutionCard({
   solution: Solution;
   isDefault: boolean;
   inUse: boolean;
-  orderId: string;
+  orderId?: string;
   editable: boolean;
   busy: boolean;
   notify: Notify;
-  onUse: () => void;
+  onUse?: () => void;
   onSolution: (next: Solution) => void;
   onReviewed: () => Promise<void>;
 }) {
@@ -294,7 +298,7 @@ function SolutionCard({
           <i />
           {solution.expired ? "Expired" : STATUS_LABEL[solution.status]}
         </span>
-        {inUse && (
+        {inUse && orderId && (
           <span className="status green">
             <i />
             Used for {orderId}
@@ -384,7 +388,7 @@ function SolutionCard({
       </div>
       {editable && usable && (
         <div className="an-actions">
-          {!inUse && (
+          {!inUse && orderId && onUse && (
             <button className="btn" disabled={busy || !!saving} onClick={onUse}>
               <Check size={15} />
               Use for {orderId}

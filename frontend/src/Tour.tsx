@@ -58,8 +58,8 @@ function tourSteps(live: boolean): TourStep[] {
       target: "nav-news",
       title: "Rules & news",
       body: live
-        ? "Four tabs in one place: News watch matches trade news to the products you sell; Rule watch shows checklist changes coming up and which orders they reach; Regulations holds the official texts with their versions; the Playbook holds your company's own rules, applied when orders are checked."
-        : "Four tabs in one place: News watch matches trade news to the products you sell; Rule watch plays out a sample rule change (try “Run rule-change demo”); Regulations holds the official texts; the Playbook holds your own rules.",
+        ? "Five tabs in one place: News watch matches trade news to the products you sell; Rule watch shows checklist changes coming up and which orders they reach; Regulations holds the official texts with their versions; the Playbook holds your company's own rules, applied when orders are checked; the Knowledge base keeps every solution your team saved, with its notes."
+        : "Five tabs in one place: News watch matches trade news to the products you sell; Rule watch plays out a sample rule change (try “Run rule-change demo”); Regulations holds the official texts; the Playbook holds your own rules; the Knowledge base keeps your company's saved solutions once you sign in.",
     },
     {
       target: "nav-reports",

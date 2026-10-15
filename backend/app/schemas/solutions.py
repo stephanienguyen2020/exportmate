@@ -89,3 +89,15 @@ class SolutionCaseOut(CamelCaseModel):
     expired: list[SolutionOut]  # for reference only; they must be analysed again
     # No valid solution: AI should be asked (again, when expired ones exist).
     needs_analysis: bool
+
+
+class SolutionProblemOut(CamelCaseModel):
+    """One kind of problem in the company's knowledge base, with every solution saved for it."""
+
+    market: str
+    requirement_key: str
+    problem_status: str  # missing, mismatch
+    title: str  # the requirement's title in force, else its key
+    in_checklist: bool  # false once the requirement left the market's checklist
+    # Valid before expired; adopted, then suggested, then rejected; newest first.
+    solutions: list[SolutionOut]

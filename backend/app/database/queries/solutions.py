@@ -40,6 +40,17 @@ def list_problem_solutions(
     )
 
 
+def list_company_solutions(db: Session, company_id: uuid.UUID) -> list[Solution]:
+    """Every solution the company has, newest first, expired and rejected ones included."""
+    return list(
+        db.scalars(
+            select(Solution)
+            .where(Solution.company_id == company_id)
+            .order_by(Solution.created_at.desc(), Solution.id)
+        )
+    )
+
+
 def add_solution_note(db: Session, note: SolutionNote) -> SolutionNote:
     db.add(note)
     db.flush()

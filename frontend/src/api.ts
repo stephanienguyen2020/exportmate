@@ -268,6 +268,16 @@ export type SolutionCase = {
   expired: Solution[];
   needsAnalysis: boolean;
 };
+// One kind of problem in the knowledge base, with every solution saved for it.
+export type SolutionProblem = {
+  market: string;
+  requirementKey: string;
+  problemStatus: string;
+  title: string;
+  inChecklist: boolean;
+  // Valid before expired; adopted, then suggested, then rejected; newest first.
+  solutions: Solution[];
+};
 export type SupplierMessageUpdate = {
   recipient?: string | null;
   subject?: string;
@@ -1190,6 +1200,8 @@ export const api = {
       `/supplier-messages/${encodeURIComponent(id)}/send`,
       { method: "POST", headers: { "Idempotency-Key": idempotencyKey } },
     ).then((r) => r.data),
+  solutions: (signal?: AbortSignal) =>
+    request<SolutionProblem[]>("/solutions", { signal }).then((r) => r.data),
   reportSolutions: (reportId: string, signal?: AbortSignal) =>
     request<SolutionCase[]>(
       `/reports/${encodeURIComponent(reportId)}/solutions`,
