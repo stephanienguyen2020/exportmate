@@ -10,6 +10,7 @@ import { date, type Order } from "../data";
 import { api, type MapMarket, type MarketComparison } from "../api";
 import { errorMessage } from "../auth";
 import { type Row, type Scenario, type ScenarioMode } from "./model";
+import ScenarioNotes from "../ScenarioNotes";
 import { PanelHead } from "./panels";
 
 const ROUTE_OPTIONS = [
@@ -30,6 +31,7 @@ export function ScenarioPanel({
   onComparison,
   onClose,
   onOpenOrder,
+  editable,
 }: {
   rows: Row[];
   markets: MapMarket[];
@@ -41,6 +43,7 @@ export function ScenarioPanel({
   ) => void;
   onClose: () => void;
   onOpenOrder: (id: string) => void;
+  editable: boolean;
 }) {
   const row = rows.find((r) => r.order.id === scenario.orderId) ?? rows[0];
   const [result, setResult] = useState<{
@@ -314,6 +317,20 @@ export function ScenarioPanel({
           </p>
         </>
       )}
+      <ScenarioNotes
+        orderId={row.order.id}
+        kind={scenario.mode === "date" ? "ship_date" : scenario.mode}
+        target={scenario.target}
+        ready={!!comparison}
+        editable={editable}
+        onShow={(saved) =>
+          onChange({
+            orderId: saved.orderId,
+            mode: saved.kind === "ship_date" ? "date" : saved.kind,
+            target: saved.target,
+          })
+        }
+      />
       <button className="text-link" onClick={() => onOpenOrder(row.order.id)}>
         Open {row.order.id} <ArrowUpRight size={14} />
       </button>

@@ -19,6 +19,7 @@ import {
   ApiError,
   type Account,
   type Overview,
+  type OrderStatusOption,
   type RuleFields,
 } from "../api";
 import { errorMessage } from "../auth";
@@ -202,6 +203,8 @@ export function useWorkspace(notify: Notify) {
     ),
   );
   const [ruleFields, setRuleFields] = useState<RuleFields | null>(null);
+  // Signed in: each status's label, colour and whether it may be set by hand, from the database.
+  const [statusOptions, setStatusOptions] = useState<OrderStatusOption[]>([]);
   const [loading, setLoading] = useState(live);
   const [loadError, setLoadError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -227,15 +230,19 @@ export function useWorkspace(notify: Notify) {
         navigate("onboarding");
         return;
       }
-      const [nextOrders, nextRules, nextOverview] = await Promise.all([
-        api.orders(signal),
-        api.rules(signal),
-        api.overview(signal),
-      ]);
+      const [nextOrders, nextRules, nextOverview, nextStatuses] =
+        await Promise.all([
+          api.orders(signal),
+          api.rules(signal),
+          api.overview(signal),
+          // Without them the workspace still works, with the built-in labels.
+          api.orderStatuses(signal).catch(() => []),
+        ]);
       if (signal.aborted) return;
       setOrders(nextOrders);
       setRules(nextRules);
       setOverview(nextOverview);
+      setStatusOptions(nextStatuses);
     } catch (error) {
       if (signal.aborted) return;
       if (error instanceof ApiError && error.code === "onboarding_required")
@@ -286,6 +293,8 @@ export function useWorkspace(notify: Notify) {
   // The demo checks every order against the sample rule change, so none waits for analysis.
   const isClear = (o: Order) => (live ? o.status === "clear" : !o.risk);
   const isPending = (o: Order) => live && o.status === "awaiting_analysis";
+  const statusOption = (code?: string) =>
+    live ? statusOptions.find((s) => s.code === code) : undefined;
   return {
     live,
     editable,
@@ -306,6 +315,10 @@ export function useWorkspace(notify: Notify) {
     refreshOrders,
     isClear,
     isPending,
+    statusOptions,
+    statusOption,
+    // The filter that lists exposed orders, named as the database names it when signed in.
+    actionFilter: statusOption("exposed")?.label || "Action needed",
     exposed: orders.filter((o) => o.risk),
     tone: (o: Order): "red" | "amber" | "green" =>
       o.risk ? "red" : isClear(o) ? "green" : "amber",

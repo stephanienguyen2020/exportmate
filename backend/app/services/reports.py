@@ -34,10 +34,10 @@ from app.core.news_alerts import fetch_news_alerts
 from app.database.models import ReportDraft, ReportKind
 from app.database.queries import analysis as analysis_queries
 from app.database.queries import audit as audit_queries
+from app.database.queries import news_reviews as news_queries
 from app.database.queries import orders as order_queries
 from app.database.queries import regulations as regulation_queries
 from app.database.queries import reports as report_queries
-from app.database.queries import trade_map as map_queries
 from app.schemas.analysis import ReportContentOut as AnalysisContent
 from app.schemas.orders import OrderOut
 from app.schemas.reports import (
@@ -394,46 +394,30 @@ def _change_section(
     db: Session,
     ctx: CompanyContext,
     open_orders: list[MapOrderOut],
-    market_names: dict[str, str],
     today: date,
     until: date,
     citations: _Citations,
     facts: _CompanyFacts,
 ) -> ReportSection:
-    shipped_to = {m.placement.market for m in open_orders if m.placement.market}
-    changing = [
-        (day, kind, req)
-        for req in map_queries.list_requirements_in_force(db, ctx.company_id)
-        if req.market_code in shipped_to
-        for day, kind in ((req.effective_on, "effective"), (req.changes_on, "changes"))
-        if day and today <= day <= until
-    ]
-    sources = trade_map_service.load_requirement_sources(db, {"": [r for _, _, r in changing]})
+    changes = trade_map_service.list_checklist_changes(
+        db, ctx.company_id, [(m.order, m.placement.market) for m in open_orders], today, until
+    )
     rows = []
-    for day, kind, req in sorted(changing, key=lambda c: (c[0], c[2].market_code, c[2].title)):
-        affected = [
-            m.order.id
-            for m in open_orders
-            if m.placement.market == req.market_code
-            and trade_map_service.applies_to(req, m.order.hs_code)
-            and m.order.ship_date >= day
-        ]
-        facts.change_orders.update(affected)
-        source = sources[req.regulation_document_id].model_copy(update={"quote": req.source_quote})
+    for change in changes:
+        facts.change_orders.update(change.order_ids)
         rows.append(
             ReportRow(
-                id=f"change-{req.market_code}-{req.requirement_key}-{kind}",
+                id=f"change-{change.market}-{change.requirement_key}-{change.kind}",
                 cells=[
-                    format_day(day),
-                    market_names.get(req.market_code, req.market_code),
-                    req.title,
-                    f"Takes effect. {req.why}"
-                    if kind == "effective"
-                    else req.change_note or req.why,
-                    join_limited(affected) or "None of your open orders ship after this date.",
-                    citations.cite(source, req.title),
+                    format_day(change.on),
+                    change.market_name,
+                    change.title,
+                    change.what_changes,
+                    join_limited(change.order_ids)
+                    or "None of your open orders ship after this date.",
+                    citations.cite(change.source, change.title),
                 ],
-                tone="warn" if affected else None,
+                tone="warn" if change.order_ids else None,
             )
         )
     facts.changes = len(rows)
@@ -451,7 +435,13 @@ def _change_section(
     )
 
 
-def _news_section(alerts: list[dict] | None, since: date, facts: _CompanyFacts) -> ReportSection:
+def _news_section(
+    alerts: list[dict] | None,
+    since: date,
+    facts: _CompanyFacts,
+    confirmed: dict[str, list[str]] | None = None,
+) -> ReportSection:
+    """`confirmed`: alert ID → the orders a person confirmed it affects in News watch."""
     rows = []
     if alerts is not None:
         recent = []
@@ -474,6 +464,10 @@ def _news_section(alerts: list[dict] | None, since: date, facts: _CompanyFacts) 
             stock_text = join_limited(names, 3) or "No stock item named"
             if isinstance(stock, int | float) and stock:
                 stock_text += f" · USD {stock:,.0f} in stock"
+            alert_id = str(alert.get("id") or alert.get("articleId") or "")
+            orders = (confirmed or {}).get(alert_id, [])
+            if orders:
+                stock_text += f"\nConfirmed for orders {join_limited(orders, 5)}"
             # A last line holding only a URL becomes a link in the PDF (see cell_link).
             source = "\n".join(
                 str(p) for p in (alert.get("publisher") or "Source", alert.get("url")) if p
@@ -501,7 +495,8 @@ def _news_section(alerts: list[dict] | None, since: date, facts: _CompanyFacts) 
         layout="table",
         heading="News alerts",
         note="High and medium alerts from News watch in this window. An AI model matches each "
-        "article to your stock list (sample stock in this prototype), not to orders.",
+        "article to your stock list (sample stock in this prototype); orders are named only "
+        "where someone in your company confirmed in News watch that the alert affects them.",
         empty="News watch could not be reached when this report was generated."
         if alerts is None
         else "No high or medium alert in this window.",
@@ -524,8 +519,13 @@ def build_company_report_content(
     citations = _Citations()
     facts = _CompanyFacts(open_orders=len(open_orders))
 
-    changes = _change_section(db, ctx, open_orders, market_names, today, until, citations, facts)
-    news = _news_section(fetch_news_alerts(authorization), since, facts)
+    changes = _change_section(db, ctx, open_orders, today, until, citations, facts)
+    news = _news_section(
+        fetch_news_alerts(authorization),
+        since,
+        facts,
+        news_queries.list_confirmed_news_by_impact(db, ctx.company_id),
+    )
 
     # Floods near the company's suppliers and sites.
     supplier_orders = {

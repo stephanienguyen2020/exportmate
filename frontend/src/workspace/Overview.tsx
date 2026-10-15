@@ -14,11 +14,13 @@ import {
   makerCost,
   money,
   placeName,
+  sampleCostWhy,
   sampleCosts,
   sampleObligation,
   sampleSources,
 } from "../data";
 import { placeCode, routeStops } from "../account-store";
+import { CostWhy } from "../CostWhy";
 import ErrorBoundary from "../ErrorBoundary";
 import { NewsHighlights } from "../../ai/news/NewsWatch";
 import { OrderTable } from "./OrderTable";
@@ -154,7 +156,38 @@ export default function Overview({
             <ArrowUpRight size={15} />
           </span>
           <div className="metric-value">
-            {risk.display}
+            <CostWhy
+              why={
+                live ? (
+                  "The full values of the orders marked as needing action, added up per currency, from your orders."
+                ) : buyer ? (
+                  <>
+                    <span>
+                      <b>
+                        {plural(exposed.length, "order")} ×{" "}
+                        {money(sampleCosts.buyer.margin, sampleCosts.buyer.currency)}
+                      </b>
+                    </span>
+                    <span>{sampleCostWhy.margin}</span>
+                  </>
+                ) : (
+                  <>
+                    <span>
+                      <b>
+                        {plural(exposed.length, "order")} × (
+                        {money(sampleCosts.maker.documentation, sampleCosts.maker.currency)} +{" "}
+                        {sampleCosts.maker.delayDays} days ×{" "}
+                        {money(sampleCosts.maker.delayPerDay, sampleCosts.maker.currency)})
+                      </b>
+                    </span>
+                    <span>{sampleCostWhy.documentation}</span>
+                    <span>{sampleCostWhy.delay}</span>
+                  </>
+                )
+              }
+            >
+              {risk.display}
+            </CostWhy>
             <span>{live ? "by currency" : risk.currency}</span>
           </div>
           <div className="metric-note">
@@ -205,7 +238,7 @@ export default function Overview({
         </div>
         <button
           className="text-link"
-          onClick={() => showOrders("Action needed")}
+          onClick={() => showOrders(ws.actionFilter)}
         >
           View all alerts <ArrowUpRight size={16} />
         </button>
@@ -300,7 +333,7 @@ export default function Overview({
         </section>
       </div>
       <ErrorBoundary fallback={null}>
-        <NewsHighlights live={live} />
+        <NewsHighlights live={live} orders={orders} />
       </ErrorBoundary>
       <div className="section-heading order-section">
         <h2>Orders on the move.</h2>

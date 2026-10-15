@@ -15,6 +15,7 @@ import {
   date,
   makerCost,
   money,
+  sampleCostWhy,
   sampleCosts,
   sampleGap,
   sampleObligation,
@@ -22,11 +23,13 @@ import {
 } from "../data";
 import { api, asOrder, type OrderDetail } from "../api";
 import { errorMessage } from "../auth";
+import { CostWhy } from "../CostWhy";
 import { OrderStatus } from "./OrderTable";
 import type { Workspace } from "./store";
 import { Button, PageHeading, go, orderPath, type Notify } from "./ui";
 
 const OrderAnalysis = lazy(() => import("../Analysis"));
+const OrderStatusPanel = lazy(() => import("../OrderStatus"));
 const costMoney = (n: number) => money(n, sampleCosts.maker.currency);
 
 function OrderHeading({ order, ws }: { order: Order; ws: Workspace }) {
@@ -129,6 +132,27 @@ export function CompanyOrder({
       <Suspense
         fallback={
           <section className="panel" role="status">
+            Loading the status…
+          </section>
+        }
+      >
+        <OrderStatusPanel
+          key={detail.order.id}
+          detail={detail}
+          options={ws.statusOptions}
+          role={ws.account?.role ?? null}
+          notify={notify}
+          onChanged={async (next) => {
+            // Only if the visitor is still on this order.
+            if (location.hash.endsWith("/" + orderPath(next.order.id)))
+              setDetail(next);
+            await ws.refreshOrders();
+          }}
+        />
+      </Suspense>
+      <Suspense
+        fallback={
+          <section className="panel" role="status">
             Loading the analysis…
           </section>
         }
@@ -228,7 +252,11 @@ export function SampleOrder({
             <h3>The cost of waiting</h3>
             <div className="cost-row">
               <span>Documentation preparation</span>
-              <b>{costMoney(sampleCosts.maker.documentation)}</b>
+              <b>
+                <CostWhy why={sampleCostWhy.documentation}>
+                  {costMoney(sampleCosts.maker.documentation)}
+                </CostWhy>
+              </b>
             </div>
             <div className="cost-row">
               <span>
@@ -236,26 +264,32 @@ export function SampleOrder({
                 {costMoney(sampleCosts.maker.delayPerDay)}
               </span>
               <b>
-                {costMoney(
-                  sampleCosts.maker.delayDays * sampleCosts.maker.delayPerDay,
-                )}
+                <CostWhy why={sampleCostWhy.delay}>
+                  {costMoney(
+                    sampleCosts.maker.delayDays * sampleCosts.maker.delayPerDay,
+                  )}
+                </CostWhy>
               </b>
             </div>
             <div className="cost-row total">
               <span>Estimated maker exposure</span>
               <b>
-                {costMoney(makerCost)} {sampleCosts.maker.currency}
+                <CostWhy why={`The two lines above. ${sampleCostWhy.note}`}>
+                  {costMoney(makerCost)} {sampleCosts.maker.currency}
+                </CostWhy>
               </b>
             </div>
             <p className="fine-print">
               Illustrative estimate from the demo's cost assumptions, not a
-              tariff or guaranteed cost. Order value is not added to this
-              estimate.
+              tariff or guaranteed cost; hover an amount to see where it comes
+              from. Order value is not added to this estimate.
             </p>
             {buyer && (
               <div className="notice">
                 Buyer scenario:{" "}
-                {money(sampleCosts.buyer.margin, sampleCosts.buyer.currency)}{" "}
+                <CostWhy why={sampleCostWhy.margin}>
+                  {money(sampleCosts.buyer.margin, sampleCosts.buyer.currency)}
+                </CostWhy>{" "}
                 margin exposure per affected purchase order. This is a separate
                 sample estimate, not a currency conversion.
               </div>

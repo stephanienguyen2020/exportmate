@@ -44,7 +44,8 @@
   align-items: center;
   gap: 6px;
 }
-.news-skus span {
+.news-skus > span:not(.news-sku-wrap),
+.news-sku {
   font:
     9px "DM Mono",
     monospace;
@@ -52,11 +53,96 @@
   padding: 5px 7px;
   background: #fff;
 }
-.news-skus b {
+.news-skus > b {
   font-size: 10px;
   font-weight: 500;
   color: var(--red);
   margin-left: 4px;
+}
+/* A stock-item chip: a link to its one matching order, or a button listing several. */
+.news-sku {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--green);
+  text-decoration: none;
+  cursor: pointer;
+}
+.news-sku:hover,
+.news-sku[aria-expanded="true"] {
+  border-color: var(--green);
+}
+.news-sku:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 1px;
+}
+.news-sku-more {
+  font-family: "DM Mono", monospace;
+}
+.news-sku em {
+  font-style: normal;
+  background: var(--lime);
+  padding: 0 4px;
+}
+.news-sku-wrap {
+  position: relative;
+}
+.news-sku-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 20;
+  width: 320px;
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  background: #fffffc;
+  border: 1px solid #d4d9cd;
+  box-shadow: 0 8px 24px rgb(36 61 51 / 12%);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.news-sku-pop > small,
+.news-sku-pop > p {
+  color: var(--muted);
+  margin: 0;
+}
+.news-sku-pop ul {
+  list-style: none;
+  margin: 4px 0;
+  padding: 0;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.news-sku-pop li a {
+  display: grid;
+  padding: 7px 0;
+  border-top: 1px solid var(--line);
+  color: inherit;
+  text-decoration: none;
+}
+.news-sku-pop li a:hover b {
+  text-decoration: underline;
+}
+.news-sku-pop li b {
+  font:
+    500 10px "DM Mono",
+    monospace;
+  color: var(--green);
+}
+.news-sku-pop li span {
+  color: #6f7869;
+}
+@media (max-width: 640px) {
+  .news-sku-pop {
+    position: fixed;
+    top: auto;
+    /* Clear of the assistant's chat button. */
+    bottom: 96px;
+    left: 16px;
+    right: 16px;
+    width: auto;
+  }
 }
 .news-reasons {
   margin: 16px 0 0;
@@ -143,11 +229,45 @@
 .news-tabs {
   margin-bottom: 20px;
 }
+.news-filterbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 20px;
+  margin-bottom: 20px;
+}
 .news-filters {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 20px;
+}
+.news-filter-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.news-filter-fields .search {
+  padding: 7px 10px;
+  background: #fff;
+}
+.news-filter-fields .search input {
+  width: 200px;
+}
+.news-filter-fields select {
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--green);
+  font-size: 11px;
+  max-width: 220px;
+}
+.news-filter-count {
+  margin-top: -6px;
+}
+.news-filter-count .news-more {
+  display: inline;
+  margin: 0;
 }
 .news-filters button {
   font-size: 10px;
@@ -285,6 +405,17 @@
   }
 }
 @media (max-width: 640px) {
+  .news-filter-fields,
+  .news-filter-fields .search {
+    width: 100%;
+  }
+  .news-filter-fields .search input {
+    width: 100%;
+  }
+  .news-filter-fields select {
+    flex: 1 1 140px;
+    max-width: none;
+  }
   .news-scanbar-action {
     margin-left: 0;
     align-items: flex-start;
@@ -293,6 +424,151 @@
 @media (prefers-reduced-motion: reduce) {
   .news-toggle span:first-of-type,
   .news-toggle span:first-of-type::after {
+    transition: none;
+  }
+}
+.news-orders {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.news-orders h4 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+.news-orders-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 2px 0;
+  font: inherit;
+  color: var(--green);
+  text-align: left;
+}
+.news-orders-toggle svg {
+  flex: none;
+  transform: rotate(-90deg);
+  transition: transform 0.15s ease;
+}
+.news-orders.open .news-orders-toggle svg {
+  transform: none;
+}
+.news-orders-count {
+  font-weight: 400;
+  color: #6f7869;
+}
+.news-orders ul {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  background: #fff;
+}
+.news-orders li {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border-left: 3px solid transparent;
+}
+.news-orders li + li {
+  border-top: 1px solid var(--line);
+}
+.news-orders li.confirmed {
+  border-left-color: var(--green);
+}
+.news-orders li.rejected {
+  opacity: 0.7;
+}
+.news-order-row {
+  display: flex;
+  align-items: center;
+  gap: 6px 12px;
+}
+.news-order-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.news-order-main small {
+  font-size: 10px;
+  color: #6f7869;
+  line-height: 1.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.news-order-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  font-size: 11px;
+}
+.news-order-verdict,
+.news-order-actions,
+.news-order-link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.news-order-verdict,
+.news-order-actions {
+  flex: none;
+  justify-content: flex-end;
+}
+.news-orders .news-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 4px 0 0;
+  white-space: nowrap;
+}
+.news-order-note,
+.news-order-link select {
+  min-width: 0;
+  border: 1px solid var(--line);
+  padding: 6px 10px;
+  background: #fff;
+  font-size: 11px;
+  color: var(--green);
+}
+.news-order-link select {
+  flex: 1 1 160px;
+}
+.news-order-actions .btn,
+.news-order-link .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 5px 10px;
+  font-size: 10px;
+  white-space: nowrap;
+}
+.news-order-link {
+  margin-top: 8px;
+}
+.news-orders .status.grey {
+  color: #6f7869;
+  background: #eceee8;
+}
+@media (max-width: 560px) {
+  .news-order-row {
+    flex-wrap: wrap;
+  }
+  .news-order-main small {
+    white-space: normal;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .news-orders-toggle svg {
     transition: none;
   }
 }

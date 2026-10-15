@@ -158,6 +158,7 @@ async function openMap(
   const comparisons: URL[] = [];
   // Saved suppliers and sites show up when the map reloads.
   const current: TradeMap = structuredClone(mapData);
+  const scenarios: Record<string, unknown>[] = [];
   await page.route("**/api/impacts**", (r) =>
     r.fulfill({ json: { impacts: [], scan: null } }),
   );
@@ -224,7 +225,12 @@ async function openMap(
       current.suppliers[0].documents = [
         { ...body, label: "Timber legality evidence", fromUpload: true },
       ];
-      data = { id: "doc-1", supplierId: "supplier-1", uploadId: "upload-1", ...body };
+      data = {
+        id: "doc-1",
+        supplierId: "supplier-1",
+        uploadId: "upload-1",
+        ...body,
+      };
     } else if (path === "/suppliers" || path.startsWith("/sites/")) {
       const method = route.request().method();
       const body = route.request().postDataJSON();
@@ -239,6 +245,54 @@ async function openMap(
         data = { ...current.sites[0], ...body };
         current.sites[0] = data as TradeMap["sites"][number];
       }
+    } else if (path.startsWith("/trade-map/scenarios")) {
+      const method = route.request().method();
+      const body = route.request().postDataJSON();
+      if (method !== "GET") options.writes?.push({ method, path, body });
+      if (path === "/trade-map/scenarios/suggest")
+        data = {
+          summary: "A stop in Singapore asks for a fresh look at origin proof.",
+          nextSteps: [
+            {
+              text: "Ask the forwarder how the consignment stays unaltered.",
+              items: ["Proof of origin"],
+            },
+          ],
+          questions: [
+            { text: "Who pays any extra freight?", items: ["Freight cost"] },
+          ],
+          note: "A stop in Singapore asks for a fresh look at origin proof.\n\nNext steps:\n- Ask the forwarder how the consignment stays unaltered.",
+        };
+      else if (method === "POST") {
+        const label =
+          body.kind === "route"
+            ? `Route via ${body.target === "SG" ? "Singapore" : body.target}`
+            : `Market: ${body.target}`;
+        const kept = {
+          id: `scenario-${scenarios.length + 1}`,
+          ...body,
+          label,
+          comparison: {
+            kind: body.kind,
+            reuse: [],
+            reevaluate: [{ title: "Proof of origin", note: "" }],
+            unknown: [{ title: "Freight cost", note: "" }],
+            dropped: [],
+          },
+          createdBy: { id: "test-user", name: "Test Owner" },
+          updatedBy: { id: "test-user", name: "Test Owner" },
+          createdAt: "2026-10-15T08:00:00Z",
+          updatedAt: "2026-10-15T08:00:00Z",
+        };
+        scenarios.unshift(kept);
+        data = kept;
+      } else if (method === "DELETE") {
+        scenarios.splice(
+          scenarios.findIndex((s) => path.endsWith(`/${s.id}`)),
+          1,
+        );
+        data = { deleted: true };
+      } else data = scenarios;
     } else if (path === "/trade-map/compare") {
       comparisons.push(url);
       if (url.searchParams.get("shipDate")) {
@@ -592,9 +646,7 @@ test("editors edit a site and viewers see no edit controls", async ({
 
   await page.getByRole("button", { name: "Edit site" }).click();
   await page.getByRole("button", { name: "Delete site" }).click();
-  await expect(page.locator(".tm-confirm")).toContainText(
-    "Routes start here",
-  );
+  await expect(page.locator(".tm-confirm")).toContainText("Routes start here");
   await page.getByRole("button", { name: "Keep it" }).click();
   await expect(page.locator(".tm-confirm")).toHaveCount(0);
 });
@@ -602,7 +654,9 @@ test("editors edit a site and viewers see no edit controls", async ({
 test("viewers can't add or edit places", async ({ page }) => {
   await openMap(page, { role: "viewer" });
   await expect(page.locator(".tm-panel h2")).toHaveText("Pick a place.");
-  await expect(page.getByRole("button", { name: "Add supplier" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Add supplier" })).toHaveCount(
+    0,
+  );
   await expect(page.getByRole("button", { name: "Add site" })).toHaveCount(0);
   await page.getByRole("button", { name: /Sample factory/ }).click();
   await expect(page.locator(".tm-panel h2")).toHaveText("Sample factory.");
@@ -626,11 +680,15 @@ test("editors upload a supplier certificate and confirm what AI read", async ({
       buffer: Buffer.from("%PDF-1.4 "),
     });
   const form = page.locator(".tm-upload-form");
-  await expect(form.getByText("Hard to read: The stamp is faint.")).toBeVisible();
+  await expect(
+    form.getByText("Hard to read: The stamp is faint."),
+  ).toBeVisible();
   await expect(form.getByLabel("Document number (optional)")).toHaveValue(
     "SGS-COC-001234",
   );
-  await expect(form.getByLabel("Expires on (optional)")).toHaveValue("2026-12-15");
+  await expect(form.getByLabel("Expires on (optional)")).toHaveValue(
+    "2026-12-15",
+  );
   await form.getByLabel("Issued by (optional)").fill("SGS Vietnam");
   await form.getByRole("button", { name: "Confirm certificate" }).click();
   await expect(
@@ -651,4 +709,95 @@ test("editors upload a supplier certificate and confirm what AI read", async ({
       },
     },
   ]);
+});
+
+test("editors save a proposed route with a note, started from an AI suggestion", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const writes: { method: string; path: string; body: any }[] = [];
+  await openMap(page, { hash: "map/order/PO%7C42", writes });
+  await page
+    .getByRole("group", { name: "Market to compare with" })
+    .getByRole("button", { name: "United States" })
+    .click();
+  await page.getByRole("button", { name: "Route", exact: true }).click();
+  await page.getByRole("button", { name: "Singapore", exact: true }).click();
+  await expect(page.getByText(/not a freight quote/)).toBeVisible();
+  await expect(page.getByText(/None yet\. Compare a market/)).toBeVisible();
+
+  await page.getByRole("button", { name: "Suggest a note with AI" }).click();
+  const suggestion = page.getByLabel("AI suggestion");
+  await expect(
+    suggestion.getByText("Who pays any extra freight?"),
+  ).toBeVisible();
+  await expect(
+    suggestion.locator("em", { hasText: "Proof of origin" }),
+  ).toBeVisible();
+  expect(writes.at(-1)).toEqual({
+    method: "POST",
+    path: "/trade-map/scenarios/suggest",
+    body: { orderId: "PO|42", kind: "route", target: "SG" },
+  });
+  await page.getByRole("button", { name: "Use as note" }).click();
+  const note = page.getByLabel("Note (optional)");
+  await expect(note).toHaveValue(/^A stop in Singapore/);
+  await note.fill("Buyer prefers Singapore. Waiting on forwarder.");
+  await page.getByRole("button", { name: "Save what-if" }).click();
+  await expect(
+    page.getByText(/order, its status and its documents are unchanged/),
+  ).toBeVisible();
+  expect(writes.at(-1)?.body).toEqual({
+    orderId: "PO|42",
+    kind: "route",
+    target: "SG",
+    note: "Buyer prefers Singapore. Waiting on forwarder.",
+  });
+  const saved = page.getByRole("region", { name: "Saved what-ifs" });
+  await expect(
+    saved.getByRole("button", { name: "Route via Singapore", exact: true }),
+  ).toBeVisible();
+  await expect(
+    saved.getByText("Buyer prefers Singapore. Waiting on forwarder."),
+  ).toBeVisible();
+  await expect(
+    saved.getByText(/1 to re-evaluate, 1 unknown · saved/),
+  ).toBeVisible();
+  const width = await page.evaluate(() => document.documentElement.scrollWidth);
+  expect(width).toBeLessThanOrEqual(390);
+
+  // Opening another what-if and coming back to the saved one restores it.
+  await page.getByRole("button", { name: "Direct", exact: true }).click();
+  await expect(page.getByLabel("Note (optional)")).toHaveValue("");
+  await saved
+    .getByRole("button", { name: "Route via Singapore", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Singapore", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByLabel("Note (optional)")).toHaveValue(
+    "Buyer prefers Singapore. Waiting on forwarder.",
+  );
+  await expect(page.getByRole("button", { name: "Update" })).toBeVisible();
+
+  await saved
+    .getByRole("button", { name: "Delete Route via Singapore" })
+    .click();
+  await saved.getByRole("button", { name: "Delete", exact: true }).click();
+  await expect(saved.getByText("None yet.", { exact: false })).toBeVisible();
+});
+
+test("viewers see saved what-ifs but can't save", async ({ page }) => {
+  await openMap(page, { hash: "map/order/PO%7C42", role: "viewer" });
+  await page.getByRole("button", { name: "Route", exact: true }).click();
+  await page.getByRole("button", { name: "Singapore", exact: true }).click();
+  await expect(page.getByText(/not a freight quote/)).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Saved what-ifs" }),
+  ).toContainText("None yet.");
+  await expect(
+    page.getByRole("button", { name: "Suggest a note with AI" }),
+  ).toHaveCount(0);
+  await expect(page.getByLabel("Note (optional)")).toHaveCount(0);
 });

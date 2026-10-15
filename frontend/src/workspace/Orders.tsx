@@ -24,12 +24,14 @@ export default function Orders({
   onView: (view: OrderFilter) => void;
   notify: Notify;
 }) {
-  const { live, orders, exposed } = ws;
+  const { live, orders, exposed, statusOptions } = ws;
   const { filter, search } = view;
   const matches = orders.filter(
     (o) =>
       (filter === "All orders" ||
-        (filter === "Action needed"
+        (live && statusOptions.length
+          ? statusOptions.some((s) => s.label === filter && s.code === o.status)
+          : filter === "Action needed"
           ? o.risk
           : filter === "Awaiting analysis"
             ? ws.isPending(o)
@@ -79,9 +81,13 @@ export default function Orders({
         <div className="tabs">
           {[
             "All orders",
-            "Action needed",
-            "In the clear",
-            ...(live ? ["Awaiting analysis", "Needs data"] : []),
+            ...(live && statusOptions.length
+              ? statusOptions.map((s) => s.label)
+              : [
+                  "Action needed",
+                  "In the clear",
+                  ...(live ? ["Awaiting analysis", "Needs data"] : []),
+                ]),
           ].map((f) => (
             <button
               key={f}

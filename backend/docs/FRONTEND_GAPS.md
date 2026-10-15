@@ -7,6 +7,7 @@ As of 15 October 2026 every built endpoint has a screen (checked against `fronte
 | # | Screen | Backend ready | Frontend today | To build |
 | --- | --- | --- | --- | --- |
 | 1 | **Supplier form: contact** | `contactName`, `contactEmail` on suppliers | In the trade map's supplier form | Remove this row once checked in the browser |
+| 2 | **Saved what-ifs: edit a note in the list** | `PATCH /trade-map/scenarios/{id}` (note only, keeps the stored comparison) | The compare panel re-saves through `POST`, which re-runs the comparison | An edit button on each saved what-if |
 
 **Not frontend, still open:** the AI test set (REQUIREMENTS.md open question 22).
 

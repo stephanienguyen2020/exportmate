@@ -270,6 +270,13 @@ test("the overview's figures come from the orders and today's date", async ({
   );
   const risk = page.locator(".metrics > div").nth(2);
   await expect(risk.locator(".metric-value")).toHaveText("$2,400USD");
+  // Hovering the estimate says how it was worked out and where each number comes from.
+  await risk.locator(".cost-why").hover();
+  const why = page.getByRole("tooltip");
+  await expect(why).toContainText("2 orders × ($400 + 4 days × $200)");
+  await expect(why).toContainText("default cost of a missing supplier document (USD 400)");
+  await page.mouse.move(0, 0);
+  await expect(why).toHaveCount(0);
   await page.getByRole("button", { name: "Buyer", exact: true }).click();
   await expect(page.getByRole("button", { name: "Buyer", exact: true })).toHaveAttribute(
     "aria-pressed",
@@ -323,4 +330,155 @@ test("the assistant gets the demo's orders and playbook, and shows code", async 
     "Supplier",
     "Watchlist",
   ]);
+});
+
+test("news alerts filter by severity, text, source, stock item and date", async ({
+  page,
+}) => {
+  const daysAgo = (n: number) =>
+    new Date(Date.now() - n * 86_400_000).toISOString();
+  const alert = (o: Record<string, unknown>) => ({
+    url: "https://news.example/a",
+    publisher: "Example",
+    sourceName: "Timber news",
+    severity: "medium",
+    direction: "risk",
+    why: "Why it matters.",
+    action: "",
+    affected: [],
+    stockValueUsd: 1000,
+    createdAt: daysAgo(0),
+    ...o,
+  });
+  const impacts = [
+    alert({
+      id: "a",
+      title: "Oak tariff",
+      headline: "US raises oak duty",
+      severity: "high",
+      publishedAt: daysAgo(2),
+      affected: [{ sku: "OAK-1", name: "Oak table", reason: "r", stockValueUsd: 1 }],
+    }),
+    alert({
+      id: "b",
+      title: "Teak rules",
+      headline: "Teak certificate change",
+      sourceName: "Customs feed",
+      publishedAt: daysAgo(3),
+      affected: [{ sku: "TEAK-2", name: "Teak chair", reason: "r", stockValueUsd: 1 }],
+    }),
+    alert({
+      id: "c",
+      title: "Old story",
+      headline: "Freight rates fall",
+      direction: "opportunity",
+      severity: "low",
+      publishedAt: daysAgo(40),
+      affected: [{ sku: "OAK-1", name: "Oak table", reason: "r", stockValueUsd: 1 }],
+    }),
+  ];
+  await openDemo(page, "#/workspace/news");
+  // Registered last, so it answers before openDemo's empty list.
+  await page.route("**/api/impacts**", (route) =>
+    route.fulfill({ json: { impacts, scan: null } }),
+  );
+  await page.reload();
+  const cards = page.locator(".news-list .news-card");
+  await expect(cards).toHaveCount(3);
+
+  await page.getByRole("button", { name: "High", exact: true }).click();
+  await expect(cards).toHaveCount(1);
+  await expect(page.getByText("Showing 1 of 3 alerts.")).toBeVisible();
+  await page.getByRole("button", { name: "All", exact: true }).click();
+
+  await page.getByLabel("Search alerts").fill("teak");
+  await expect(cards).toHaveCount(1);
+  await expect(cards.first()).toContainText("Teak certificate change");
+  await page.getByRole("button", { name: "Clear filters" }).click();
+  await expect(cards).toHaveCount(3);
+
+  await page.getByLabel("Source").selectOption("Customs feed");
+  await expect(cards).toHaveCount(1);
+  await page.getByLabel("Source").selectOption("");
+
+  await page.getByLabel("Stock item").selectOption("OAK-1");
+  await expect(cards).toHaveCount(2);
+  await page.getByLabel("Published").selectOption("7");
+  await expect(cards).toHaveCount(1);
+  await expect(cards.first()).toContainText("US raises oak duty");
+
+  await page.getByLabel("Stock item").selectOption("TEAK-2");
+  await page.getByLabel("Search alerts").fill("freight");
+  await expect(cards).toHaveCount(0);
+  await expect(page.getByText("No alerts here.")).toBeVisible();
+});
+
+test("people confirm or reject which demo orders a news alert affects", async ({
+  page,
+}) => {
+  const impacts = [
+    {
+      id: "eudr",
+      title: "EUDR guidance",
+      url: "https://news.example/eudr",
+      publisher: "EU press",
+      sourceName: "Timber news",
+      publishedAt: new Date().toISOString(),
+      severity: "high",
+      direction: "risk",
+      headline: "EU tightens plywood geolocation checks",
+      why: "Why it matters.",
+      action: "",
+      affected: [
+        { sku: "PLY-001", name: "Acacia plywood 18 mm", reason: "r", stockValueUsd: 1 },
+      ],
+      stockValueUsd: 1,
+      createdAt: new Date().toISOString(),
+    },
+  ];
+  const items = [
+    { sku: "PLY-001", name: "Acacia plywood 18 mm", hsCode: "4412.33", markets: ["EU"] },
+  ];
+  await openDemo(page, "#/workspace/news");
+  await page.route("**/api/impacts**", (route) =>
+    route.fulfill({ json: { impacts, scan: null } }),
+  );
+  await page.route("**/api/inventory**", (route) =>
+    route.fulfill({ json: { items } }),
+  );
+  await page.reload();
+
+  // The three EU-bound HS 4412 sample orders are suggested; nothing is decided yet.
+  const panel = page.locator(".news-orders");
+  await expect(panel.getByText("3 to review")).toBeVisible();
+  await expect(panel.locator("li")).toHaveCount(0);
+  await panel.getByRole("button", { name: /Orders this may affect/ }).click();
+  await expect(panel.locator("li")).toHaveCount(3);
+  await expect(panel.getByText("HS 4412 and ships to EU").first()).toBeVisible();
+
+  await page.getByRole("button", { name: "Add a note on PO-2291" }).click();
+  await page.getByLabel("PO-2291 (optional)").fill("Our Rotterdam lot.");
+  await page.getByRole("button", { name: "PO-2291: affects this order" }).click();
+  await page.getByRole("button", { name: "PO-2304: not relevant" }).click();
+  await expect(panel.locator("li.confirmed")).toContainText("“Our Rotterdam lot.”");
+  await expect(panel.locator("li.rejected")).toContainText("PO-2304");
+  await expect(panel.getByText("1 to review")).toBeVisible();
+
+  // A person can link an order that wasn't suggested.
+  await page.getByLabel("Order to link").selectOption("PO-2310");
+  await page.getByRole("button", { name: "Link order" }).click();
+  await expect(panel.locator("li.confirmed")).toHaveCount(2);
+  await expect(panel.getByText("did not suggest this order")).toBeVisible();
+
+  // Verdicts stay in this browser; undo puts a suggestion back to review.
+  await page.reload();
+  await panel.getByRole("button", { name: /Orders this may affect/ }).click();
+  await expect(panel.locator("li.confirmed")).toHaveCount(2);
+  await page.getByRole("button", { name: "Undo the verdict on PO-2304" }).click();
+  await expect(panel.getByText("2 to review")).toBeVisible();
+
+  await page.getByLabel("Orders", { exact: true }).selectOption("none");
+  await expect(page.locator(".news-list .news-card")).toHaveCount(0);
+  await page.getByLabel("Orders", { exact: true }).selectOption("review");
+  await expect(page.locator(".news-list .news-card")).toHaveCount(1);
 });

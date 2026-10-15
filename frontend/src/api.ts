@@ -36,6 +36,24 @@ export type ApiOrder = Omit<Order, "value" | "risk"> & {
   currency: string;
   status: "awaiting_analysis" | "clear" | "exposed" | "needs_data";
 };
+// Order statuses as the backend's database names them (GET /order-statuses).
+export type OrderStatusOption = {
+  code: ApiOrder["status"];
+  label: string;
+  description: string;
+  tone: "green" | "amber" | "red" | string;
+  manual: boolean; // an owner or editor may set it by hand
+};
+export type OrderStatusChange = {
+  id: string;
+  fromStatus: ApiOrder["status"];
+  toStatus: ApiOrder["status"];
+  source: "manual" | "analysis";
+  note: string | null; // always set for a manual change
+  runId: string | null;
+  changedBy: { id: string; name: string };
+  changedAt: string;
+};
 export type Overview = {
   totalOrders: number;
   countsByStatus: Record<string, number>;
@@ -60,6 +78,7 @@ export type OrderDetail = {
     source: RequirementSource;
   }[];
   latestReportId?: string | null; // the order's latest analysis report; null before any run
+  statusChanges?: OrderStatusChange[]; // newest first
 };
 export type CostSetting = {
   key: string;
@@ -203,6 +222,61 @@ export type SupplierMessage = {
   sentAt: string | null;
   sandbox: boolean | null;
   error: string | null;
+};
+export type Solution = {
+  id: string;
+  market: string;
+  requirementKey: string;
+  problemStatus: string;
+  summary: string;
+  steps: string[];
+  status: "suggested" | "adopted" | "rejected";
+  writtenFor: string | null;
+  basis: {
+    regulationTitle: string;
+    documentId: string;
+    versionNumber: number;
+    sourceUrl: string | null;
+    quote: string;
+  };
+  validUntil: string;
+  expired: boolean;
+  expiredReason: string | null;
+  model: string;
+  createdBy: { id: string; name: string };
+  createdAt: string;
+  reviewedBy: { id: string; name: string } | null;
+  reviewedAt: string | null;
+  supersedesId: string | null;
+  usedFor: number;
+  notes: {
+    id: string;
+    author: { id: string; name: string };
+    text: string;
+    createdAt: string;
+  }[];
+};
+// One problem in a report. `default` is never expired or rejected.
+export type SolutionCase = {
+  requirementKey: string;
+  title: string;
+  problemStatus: string;
+  note: string;
+  default: Solution | null;
+  inUse: boolean;
+  others: Solution[];
+  expired: Solution[];
+  needsAnalysis: boolean;
+};
+// One kind of problem in the knowledge base, with every solution saved for it.
+export type SolutionProblem = {
+  market: string;
+  requirementKey: string;
+  problemStatus: string;
+  title: string;
+  inChecklist: boolean;
+  // Valid before expired; adopted, then suggested, then rejected; newest first.
+  solutions: Solution[];
 };
 export type SupplierMessageUpdate = {
   recipient?: string | null;
@@ -407,6 +481,24 @@ export type RequirementCheck = {
   status: CheckStatus;
   note: string;
 };
+// A checklist line that takes effect or changes soon in a market the company ships to.
+export type ChecklistChange = {
+  on: string;
+  kind: "effective" | "changes";
+  market: string;
+  marketName: string;
+  requirementKey: string;
+  title: string;
+  whatChanges: string;
+  orderIds: string[]; // open orders to that market shipping on or after `on`
+  source: RequirementSource;
+};
+export type ChecklistChanges = {
+  start: string;
+  until: string;
+  days: number; // the window the backend used (RULE_WATCH_DAYS unless asked)
+  changes: ChecklistChange[];
+};
 export type MapOrder = {
   order: ApiOrder;
   placement: {
@@ -542,6 +634,27 @@ export type MarketComparison = {
   dropped: string[];
   assumptions?: string[];
 };
+export type ScenarioKind = "market" | "ship_date" | "route";
+export type SavedScenario = {
+  id: string;
+  orderId: string;
+  kind: ScenarioKind;
+  target: string;
+  label: string;
+  note: string | null;
+  comparison: MarketComparison; // as it stood when saved
+  createdBy: { id: string; name: string } | null;
+  updatedBy: { id: string; name: string } | null;
+  createdAt: string;
+  updatedAt: string;
+};
+export type ScenarioPoint = { text: string; items: string[] };
+export type ScenarioSuggestion = {
+  summary: string;
+  nextSteps: ScenarioPoint[];
+  questions: ScenarioPoint[];
+  note: string;
+};
 export type RegulationDocument = {
   id: string;
   title: string;
@@ -567,6 +680,53 @@ export type RegulationDetail = Regulation & { versions: RegulationDocument[] };
 type Envelope<T> = {
   data: T;
   meta: { nextCursor?: string | null; total?: number; revision?: number };
+};
+export type NewsVerdict = "relevant" | "not_relevant";
+// An order a News watch alert may affect: suggested (same HS heading and market as a stock
+// item the alert names), linked by a person, or both, with the person's verdict once given.
+export type NewsMatch = {
+  impactId: string;
+  orderId: string;
+  product: string;
+  destination: string;
+  market: string | null;
+  shipDate: string;
+  suggested: boolean;
+  reason: string;
+  review: {
+    verdict: NewsVerdict;
+    note: string | null;
+    reviewedBy: { id: string; name: string };
+    reviewedAt: string;
+  } | null;
+};
+export type Role = "owner" | "editor" | "viewer";
+// GET /company/members: everyone in the company. Owners change roles and remove people.
+export type Member = {
+  userId: string;
+  name: string;
+  email: string;
+  role: Role;
+  joinedAt: string;
+  you: boolean;
+};
+// GET /company/invites (owners): addresses invited to join, until they accept or it expires.
+export type Invite = {
+  id: string;
+  email: string;
+  role: Role;
+  invitedBy: { id: string; name: string } | null;
+  createdAt: string;
+  expiresAt: string;
+  expired: boolean;
+};
+// GET /me/invites: invitations to the signed-in person's own address.
+export type ReceivedInvite = {
+  id: string;
+  companyName: string;
+  role: Role;
+  invitedBy: { id: string; name: string } | null;
+  expiresAt: string;
 };
 export class ApiError extends Error {
   constructor(
@@ -715,6 +875,15 @@ export const api = {
     request<OrderDetail>(`/orders/${encodeURIComponent(id)}`).then(
       (r) => r.data,
     ),
+  orderStatuses: (signal?: AbortSignal) =>
+    request<OrderStatusOption[]>("/order-statuses", { signal }).then(
+      (r) => r.data,
+    ),
+  changeOrderStatus: (id: string, status: ApiOrder["status"], note: string) =>
+    request<OrderDetail>(`/orders/${encodeURIComponent(id)}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status, note }),
+    }).then((r) => r.data),
   reports: (signal?: AbortSignal) =>
     request<ReportSummary[]>("/report-drafts", { signal }).then((r) => r.data),
   report: (id: string, signal?: AbortSignal) =>
@@ -827,6 +996,11 @@ export const api = {
   },
   tradeMap: (signal?: AbortSignal) =>
     request<TradeMap>("/trade-map", { signal }).then((r) => r.data),
+  // The window is the backend's RULE_WATCH_DAYS setting.
+  checklistChanges: (signal?: AbortSignal) =>
+    request<ChecklistChanges>("/trade-map/changes", { signal }).then(
+      (r) => r.data,
+    ),
   createSupplier: (supplier: SupplierInput) =>
     request<SupplierRecord>("/suppliers", {
       method: "POST",
@@ -867,6 +1041,40 @@ export const api = {
       `/trade-map/compare?${new URLSearchParams({ orderId, via })}`,
       { signal },
     ).then((r) => r.data),
+  // What-ifs saved with a note; saving changes nothing on the order.
+  scenarios: (orderId?: string, signal?: AbortSignal) =>
+    request<SavedScenario[]>(
+      `/trade-map/scenarios${orderId ? `?${new URLSearchParams({ orderId })}` : ""}`,
+      { signal },
+    ).then((r) => r.data),
+  saveScenario: (scenario: {
+    orderId: string;
+    kind: ScenarioKind;
+    target: string;
+    note: string | null;
+  }) =>
+    request<SavedScenario>("/trade-map/scenarios", {
+      method: "POST",
+      body: JSON.stringify(scenario),
+    }).then((r) => r.data),
+  updateScenarioNote: (id: string, note: string | null) =>
+    request<SavedScenario>(`/trade-map/scenarios/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ note }),
+    }).then((r) => r.data),
+  deleteScenario: (id: string) =>
+    request(`/trade-map/scenarios/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
+  suggestScenarioNote: (what: {
+    orderId: string;
+    kind: ScenarioKind;
+    target: string;
+  }) =>
+    request<ScenarioSuggestion>("/trade-map/scenarios/suggest", {
+      method: "POST",
+      body: JSON.stringify(what),
+    }).then((r) => r.data),
   // Analysis: every order when orderIds is omitted. Returns the finished run.
   startRun: (orderIds?: string[]) =>
     request<AnalysisRun>("/runs", {
@@ -994,19 +1202,116 @@ export const api = {
       `/supplier-messages/${encodeURIComponent(id)}/send`,
       { method: "POST", headers: { "Idempotency-Key": idempotencyKey } },
     ).then((r) => r.data),
+  solutions: (signal?: AbortSignal) =>
+    request<SolutionProblem[]>("/solutions", { signal }).then((r) => r.data),
+  reportSolutions: (reportId: string, signal?: AbortSignal) =>
+    request<SolutionCase[]>(
+      `/reports/${encodeURIComponent(reportId)}/solutions`,
+      { signal },
+    ).then((r) => r.data),
+  suggestSolution: (reportId: string, requirementKey: string) =>
+    request<SolutionCase>(
+      `/reports/${encodeURIComponent(reportId)}/solutions`,
+      { method: "POST", body: JSON.stringify({ requirementKey }) },
+    ).then((r) => r.data),
+  useSolution: (id: string, reportId: string) =>
+    request<SolutionCase>(`/solutions/${encodeURIComponent(id)}/use`, {
+      method: "POST",
+      body: JSON.stringify({ reportId }),
+    }).then((r) => r.data),
+  addSolutionNote: (id: string, text: string) =>
+    request<Solution>(`/solutions/${encodeURIComponent(id)}/notes`, {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    }).then((r) => r.data),
+  reviewSolution: (
+    id: string,
+    verdict: "adopted" | "rejected",
+    note: string | null,
+  ) =>
+    request<Solution>(`/solutions/${encodeURIComponent(id)}/review`, {
+      method: "POST",
+      body: JSON.stringify({ verdict, note }),
+    }).then((r) => r.data),
   async auditEvents(
-    filter: { objectType?: string; userId?: string; cursor?: string | null },
+    filter: { objectType?: string; userId?: string; limit?: number },
     signal?: AbortSignal,
   ) {
-    const query = new URLSearchParams({ limit: "50" });
+    const query = new URLSearchParams({ limit: String(filter.limit ?? 50) });
     if (filter.objectType) query.set("objectType", filter.objectType);
     if (filter.userId) query.set("userId", filter.userId);
-    if (filter.cursor) query.set("cursor", filter.cursor);
     const page = await request<AuditEvent[]>(`/audit-events?${query}`, {
       signal,
     });
-    return { events: page.data, nextCursor: page.meta.nextCursor ?? null };
+    return { events: page.data, more: Boolean(page.meta.nextCursor) };
   },
+  // The whole log with the same filters, as a CSV file.
+  async downloadAuditEvents(filter: { objectType?: string; userId?: string }) {
+    const query = new URLSearchParams();
+    if (filter.objectType) query.set("objectType", filter.objectType);
+    if (filter.userId) query.set("userId", filter.userId);
+    const response = await authenticatedResponse(`/audit-events/export?${query}`);
+    const filename =
+      /filename="([^"]+)"/.exec(
+        response.headers.get("content-disposition") || "",
+      )?.[1] || "exportmate-activity.csv";
+    const url = URL.createObjectURL(await response.blob());
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  },
+  newsMatches: (signal?: AbortSignal) =>
+    request<{ newsAvailable: boolean; matches: NewsMatch[] }>("/news-matches", {
+      signal,
+    }).then((r) => r.data),
+  reviewNewsMatch: (
+    impactId: string,
+    orderId: string,
+    verdict: NewsVerdict,
+    note: string | null,
+  ) =>
+    request<NewsMatch>(
+      `/news-matches/${encodeURIComponent(impactId)}/orders/${encodeURIComponent(orderId)}`,
+      { method: "PUT", body: JSON.stringify({ verdict, note }) },
+    ).then((r) => r.data),
+  clearNewsReview: (impactId: string, orderId: string) =>
+    request(
+      `/news-matches/${encodeURIComponent(impactId)}/orders/${encodeURIComponent(orderId)}`,
+      { method: "DELETE" },
+    ),
+  members: (signal?: AbortSignal) =>
+    request<Member[]>("/company/members", { signal }).then((r) => r.data),
+  changeMemberRole: (userId: string, role: Role) =>
+    request<Member>(`/company/members/${encodeURIComponent(userId)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ role }),
+    }).then((r) => r.data),
+  // An owner removing someone, or anyone leaving (their own user ID).
+  removeMember: (userId: string) =>
+    request(`/company/members/${encodeURIComponent(userId)}`, {
+      method: "DELETE",
+    }),
+  invites: (signal?: AbortSignal) =>
+    request<Invite[]>("/company/invites", { signal }).then((r) => r.data),
+  inviteMember: (email: string, role: Role) =>
+    request<Invite & { sandbox: boolean }>("/company/invites", {
+      method: "POST",
+      body: JSON.stringify({ email, role }),
+    }).then((r) => r.data),
+  revokeInvite: (id: string) =>
+    request(`/company/invites/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  receivedInvites: (signal?: AbortSignal) =>
+    request<ReceivedInvite[]>("/me/invites", { signal }).then((r) => r.data),
+  acceptInvite: (id: string) =>
+    request<Account>(`/me/invites/${encodeURIComponent(id)}/accept`, {
+      method: "POST",
+    }).then((r) => r.data),
+  declineInvite: (id: string) =>
+    request(`/me/invites/${encodeURIComponent(id)}`, { method: "DELETE" }),
 };
 
 // The public contact form: no sign-in, so no token.
