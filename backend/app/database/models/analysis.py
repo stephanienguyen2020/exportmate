@@ -68,6 +68,11 @@ class AnalysisReport(Base):
         pg_enum(OrderStatus, "order_status"), nullable=False
     )
     blocked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # The owner's review of a `needs_human_review` report (a playbook rule asked for it); after
+    # it the report can lead to a supplier message. A failed audit can't be reviewed away.
+    reviewed_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    review_note: Mapped[str | None] = mapped_column(Text)
     # The schemas in schemas/analysis.py, stored as JSON so the report reads the same later.
     content: Mapped[dict] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = created_column()

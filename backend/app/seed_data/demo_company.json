@@ -13,6 +13,8 @@
   "suppliers": [
     {
       "name": "Binh Phu Wood",
+      "contactName": "Nguyen Van Minh",
+      "contactEmail": "minh@binhphuwood.example.com",
       "place": "Dong Xoai, Binh Phuoc",
       "country": "VN",
       "at": [
@@ -44,6 +46,8 @@
     },
     {
       "name": "An Cuong Wood",
+      "contactName": "Tran Thi Lan Anh",
+      "contactEmail": "lananh@ancuongwood.example.com",
       "place": "Tan Chau, Tay Ninh",
       "country": "VN",
       "at": [

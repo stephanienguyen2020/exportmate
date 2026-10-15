@@ -35,13 +35,14 @@ def list_run_reports(db: Session, run_id: uuid.UUID) -> list[tuple[AnalysisRepor
 
 
 def get_company_report(
-    db: Session, company_id: uuid.UUID, report_id: uuid.UUID
+    db: Session, company_id: uuid.UUID, report_id: uuid.UUID, *, for_update: bool = False
 ) -> AnalysisReport | None:
-    return db.scalar(
-        select(AnalysisReport).where(
-            AnalysisReport.id == report_id, AnalysisReport.company_id == company_id
-        )
+    stmt = select(AnalysisReport).where(
+        AnalysisReport.id == report_id, AnalysisReport.company_id == company_id
     )
+    if for_update:
+        stmt = stmt.with_for_update()
+    return db.scalar(stmt)
 
 
 def get_latest_order_report(db: Session, order_id: uuid.UUID) -> AnalysisReport | None:

@@ -187,6 +187,9 @@ class Supplier(Base):
     latitude: Mapped[float | None] = mapped_column(Float)
     longitude: Mapped[float | None] = mapped_column(Float)
     supplies: Mapped[str | None] = mapped_column(Text)
+    # Who to write to about missing documents (supplier messages pre-fill it).
+    contact_name: Mapped[str | None] = mapped_column(String(200))
+    contact_email: Mapped[str | None] = mapped_column(String(254))
     created_at: Mapped[datetime] = created_column()
     __table_args__ = (UniqueConstraint("company_id", "name_key"),)
 

@@ -531,6 +531,8 @@ def build_trade_map(db: Session, ctx: CompanyContext) -> TradeMapOut:
             country=s.country_alpha2,
             location=_point(s.latitude, s.longitude),
             supplies=s.supplies,
+            contact_name=s.contact_name,
+            contact_email=s.contact_email,
             documents=supplier_documents_out(list(documents[s.id].values()), kinds),
             order_ids=order_ids.get(s.name_key, []),
         )

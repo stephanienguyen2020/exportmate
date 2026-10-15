@@ -162,6 +162,8 @@ export type MapSupplier = {
   country: string | null;
   location: GeoPoint | null;
   supplies: string | null;
+  contactName?: string | null;
+  contactEmail?: string | null; // supplier messages are pre-filled with it
   documents:
     | {
         kind: string;
@@ -236,6 +238,8 @@ export type SupplierInput = {
   country: string | null;
   location: GeoPoint | null;
   supplies: string | null;
+  contactName: string | null;
+  contactEmail: string | null;
   documents: SupplierDocumentInput[];
 };
 export type SupplierRecord = Omit<SupplierInput, "documents"> & {
