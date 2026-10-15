@@ -707,7 +707,7 @@ The PDF of the saved content, `inline` for the preview; `?download=true` makes i
 
 ## News watch and orders
 
-News watch (the AI service) matches each article to items in its sample stock, not to orders. The backend suggests which of the company's orders an alert may affect, and people decide (`news_order_reviews`, `services/news_matches.py`). An order is suggested when it hasn't shipped, shares an HS heading (first four digits) with an item the alert names (stock from the AI service's `GET /api/inventory`), and ships to one of that item's markets (`EU`, `US`…; items with no export market, such as raw material, match on the heading alone). A suggestion is a guess until an owner or editor confirms or rejects it, and only confirmed links reach reports. Alerts and stock are read with the caller's token. A review keeps a copy of the alert's headline and link, so it outlives the alert.
+News watch (the AI service) matches each article to the company's goods (what its profile names and its orders ship), not straight to orders. The backend suggests which of the company's orders an alert may affect, and people decide (`news_order_reviews`, `services/news_matches.py`). An order is suggested when it hasn't shipped, shares an HS heading (first four digits) with an item the alert names (stock from the AI service's `GET /api/inventory`), and ships to one of that item's markets (`EU`, `US`…; items with no export market, such as raw material, match on the heading alone). A suggestion is a guess until an owner or editor confirms or rejects it, and only confirmed links reach reports. Alerts and stock are read with the caller's token. A review keeps a copy of the alert's headline and link, so it outlives the alert.
 
 ### `GET /news-matches` (viewer)
 ```json

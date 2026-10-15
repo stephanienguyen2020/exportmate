@@ -22,6 +22,7 @@ import { TIERS, thinkingFor } from "./models.js";
 import { routeQuestion } from "./router.js";
 import { answerKey, cacheable, cachedAudit, fingerprint, CACHE_TTL_MS } from "./answer-cache.js";
 import { GUIDES } from "./seed/guides.js";
+import { companyStock, goodsReader } from "./goods-store.js";
 import { LIVE_TOOLS, REGISTRY, UnknownToolPlugin, cached, clearCaches, lastDoneScan, makeRefs, withStockLists, workspaceReaders } from "./agents/tools.js";
 import { ANSWERING, buildAssistant } from "./agents/assistant.js";
 import { APP, chatSession, memoryService, remembers, userKeyFor } from "./agents/platform.js";
@@ -60,10 +61,23 @@ async function dataVersion(company, access, session) {
     clearCaches();
     scanSeen = scan?.id;
   }
-  const [items, stored] = await Promise.all([cached("inventory", () => list(inventory)), cached("sources", () => list(sources))]);
+  const stored = await cached("sources", () => list(sources));
   // Which order and playbook tools were offered: they change the prompt, though what they read is live.
   const tools = { orders: Boolean(session.orders), playbook: Boolean(session.playbook) };
-  return fingerprint({ items, sources: presentSources(stored, access), scan: scan?.id ?? null, company, tools, guides: GUIDES_VERSION });
+  return fingerprint({ items: session.stock, sources: presentSources(stored, access), scan: scan?.id ?? null, company, tools, guides: GUIDES_VERSION });
+}
+
+// What query_inventory and get_alerts read: a company's own goods (goods-store.js, refreshed
+// with the member's token when stale), or the sample stock in the browser demo. Unread, the
+// tools get nothing and the stock filters are free text.
+async function stockFor(company, backend) {
+  const load = company
+    ? companyStock(company.company.id, backend ? goodsReader(backend, async () => company.company) : null).then((g) => g.items ?? [])
+    : cached("inventory", () => list(inventory));
+  return load.catch((e) => {
+    log("WARNING", "stock.unavailable", { companyId: company?.company.id, error: String(e?.message || e) });
+    return [];
+  });
 }
 
 // The audit that answered this key before, if it is still there and still fit to reuse.
@@ -107,7 +121,7 @@ export async function runAgent({
   const companyId = company?.company.id;
   const readers = workspaceReaders(backend, company ? null : demo);
   // What this turn's tools and rules may use (gateway.js scopes, policy.js `when`).
-  const session = { company, orders: readers.orders, playbook: readers.playbook, memories: [] };
+  const session = { company, orders: readers.orders, playbook: readers.playbook, stock: await stockFor(company, backend), memories: [] };
   // Who this chat runs as (agents/platform.js): Agent Platform session and Memory Bank scope.
   const userKey = userKeyFor({ company, user, sessionId });
 
@@ -145,10 +159,8 @@ export async function runAgent({
   // analyst on the complex tier.
   let current = route.tier;
   const refs = makeRefs();
-  // The stock's own categories and markets for query_inventory's filters; unread, the filters
-  // are free text and the tool reports the error if it's called.
-  const stock = await cached("inventory", () => list(inventory)).catch(() => []);
-  const gateway = toolGateway(withStockLists(REGISTRY, stock), { refs, access, ...session }, { maxCalls: TOOL_BUDGET });
+  // query_inventory's category and market filters list the turn's own stock.
+  const gateway = toolGateway(withStockLists(REGISTRY, session.stock), { refs, access, ...session }, { maxCalls: TOOL_BUDGET });
   const audit = {
     sessionId,
     requestId,

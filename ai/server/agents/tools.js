@@ -9,7 +9,7 @@ import { evaluate } from "../calc.js";
 import { ToolError } from "../gateway.js";
 import { ORDER_STATUSES, matchOrders, presentOrder, totalsByCurrency } from "../orders.js";
 import { createGuard } from "../guard.js";
-import { itemVisible, presentSources, visibleItems } from "../access.js";
+import { itemVisible, presentScan, presentSources, visibleItems } from "../access.js";
 
 // Describes the Cloud Scheduler job; set it where the job is configured.
 const SCAN_SCHEDULE = process.env.SCAN_SCHEDULE || "Daily at 07:00 Asia/Ho_Chi_Minh (Cloud Scheduler)";
@@ -26,6 +26,10 @@ export const clearCaches = () => cache.clear();
 
 const clamp = (n, lo, hi, fallback) => (Number.isInteger(n) ? Math.min(hi, Math.max(lo, n)) : fallback);
 const has = (value, wanted) => !wanted || String(value).toLowerCase().includes(String(wanted).toLowerCase());
+// An item's stock value; a company's goods have no quantity or cost, so none.
+const stockValue = (i) => (Number.isFinite(i?.qtyOnHand * i?.unitCostUsd) ? Math.round(i.qtyOnHand * i.unitCostUsd) : undefined);
+// The turn's stock (agent.js): a company's own goods, or the sample stock in the browser demo.
+const stockOf = async (ctx) => ctx.stock ?? (await cached("inventory", () => list(inventory)));
 const ageDays = (iso) => (iso && !isNaN(Date.parse(iso)) ? Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / 86_400_000)) : undefined);
 const SEVERITY = { high: 0, medium: 1, low: 2 };
 // Document types whose text comes from third parties (news feeds, or alerts written from them).
@@ -176,7 +180,7 @@ export const REGISTRY = {
     declaration: {
       name: "query_inventory",
       description:
-        "Exact lookup of stock items. Returns each matching item's SKU, name, category, HS code, main material and the country it comes from, supplier, markets, certifications, whether its origin is traced, quantity, unit cost and stock value, plus the count and total stock value. Filters combine with AND.",
+        "Exact lookup of the workspace's stock items: in a company workspace, the company's own goods (the products its profile names and its orders ship, each with the ids of those orders; no quantities or values); in the browser demo, the sample stock. Returns what each matching item has of SKU, name, category, HS code, main material and the country it comes from, supplier, markets, certifications, whether its origin is traced, quantity, unit cost and stock value, plus the count and, when items have values, the total stock value. Filters combine with AND.",
       parameters: {
         type: Type.OBJECT,
         properties: {
@@ -199,26 +203,33 @@ export const REGISTRY = {
         },
       },
     },
-    async run(args, { refs }) {
-      const items = await cached("inventory", () => list(inventory));
+    async run(args, ctx) {
+      const { refs } = ctx;
+      const items = await stockOf(ctx);
       const skus = args.skus ? args.skus.map((s) => s.toUpperCase()) : null;
+      const digits = (hs) => String(hs ?? "").replace(/\D/g, "");
       const rows = items
         .filter(
           (i) =>
             (!skus || skus.includes(i.sku)) &&
-            (!args.category || i.category.toLowerCase() === args.category.toLowerCase()) &&
-            (!args.market || i.markets.some((m) => m.toLowerCase() === args.market.toLowerCase())) &&
-            (!args.hsCode || i.hsCode.replace(".", "").startsWith(args.hsCode.replace(".", ""))) &&
+            (!args.category || String(i.category ?? "").toLowerCase() === args.category.toLowerCase()) &&
+            (!args.market || (i.markets || []).some((m) => m.toLowerCase() === args.market.toLowerCase())) &&
+            (!args.hsCode || (digits(i.hsCode) && digits(i.hsCode).startsWith(digits(args.hsCode)))) &&
             has(i.material, args.material) &&
             has(i.materialOrigin, args.materialOrigin) &&
             has(i.supplier, args.supplier) &&
-            (!args.certification || i.certifications.some((c) => has(c, args.certification))) &&
+            (!args.certification || (i.certifications || []).some((c) => has(c, args.certification))) &&
             (typeof args.originTraced !== "boolean" || i.originTraced === args.originTraced),
         )
-        .map((i) => ({ ...i, stockValueUsd: Math.round(i.qtyOnHand * i.unitCostUsd) }));
+        .map((i) => ({ ...i, stockValueUsd: stockValue(i) }));
       const sort = args.sortBy || "stockValue";
+      const number = (n) => (Number.isFinite(n) ? n : -1);
       rows.sort((a, b) =>
-        sort === "sku" ? a.sku.localeCompare(b.sku) : sort === "quantity" ? b.qtyOnHand - a.qtyOnHand : b.stockValueUsd - a.stockValueUsd,
+        sort === "sku"
+          ? a.sku.localeCompare(b.sku)
+          : sort === "quantity"
+            ? number(b.qtyOnHand) - number(a.qtyOnHand)
+            : number(b.stockValueUsd) - number(a.stockValueUsd),
       );
       const shown = rows.slice(0, clamp(args.limit, 1, 40, 20)).map((i) => ({
         ref: refs.cite(`item:${i.sku}`, { type: "item", id: i.sku, title: `${i.sku} · ${i.name}`, url: "#/workspace/news" }),
@@ -237,14 +248,17 @@ export const REGISTRY = {
         unitCostUsd: i.unitCostUsd,
         stockValueUsd: i.stockValueUsd,
         warehouse: i.warehouse,
+        orders: i.orders,
       }));
-      const total = rows.reduce((s, i) => s + i.stockValueUsd, 0);
+      const valued = rows.filter((i) => Number.isFinite(i.stockValueUsd));
+      const total = valued.length ? valued.reduce((s, i) => s + i.stockValueUsd, 0) : undefined;
+      const totalText = total === undefined ? "" : `, total USD ${total.toLocaleString("en-US")}`;
       const filters = describe(args, ["limit", "sortBy"]);
       // The query itself is citable, for counts and totals.
       const ref = refs.cite(`query:${filters}`, {
         type: "query",
         id: filters || "all",
-        title: `Stock query${filters ? ` (${filters})` : ""}: ${rows.length} items, total USD ${total.toLocaleString("en-US")}`,
+        title: `Stock query${filters ? ` (${filters})` : ""}: ${rows.length} items${totalText}`,
         url: "#/workspace/news",
       });
       return {
@@ -253,7 +267,7 @@ export const REGISTRY = {
           count: rows.length,
           totalStockValueUsd: total,
           results: [
-            { ref, type: "query", title: `${rows.length} matching items, total USD ${total.toLocaleString("en-US")}` },
+            { ref, type: "query", title: `${rows.length} matching items${totalText}` },
             ...shown.map((i) => ({ ref: i.ref, type: "item", title: `${i.sku} · ${i.name}` })),
           ],
         },
@@ -266,7 +280,7 @@ export const REGISTRY = {
     declaration: {
       name: "get_alerts",
       description:
-        "News-impact alerts from the daily AI news scans, most severe first. By default it returns open alerts from every scan so far; set latestScanOnly for the most recent scan only. Each alert includes its headline, severity, direction, why it matters, every affected SKU (name, reason, stock value, markets, material origin, whether its origin is traced), the total stock value exposed, the next step and the source article with its age in days. Also returns the exposure across all matching alerts: the distinct affected SKUs and their combined stock value, each SKU counted once. Filters combine with AND.",
+        "News-impact alerts from the daily AI news scans, most severe first. By default it returns open alerts from every scan so far; set latestScanOnly for the most recent scan only. Each alert includes its headline, severity, direction, why it matters, every affected item by SKU (name, reason, markets, and what the item has of stock value, material origin, whether its origin is traced and the orders it comes from), the total stock value exposed when items have values, the next step and the source article with its age in days. Also returns the exposure across all matching alerts: the distinct affected SKUs, each counted once, and their combined stock value when they have one. In a company workspace the alerts are about the company's own goods. Filters combine with AND.",
       parameters: {
         type: Type.OBJECT,
         properties: {
@@ -289,10 +303,11 @@ export const REGISTRY = {
         },
       },
     },
-    async run(args, { refs, access }) {
+    async run(args, ctx) {
+      const { refs, access } = ctx;
       const [stored, items, latest, srcs] = await Promise.all([
         cached("impacts", () => list(impacts)),
-        cached("inventory", () => list(inventory)),
+        stockOf(ctx),
         args.latestScanOnly ? lastDoneScan() : null,
         cached("sources", () => list(sources)),
       ]);
@@ -319,14 +334,16 @@ export const REGISTRY = {
       for (const a of matching)
         for (const x of a.affected) {
           const it = bySku.get(x.sku);
-          exposed.set(x.sku, it ? Math.round(it.qtyOnHand * it.unitCostUsd) : x.stockValueUsd);
+          exposed.set(x.sku, it ? stockValue(it) : x.stockValueUsd);
         }
-      const exposure = [...exposed.values()].reduce((s, v) => s + v, 0);
+      const values = [...exposed.values()].filter(Number.isFinite);
+      const exposure = values.length ? values.reduce((s, v) => s + v, 0) : undefined;
+      const exposureText = exposure === undefined ? "" : `, USD ${exposure.toLocaleString("en-US")}`;
       const filters = describe(args, ["limit"]);
       const exposureRef = refs.cite(`alerts:${filters}`, {
         type: "query",
         id: filters || "all",
-        title: `Alert exposure${filters ? ` (${filters})` : ""}: ${matching.length} alerts, ${exposed.size} SKUs, USD ${exposure.toLocaleString("en-US")}`,
+        title: `Alert exposure${filters ? ` (${filters})` : ""}: ${matching.length} alerts, ${exposed.size} SKUs${exposureText}`,
         url: "#/workspace/news",
       });
       const rows = matching.slice(0, clamp(args.limit, 1, 30, 10)).map((a) => {
@@ -348,6 +365,7 @@ export const REGISTRY = {
             markets: bySku.get(sku)?.markets,
             materialOrigin: bySku.get(sku)?.materialOrigin,
             originTraced: bySku.get(sku)?.originTraced,
+            orders: bySku.get(sku)?.orders,
           })),
           stockValueUsd: a.stockValueUsd,
           article: guard.clean(a.title, `alert ${a.id} article title`),
@@ -365,7 +383,7 @@ export const REGISTRY = {
         output: {
           scope,
           latestScan: latest
-            ? { ref: citeScan(refs, latest), finishedAt: latest.finishedAt, articlesAnalysed: latest.articlesAnalysed, alertsRaised: latest.impactsFound }
+            ? { ref: citeScan(refs, latest), finishedAt: latest.finishedAt, articlesAnalysed: latest.articlesAnalysed, alertsRaised: presentScan(latest, access).impactsFound }
             : undefined,
           matching: matching.length,
           exposure: { ref: exposureRef, skus: [...exposed.keys()].sort(), stockValueUsd: exposure },
@@ -376,7 +394,7 @@ export const REGISTRY = {
             count: rows.length,
             totalStockValueUsd: exposure,
             results: [
-              { ref: exposureRef, type: "query", title: `${matching.length} matching alerts, ${exposed.size} SKUs, USD ${exposure.toLocaleString("en-US")} exposed` },
+              { ref: exposureRef, type: "query", title: `${matching.length} matching alerts, ${exposed.size} SKUs${exposureText}${exposure === undefined ? "" : " exposed"}` },
               ...rows.map((a) => ({ ref: a.ref, type: "alert", title: a.headline, ageDays: a.ageDays })),
             ],
           },
@@ -413,7 +431,8 @@ export const REGISTRY = {
         "When the daily news scan last ran, how many articles it read and alerts it raised, the schedule, and each news source's status. For which alerts it raised, call get_alerts with latestScanOnly.",
     },
     async run(_args, { refs, access }) {
-      const [last, stored] = await Promise.all([lastDoneScan(), cached("sources", () => list(sources))]);
+      const [done, stored] = await Promise.all([lastDoneScan(), cached("sources", () => list(sources))]);
+      const last = presentScan(done, access);
       const srcs = presentSources(stored, access); // `enabled` as it applies to this company
       const guard = createGuard();
       const output = {
