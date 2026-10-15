@@ -30,7 +30,7 @@ import "./regulations.css";
 
 const library = "#/workspace/regulations";
 const regulationLink = (id: string) => `${library}/${encodeURIComponent(id)}`;
-const documentLink = (id: string) =>
+export const documentLink = (id: string) =>
   `${library}/documents/${encodeURIComponent(id)}`;
 const timestamp = (value: string) =>
   new Date(value).toLocaleDateString("en-GB", {

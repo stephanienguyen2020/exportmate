@@ -47,6 +47,7 @@ import {
   makerCost,
   placeName,
   readSaved,
+  sampleCostWhy,
   sampleCosts,
   sampleGap,
   sampleObligation,
@@ -86,6 +87,7 @@ import { errorMessage } from "./auth";
 import ErrorBoundary from "./ErrorBoundary";
 import { MAX_UPLOAD_MB, validateOrderCsv } from "./order-csv";
 import CompanyRuleWatch from "./RuleWatch";
+import { CostWhy } from "./CostWhy";
 import {
   RuleBuilder,
   RuleConditionsEditor,
@@ -1000,7 +1002,38 @@ function App() {
                         <ArrowUpRight size={15} />
                       </span>
                       <div className="metric-value">
-                        {riskDisplay}
+                        <CostWhy
+                          why={
+                            live ? (
+                              "The full values of the orders marked as needing action, added up per currency, from your orders."
+                            ) : buyer ? (
+                              <>
+                                <span>
+                                  <b>
+                                    {plural(exposed.length, "order")} ×{" "}
+                                    {money(sampleCosts.buyer.margin, sampleCosts.buyer.currency)}
+                                  </b>
+                                </span>
+                                <span>{sampleCostWhy.margin}</span>
+                              </>
+                            ) : (
+                              <>
+                                <span>
+                                  <b>
+                                    {plural(exposed.length, "order")} × (
+                                    {costMoney(sampleCosts.maker.documentation)} +{" "}
+                                    {sampleCosts.maker.delayDays} days ×{" "}
+                                    {costMoney(sampleCosts.maker.delayPerDay)})
+                                  </b>
+                                </span>
+                                <span>{sampleCostWhy.documentation}</span>
+                                <span>{sampleCostWhy.delay}</span>
+                              </>
+                            )
+                          }
+                        >
+                          {riskDisplay}
+                        </CostWhy>
                         <span>{live ? "by currency" : riskCurrency}</span>
                       </div>
                       <div className="metric-note">
@@ -1475,7 +1508,11 @@ function App() {
                         <h3>The cost of waiting</h3>
                         <div className="cost-row">
                           <span>Documentation preparation</span>
-                          <b>{costMoney(sampleCosts.maker.documentation)}</b>
+                          <b>
+                            <CostWhy why={sampleCostWhy.documentation}>
+                              {costMoney(sampleCosts.maker.documentation)}
+                            </CostWhy>
+                          </b>
                         </div>
                         <div className="cost-row">
                           <span>
@@ -1483,30 +1520,39 @@ function App() {
                             × {costMoney(sampleCosts.maker.delayPerDay)}
                           </span>
                           <b>
-                            {costMoney(
-                              sampleCosts.maker.delayDays *
-                                sampleCosts.maker.delayPerDay,
-                            )}
+                            <CostWhy why={sampleCostWhy.delay}>
+                              {costMoney(
+                                sampleCosts.maker.delayDays *
+                                  sampleCosts.maker.delayPerDay,
+                              )}
+                            </CostWhy>
                           </b>
                         </div>
                         <div className="cost-row total">
                           <span>Estimated maker exposure</span>
                           <b>
-                            {costMoney(makerCost)} {sampleCosts.maker.currency}
+                            <CostWhy
+                              why={`The two lines above. ${sampleCostWhy.note}`}
+                            >
+                              {costMoney(makerCost)} {sampleCosts.maker.currency}
+                            </CostWhy>
                           </b>
                         </div>
                         <p className="fine-print">
                           Illustrative estimate from the demo's cost
-                          assumptions, not a tariff or guaranteed cost. Order
-                          value is not added to this estimate.
+                          assumptions, not a tariff or guaranteed cost; hover an
+                          amount to see where it comes from. Order value is not
+                          added to this estimate.
                         </p>
                         {buyer && (
                           <div className="notice">
                             Buyer scenario:{" "}
-                            {money(
-                              sampleCosts.buyer.margin,
-                              sampleCosts.buyer.currency,
-                            )}{" "}
+                            <CostWhy why={sampleCostWhy.margin}>
+                              {money(
+                                sampleCosts.buyer.margin,
+                                sampleCosts.buyer.currency,
+                              )}
+                            </CostWhy>{" "}
                             margin exposure per affected purchase order. This is
                             a separate sample estimate, not a currency
                             conversion.

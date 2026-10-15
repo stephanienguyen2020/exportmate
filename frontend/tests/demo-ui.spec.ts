@@ -197,6 +197,13 @@ test("the overview's figures come from the orders and today's date", async ({
   );
   const risk = page.locator(".metrics > div").nth(2);
   await expect(risk.locator(".metric-value")).toHaveText("$2,400USD");
+  // Hovering the estimate says how it was worked out and where each number comes from.
+  await risk.locator(".cost-why").hover();
+  const why = page.getByRole("tooltip");
+  await expect(why).toContainText("2 orders × ($400 + 4 days × $200)");
+  await expect(why).toContainText("default cost of a missing supplier document (USD 400)");
+  await page.mouse.move(0, 0);
+  await expect(why).toHaveCount(0);
   await page.getByRole("button", { name: "Buyer", exact: true }).click();
   await expect(page.getByRole("button", { name: "Buyer", exact: true })).toHaveAttribute(
     "aria-pressed",

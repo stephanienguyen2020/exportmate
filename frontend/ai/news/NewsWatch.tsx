@@ -14,6 +14,7 @@ import { matchCounts, OrderMatches } from "./NewsOrders";
 import { useNewsMatches, type StockItem } from "./news-matches";
 import { SkuChip } from "./SkuChip";
 import type { NewsMatch } from "../../src/api";
+import { CostWhy } from "../../src/CostWhy";
 import type { Order } from "../../src/data";
 import "./news.css";
 
@@ -349,7 +350,11 @@ function StockTable({ impacts }: { impacts: Impact[] }) {
   return (
     <>
       <p className="news-note">
-        {items.length} items · {usd(total)} on hand · a made-up stock list for the sample wood exporter, kept apart from
+        {items.length} items ·{" "}
+        <CostWhy why="Each item's quantity on hand × its unit cost, added up, from the sample stock list.">
+          {usd(total)}
+        </CostWhy>{" "}
+        on hand · a made-up stock list for the sample wood exporter, kept apart from
         the orders
       </p>
       <div className="table-scroll">
@@ -384,7 +389,13 @@ function StockTable({ impacts }: { impacts: Impact[] }) {
                 <td className="mono">
                   {i.qtyOnHand.toLocaleString()} {i.unit}
                 </td>
-                <td className="mono">{usd(i.qtyOnHand * i.unitCostUsd)}</td>
+                <td className="mono">
+                  <CostWhy
+                    why={`${i.qtyOnHand.toLocaleString()} ${i.unit} on hand × ${i.unitCostUsd.toLocaleString("en-US", { style: "currency", currency: "USD" })} unit cost, from the sample stock list.`}
+                  >
+                    {usd(i.qtyOnHand * i.unitCostUsd)}
+                  </CostWhy>
+                </td>
                 <td>
                   <span className={`status ${i.geolocationOnFile ? "green" : "amber"}`}>
                     <i />

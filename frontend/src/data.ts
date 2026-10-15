@@ -65,6 +65,15 @@ export const sampleCosts = {
 export const makerCost =
   sampleCosts.maker.documentation +
   sampleCosts.maker.delayDays * sampleCosts.maker.delayPerDay;
+// Where each assumption comes from, shown when the pointer is over a demo cost. The maker's
+// figures match the signed-in workspace's default cost settings (backend reference.json).
+const { maker, buyer } = sampleCosts;
+export const sampleCostWhy = {
+  documentation: `Getting the missing geolocation record from the supplier: the default cost of a missing supplier document (${maker.currency} ${maker.documentation}), which a company changes in its cost settings.`,
+  delay: `Each day the shipment waits while the record arrives (storage, late fees): the default delay cost (${maker.currency} ${maker.delayPerDay} a day). ${maker.delayDays} days is the demo's assumed wait.`,
+  margin: `The sample buyer's margin on one purchase order that can't clear (${buyer.currency} ${buyer.margin}). A separate sample figure, not a currency conversion.`,
+  note: "Demo planning assumptions, not a tariff, quote or figure set by the sample clause.",
+};
 // The source collections the sample rule watch reads (shown on Rule watch).
 export const sampleSources = [
   { code: "EU", name: "European Union", scope: "Wood & deforestation", source: "EUR-Lex" },
