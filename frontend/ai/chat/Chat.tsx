@@ -6,9 +6,9 @@ import {
   Loader2,
   Maximize2,
   MessageCircle,
-  RotateCcw,
   Send,
   ShieldCheck,
+  SquarePen,
   X,
 } from "lucide-react";
 import {
@@ -29,7 +29,7 @@ const RESET_EVENT = "em-chat-reset";
 // Longest wait for an answer before the UI gives up (the agent makes several model calls).
 const ANSWER_TIMEOUT_MS = 120_000;
 
-/** Forgets the conversation and starts a new audit session, e.g. on sign-out. */
+/** Forgets the conversation and starts a new audit session: "New chat", and on sign-out. */
 export function clearChat() {
   try {
     sessionStorage.removeItem(KEY);
@@ -259,15 +259,11 @@ function useConversation(onAudit?: () => void) {
       if (turn === generation.current) setBusy(false);
     }
   };
-  const reset = () => {
-    clearChat();
-    onAudit?.();
-  };
-  return { messages, busy, steps, error, ask, reset };
+  return { messages, busy, steps, error, ask };
 }
 
 function Conversation({ autoFocus, onAudit }: { autoFocus?: boolean; onAudit?: () => void }) {
-  const { messages, busy, steps, error, ask, reset } = useConversation(onAudit);
+  const { messages, busy, steps, error, ask } = useConversation(onAudit);
   const [draft, setDraft] = useState("");
   const end = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -333,11 +329,6 @@ function Conversation({ autoFocus, onAudit }: { autoFocus?: boolean; onAudit?: (
       </form>
       <div className="chat-foot">
         <span>Gemini agent on Vertex AI · answers are logged for audit; verify rules.</span>
-        {messages.length > 0 && (
-          <button type="button" onClick={reset}>
-            <RotateCcw size={12} /> New chat
-          </button>
-        )}
       </div>
     </div>
   );
@@ -412,6 +403,9 @@ export function ChatWidget() {
         <section className="chat-panel" role="dialog" aria-label="ExportMate assistant">
           <header>
             <strong>ExportMate assistant</strong>
+            <button type="button" aria-label="New chat" title="New chat" onClick={clearChat}>
+              <SquarePen size={16} />
+            </button>
             <a href="#/chat" aria-label="Open full screen with audit trail" onClick={() => setOpen(false)}>
               <Maximize2 size={16} />
             </a>
@@ -439,6 +433,10 @@ export function ChatWidget() {
 
 export default function ChatPage() {
   const [version, setVersion] = useState(0);
+  const newChat = () => {
+    clearChat();
+    setVersion((v) => v + 1);
+  };
   return (
     <main className="chat-page">
       <header>
@@ -449,6 +447,9 @@ export default function ChatPage() {
           <span className="chat-kicker">ExportMate · RAG agent</span>
           <h1>Assistant</h1>
         </div>
+        <button type="button" className="chat-new" onClick={newChat}>
+          <SquarePen size={15} /> New chat
+        </button>
       </header>
       <div className="chat-page-grid">
         <Conversation autoFocus onAudit={() => setVersion((v) => v + 1)} />

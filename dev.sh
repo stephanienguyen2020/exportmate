@@ -6,7 +6,10 @@
 #         Stop Postgres too: docker compose -f backend/docker-compose.yml down
 #
 # Sign-in uses dev tokens, not Firebase: log in as lan@example.com with any 8+ character password.
-# The AI service reads the real exportmate-app Firestore: run `gcloud auth application-default login` once.
+# AI (the assistant, News watch and the backend's AI steps) calls Gemini and reads the AI service's
+# Firestore and RAG Engine in GCP: run `gcloud auth application-default login` once. The backend's
+# AI project is GOOGLE_CLOUD_PROJECT in backend/.env; ai/server/.env (see its .env.example) is
+# optional and turns on the assistant's Memory Bank.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
@@ -73,7 +76,7 @@ done
 command -v uv >/dev/null || die "uv is not installed: https://docs.astral.sh/uv/getting-started/installation/"
 docker info >/dev/null 2>&1 || die "Docker is not running. Start Docker Desktop and try again."
 [ -f "${GOOGLE_APPLICATION_CREDENTIALS:-$HOME/.config/gcloud/application_default_credentials.json}" ] ||
-  echo "warning: no Google credentials found, so AI chat and news will fail. Run: gcloud auth application-default login"
+  echo "warning: no Google credentials found, so the assistant, News watch and the backend's AI steps will fail. Run: gcloud auth application-default login"
 
 install_node_deps "$ROOT/frontend"
 install_node_deps "$ROOT/ai/server"
@@ -96,7 +99,11 @@ done
 say "Migrating and seeding the database"
 uv sync --quiet
 uv run alembic upgrade head
+# Reference data, and vectors for the HS headings that HS code suggestions search (embedded once).
+uv run python -m app.seed_reference_data
 uv run python -m app.seed_demo_data --email "$DEMO_EMAIL"
+[ -n "$(uv run python -c 'from app.core.config import get_settings; print(get_settings().google_cloud_project or "")')" ] ||
+  echo "warning: GOOGLE_CLOUD_PROJECT is not set in backend/.env, so the backend's AI steps answer 503 (see backend/.env.example)"
 
 # --- Services
 say "Starting services"

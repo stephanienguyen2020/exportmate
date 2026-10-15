@@ -299,6 +299,46 @@ test("the demo never shows a signed-in account's profile", async ({ page }) => {
   await expect(page.getByText("Real Co")).toHaveCount(0);
 });
 
+test("New chat clears the conversation and starts a new session", async ({ page }) => {
+  const sent: any[] = [];
+  await page.route("**/api/chat", async (route) => {
+    sent.push(route.request().postDataJSON());
+    await route.fulfill({
+      contentType: "application/x-ndjson",
+      body:
+        JSON.stringify({ type: "done", reply: `Answer ${sent.length}.`, citations: [], audit: null }) +
+        "\n",
+    });
+  });
+  const audits: string[] = [];
+  await page.route("**/api/audits**", (route) => {
+    audits.push(new URL(route.request().url()).searchParams.get("session") || "");
+    return route.fulfill({ json: { audits: [] } });
+  });
+  await openDemo(page, "#/workspace/orders");
+  await page.getByRole("button", { name: "Open assistant" }).click();
+  const panel = page.getByRole("dialog", { name: "ExportMate assistant" });
+  await panel.getByLabel("Message").fill("First question");
+  await page.keyboard.press("Enter");
+  await expect(panel.locator(".chat-msg.model")).toHaveText("Answer 1.");
+
+  await panel.getByRole("button", { name: "New chat" }).click();
+  await expect(panel.locator(".chat-msg")).toHaveCount(0);
+  await expect(panel.getByRole("button", { name: "How do I import my orders?" })).toBeVisible();
+  await panel.getByLabel("Message").fill("Second question");
+  await page.keyboard.press("Enter");
+  await expect(panel.locator(".chat-msg.model")).toHaveText("Answer 2.");
+  expect(sent[1].messages).toEqual([{ role: "user", text: "Second question" }]);
+  expect(sent[1].sessionId).not.toBe(sent[0].sessionId);
+
+  // The full-screen page starts one too, and its audit trail follows the new session.
+  await page.goto("/#/chat");
+  await expect(page.locator(".chat-msg.model")).toHaveText("Answer 2.");
+  await page.getByRole("button", { name: "New chat" }).click();
+  await expect(page.locator(".chat-msg")).toHaveCount(0);
+  await expect.poll(() => audits.at(-1)).not.toBe(sent[1].sessionId);
+});
+
 test("the assistant gets the demo's orders and playbook, and shows code", async ({
   page,
 }) => {
