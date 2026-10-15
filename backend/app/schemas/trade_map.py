@@ -153,6 +153,26 @@ class TradeMapOut(CamelCaseModel):
     check_radius_km: float
 
 
+class ChecklistChangeOut(CamelCaseModel):
+    """A checklist line in a market the company ships to that takes effect or changes on `on`."""
+
+    on: date
+    kind: Literal["effective", "changes"]
+    market: str
+    market_name: str
+    requirement_key: str
+    title: str
+    what_changes: str
+    order_ids: list[str]  # open orders to that market shipping on or after `on`
+    source: RequirementSourceOut
+
+
+class ChecklistChangesOut(CamelCaseModel):
+    start: date
+    until: date
+    changes: list[ChecklistChangeOut]
+
+
 class ComparisonItemOut(CamelCaseModel):
     title: str
     note: str

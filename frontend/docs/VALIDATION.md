@@ -118,3 +118,9 @@ Supersedes the fixture-based trade map checks above where they differ. Map data 
 - First-visit walkthrough of the workspace: a welcome card, then a spotlight on each sidebar page (Overview to Playbook), the demo's Maker/Buyer switch, the assistant button and the ? that replays it. Skip, Back/Next, Escape and arrow keys; focus stays in the card and returns afterwards. Shown once per browser (`em-tour-done`); signed in it waits until the workspace has loaded. On phones the sidebar steps are centred cards.
 - Playwright (port 5199, since 5175 was in use): 54 passed, 1 skipped. New `tests/tour.spec.ts`: the tour opens on a first visit, places the card beside the item it describes, goes back, closes with Escape, stays closed after a reload and reopens from the ? button; at 390 px every step fits the screen and the last one spotlights the ? button. Screenshots at 1366 and 390 px checked.
 - Not exercised: a signed-in company workspace with a real backend.
+
+### Rules & news tab (15 October 2026)
+
+- News watch, Rule watch, Regulations and the Playbook share one sidebar item, "Rules & news", with a tab bar; their routes and deep links are unchanged. The workspace tour has one step for the four. Signed in, Rule watch starts with "Coming up" (`GET /trade-map/changes?days=90`): each checklist line that takes effect or changes, its date and market, what changes, the official text version, and the open orders it reaches (buttons to the map).
+- Backend: `test_rule_watch_lists_checklist_changes_with_the_orders_they_reach` (the US tariff change on 1 Jan 2027 reaches PO-6 only; the list equals the company report's changes section; `days` outside 1–365 is 422). Frontend: Playwright 61 passed, 1 skipped; the rule watch test covers the tab bar, the active sidebar item and "Coming up". Screenshots of News watch, Rule watch and the Playbook at 1366 and 390 px: no horizontal overflow, all four tabs fit at 390 px.
+

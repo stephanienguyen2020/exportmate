@@ -56,20 +56,10 @@ function tourSteps(live: boolean): TourStep[] {
     },
     {
       target: "nav-news",
-      title: "News watch",
-      body: "Trade news read every day and matched to the products you sell, so you only see articles that affect you.",
-    },
-    {
-      target: "nav-rules",
-      title: "Rule watch",
+      title: "Rules & news",
       body: live
-        ? "The requirements behind your orders' market checklists, and which orders each one touches."
-        : "A rule change and the orders it affects. Try “Run rule-change demo” there to see one play out.",
-    },
-    {
-      target: "nav-regulations",
-      title: "Regulations",
-      body: "The official texts behind every check, with their version history, so each requirement can be traced to its source.",
+        ? "Four tabs in one place: News watch matches trade news to the products you sell; Rule watch shows checklist changes coming up and which orders they reach; Regulations holds the official texts with their versions; the Playbook holds your company's own rules, applied when orders are checked."
+        : "Four tabs in one place: News watch matches trade news to the products you sell; Rule watch plays out a sample rule change (try “Run rule-change demo”); Regulations holds the official texts; the Playbook holds your own rules.",
     },
     {
       target: "nav-reports",
@@ -80,11 +70,6 @@ function tourSteps(live: boolean): TourStep[] {
       target: "nav-data",
       title: "Data room",
       body: "Bring your orders in from a spreadsheet: upload a CSV, review the rows, then import them.",
-    },
-    {
-      target: "nav-playbook",
-      title: "Playbook",
-      body: "Your company's own rules, such as who must review what. Switched-on rules are applied when orders are checked.",
     },
     ...(live
       ? []
