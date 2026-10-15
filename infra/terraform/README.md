@@ -18,7 +18,7 @@ Creates everything ExportMate runs on Google Cloud (backend and AI service) in o
 | Service accounts | `exportmate-ai` (Firestore user, Vertex AI user, Model Armor user), `exportmate-scheduler` (signs the scan's OIDC token, no roles) |
 | Cloud Run service (public) | `exportmate-ai`, URL printed as `ai_url` |
 | Cloud Run job (same image, one command) | `exportmate-ai-task` |
-| Model Armor template | `exportmate-untrusted-text` (prompt injection and jailbreak at medium confidence and above, malicious links), screens each new news article; set on the service as `MODEL_ARMOR_TEMPLATE` |
+| Model Armor template | `exportmate-untrusted-text` (prompt injection and jailbreak at medium confidence and above, malicious links, any language), screens each new news article; set on the service as `MODEL_ARMOR_TEMPLATE`. In `us-central1` (`model_armor_region`): `asia-southeast1` lacks the malicious-link filter and multi-language detection, and only public news articles are sent to it |
 | Cloud Scheduler | `exportmate-daily-news-scan`, 07:00 Asia/Ho_Chi_Minh, `POST <ai_url>/api/scan` |
 | Log-based metrics | `exportmate_ai/chat_answers` (by status, policy version), `chat_latency`, `guard_withheld`, `armor_failures`, `scan_failures` |
 | **Builds** (`build.tf`) | |
@@ -116,6 +116,8 @@ gcloud run jobs execute exportmate-ai-task --region asia-southeast1 --wait --arg
 ## Moving the AI service from exportmate-app
 
 The AI service, its Firestore data and the daily scan used to live in project `exportmate-app`. To move them here:
+
+**Status (15 October 2026):** steps 1 and 2 are done and the new service is healthy. Its Firestore was filled with `node seed.js` and one scan (`node scan.js --lookback=14`: 58 articles, all screened by Model Armor), not yet copied from `exportmate-app`. The backend's `AI_SERVICE_URL` already points to the new service (company reports read its News watch alerts); the website's chat and News watch still use the old one until step 5.
 
 1. **Owner:** `terraform apply` (creates Firestore, service accounts and grants, the service, job, scheduler, metrics and build resources). `terraform plan` should show 0 to destroy.
 2. Deploy the code: `PROJECT_ID=skilful-scarab-511320-q9 ai/server/deploy.sh`.
