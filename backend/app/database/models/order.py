@@ -7,6 +7,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     LargeBinary,
     String,
@@ -88,4 +89,13 @@ class Order(Base):
     )
     source_row_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("import_rows.id"))
     created_at: Mapped[datetime] = created_column()
-    __table_args__ = (UniqueConstraint("company_id", "external_id"),)
+    __table_args__ = (
+        UniqueConstraint("company_id", "external_id"),
+        # Past orders with similar product names (HS code suggestions).
+        Index(
+            "ix_orders_product_trgm",
+            "product",
+            postgresql_using="gin",
+            postgresql_ops={"product": "gin_trgm_ops"},
+        ),
+    )

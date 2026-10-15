@@ -26,7 +26,7 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
 | 403 | `forbidden` | The caller's role is too low |
 | 404 | `not_found` | Missing, or it belongs to another company |
 | 422 | `invalid_input` | Validation failed. `fieldErrors` holds one message per field |
-| 429 | `rate_limited` | Per-user hourly limit reached, counted per instance: uploads 60 (per upload type), analysis runs 60, report emails 20 |
+| 429 | `rate_limited` | Per-user hourly limit reached, counted per instance: uploads 60 (per upload type), analysis runs 60, report emails 20, HS suggestions 60, requirement drafts 20 |
 | 503 | `ai_unavailable` / `ai_not_configured` | An AI step (Gemini) failed or isn't set up (`GOOGLE_CLOUD_PROJECT`). Nothing was saved; try again |
 
 ## Index
@@ -71,12 +71,18 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
 | `GET /regulation-documents/{id}/file` | viewer | Regulation library |
 | `GET /regulations` | viewer | Regulation library |
 | `GET /regulations/{id}` | viewer | Regulation library |
+| `POST /regulation-documents/{id}/requirements` | editor | Not yet (requirement review) |
+| `GET /regulations/{id}/requirements` | viewer | Not yet (requirement review, regulation page) |
+| `PATCH /market-requirements/{id}` | owner | Not yet (requirement review) |
 | **Analysis** | | |
 | `GET /company/cost-settings` | viewer | Not yet (settings, report cost lines) |
 | `PATCH /company/cost-settings` | owner | Not yet (settings) |
 | `POST /runs` | editor | Not yet ("Analyse", replacing the simulated five-agent review) |
 | `GET /runs/{id}` | viewer | Not yet (run panel) |
 | `GET /reports/{id}` | viewer | Not yet (report view) |
+| `GET /orders/{id}/hs-suggestions` | viewer | Not yet (order detail, `needs_data`) |
+| `POST /orders/{id}/hs-suggestions` | editor | Not yet (order detail) |
+| `POST /hs-suggestions/{id}/accept`, `/reject` | editor | Not yet (order detail) |
 | **Shareable reports** | | |
 | `POST /report-drafts` | viewer | Order detail: "Prepare report"; Reports: "Generate company report" |
 | `GET /report-drafts` | viewer | Reports: your reports |
@@ -84,7 +90,7 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
 | `PATCH /report-drafts/{id}` | viewer (author) | Report editor: save (also before preview, download, email) |
 | `GET /report-drafts/{id}/pdf` | viewer (author) | Report editor: "Preview PDF", "Download PDF" |
 | `POST /report-drafts/{id}/email` | editor (author) | Report editor: "Email report" |
-| [Planned](#planned) | | Phases 2 (later) – 4 |
+| [Planned](#planned) | | Phases 3–4 |
 
 "Every workspace load" means `refreshWorkspace()` in `frontend/src/main.tsx`. It runs on entering the workspace, after a commit, and on "Retry". It calls `GET /me`, then `GET /orders`, `GET /playbook/rules` and `GET /overview` in parallel. The browser-only demo session calls none of these: it uses localStorage.
 
@@ -193,7 +199,7 @@ Opening `#/workspace/orders/<id>` in a live session.
 Upload screen, live session: choose file → `POST /imports` → `GET /imports/{id}` → show errors and preview → "Import" → `POST /imports/{id}/commit` → toast "N orders imported. Awaiting analysis." → workspace reload. The demo session parses the file in the browser instead (PapaParse, `frontend/src/order-csv.ts`, with the same checks).
 
 ### `POST /imports` (editor, rate limited)
-`multipart/form-data` with `file`. `.csv` only, ≤4 MB, ≤10,000 rows. Columns: `id,product,supplier,destination,value,shipDate,hsCode` (+ optional `currency`, which defaults to the company's).
+`multipart/form-data` with `file`. `.csv` only, ≤4 MB, ≤10,000 rows. Columns: `id,product,supplier,destination,value,shipDate,hsCode` (+ optional `currency`, which defaults to the company's). An `hsCode` cell may be empty: analysis marks the order `needs_data` and `POST /orders/{id}/hs-suggestions` suggests a code.
 The file and every row are always saved. Row problems don't fail the request; they show up in `errors` and set `status: "invalid"`. Returns `201` with the import:
 
 ```json
@@ -387,6 +393,37 @@ Every regulation, oldest first, with `versionCount` and `latestVersion`. With `o
 ### `GET /regulations/{id}` (viewer)
 The regulation plus `versions[]`, newest first.
 
+## Market requirements (drafted and reviewed)
+
+What a regulation version requires, per market, with the sentence that says so (REQUIREMENTS.md §4.5). Shared ones come from the seed. A company's own are drafted by AI from its own regulation documents and reviewed by the owner. Only reviewed ones in a version with no drafts left are checked; then the earlier versions' requirements become `replaced`.
+
+```json
+{"id": "…", "marketCode": "EU", "requirementKey": "buyer_chain", "title": "FSC chain of custody (buyer policy)",
+ "level": "supplier", "documentKind": "chain", "acceptedStandards": [], "form": null, "hsPrefixes": [],
+ "why": "…", "sourceQuote": "Suppliers must hold an FSC chain-of-custody certificate for all solid wood.",
+ "quoteVerified": true, "effectiveOn": null, "dutyRatePercent": null, "status": "draft", "shared": false,
+ "regulationDocumentId": "…", "reviewedAt": null}
+```
+
+### `POST /regulation-documents/{id}/requirements` (editor, rate limited, AI)
+Reads the version's text (PDF, HTML or plain text). A text longer than about 120,000 characters is cut down to the sections closest in meaning to an exporter's obligations (embeddings, nothing stored). Gemini drafts the requirements; code drops drafts with an unknown market or document kind, a bad key or HS prefix, or a quote that isn't in the text (word for word, ignoring line breaks, hyphenation and EU amendment markers; a quote joining passages counts when each sentence is there). A key over 40 characters is shortened. A scanned PDF (no text) is sent to Gemini as a file and its drafts have `quoteVerified: false`. Replaces earlier drafts of the version. Returns `201` with the `GET /regulations/{id}/requirements` shape plus `readAs` (`text` / `scanned_file`), `sectionsSelected` and `dropped` (counts by reason, e.g. `{"quote_not_in_document": 1}`).
+- `403 shared_regulation`: shared official texts are maintained in the seed. `404`: another company's document.
+- `409 already_reviewed`: the version already has reviewed or rejected requirements; upload a new version instead.
+
+### `GET /regulations/{id}/requirements?version=` (viewer)
+The requirements one version sets (default: the latest), and what changed from the previous version:
+```json
+{"regulationId": "…", "documentId": "…", "versionNumber": 2, "previousVersionNumber": 1, "inForce": false,
+ "requirements": [ …market requirements… ],
+ "changes": [{"marketCode": "EU", "requirementKey": "buyer_chain", "title": "…", "change": "changed", "fields": ["hsPrefixes"]},
+             {"marketCode": "EU", "requirementKey": "buyer_formaldehyde", "title": "…", "change": "added", "fields": []}]}
+```
+`inForce`: no drafts left and at least one reviewed. `change`: `added` / `changed` / `removed`. Rejected requirements count as absent.
+
+### `PATCH /market-requirements/{id}` (owner)
+Edit a draft (`marketCode`, `title`, `level`, `documentKind`, `acceptedStandards`, `form`, `hsPrefixes`, `why`, `sourceQuote`, `effectiveOn`, `dutyRatePercent`) and/or decide it with `status`: `reviewed` | `rejected`. Editing `sourceQuote` marks it verified (the reviewer checked it against the file). Returns the requirement.
+- `404` for shared requirements and other companies'. `409 already_reviewed` once decided. `409 requirement_exists` when an edit would duplicate a market + key in the version. `422` for an unknown market or document kind, HS prefixes that aren't 2–10 digits, or a supplier requirement without a document kind.
+
 ## Analysis (runs and reports)
 
 A run checks orders against the market requirements, prices the problems, applies the checked playbook rules, suggests one action and audits the result (REQUIREMENTS.md §4.6). Plain code, no AI: it finishes inside the request.
@@ -443,6 +480,35 @@ One order's report. Stored as it was written, so it reads the same after require
 | `audit` | `passed`, `problems[]`: every finding has a quote, every cost line re-computes and names its basis, totals add up, every rule exists |
 | `missingData`, `daysUntilShip`, `market` | What's missing, days to the ship date at run time, the market |
 
+## HS code suggestions
+
+For orders imported without an HS code (REQUIREMENTS.md §8.3 J5, §8.4). A code from the CSV is never replaced.
+
+### `POST /orders/{id}/hs-suggestions` (editor, rate limited, AI)
+1. Retrieves candidates: the company's past orders with a code and a similar product name (word similarity, `pg_trgm`), and the 12 official tariff lines closest in meaning to the product name (embeddings of the seeded HS headings, pgvector; shared words when embeddings aren't available).
+2. Gemini picks up to 3 codes, preferably from the candidates, citing the ones it used.
+3. Code keeps codes that are real tariff lines (or a past order's code) and only the citations it was shown. Earlier pending suggestions become `rejected`.
+
+Returns `201` with the list:
+```json
+[{"id": "…", "hsCode": "9403.40",
+  "description": "Other furniture and parts thereof: Wooden furniture of a kind used in the kitchen",
+  "reason": "Same product as PO-1: wooden kitchen furniture.",
+  "basedOn": [{"type": "order", "ref": "PO-1", "text": "Wooden kitchen furniture set", "hsCode": "9403.40"},
+              {"type": "heading", "ref": "9403.40", "text": "Other furniture and parts thereof: …", "hsCode": null}],
+  "status": "pending", "createdAt": "…", "decidedAt": null}]
+```
+`409 has_hs_code` when the order already has one.
+
+### `GET /orders/{id}/hs-suggestions` (viewer)
+Every suggestion for the order, newest first, with its status.
+
+### `POST /hs-suggestions/{id}/accept` (editor)
+Sets the order's HS code, rejects the other pending suggestions, and analyses the order again. Returns `{"suggestion": {…}, "order": {…}, "run": {…as POST /runs…}}`. `409 already_decided`, `409 has_hs_code`.
+
+### `POST /hs-suggestions/{id}/reject` (editor)
+Returns the suggestion. `409 already_decided`.
+
 ## Shareable reports (report drafts)
 
 A report is generated into a draft that only its author sees (`report_drafts`). The draft keeps the generated report (`original`) and an editable copy (`content`). Everything in `content` can be edited, but the PDF shades every line that differs from `original`, notes per section what was changed, added or left out and by whom, and says "contains edits by <name>" in the footer. Sending locks the draft. An order report is the shareable copy of the order's latest analysis report (`GET /reports/{id}`): analysis decides statuses and costs; this repeats them for a reader outside the app.
@@ -488,14 +554,10 @@ The PDF of the saved content, `inline` for the preview; `?download=true` makes i
 
 ## Planned
 
-Not built. Shapes follow the requirements and may change. Phases are the ones in REQUIREMENTS.md §5. Requirement drafting and HS code suggestions are phase 2 but wait for retrieval (RAG).
+Not built. Shapes follow the requirements and may change. Phases are the ones in REQUIREMENTS.md §5.
 
 | Endpoint | Phase | Role | Does | Will be used by |
 | --- | --- | --- | --- | --- |
-| `GET /regulations/{id}/requirements?version=` | 2 (later, with RAG) | viewer | The market requirements a version sets, each with its quote, plus what changed from the previous version | Rule-change review, regulation page |
-| `POST /regulation-documents/{id}/requirements` | 2 (later, with RAG) | editor | AI drafts the market requirements of one version of the company's own regulation; quotes checked against the text (PDF text too); long texts searched by section | Rule-change review |
-| `PATCH /market-requirements/{id}` | 2 (later, with RAG) | owner | Edit a drafted requirement and mark it `reviewed` / `rejected`. Only reviewed ones are checked | Rule-change review |
-| `POST /orders/{id}/hs-suggestions`, `GET …`, `POST /hs-suggestions/{id}/accept` / `reject` | 2 (later, with RAG) | editor / viewer | AI suggests HS codes for orders without one, from the company's past orders and the HS headings it retrieves. Accepting sets the code and analyses the order again. Needs empty `hsCode` cells allowed in the CSV | Order detail (`needs_data`) |
 | `POST /reports/{id}/feedback` | 3 | viewer | Thumbs up/down + note on an analysis report | Report view |
 | `POST /actions/drafts` | 3 | editor | AI drafts a supplier message from a `pass` report that isn't `blocked` | "Draft email" |
 | `PATCH /actions/{id}` | 3 | editor | Edit text or recipient. Resets an approved action to `draft` | Message editor |

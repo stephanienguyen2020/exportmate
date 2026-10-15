@@ -22,7 +22,7 @@ Firestore can do these, but with more code.
 | `backend` (Python) | Accounts, companies, orders, imports, playbook, regulations, trade map, analysis runs, reports, messages. Source of truth. |
 | `ai/server` (Node) | Chat assistant (Google ADK), daily news scan, News watch alerts. |
 
-- Analysis (match → cost → playbook → plan → auditor) lives in `backend`: it needs orders and must be deterministic and tested, so every step is code. The backend calls Gemini only to read uploaded supplier documents (§9).
+- Analysis (match → cost → playbook → plan → auditor) lives in `backend`: it needs orders and must be deterministic and tested, so every step is code. The backend calls Gemini to read uploaded supplier documents, draft a company's requirements and suggest HS codes (§9), never to decide.
 - Neither service reads the other's database; each calls the other's API with the user's own token. `ai/server` reads the company profile, orders (`GET /trade-map`), the playbook and the user's role (`BACKEND_URL`). The backend's company report reads News watch alerts (`GET /api/impacts`, `AI_SERVICE_URL`). Demo chats stay anonymous.
 
 ## 3. Code layout
@@ -93,20 +93,33 @@ Local: `AUTH_MODE=dev` accepts `Bearer dev:<email>` (no Firebase). Production re
 
 ## 9. AI: Gemini on Vertex AI
 
-- The backend calls Gemini through `app/core/gemini.py`. Today one step uses it: reading uploaded supplier documents. Drafting a company's market requirements and suggesting HS codes will use it too, once they have retrieval (PDF text, past orders, HS headings). Plain SDK calls (`google-genai`), no agent framework (REQUIREMENTS.md open question 6): code runs the steps in a fixed order, and the AI only reads or writes text inside one.
-- Every call asks for JSON in a fixed shape (`response_schema`, temperature 0). Code checks the answer before saving (known document kinds, dates that parse), and a person reviews it before it counts.
-- Uploaded files are untrusted: the prompt says to ignore instructions inside them. Prompts and answers are never logged; logs carry the task name, model and duration.
+- The backend calls Gemini through `app/core/gemini.py` for three steps: reading uploaded supplier documents, drafting a company's market requirements from its own regulation, and suggesting HS codes. Each answer is a draft a person confirms. Plain SDK calls (`google-genai`), no agent framework (REQUIREMENTS.md open question 6): code runs the steps in a fixed order, and the AI only reads or writes text inside one.
+- Every call asks for JSON in a fixed shape (`response_schema`, temperature 0). Code checks the answer before saving (known markets and document kinds, quotes found in the document's text, real tariff lines, dates that parse), and a person reviews it before it counts.
+- Uploaded files and spreadsheet text are untrusted: they are fenced in the prompt (`<document>`, `<product>`) or sent as a file, and the prompt says to ignore instructions inside them. Prompts and answers are never logged; logs carry the task name, model and duration.
 - Settings: `GOOGLE_CLOUD_PROJECT` (required), `GEMINI_MODEL` (default `gemini-2.5-flash`), `GEMINI_LOCATION` (`global`). The backend's service account has `roles/aiplatform.user`. Without a project, AI routes return `503 ai_not_configured`; a failed call returns `503 ai_unavailable` and nothing is saved. Tests replace `generate_json` with a fake.
 - Analysis, matching, costs and playbook rules are code, never AI, so the same input always gives the same answer.
 - The chat assistant (`ai/server`) is separate: a Google ADK agent with a model router, with its own harness (`docs/AGENT_HARNESS.md`).
 
-## 10. Email: Resend
+## 10. Retrieval: the method that fits each case
+
+| Searched | How | Why |
+| --- | --- | --- |
+| Official HS headings (`hs_headings`, ~2,500 lines from the USITC HTS) | Embeddings (`gemini-embedding-001`, 768 dimensions) in **pgvector**, computed once at seed time for new or changed lines; cosine distance at query time | Product names rarely use the tariff's words ("Shaker kitchen cabinet set" vs "Wooden furniture of a kind used in the kitchen"), and embeddings also match across languages. The list is fixed and small |
+| The company's past orders with a code | Word similarity (`pg_trgm`, `similarity ≥ 0.3`, trigram index on `orders.product`) | Companies reuse their own wording; no AI call per import |
+| Sections of a long regulation, while drafting | Embeddings in memory (nothing stored); shared words if embedding fails | Each document is read once. Texts up to ~120,000 characters go whole |
+| PDF text | `pypdf`; under 200 letters per page counts as a scan, which Gemini reads as a file | Quotes can be checked against the text; a scan's quotes are marked unchecked |
+
+- Local Postgres and CI use the `pgvector/pgvector:pg16` image; the migration runs `CREATE EXTENSION vector` and `pg_trgm` (both on Cloud SQL for Postgres 16).
+- The reference seed embeds headings through Vertex AI. If that fails, the headings still load and suggestions search them by words; the next deploy embeds them.
+- Tests use a fake embedder (word-hashing vectors), so nearest-neighbour search is tested without Gemini.
+
+## 11. Email: Resend
 
 - Reports are emailed through Resend (`core/email.py`); without `RESEND_API_KEY` it is a sandbox that builds and audits the email but delivers nothing. Auth emails stay Firebase's.
 - Sending once: an optional `Idempotency-Key` (Resend keeps it 24 hours) and a row lock; a sent report is locked.
 - Phase 3 supplier messages will use the same sender, after an owner approves the exact text.
 
-## 11. Limits
+## 12. Limits
 
-- Uploads: 4 MB (the Vercel function accepts about 4.5 MB), 60 per user per hour per upload type. Analysis runs: 60. Report emails: 20 (`REPORT_EMAILS_PER_HOUR`). Counted in memory per Cloud Run instance, so it stops runaway scripts but isn't a quota.
+- Uploads: 4 MB (the Vercel function accepts about 4.5 MB), 60 per user per hour per upload type. Analysis runs: 60. Report emails: 20 (`REPORT_EMAILS_PER_HOUR`). Requirement drafts: 20; HS suggestions: 60. Counted in memory per Cloud Run instance, so it stops runaway scripts but isn't a quota.
 - CSV: 10,000 rows. Uncommitted imports are deleted after 30 days (`python -m app.cleanup_imports`).

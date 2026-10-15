@@ -405,9 +405,12 @@ def load_gazetteer(db: Session) -> Gazetteer:
     )
 
 
-def requirements_by_market(db: Session) -> dict[str, list[MarketRequirement]]:
+def requirements_by_market(
+    db: Session, company_id: uuid.UUID
+) -> dict[str, list[MarketRequirement]]:
+    """The requirements in force for this company (shared and its own), by market."""
     grouped: dict[str, list[MarketRequirement]] = defaultdict(list)
-    for req in map_queries.list_market_requirements(db):
+    for req in map_queries.list_requirements_in_force(db, company_id):
         grouped[req.market_code].append(req)
     return grouped
 
@@ -483,7 +486,7 @@ def build_trade_map(db: Session, ctx: CompanyContext) -> TradeMapOut:
     started = time.perf_counter()
     radius = get_settings().flood_check_radius_km
     gazetteer = load_gazetteer(db)
-    requirements = requirements_by_market(db)
+    requirements = requirements_by_market(db, ctx.company_id)
     sources = load_requirement_sources(db, requirements)
     kinds = {k.kind: k.label for k in map_queries.list_document_kinds(db)}
     orders = order_queries.list_company_orders(db, ctx.company_id)
@@ -640,7 +643,9 @@ def build_order_checklist(
     market = gazetteer.markets.get(placement.market) if placement.market else None
     checks: list[RequirementCheckOut] = []
     if market:
-        requirements = {market.code: requirements_by_market(db).get(market.code, [])}
+        requirements = {
+            market.code: requirements_by_market(db, ctx.company_id).get(market.code, [])
+        }
         checks = check_order(
             order,
             requirements[market.code],
@@ -748,7 +753,11 @@ def compare_ship_date(
         )
     gazetteer = load_gazetteer(db)
     placement = locate_destination(order.destination, gazetteer)
-    requirements = requirements_by_market(db).get(placement.market, []) if placement.market else []
+    requirements = (
+        requirements_by_market(db, ctx.company_id).get(placement.market, [])
+        if placement.market
+        else []
+    )
     current, reuse, reevaluate, evidence_unknown = order.ship_date, [], [], []
     documents = _supplier_documents(db, ctx, order)
     for req in requirements:
@@ -841,7 +850,11 @@ def compare_route(db: Session, ctx: CompanyContext, order_id: str, via: str) -> 
             f"{hub[0]} is already in the destination country.",
             {"via": "Pick a stop that is not the destination"},
         )
-    requirements = requirements_by_market(db).get(placement.market, []) if placement.market else []
+    requirements = (
+        requirements_by_market(db, ctx.company_id).get(placement.market, [])
+        if placement.market
+        else []
+    )
     reuse, reevaluate, evidence_unknown = [], [], []
     documents = _supplier_documents(db, ctx, order)
     hub_name = "Direct" if hub is None else hub[0]
@@ -959,7 +972,7 @@ def compare_order_markets(
             {"market": "Pick a different market"},
         )
     docs = _supplier_documents(db, ctx, order)
-    requirements = requirements_by_market(db)
+    requirements = requirements_by_market(db, ctx.company_id)
     result = compare_requirements(
         order,
         gazetteer.markets.get(placement.market) if placement.market else None,

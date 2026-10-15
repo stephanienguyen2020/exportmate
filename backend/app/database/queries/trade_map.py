@@ -1,9 +1,9 @@
 import uuid
 from collections.abc import Iterable
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, exists, or_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from app.database.models import (
     CompanyCostSetting,
@@ -14,6 +14,7 @@ from app.database.models import (
     Market,
     MarketRequirement,
     Port,
+    RequirementStatus,
     SatelliteObservation,
     Supplier,
     SupplierDocument,
@@ -46,11 +47,29 @@ def list_document_kinds(db: Session) -> list[DocumentKind]:
     return list(db.scalars(select(DocumentKind).order_by(DocumentKind.sort_order)))
 
 
-def list_market_requirements(db: Session) -> list[MarketRequirement]:
+def list_requirements_in_force(db: Session, company_id: uuid.UUID) -> list[MarketRequirement]:
+    """What a company's orders are checked against: reviewed shared requirements and its own,
+    leaving out a version while any of its requirements is still a draft."""
+    draft = aliased(MarketRequirement)
+    version_in_review = exists().where(
+        draft.regulation_document_id == MarketRequirement.regulation_document_id,
+        draft.status == RequirementStatus.draft,
+    )
     return list(
         db.scalars(
-            select(MarketRequirement).order_by(
-                MarketRequirement.market_code, MarketRequirement.sort_order
+            select(MarketRequirement)
+            .where(
+                MarketRequirement.status == RequirementStatus.reviewed,
+                or_(
+                    MarketRequirement.company_id.is_(None),
+                    MarketRequirement.company_id == company_id,
+                ),
+                ~version_in_review,
+            )
+            .order_by(
+                MarketRequirement.market_code,
+                MarketRequirement.company_id.nulls_first(),
+                MarketRequirement.sort_order,
             )
         )
     )
@@ -192,15 +211,23 @@ def upsert_ports(db: Session, rows: list[dict]) -> None:
     _upsert(db, Port, rows, ["name_key", "country_alpha2"])
 
 
-def replace_market_requirements(db: Session, market_code: str, rows: list[dict]) -> None:
-    """The seed file is the whole checklist: keys no longer in it are removed."""
-    _upsert(db, MarketRequirement, rows, ["market_code", "requirement_key"])
-    db.execute(
-        delete(MarketRequirement).where(
-            MarketRequirement.market_code == market_code,
-            MarketRequirement.requirement_key.not_in([r["requirement_key"] for r in rows]),
-        )
+def replace_shared_market_requirements(db: Session, market_code: str, rows: list[dict]) -> None:
+    """The seed file is the whole shared checklist: rows no longer in it are removed. Companies'
+    own requirements are never touched."""
+    _upsert(
+        db, MarketRequirement, rows, ["regulation_document_id", "market_code", "requirement_key"]
     )
+    kept = [(r["regulation_document_id"], r["requirement_key"]) for r in rows]
+    stale = delete(MarketRequirement).where(
+        MarketRequirement.market_code == market_code, MarketRequirement.company_id.is_(None)
+    )
+    if kept:
+        stale = stale.where(
+            tuple_(
+                MarketRequirement.regulation_document_id, MarketRequirement.requirement_key
+            ).not_in(kept)
+        )
+    db.execute(stale)
 
 
 def upsert_cost_defaults(db: Session, rows: list[dict]) -> None:

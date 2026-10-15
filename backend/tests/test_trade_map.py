@@ -361,7 +361,7 @@ def test_checklist_lines_removed_from_the_seed_are_deleted(reference):
     with open_session() as db:
         origin = next(r for r in db.scalars(select(MarketRequirement)) if r.market_code == "SG")
         row = {c.name: getattr(origin, c.name) for c in MarketRequirement.__table__.columns}
-        map_queries.replace_market_requirements(db, "SG", [row])
+        map_queries.replace_shared_market_requirements(db, "SG", [row])
         db.commit()
         keys = [r.requirement_key for r in db.scalars(select(MarketRequirement))]
         assert keys.count("ispm15") == 7  # removed from SG only
