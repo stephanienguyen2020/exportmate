@@ -9,6 +9,18 @@ variable "region" {
   default     = "asia-southeast1"
 }
 
+variable "contact_inbox" {
+  description = "Where the public contact form (POST /api/v1/contact) is emailed. Delivered only once the backend has a Resend key."
+  type        = string
+  default     = "dylan.exportmate@gmail.com"
+}
+
+variable "model_armor_region" {
+  description = "Region of the Model Armor template. asia-southeast1 lacks the malicious-link filter and multi-language detection; the scan only sends public news articles there."
+  type        = string
+  default     = "us-central1"
+}
+
 variable "db_tier" {
   description = "Cloud SQL machine tier. db-f1-micro is the cheapest (~USD 10/month)."
   type        = string

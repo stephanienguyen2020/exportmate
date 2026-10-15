@@ -5,9 +5,9 @@ Creates everything ExportMate runs on Google Cloud (backend and AI service) in o
 | Resource | Name |
 | --- | --- |
 | APIs | Cloud Run, Cloud SQL Admin, Secret Manager, Artifact Registry, Firebase, Identity Toolkit, Firestore, Vertex AI, Model Armor, Cloud Scheduler, Cloud Build, … |
-| Postgres 16 (Cloud SQL, `db-f1-micro`, ~USD 10/month) | `exportmate-db`, database + user `exportmate` |
+| Postgres 16 (Cloud SQL, `db-f1-micro`, ~USD 10/month) | `exportmate-db`, database + user `exportmate`; extensions `vector` and `pg_trgm` (created by the backend's migration) |
 | Secret | `backend-database-url` |
-| Service account | `exportmate-backend` (Cloud SQL client, Firebase Auth admin, reads the secret, creates, reads and deletes regulation documents) |
+| Service account | `exportmate-backend` (Cloud SQL client, Firebase Auth admin, reads the secret, creates, reads and deletes regulation and supplier documents, calls Gemini on Vertex AI) |
 | Image registry | `<region>-docker.pkg.dev/<project>/exportmate` |
 | Cloud Run service (public) | `exportmate-backend` |
 | Cloud Run job (same image, one command) | `exportmate-backend-task` |
@@ -18,7 +18,7 @@ Creates everything ExportMate runs on Google Cloud (backend and AI service) in o
 | Service accounts | `exportmate-ai` (Firestore user, Vertex AI user, Model Armor user), `exportmate-scheduler` (signs the scan's OIDC token, no roles) |
 | Cloud Run service (public) | `exportmate-ai`, URL printed as `ai_url` |
 | Cloud Run job (same image, one command) | `exportmate-ai-task` |
-| Model Armor template | `exportmate-untrusted-text` (prompt injection and jailbreak at medium confidence and above, malicious links), screens each new news article; set on the service as `MODEL_ARMOR_TEMPLATE` |
+| Model Armor template | `exportmate-untrusted-text` (prompt injection and jailbreak at medium confidence and above, malicious links, any language), screens each new news article; set on the service as `MODEL_ARMOR_TEMPLATE`. In `us-central1` (`model_armor_region`): `asia-southeast1` lacks the malicious-link filter and multi-language detection, and only public news articles are sent to it |
 | Cloud Scheduler | `exportmate-daily-news-scan`, 07:00 Asia/Ho_Chi_Minh, `POST <ai_url>/api/scan` |
 | Log-based metrics | `exportmate_ai/chat_answers` (by status, policy version), `chat_latency`, `guard_withheld`, `armor_failures`, `scan_failures` |
 | **Builds** (`build.tf`) | |
@@ -116,6 +116,8 @@ gcloud run jobs execute exportmate-ai-task --region asia-southeast1 --wait --arg
 ## Moving the AI service from exportmate-app (and onto Agent Platform)
 
 The AI service, its Firestore data and the daily scan used to live in project `exportmate-app`, with the assistant inside the Cloud Run service. They move here in one go, with the assistant's agents on Gemini Enterprise Agent Platform (Agent Runtime, Sessions, Memory Bank, RAG Engine, Evaluation, Govern; see `docs/AGENT_HARNESS.md`). Steps marked **owner** need dylan.exportmate@gmail.com; the rest work as Editor. Every command runs from the repository root unless noted.
+
+**Status (15 October 2026):** the first `terraform apply` (before the Agent Platform resources) is done, and `exportmate-ai` here runs the code from before the move to Agent Platform: there is no `<project>-kb` bucket, no RAG corpus and no Agent Runtime instance yet. Its Firestore was filled with `node seed.js` and one scan (`node scan.js --lookback=14`: 58 articles, all screened by Model Armor), not yet copied from `exportmate-app`. The backend's `AI_SERVICE_URL` already points to it (company reports read its News watch alerts); the website's chat and News watch still use `exportmate-app` until step 8. Don't redeploy it from this code before step 1 runs again: the assistant's search needs the RAG bucket and the index from step 4.
 
 1. **Owner:** `terraform apply` (Firestore, service accounts and grants, the Cloud Run service, job and scheduler, the RAG bucket, the APIs Agent Gateway needs, metrics, build resources). `terraform plan` should show 0 to destroy apart from the two Firestore vector indexes on `kb`, which nothing uses any more.
 2. Copy the data (stock, sources, articles, alerts, scans, audits) with an account that can read `exportmate-app` and write here:

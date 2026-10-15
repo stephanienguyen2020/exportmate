@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   geoArea,
   geoCircle,
+  geoContains,
   geoGraticule10,
   geoMercator,
   geoNaturalEarth1,
@@ -20,9 +21,14 @@ import {
   Copy,
   Layers,
   Loader2,
+  MapPin,
+  Pencil,
+  Plus,
   Route,
   Satellite,
   ShieldCheck,
+  Trash2,
+  Upload,
   Waves,
   X,
 } from "lucide-react";
@@ -40,11 +46,15 @@ import {
   type MarketComparison,
   type RequirementCheck,
   type SatelliteObservation,
+  type SiteInput,
+  type SupplierDocumentUpload,
+  type SupplierInput,
   type TradeMap,
 } from "./api";
 import { errorMessage } from "./auth";
 import { useImpacts, type Impact } from "../ai/news/NewsWatch";
 import { RegulationCitation } from "./Regulations";
+import ScenarioNotes from "./ScenarioNotes";
 import TradeMapGlobe, {
   type GlobePoint,
   type GlobeRoute,
@@ -117,10 +127,14 @@ type Row = {
 };
 type SupplierGroup = {
   key: string;
+  id: string | null; // null: named on orders, no supplier record
   name: string;
+  country: string | null;
   place: string | null;
   at: LonLat | null;
   supplies: string | null;
+  contactName: string | null;
+  contactEmail: string | null;
   documents: MapSupplier["documents"];
   rows: Row[];
 };
@@ -130,6 +144,13 @@ type FloodEntry = {
   sites: { site: MapSite; km: number }[];
 };
 type MarketSummary = { market: MapMarket; rows: Row[]; tone: Tone };
+// An open supplier or site form. `group`/`site` null adds a new one.
+type Editing =
+  | { type: "supplier"; group: SupplierGroup | null; name?: string }
+  | { type: "site"; site: MapSite | null };
+// The location being entered. `picked` counts map clicks, so a form can tell a
+// click (which also suggests the country) from typed coordinates.
+type Pin = { at: LonLat; country: string | null; picked: number };
 type Marker = {
   key: string;
   kind: "market" | "port" | "supplier" | "site" | "origin" | "flood";
@@ -155,6 +176,7 @@ type Focus = {
 
 export type TradeMapProps = {
   live: boolean;
+  editable: boolean;
   focus: string;
   toneOf: (order: Order) => Tone;
   renderStatus: (order: Order) => React.ReactNode;
@@ -427,18 +449,26 @@ export default function TradeMapPage(props: TradeMapProps) {
         </section>
       </>
     );
-  return <TradeMapView {...props} data={data} />;
+  return (
+    <TradeMapView
+      {...props}
+      data={data}
+      onReload={async () => setData(await api.tradeMap())}
+    />
+  );
 }
 
 function TradeMapView({
   data,
+  onReload,
+  editable,
   focus,
   toneOf,
   renderStatus,
   onNavigate,
   signature,
   companyOrigin,
-}: TradeMapProps & { data: TradeMap }) {
+}: TradeMapProps & { data: TradeMap; onReload: () => Promise<void> }) {
   const markets = data.markets;
   const marketByCode = useMemo(
     () => new Map(markets.map((m) => [m.code, m])),
@@ -459,10 +489,14 @@ function TradeMapView({
     return data.suppliers
       .map((s) => ({
         key: supplierKey(s.name),
+        id: s.id,
         name: s.name,
+        country: s.country,
         place: s.place,
         at: s.location ? lonLat(s.location) : null,
         supplies: s.supplies,
+        contactName: s.contactName ?? null,
+        contactEmail: s.contactEmail ?? null,
         documents: s.documents,
         rows: s.orderIds.map((id) => byId.get(id)!).filter(Boolean),
       }))
@@ -553,8 +587,22 @@ function TradeMapView({
   const [scenario, setScenario] = useState<Scenario | null>(
     initial.scenario ?? null,
   );
+  const [comparisonResult, setComparisonResult] = useState<{
+    key: string;
+    comparison: MarketComparison;
+  } | null>(null);
+  const comparisonKey = scenario?.target
+    ? JSON.stringify([scenario.orderId, scenario.mode, scenario.target])
+    : "";
+  const routeComparison =
+    comparisonResult?.key === comparisonKey &&
+    comparisonResult.comparison.kind === "route"
+      ? comparisonResult.comparison
+      : undefined;
   const [showRoutes, setShowRoutes] = useState(true);
   const [showSatellite, setShowSatellite] = useState(true);
+  const [editing, setEditing] = useState<Editing | null>(null);
+  const [pin, setPin] = useState<Pin | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const { impacts } = useImpacts();
 
@@ -568,6 +616,8 @@ function TradeMapView({
   };
   const select = (next: Selection | null, nextView?: View) => {
     setScenario(null);
+    setEditing(null);
+    setPin(null);
     setSelection(next);
     if (nextView) setView(nextView);
     if (next) reveal();
@@ -576,6 +626,8 @@ function TradeMapView({
     select({ kind: "flood", id: flood.id }, floodView(flood, check));
   const startScenario = (orderId: string) => {
     setSelection(null);
+    setEditing(null);
+    setPin(null);
     setScenario({ orderId, mode: "market", target: null });
     setView(WORLD_VIEW);
     reveal();
@@ -589,6 +641,39 @@ function TradeMapView({
     select({ kind: "market", code });
   };
   const originKey = data.sites.find((s) => s.isRouteOrigin)?.key;
+  // Forms place things on a 2D view of the company's own area.
+  const startEditing = (next: Editing) => {
+    const at =
+      next.type === "supplier"
+        ? (next.group?.at ?? null)
+        : next.site
+          ? lonLat(next.site.location)
+          : null;
+    const profileAt = PROFILE_ORIGIN_AT[companyOrigin];
+    const area =
+      production ??
+      (at || profileAt
+        ? { ...productionView([at ?? profileAt])!, id: "focus" as const, label: "Place" }
+        : viewById("asia"));
+    setScenario(null);
+    setEditing(next);
+    setPin(at ? { at, country: null, picked: 0 } : null);
+    if (view.id !== "production" && view.id !== "focus") setView(area);
+    reveal();
+  };
+  const onPick = (at: LonLat, countryId: string | null) =>
+    setPin((current) => ({
+      at,
+      country:
+        data.countries.find((c) => c.numericCode === countryId)?.code ?? null,
+      picked: (current?.picked ?? 0) + 1,
+    }));
+  const finishEditing = async (next: Selection | null) => {
+    await onReload();
+    setEditing(null);
+    setPin(null);
+    setSelection(next);
+  };
 
   // What the current selection touches; everything else is dimmed.
   const focusSet = useMemo<Focus | null>(() => {
@@ -681,15 +766,50 @@ function TradeMapView({
     onNavigate("orders/" + encodeURIComponent(id));
   const allSample = data.observations.every((o) => o.isSample);
 
-  const panel = scenario ? (
+  const panel = editing ? (
+    editing.type === "supplier" ? (
+      <SupplierForm
+        key={editing.group?.key ?? "new"}
+        group={editing.group}
+        name={editing.name}
+        documentKinds={data.documentKinds}
+        countries={data.countries}
+        pin={pin}
+        onPin={setPin}
+        onSaved={(name) => finishEditing({ kind: "supplier", name })}
+        onDeleted={() => finishEditing(null)}
+        onCancel={() => {
+          setEditing(null);
+          setPin(null);
+        }}
+      />
+    ) : (
+      <SiteForm
+        key={editing.site?.id ?? "new"}
+        site={editing.site}
+        originName={data.sites.find((s) => s.isRouteOrigin)?.name ?? null}
+        countries={data.countries}
+        pin={pin}
+        onPin={setPin}
+        onSaved={(key) => finishEditing({ kind: "site", id: key })}
+        onDeleted={() => finishEditing(null)}
+        onCancel={() => {
+          setEditing(null);
+          setPin(null);
+        }}
+      />
+    )
+  ) : scenario ? (
     <ScenarioPanel
       rows={rows}
       markets={markets}
       scenario={scenario}
       renderStatus={renderStatus}
       onChange={setScenario}
+      onComparison={setComparisonResult}
       onClose={() => setScenario(null)}
       onOpenOrder={openOrder}
+      editable={editable}
     />
   ) : selection?.kind === "market" && marketByCode.has(selection.code) ? (
     <MarketPanel
@@ -709,10 +829,14 @@ function TradeMapView({
       group={
         supplierByKey.get(supplierKey(selection.name)) ?? {
           key: supplierKey(selection.name),
+          id: null,
           name: selection.name,
+          country: null,
           place: null,
           at: null,
           supplies: null,
+          contactName: null,
+          contactEmail: null,
           documents: null,
           rows: [],
         }
@@ -726,6 +850,16 @@ function TradeMapView({
       onCompare={startScenario}
       onMarket={(code) => select({ kind: "market", code })}
       onFlood={selectFlood}
+      onEdit={
+        editable
+          ? (group) => startEditing({ type: "supplier", group })
+          : undefined
+      }
+      onCertificate={
+        editable
+          ? (name) => finishEditing({ kind: "supplier", name })
+          : undefined
+      }
     />
   ) : selection?.kind === "site" &&
     data.sites.some((s) => s.key === selection.id) ? (
@@ -737,6 +871,9 @@ function TradeMapView({
       onBack={() => select(null)}
       onSupplier={(name) => select({ kind: "supplier", name })}
       onFlood={selectFlood}
+      onEdit={
+        editable ? (site) => startEditing({ type: "site", site }) : undefined
+      }
     />
   ) : selection?.kind === "flood" &&
     floods.some((f) => f.flood.id === selection.id) ? (
@@ -765,6 +902,21 @@ function TradeMapView({
       onSite={(id) => select({ kind: "site", id }, production ?? undefined)}
       onFlood={selectFlood}
       onImport={() => onNavigate("data")}
+      onAddSupplier={
+        editable
+          ? (group) =>
+              startEditing({
+                type: "supplier",
+                group: group?.id ? group : null,
+                name: group?.name,
+              })
+          : undefined
+      }
+      onAddSite={
+        editable
+          ? () => startEditing({ type: "site", site: null })
+          : undefined
+      }
     />
   );
 
@@ -851,6 +1003,7 @@ function TradeMapView({
             marketByCode={marketByCode}
             scenario={scenario}
             scenarioRow={scenarioRow}
+            routeComparison={routeComparison}
             selectionMarket={
               selection?.kind === "market" ? selection.code : null
             }
@@ -861,6 +1014,9 @@ function TradeMapView({
             isSelected={isSelected}
             isRelated={isRelated}
             onMarker={onMarker}
+            picking={!!editing}
+            pin={pin?.at ?? null}
+            onPick={onPick}
           />
           <ul className="tm-legend" aria-label="Map legend">
             <li>
@@ -884,9 +1040,14 @@ function TradeMapView({
                 {allSample ? " · sample" : ""} · {check} km proximity check
               </li>
             )}
-            {scenario && (
+            {scenario?.mode === "market" && (
               <li>
                 <i className="tm-key alt" /> Market being compared
+              </li>
+            )}
+            {showRoutes && !!routeComparison?.routePoints?.length && (
+              <li>
+                <i className="tm-key alt" /> Proposed route
               </li>
             )}
           </ul>
@@ -908,6 +1069,7 @@ function MapCanvas({
   marketByCode,
   scenario,
   scenarioRow,
+  routeComparison,
   selectionMarket,
   showRoutes,
   showSatellite,
@@ -916,6 +1078,9 @@ function MapCanvas({
   isSelected,
   isRelated,
   onMarker,
+  picking,
+  pin,
+  onPick,
 }: {
   view: View;
   data: TradeMap;
@@ -925,6 +1090,7 @@ function MapCanvas({
   marketByCode: Map<string, MapMarket>;
   scenario: Scenario | null;
   scenarioRow?: Row;
+  routeComparison?: MarketComparison;
   selectionMarket: string | null;
   showRoutes: boolean;
   showSatellite: boolean;
@@ -933,8 +1099,12 @@ function MapCanvas({
   isSelected: (m: Marker) => boolean;
   isRelated: (m: Marker) => boolean;
   onMarker: (m: Marker) => void;
+  picking: boolean;
+  pin: LonLat | null;
+  onPick: (at: LonLat, countryId: string | null) => void;
 }) {
   const host = useRef<HTMLDivElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
   const [width, setWidth] = useState(W);
   const [globe, setGlobe] = useState(true);
   const [globeUnavailable, setGlobeUnavailable] = useState(false);
@@ -1004,7 +1174,16 @@ function MapCanvas({
   const target = new Set(countriesOf(marketTarget));
 
   const originSite = data.sites.find((s) => s.isRouteOrigin);
-  const start = routeStart(data.sites, companyOrigin);
+  const profileStart = routeStart(data.sites, companyOrigin);
+  const routePoints = routeComparison?.routePoints ?? [];
+  const start =
+    profileStart && routePoints.length
+      ? { ...profileStart, at: lonLat(routePoints[0]) }
+      : profileStart;
+  const routeLabel =
+    routePoints.length > 1
+      ? `${start?.approximate ? companyOrigin : "Production"} → ${routePoints.length > 2 ? `${routeComparison!.viaName} → ` : ""}${scenarioRow?.placement.city ?? "Destination"}`
+      : null;
   if (start?.approximate && PROFILE_HOME_ID[companyOrigin])
     home.add(PROFILE_HOME_ID[companyOrigin]);
   const markers: Marker[] = [];
@@ -1199,7 +1378,7 @@ function MapCanvas({
           d: arcPath(origin, [m.x, m.y]),
           tone: m.tone as Tone,
           width: 2.2 + Math.sqrt(m.count),
-          dim: !isRelated(m),
+          dim: routePoints.length > 1 || !isRelated(m),
           dashed: start?.approximate,
         });
   if (showRoutes && (view.id === "production" || view.id === "focus")) {
@@ -1218,14 +1397,19 @@ function MapCanvas({
   }
   let scenarioArcs: { key: string; d: string; kind: "current" | "target" }[] =
     [];
-  if (showRoutes && scenario && scenarioRow && origin && showOrigin) {
+  if (
+    showRoutes &&
+    scenario?.mode === "market" &&
+    scenarioRow &&
+    origin &&
+    showOrigin
+  ) {
     const current = markers.find(
       (m) =>
         !!scenarioRow.placement.market &&
         m.market === scenarioRow.placement.market,
     );
-    const next =
-      marketTarget && markers.find((m) => m.market === marketTarget);
+    const next = marketTarget && markers.find((m) => m.market === marketTarget);
     scenarioArcs = [
       current && {
         key: "current",
@@ -1238,6 +1422,19 @@ function MapCanvas({
         kind: "target" as const,
       },
     ].filter(Boolean) as typeof scenarioArcs;
+  }
+
+  if (showRoutes && routePoints.length > 1) {
+    for (let i = 1; i < routePoints.length; i++) {
+      const from = project(lonLat(routePoints[i - 1]));
+      const to = project(lonLat(routePoints[i]));
+      if (from && to)
+        scenarioArcs.push({
+          key: `via-${i}`,
+          d: arcPath(from, to),
+          kind: "target",
+        });
+    }
   }
 
   const floodShapes = useMemo(
@@ -1257,7 +1454,8 @@ function MapCanvas({
     [showSatellite, data.observations, data.checkRadiusKm, path],
   );
 
-  if (view.id === "world" && globe && !globeUnavailable) {
+  // Placing a supplier or site uses the 2D map, where a click maps to one point.
+  if (view.id === "world" && globe && !globeUnavailable && !picking) {
     const globeMarkers = markers.filter(
       (m) => m.kind === "market" || m.kind === "origin",
     );
@@ -1318,11 +1516,41 @@ function MapCanvas({
               key: p.key,
               from: start.at,
               to: p.at,
-              tone: p.tone,
-              dim: !p.related,
+              tone: routePoints.length > 1 ? "neutral" : p.tone,
+              dim: routePoints.length > 1 || !p.related,
               approximate: start.approximate,
             }))
         : [];
+    if (showRoutes && routePoints.length > 1) {
+      // The API supplies the same ordered points used to calculate the distance.
+      // Use the order's destination port, not the market's display hub.
+      for (let i = 1; i < routePoints.length; i++) {
+        const last = i === routePoints.length - 1;
+        points.push({
+          key: `route-stop-${i}`,
+          at: lonLat(routePoints[i]),
+          label: last
+            ? (scenarioRow?.placement.city ?? "Destination")
+            : routeComparison!.viaName!,
+          aria: last
+            ? `Proposed route destination: ${scenarioRow?.placement.city}`
+            : `Proposed stop: ${routeComparison!.viaName}`,
+          tone: "target",
+          count: 0,
+          selected: true,
+          related: true,
+        });
+        routes.push({
+          key: `route-leg-${i}`,
+          connectionKey: "route-comparison",
+          from: lonLat(routePoints[i - 1]),
+          to: lonLat(routePoints[i]),
+          tone: "target",
+          dim: false,
+          approximate: start?.approximate,
+        });
+      }
+    }
     const countryColors = new Map(
       countries.map((c) => {
         const id = String(c.id);
@@ -1349,6 +1577,7 @@ function MapCanvas({
           countryColors={countryColors}
           extents={showSatellite ? data.observations.map((o) => o.extent) : []}
           originApproximate={!!start?.approximate}
+          routeLabel={showRoutes ? routeLabel : null}
           onSelect={(key) => {
             const marker = globeMarkers.find((m) => m.key === key);
             if (marker) onMarker(marker);
@@ -1384,14 +1613,46 @@ function MapCanvas({
     );
   }
 
+  const pick = (event: React.MouseEvent) => {
+    const matrix = svgRef.current?.getScreenCTM();
+    if (!matrix) return;
+    const point = new DOMPoint(event.clientX, event.clientY).matrixTransform(
+      matrix.inverse(),
+    );
+    const at = projection.invert?.([point.x, point.y]);
+    // Outside the world outline, invert returns a point that doesn't project back.
+    const back = at && projection(at);
+    if (
+      !at ||
+      !back ||
+      !Number.isFinite(at[0]) ||
+      Math.hypot(back[0] - point.x, back[1] - point.y) > 1
+    )
+      return;
+    const round = (n: number) => Math.round(n * 1e5) / 1e5;
+    const country = countries.find((f) => geoContains(f, at));
+    onPick(
+      [round(((at[0] + 540) % 360) - 180), round(at[1])],
+      country ? String(country.id) : null,
+    );
+  };
+  const pinAt = pin && project(pin);
+
   return (
     <div
-      className="tm-canvas"
+      className={"tm-canvas" + (picking ? " picking" : "")}
       ref={host}
       role="group"
       aria-label={`Trade map, ${view.label}`}
+      onClick={picking ? pick : undefined}
     >
-      {view.id === "world" && !globeUnavailable && (
+      {picking && (
+        <p className="tm-pick-note" role="status">
+          <MapPin size={13} /> Click the map to place it
+          {view.bounds ? "" : ", or zoom in with the area tabs"}.
+        </p>
+      )}
+      {view.id === "world" && !globeUnavailable && !picking && (
         <button className="tm-projection flat" onClick={() => setGlobe(true)}>
           3D globe ↗
         </button>
@@ -1401,13 +1662,19 @@ function MapCanvas({
           3D is unavailable on this device. Showing the 2D map.
         </p>
       )}
-      {start?.approximate && showOrigin && (
+      {start?.approximate && showOrigin && !picking && (
         <p className="tm-map-note tm-origin-note" role="status">
           Lines run from {companyOrigin} on your company profile. This is not a
           recorded production site.
         </p>
       )}
+      {showRoutes && routeLabel && (
+        <p className="tm-route-preview" role="status">
+          Proposed route · {routeLabel}
+        </p>
+      )}
       <svg
+        ref={svgRef}
         viewBox={`0 0 ${W} ${H}`}
         aria-hidden="true"
         preserveAspectRatio="xMidYMid meet"
@@ -1471,6 +1738,25 @@ function MapCanvas({
         {scenarioArcs.map((a) => (
           <path key={a.key} d={a.d} className={`tm-arc scenario ${a.kind}`} />
         ))}
+        {showRoutes &&
+          routePoints.slice(1).map((point, i) => {
+            const at = project(lonLat(point));
+            if (!at) return null;
+            return (
+              <g
+                key={`route-stop-${i}`}
+                className="tm-route-stop"
+                transform={`translate(${at[0]},${at[1]})`}
+              >
+                <circle r="5" />
+                <text x="9" y="-8">
+                  {i === routePoints.length - 2
+                    ? scenarioRow?.placement.city
+                    : routeComparison?.viaName}
+                </text>
+              </g>
+            );
+          })}
       </svg>
       {markers.map((m) => {
         const selected = isSelected(m);
@@ -1501,6 +1787,15 @@ function MapCanvas({
           </button>
         );
       })}
+      {pinAt && (
+        <span
+          className="tm-pin"
+          style={{ left: pct(pinAt[0], W), top: pct(pinAt[1], H) }}
+          aria-hidden="true"
+        >
+          <MapPin size={24} />
+        </span>
+      )}
       {atlasError && !countries.length && (
         <p className="tm-map-note" role="status">
           Map outlines couldn't load. Places are still shown.
@@ -1729,6 +2024,8 @@ function OverviewPanel({
   onSite,
   onFlood,
   onImport,
+  onAddSupplier,
+  onAddSite,
 }: {
   orderCount: number;
   markets: MarketSummary[];
@@ -1742,6 +2039,9 @@ function OverviewPanel({
   onSite: (id: string) => void;
   onFlood: (flood: SatelliteObservation) => void;
   onImport: () => void;
+  // Editors only. A supplier named on orders opens with its name filled in.
+  onAddSupplier?: (group?: SupplierGroup) => void;
+  onAddSite?: () => void;
 }) {
   const nearby = floods.filter((f) => f.suppliers.length || f.sites.length);
   return (
@@ -1799,9 +2099,19 @@ function OverviewPanel({
           </ul>
         </section>
       )}
-      {suppliers.length > 0 && (
+      {(suppliers.length > 0 || onAddSupplier) && (
         <section className="tm-section">
-          <h3>Suppliers</h3>
+          <SectionHead
+            title="Suppliers"
+            action={onAddSupplier && (() => onAddSupplier())}
+            actionLabel="Add supplier"
+          />
+          {!suppliers.length && (
+            <p className="tm-muted">
+              No suppliers yet. Add one to check its documents against your
+              orders.
+            </p>
+          )}
           <ul className="tm-list">
             {suppliers.map((s) => (
               <li key={s.key}>
@@ -1824,7 +2134,11 @@ function OverviewPanel({
         </section>
       )}
       <section className="tm-section">
-        <h3>Your sites</h3>
+        <SectionHead
+          title="Your sites"
+          action={onAddSite}
+          actionLabel="Add site"
+        />
         {sites.length ? (
           <ul className="tm-list">
             {sites.map((s) => (
@@ -1859,8 +2173,14 @@ function OverviewPanel({
             ))}
             {unlocated.map((s) => (
               <li key={s.key}>
-                <b>{s.name}</b> · no supplier record with a location (
-                {plural(s.rows.length, "order")}).
+                <b>{s.name}</b> ·{" "}
+                {s.id ? "no location on file" : "no supplier record"} (
+                {plural(s.rows.length, "order")}).{" "}
+                {onAddSupplier && (
+                  <button className="text-link" onClick={() => onAddSupplier(s)}>
+                    {s.id ? "Add its location" : "Add a supplier record"}
+                  </button>
+                )}
               </li>
             ))}
           </ul>
@@ -2143,6 +2463,8 @@ function SupplierPanel({
   onCompare,
   onMarket,
   onFlood,
+  onEdit,
+  onCertificate,
 }: {
   group: SupplierGroup;
   documentKinds: TradeMap["documentKinds"];
@@ -2154,6 +2476,9 @@ function SupplierPanel({
   onCompare: (id: string) => void;
   onMarket: (code: string) => void;
   onFlood: (flood: SatelliteObservation) => void;
+  onEdit?: (group: SupplierGroup) => void;
+  // Editors: after a certificate is confirmed, reload the map on this supplier.
+  onCertificate?: (name: string) => Promise<void>;
 }) {
   const near = floods.flatMap((f) =>
     f.suppliers
@@ -2171,6 +2496,12 @@ function SupplierPanel({
         sub={group.supplies}
         onBack={onBack}
       />
+      {onEdit && (
+        <button className="text-link tm-edit" onClick={() => onEdit(group)}>
+          {group.id ? <Pencil size={13} /> : <Plus size={13} />}
+          {group.id ? "Edit supplier" : "Add a supplier record"}
+        </button>
+      )}
       {near.map(({ flood, km }) => (
         <FloodCallout
           key={flood.id}
@@ -2211,7 +2542,8 @@ function SupplierPanel({
         <h3>Documents on file</h3>
         {!group.documents ? (
           <p className="tm-muted">
-            No supplier record yet, so there are no documents to show.
+            No supplier record yet, so there are no documents to show
+            {onEdit ? ". Add one to record what this supplier has on file." : "."}
           </p>
         ) : (
           <ul className="tm-docs">
@@ -2224,7 +2556,12 @@ function SupplierPanel({
                     <b>{label}</b>
                     <small>
                       {doc
-                        ? [doc.detail, doc.standards.join(", ")]
+                        ? [
+                            doc.detail,
+                            doc.standards.join(", "),
+                            doc.expiresOn && `expires ${doc.expiresOn}`,
+                            doc.fromUpload && "from an uploaded certificate",
+                          ]
                             .filter(Boolean)
                             .join(" · ")
                         : "Not on file"}
@@ -2235,8 +2572,199 @@ function SupplierPanel({
             })}
           </ul>
         )}
+        {onCertificate && group.id && (
+          <CertificateUpload
+            supplierId={group.id}
+            supplierName={group.name}
+            documentKinds={documentKinds}
+            onConfirmed={() => onCertificate(group.name)}
+          />
+        )}
       </section>
     </>
+  );
+}
+
+// Upload a certificate, check what AI read from it, confirm. Nothing counts in checks or
+// analysis until a person confirms the fields.
+function CertificateUpload({
+  supplierId,
+  supplierName,
+  documentKinds,
+  onConfirmed,
+}: {
+  supplierId: string;
+  supplierName: string;
+  documentKinds: TradeMap["documentKinds"];
+  onConfirmed: () => Promise<void>;
+}) {
+  const [upload, setUpload] = useState<SupplierDocumentUpload | null>(null);
+  const [fields, setFields] = useState({
+    kind: "",
+    detail: "",
+    standards: "",
+    number: "",
+    issuer: "",
+    expiresOn: "",
+  });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
+  const pick = async (file?: File) => {
+    if (!file) return;
+    setError("");
+    if (!/\.(pdf|png|jpe?g)$/i.test(file.name))
+      return setError("Choose a PDF, PNG or JPEG file.");
+    if (!file.size || file.size > 4 * 1024 * 1024)
+      return setError("Choose a non-empty file up to 4 MB.");
+    setBusy(true);
+    try {
+      const result = await api.uploadSupplierDocument(supplierId, file);
+      const read = result.extracted;
+      setUpload(result);
+      setFields({
+        kind: read.kind ?? "",
+        detail: read.detail,
+        standards: read.standards.join(", "),
+        number: read.documentNumber ?? "",
+        issuer: read.issuer ?? "",
+        expiresOn: read.expiresOn ?? "",
+      });
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const confirm = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!upload) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api.confirmSupplierDocument(upload.id, {
+        kind: fields.kind,
+        detail: fields.detail.trim(),
+        standards: fields.standards
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean),
+        documentNumber: fields.number.trim() || null,
+        issuer: fields.issuer.trim() || null,
+        expiresOn: fields.expiresOn || null,
+      });
+      setUpload(null);
+      await onConfirmed();
+    } catch (e) {
+      setError(errorMessage(e));
+      setBusy(false);
+    }
+  };
+  const set = (change: Partial<typeof fields>) =>
+    setFields((all) => ({ ...all, ...change }));
+  if (!upload)
+    return (
+      <div className="tm-upload">
+        <button
+          type="button"
+          className="text-link"
+          disabled={busy}
+          onClick={() => fileRef.current?.click()}
+        >
+          {busy ? <Loader2 size={13} className="spin" /> : <Upload size={13} />}
+          {busy ? "Reading the certificate…" : "Upload certificate"}
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          hidden
+          aria-label={`Upload a certificate for ${supplierName}`}
+          accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
+          onChange={(e) => {
+            void pick(e.target.files?.[0]);
+            e.target.value = "";
+          }}
+        />
+        <small>PDF, PNG or JPEG, up to 4 MB. AI reads it; you confirm.</small>
+        {error && (
+          <p className="tm-field-error" role="alert">
+            {error}
+          </p>
+        )}
+      </div>
+    );
+  const read = upload.extracted;
+  return (
+    <form className="tm-form tm-upload-form" onSubmit={confirm}>
+      <h3>Check what AI read.</h3>
+      <small>
+        {upload.filename}. Nothing is checked against orders until you
+        confirm. It replaces {supplierName}'s document of the same kind.
+      </small>
+      {read.notes && <p className="tm-muted">Hard to read: {read.notes}</p>}
+      <label htmlFor="tm-cert-kind">Document</label>
+      <select
+        id="tm-cert-kind"
+        required
+        value={fields.kind}
+        onChange={(e) => set({ kind: e.target.value })}
+      >
+        <option value="">Choose a kind</option>
+        {documentKinds.map(({ kind, label }) => (
+          <option key={kind} value={kind}>
+            {label}
+          </option>
+        ))}
+      </select>
+      <label htmlFor="tm-cert-detail">What's on file</label>
+      <input
+        id="tm-cert-detail"
+        required
+        maxLength={1000}
+        value={fields.detail}
+        onChange={(e) => set({ detail: e.target.value })}
+      />
+      <label htmlFor="tm-cert-number">Document number (optional)</label>
+      <input
+        id="tm-cert-number"
+        maxLength={100}
+        value={fields.number}
+        onChange={(e) => set({ number: e.target.value })}
+      />
+      <label htmlFor="tm-cert-issuer">Issued by (optional)</label>
+      <input
+        id="tm-cert-issuer"
+        maxLength={200}
+        value={fields.issuer}
+        onChange={(e) => set({ issuer: e.target.value })}
+      />
+      {read.issuedOn && (
+        <small>Issued on {read.issuedOn}, as read from the file.</small>
+      )}
+      <label htmlFor="tm-cert-expires">Expires on (optional)</label>
+      <input
+        id="tm-cert-expires"
+        type="date"
+        value={fields.expiresOn}
+        onChange={(e) => set({ expiresOn: e.target.value })}
+      />
+      <label htmlFor="tm-cert-standards">Standards (optional)</label>
+      <input
+        id="tm-cert-standards"
+        value={fields.standards}
+        placeholder="Comma-separated, e.g. FSC-STD-40-004"
+        onChange={(e) => set({ standards: e.target.value })}
+      />
+      <FormActions
+        busy={busy}
+        saveLabel="Confirm certificate"
+        error={error}
+        onCancel={() => {
+          setUpload(null);
+          setError("");
+        }}
+      />
+    </form>
   );
 }
 
@@ -2248,6 +2776,7 @@ function SitePanel({
   onBack,
   onSupplier,
   onFlood,
+  onEdit,
 }: {
   site: MapSite;
   suppliers: SupplierGroup[];
@@ -2256,6 +2785,7 @@ function SitePanel({
   onBack: () => void;
   onSupplier: (name: string) => void;
   onFlood: (flood: SatelliteObservation) => void;
+  onEdit?: (site: MapSite) => void;
 }) {
   const near = floods.flatMap((f) =>
     f.sites
@@ -2270,6 +2800,15 @@ function SitePanel({
         sub={site.note}
         onBack={onBack}
       />
+      {onEdit && (
+        <button className="text-link tm-edit" onClick={() => onEdit(site)}>
+          <Pencil size={13} />
+          Edit site
+        </button>
+      )}
+      {site.isRouteOrigin && (
+        <p className="tm-muted">Order routes on the world map start here.</p>
+      )}
       {near.map(({ flood, km }) => (
         <FloodCallout
           key={flood.id}
@@ -2309,6 +2848,661 @@ function SitePanel({
         </section>
       )}
     </>
+  );
+}
+
+function SectionHead({
+  title,
+  action,
+  actionLabel,
+}: {
+  title: string;
+  action?: () => void;
+  actionLabel: string;
+}) {
+  return (
+    <div className="tm-section-head">
+      <h3>{title}</h3>
+      {action && (
+        <button className="text-link" onClick={action}>
+          <Plus size={13} />
+          {actionLabel}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// Latitude first, the way map apps copy a point: "10.95, 106.82".
+function parseLocation(text: string): LonLat | null | "invalid" {
+  const value = text.trim();
+  if (!value) return null;
+  const match = /^(-?\d+(?:\.\d+)?)°?\s*[,;\s]\s*(-?\d+(?:\.\d+)?)°?$/.exec(
+    value,
+  );
+  if (!match) return "invalid";
+  const lat = Number(match[1]),
+    lon = Number(match[2]);
+  return Math.abs(lat) <= 90 && Math.abs(lon) <= 180 ? [lon, lat] : "invalid";
+}
+const formatLocation = ([lon, lat]: LonLat) =>
+  `${Number(lat.toFixed(5))}, ${Number(lon.toFixed(5))}`;
+
+function LocationField({
+  id,
+  pin,
+  required,
+  onPin,
+  onValid,
+}: {
+  id: string;
+  pin: Pin | null;
+  required?: boolean;
+  onPin: (pin: Pin | null) => void;
+  onValid: (valid: boolean) => void;
+}) {
+  const [text, setText] = useState(pin ? formatLocation(pin.at) : "");
+  // A click on the map replaces whatever was typed.
+  useEffect(() => {
+    if (!pin?.picked) return;
+    setText(formatLocation(pin.at));
+    onValid(true);
+  }, [pin?.picked]);
+  const invalid = parseLocation(text) === "invalid";
+  return (
+    <>
+      <label htmlFor={id}>Location{required ? "" : " (optional)"}</label>
+      <input
+        id={id}
+        value={text}
+        required={required}
+        autoComplete="off"
+        placeholder="10.95, 106.82"
+        aria-invalid={invalid}
+        aria-describedby={id + "-hint"}
+        onChange={(e) => {
+          setText(e.target.value);
+          const next = parseLocation(e.target.value);
+          onValid(next !== "invalid");
+          onPin(
+            next && next !== "invalid"
+              ? { at: next, country: null, picked: pin?.picked ?? 0 }
+              : null,
+          );
+        }}
+      />
+      <small id={id + "-hint"} className={invalid ? "tm-field-error" : ""}>
+        {invalid
+          ? "Write latitude, then longitude, for example 10.95, 106.82."
+          : "Click the map, or paste latitude and longitude from a map app."}
+      </small>
+    </>
+  );
+}
+
+function CountryField({
+  id,
+  value,
+  countries,
+  onChange,
+}: {
+  id: string;
+  value: string;
+  countries: TradeMap["countries"];
+  onChange: (code: string) => void;
+}) {
+  return (
+    <>
+      <label htmlFor={id}>Country</label>
+      <select id={id} value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">Not set</option>
+        {countries.map((c) => (
+          <option key={c.code} value={c.code}>
+            {c.name}
+          </option>
+        ))}
+      </select>
+    </>
+  );
+}
+
+function FormActions({
+  busy,
+  saveLabel,
+  error,
+  onCancel,
+}: {
+  busy: boolean;
+  saveLabel: string;
+  error: string;
+  onCancel: () => void;
+}) {
+  return (
+    <>
+      {error && (
+        <p className="tm-field-error" role="alert">
+          {error}
+        </p>
+      )}
+      <div className="tm-form-actions">
+        <button className="btn" type="submit" disabled={busy}>
+          {busy ? <Loader2 size={15} className="spin" /> : <Check size={15} />}
+          {saveLabel}
+        </button>
+        <button className="text-link" type="button" onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
+    </>
+  );
+}
+
+function DeleteRecord({
+  what,
+  consequence,
+  busy,
+  onDelete,
+}: {
+  what: string;
+  consequence: string;
+  busy: boolean;
+  onDelete: () => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  if (!confirming)
+    return (
+      <button
+        type="button"
+        className="text-link tm-delete"
+        onClick={() => setConfirming(true)}
+      >
+        <Trash2 size={13} />
+        Delete {what}
+      </button>
+    );
+  return (
+    <div className="tm-confirm" role="group" aria-label={`Delete ${what}`}>
+      <p>{consequence}</p>
+      <div className="tm-form-actions">
+        <button
+          type="button"
+          className="btn tm-danger"
+          disabled={busy}
+          onClick={onDelete}
+        >
+          <Trash2 size={15} />
+          Delete {what}
+        </button>
+        <button
+          type="button"
+          className="text-link"
+          onClick={() => setConfirming(false)}
+        >
+          Keep it
+        </button>
+      </div>
+    </div>
+  );
+}
+
+type DocumentDraft = {
+  on: boolean;
+  detail: string;
+  standards: string;
+  number: string;
+  issuer: string;
+  expiresOn: string;
+};
+
+function SupplierForm({
+  group,
+  name: suggestedName,
+  documentKinds,
+  countries,
+  pin,
+  onPin,
+  onSaved,
+  onDeleted,
+  onCancel,
+}: {
+  group: SupplierGroup | null;
+  name?: string;
+  documentKinds: TradeMap["documentKinds"];
+  countries: TradeMap["countries"];
+  pin: Pin | null;
+  onPin: (pin: Pin | null) => void;
+  onSaved: (name: string) => Promise<void>;
+  onDeleted: () => Promise<void>;
+  onCancel: () => void;
+}) {
+  const record = group?.id ? group : null;
+  const [name, setName] = useState(group?.name ?? suggestedName ?? "");
+  const [place, setPlace] = useState(record?.place ?? "");
+  const [country, setCountry] = useState(record?.country ?? "");
+  const [supplies, setSupplies] = useState(record?.supplies ?? "");
+  const [contactName, setContactName] = useState(record?.contactName ?? "");
+  const [contactEmail, setContactEmail] = useState(record?.contactEmail ?? "");
+  const [documents, setDocuments] = useState<Record<string, DocumentDraft>>(
+    () =>
+      Object.fromEntries(
+        documentKinds.map(({ kind }) => {
+          const doc = record?.documents?.find((d) => d.kind === kind);
+          return [
+            kind,
+            {
+              on: !!doc,
+              detail: doc?.detail ?? "",
+              standards: doc?.standards.join(", ") ?? "",
+              number: doc?.documentNumber ?? "",
+              issuer: doc?.issuer ?? "",
+              expiresOn: doc?.expiresOn ?? "",
+            },
+          ];
+        }),
+      ),
+  );
+  const [locationValid, setLocationValid] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    if (pin?.picked && pin.country) setCountry(pin.country);
+  }, [pin?.picked]);
+  const editDocument = (kind: string, change: Partial<DocumentDraft>) =>
+    setDocuments((all) => ({ ...all, [kind]: { ...all[kind], ...change } }));
+  const renamed =
+    !!record && !!name.trim() && supplierKey(name) !== record.key;
+
+  const run = async (action: () => Promise<void>) => {
+    setBusy(true);
+    setError("");
+    try {
+      await action();
+    } catch (e) {
+      setError(errorMessage(e));
+      setBusy(false);
+    }
+  };
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!locationValid)
+      return setError("Fix the location, or leave it empty.");
+    const body: SupplierInput = {
+      name: name.trim(),
+      place: place.trim() || null,
+      country: country || null,
+      location: pin ? { latitude: pin.at[1], longitude: pin.at[0] } : null,
+      supplies: supplies.trim() || null,
+      contactName: contactName.trim() || null,
+      contactEmail: contactEmail.trim() || null,
+      documents: documentKinds
+        .filter(({ kind }) => documents[kind].on)
+        .map(({ kind }) => ({
+          kind,
+          detail: documents[kind].detail.trim(),
+          standards: documents[kind].standards
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean),
+          documentNumber: documents[kind].number.trim() || null,
+          issuer: documents[kind].issuer.trim() || null,
+          expiresOn: documents[kind].expiresOn || null,
+        })),
+    };
+    run(async () => {
+      const saved = record
+        ? await api.updateSupplier(record.id!, body)
+        : await api.createSupplier(body);
+      await onSaved(saved.name);
+    });
+  };
+
+  return (
+    <form className="tm-form" onSubmit={submit}>
+      <PanelHead
+        eyebrow={record ? "EDIT SUPPLIER" : "NEW SUPPLIER"}
+        title={record ? record.name + "." : "Add a supplier."}
+        sub="Orders are matched to a supplier by name, ignoring case and spacing."
+      />
+      <label htmlFor="tm-supplier-name">Name</label>
+      <input
+        id="tm-supplier-name"
+        required
+        maxLength={300}
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="As it's written on your orders"
+      />
+      {renamed && record.rows.length > 0 && (
+        <small className="tm-field-error">
+          {plural(record.rows.length, "order")} name “{record.name}”. After
+          renaming, they won't be checked against this supplier.
+        </small>
+      )}
+      <label htmlFor="tm-supplier-place">Place (optional)</label>
+      <input
+        id="tm-supplier-place"
+        maxLength={200}
+        value={place}
+        onChange={(e) => setPlace(e.target.value)}
+        placeholder="Town, province"
+      />
+      <CountryField
+        id="tm-supplier-country"
+        value={country}
+        countries={countries}
+        onChange={setCountry}
+      />
+      <LocationField
+        id="tm-supplier-location"
+        pin={pin}
+        onPin={onPin}
+        onValid={setLocationValid}
+      />
+      <label htmlFor="tm-supplier-supplies">What they supply (optional)</label>
+      <textarea
+        id="tm-supplier-supplies"
+        maxLength={1000}
+        value={supplies}
+        onChange={(e) => setSupplies(e.target.value)}
+        placeholder="Acacia plywood, rubberwood panels"
+      />
+      <label htmlFor="tm-supplier-contact-name">Contact person (optional)</label>
+      <input
+        id="tm-supplier-contact-name"
+        maxLength={200}
+        value={contactName}
+        onChange={(e) => setContactName(e.target.value)}
+        placeholder="Nguyen Van Minh"
+      />
+      <label htmlFor="tm-supplier-contact-email">Contact email (optional)</label>
+      <input
+        id="tm-supplier-contact-email"
+        type="email"
+        maxLength={254}
+        value={contactEmail}
+        onChange={(e) => setContactEmail(e.target.value)}
+        placeholder="sales@supplier.com"
+      />
+      <fieldset className="tm-doc-fields">
+        <legend>Documents on file</legend>
+        <small>
+          Tick what this supplier has given you. Orders' market checklists are
+          checked against it.
+        </small>
+        {documentKinds.map(({ kind, label }) => {
+          const doc = documents[kind];
+          return (
+            <div key={kind} className={"tm-doc-field" + (doc.on ? " on" : "")}>
+              <label className="tm-check">
+                <input
+                  type="checkbox"
+                  checked={doc.on}
+                  onChange={(e) => editDocument(kind, { on: e.target.checked })}
+                />
+                {label}
+              </label>
+              {doc.on && (
+                <>
+                  <input
+                    aria-label={`${label}: what's on file`}
+                    required
+                    maxLength={500}
+                    value={doc.detail}
+                    onChange={(e) =>
+                      editDocument(kind, { detail: e.target.value })
+                    }
+                    placeholder="What's on file, e.g. Test report, Mar 2026"
+                  />
+                  <input
+                    aria-label={`${label}: test standards`}
+                    value={doc.standards}
+                    onChange={(e) =>
+                      editDocument(kind, { standards: e.target.value })
+                    }
+                    placeholder="Test standards, comma-separated (optional)"
+                  />
+                  <input
+                    aria-label={`${label}: document number`}
+                    maxLength={100}
+                    value={doc.number}
+                    onChange={(e) =>
+                      editDocument(kind, { number: e.target.value })
+                    }
+                    placeholder="Document number (optional)"
+                  />
+                  <input
+                    aria-label={`${label}: issuer`}
+                    maxLength={200}
+                    value={doc.issuer}
+                    onChange={(e) =>
+                      editDocument(kind, { issuer: e.target.value })
+                    }
+                    placeholder="Issued by (optional)"
+                  />
+                  <label className="tm-doc-expiry">
+                    Expires on (optional)
+                    <input
+                      type="date"
+                      aria-label={`${label}: expires on`}
+                      value={doc.expiresOn}
+                      onChange={(e) =>
+                        editDocument(kind, { expiresOn: e.target.value })
+                      }
+                    />
+                  </label>
+                </>
+              )}
+            </div>
+          );
+        })}
+      </fieldset>
+      <FormActions
+        busy={busy}
+        saveLabel={record ? "Save supplier" : "Add supplier"}
+        error={error}
+        onCancel={onCancel}
+      />
+      {record && (
+        <DeleteRecord
+          what="supplier"
+          busy={busy}
+          consequence={`Delete ${record.name} and its documents? ${
+            record.rows.length
+              ? `Its ${plural(record.rows.length, "order")} stay, without a supplier record to check.`
+              : ""
+          }`}
+          onDelete={() =>
+            run(async () => {
+              await api.deleteSupplier(record.id!);
+              await onDeleted();
+            })
+          }
+        />
+      )}
+    </form>
+  );
+}
+
+const SITE_KINDS: { kind: MapSite["kind"]; label: string }[] = [
+  { kind: "factory", label: "Factory" },
+  { kind: "warehouse", label: "Warehouse" },
+  { kind: "port", label: "Port" },
+];
+
+function SiteForm({
+  site,
+  originName,
+  countries,
+  pin,
+  onPin,
+  onSaved,
+  onDeleted,
+  onCancel,
+}: {
+  site: MapSite | null;
+  originName: string | null; // the site routes start from now, if any
+  countries: TradeMap["countries"];
+  pin: Pin | null;
+  onPin: (pin: Pin | null) => void;
+  onSaved: (key: string) => Promise<void>;
+  onDeleted: () => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [kind, setKind] = useState<MapSite["kind"]>(site?.kind ?? "factory");
+  const [name, setName] = useState(site?.name ?? "");
+  const [shortName, setShortName] = useState(
+    site && site.shortName !== site.name ? site.shortName : "",
+  );
+  const [place, setPlace] = useState(site?.place ?? "");
+  const [country, setCountry] = useState(site?.country ?? "");
+  const [note, setNote] = useState(site?.note ?? "");
+  const [origin, setOrigin] = useState(
+    site ? site.isRouteOrigin : !originName,
+  );
+  const [locationValid, setLocationValid] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    if (pin?.picked && pin.country) setCountry(pin.country);
+  }, [pin?.picked]);
+
+  const run = async (action: () => Promise<void>) => {
+    setBusy(true);
+    setError("");
+    try {
+      await action();
+    } catch (e) {
+      setError(errorMessage(e));
+      setBusy(false);
+    }
+  };
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!locationValid || !pin)
+      return setError("Click the map where the site is, or enter its coordinates.");
+    const body: SiteInput = {
+      kind,
+      name: name.trim(),
+      shortName: shortName.trim() || name.trim().slice(0, 60).trim(),
+      place: place.trim(),
+      country: country || null,
+      location: { latitude: pin.at[1], longitude: pin.at[0] },
+      note: note.trim(),
+      isRouteOrigin: origin,
+    };
+    run(async () => {
+      const saved = site
+        ? await api.updateSite(site.id, body)
+        : await api.createSite(body);
+      await onSaved(saved.key);
+    });
+  };
+  const movesOrigin =
+    origin && !site?.isRouteOrigin && originName && originName !== site?.name;
+
+  return (
+    <form className="tm-form" onSubmit={submit}>
+      <PanelHead
+        eyebrow={site ? "EDIT SITE" : "NEW SITE"}
+        title={site ? site.name + "." : "Add a site."}
+        sub="A factory, warehouse or port of your own."
+      />
+      <label htmlFor="tm-site-kind">Kind</label>
+      <select
+        id="tm-site-kind"
+        value={kind}
+        onChange={(e) => setKind(e.target.value as MapSite["kind"])}
+      >
+        {SITE_KINDS.map((k) => (
+          <option key={k.kind} value={k.kind}>
+            {k.label}
+          </option>
+        ))}
+      </select>
+      <label htmlFor="tm-site-name">Name</label>
+      <input
+        id="tm-site-name"
+        required
+        maxLength={200}
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Cat Lai bonded warehouse"
+      />
+      <label htmlFor="tm-site-short">Label on the map (optional)</label>
+      <input
+        id="tm-site-short"
+        maxLength={60}
+        value={shortName}
+        onChange={(e) => setShortName(e.target.value)}
+        placeholder={name.trim().slice(0, 60) || "Cat Lai"}
+      />
+      <label htmlFor="tm-site-place">Place</label>
+      <input
+        id="tm-site-place"
+        required
+        maxLength={200}
+        value={place}
+        onChange={(e) => setPlace(e.target.value)}
+        placeholder="Ho Chi Minh City port"
+      />
+      <CountryField
+        id="tm-site-country"
+        value={country}
+        countries={countries}
+        onChange={setCountry}
+      />
+      <LocationField
+        id="tm-site-location"
+        pin={pin}
+        required
+        onPin={onPin}
+        onValid={setLocationValid}
+      />
+      <label htmlFor="tm-site-note">Note (optional)</label>
+      <textarea
+        id="tm-site-note"
+        maxLength={1000}
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        placeholder="Production and warehouses WH-1, WH-2."
+      />
+      <label className="tm-check">
+        <input
+          type="checkbox"
+          checked={origin}
+          onChange={(e) => setOrigin(e.target.checked)}
+        />
+        Order routes start here
+      </label>
+      <small>
+        {movesOrigin
+          ? `Routes start from ${originName} now. Saving moves the start here.`
+          : "Routes on the world map, and route comparisons, start from one site."}
+      </small>
+      <FormActions
+        busy={busy}
+        saveLabel={site ? "Save site" : "Add site"}
+        error={error}
+        onCancel={onCancel}
+      />
+      {site && (
+        <DeleteRecord
+          what="site"
+          busy={busy}
+          consequence={`Delete ${site.name}?${
+            site.isRouteOrigin
+              ? " Routes start here; without it they start from your company profile's origin, or not at all."
+              : ""
+          }`}
+          onDelete={() =>
+            run(async () => {
+              await api.deleteSite(site.id);
+              await onDeleted();
+            })
+          }
+        />
+      )}
+    </form>
   );
 }
 
@@ -2507,16 +3701,22 @@ function ScenarioPanel({
   scenario,
   renderStatus,
   onChange,
+  onComparison,
   onClose,
   onOpenOrder,
+  editable,
 }: {
   rows: Row[];
   markets: MapMarket[];
   scenario: Scenario;
   renderStatus: (order: Order) => React.ReactNode;
   onChange: (scenario: Scenario) => void;
+  onComparison: (
+    result: { key: string; comparison: MarketComparison } | null,
+  ) => void;
   onClose: () => void;
   onOpenOrder: (id: string) => void;
+  editable: boolean;
 }) {
   const row = rows.find((r) => r.order.id === scenario.orderId) ?? rows[0];
   const [result, setResult] = useState<{
@@ -2529,6 +3729,7 @@ function ScenarioPanel({
       ? JSON.stringify([row.order.id, scenario.mode, scenario.target])
       : "";
   useEffect(() => {
+    onComparison(null);
     if (!requestKey) return;
     const [orderId, mode, target] = JSON.parse(requestKey) as [
       string,
@@ -2544,15 +3745,17 @@ function ScenarioPanel({
           : api.compareMarkets(orderId, target, controller.signal);
     call
       .then((comparison) => {
-        if (!controller.signal.aborted)
+        if (!controller.signal.aborted) {
           setResult({ key: requestKey, comparison });
+          onComparison({ key: requestKey, comparison });
+        }
       })
       .catch((e) => {
         if (!controller.signal.aborted)
           setResult({ key: requestKey, error: errorMessage(e) });
       });
     return () => controller.abort();
-  }, [requestKey]);
+  }, [requestKey, onComparison]);
   if (!row) return null;
   const from = row.placement.market;
   const nameOf = (code: string | null) =>
@@ -2787,6 +3990,20 @@ function ScenarioPanel({
           </p>
         </>
       )}
+      <ScenarioNotes
+        orderId={row.order.id}
+        kind={scenario.mode === "date" ? "ship_date" : scenario.mode}
+        target={scenario.target}
+        ready={!!comparison}
+        editable={editable}
+        onShow={(saved) =>
+          onChange({
+            orderId: saved.orderId,
+            mode: saved.kind === "ship_date" ? "date" : saved.kind,
+            target: saved.target,
+          })
+        }
+      />
       <button className="text-link" onClick={() => onOpenOrder(row.order.id)}>
         Open {row.order.id} <ArrowUpRight size={14} />
       </button>

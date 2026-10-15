@@ -693,3 +693,27 @@
   opacity: 0.5;
   cursor: progress;
 }
+
+/* Onboarding: invitations to join a company (GET /me/invites) above the wizard. */
+.ac-invites {
+  border-bottom: 1px solid #d8dece;
+  margin-bottom: 24px;
+  padding-bottom: 8px;
+}
+.ac-invite {
+  border: 1px solid #b6c5a9;
+  padding: 14px 16px 2px;
+  margin: 12px 0;
+}
+.ac-invite p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.ac-invite .ac-primary {
+  margin: 14px 0 4px;
+}
+.ac-invites-or {
+  font-size: 12px;
+  color: #6b7a5f;
+}

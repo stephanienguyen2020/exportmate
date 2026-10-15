@@ -8,7 +8,7 @@ from app.core.auth import ViewerContext
 from app.core.errors import AppError
 from app.database.session import get_db
 from app.schemas.common import SuccessResponse, success_response
-from app.schemas.trade_map import MarketComparisonOut, TradeMapOut
+from app.schemas.trade_map import ChecklistChangesOut, MarketComparisonOut, TradeMapOut
 from app.services import trade_map as trade_map_service
 
 router = APIRouter(prefix="/trade-map", tags=["trade map"])
@@ -20,6 +20,18 @@ def get_trade_map(ctx: ViewerContext, db: Db):
     """Markets, the company's orders placed on the map with their document checks, its
     suppliers and sites, and satellite observations with the places near them."""
     return success_response(trade_map_service.build_trade_map(db, ctx))
+
+
+@router.get("/changes", response_model=SuccessResponse[ChecklistChangesOut])
+def get_checklist_changes(
+    ctx: ViewerContext,
+    db: Db,
+    days: Annotated[int | None, Query(ge=1, le=365)] = None,
+):
+    """Checklist lines in the markets of the company's open orders that take effect or change
+    in the next `days` days (default RULE_WATCH_DAYS), with the open orders shipping on or
+    after each date."""
+    return success_response(trade_map_service.build_checklist_changes(db, ctx, days))
 
 
 @router.get("/compare", response_model=SuccessResponse[MarketComparisonOut])

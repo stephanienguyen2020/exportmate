@@ -55,6 +55,9 @@
   width: 100%;
   line-height: 1.7;
   resize: vertical;
+}
+.report-note,
+.report-header-fields textarea {
   min-height: 74px;
 }
 .report-list {

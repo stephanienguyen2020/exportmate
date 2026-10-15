@@ -1,9 +1,16 @@
+import re
 from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
 DataT = TypeVar("DataT")
+# One address, no display name: what a person types into a "To" field.
+EMAIL_ADDRESS = re.compile(r"^[^@\s,;<>\"()]+@[^@\s,;<>\"()]+\.[A-Za-z]{2,}$")
+
+
+def is_email_address(text: str) -> bool:
+    return len(text) <= 254 and EMAIL_ADDRESS.match(text) is not None
 
 
 class CamelCaseModel(BaseModel):

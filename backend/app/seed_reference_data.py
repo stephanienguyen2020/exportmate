@@ -1,7 +1,7 @@
 """Load the shared trade-map reference data into Postgres.
 
-Markets, countries, ports, document kinds, per-market requirement checklists and sample
-satellite observations, from the JSON files in app/seed_data/. Each market requirement cites
+Markets, countries, ports, document kinds, order statuses, per-market requirement checklists,
+cost defaults and sample satellite observations, from the JSON files in app/seed_data/. Each market requirement cites
 an official text (regulation_sources.json): the seed downloads each text once into a shared
 regulation document. A market requirement whose text can't be downloaded is left out until
 the next run.
@@ -12,6 +12,7 @@ place; checklist lines removed from the file are removed from the database.
 """
 
 import argparse
+import hashlib
 import logging
 import math
 import re
@@ -21,9 +22,12 @@ from datetime import date
 
 from sqlalchemy.orm import Session
 
+from app.core import gemini
 from app.core.config import get_settings
 from app.core.errors import AppError
 from app.core.logging import configure_logging
+from app.database.queries import hs_codes as hs_queries
+from app.database.queries import orders as order_queries
 from app.database.queries import regulations as regulation_queries
 from app.database.queries import trade_map as map_queries
 from app.database.session import open_session
@@ -107,9 +111,30 @@ def seed_shared_regulations(db: Session) -> tuple[dict[str, uuid.UUID], list[str
     return document_ids, saved_paths
 
 
+def seed_order_statuses(db: Session) -> int:
+    """How each order status is named and shown, and which ones a person may set by hand."""
+    statuses = load_seed_file("reference.json")["orderStatuses"]
+    order_queries.upsert_order_statuses(
+        db,
+        [
+            {
+                "code": s["code"],
+                "label": s["label"],
+                "description": s["description"],
+                "tone": s["tone"],
+                "manual": s["manual"],
+                "sort_order": i,
+            }
+            for i, s in enumerate(statuses)
+        ],
+    )
+    return len(statuses)
+
+
 def seed_reference_data(db: Session) -> dict[str, int]:
     reference = load_seed_file("reference.json")
     document_ids, saved_paths = seed_shared_regulations(db)
+    order_status_count = seed_order_statuses(db)
     map_queries.upsert_document_kinds(
         db,
         [
@@ -185,13 +210,28 @@ def seed_reference_data(db: Session) -> dict[str, int]:
                 "route_sensitive": r.get("routeSensitive", False),
                 "regulation_document_id": document_ids[r["source"]],
                 "source_quote": r["quote"],
+                "duty_rate_percent": r.get("dutyRatePercent"),
                 "sort_order": i,
             }
             for i, r in enumerate(items)
             if r["source"] in document_ids
         ]
-        map_queries.replace_market_requirements(db, market_code, rows)
+        map_queries.replace_shared_market_requirements(db, market_code, rows)
         requirement_count += len(rows)
+
+    map_queries.upsert_cost_defaults(
+        db,
+        [
+            {
+                "key": c["key"],
+                "label": c["label"],
+                "unit": c["unit"],
+                "value": c["value"],
+                "sort_order": i,
+            }
+            for i, c in enumerate(reference["costDefaults"])
+        ],
+    )
 
     observations = load_seed_file("satellite_observations.json")["observations"]
     map_queries.upsert_satellite_observations(
@@ -221,14 +261,54 @@ def seed_reference_data(db: Session) -> dict[str, int]:
     regulation_service.commit_or_delete_saved_files(db, saved_paths)
     counts = {
         "official_texts": len(document_ids),
+        "order_statuses": order_status_count,
         "document_kinds": len(reference["documentKinds"]),
         "markets": len(reference["markets"]),
         "countries": len(reference["countries"]),
         "ports": len(reference["ports"]),
         "requirements": requirement_count,
+        "cost_defaults": len(reference["costDefaults"]),
         "observations": len(observations),
     }
     log.info("seed.reference_loaded", extra=counts)
+    return counts
+
+
+def seed_hs_headings(db: Session) -> dict[str, int]:
+    """Load the official tariff lines (seed_data/hs_headings.json) and embed the new or changed
+    ones. If embedding fails (no AI access), the lines still load: HS suggestions then search
+    them by words, and the next run embeds them."""
+    headings = load_seed_file("hs_headings.json")["headings"]
+    hs_queries.upsert_hs_headings(
+        db,
+        [
+            {
+                "code": h["code"],
+                "digits": h["code"].replace(".", ""),
+                "level": len(h["code"].replace(".", "")),
+                "description": h["description"],
+                "text_hash": hashlib.sha256(h["description"].encode()).hexdigest(),
+            }
+            for h in headings
+        ],
+    )
+    missing = hs_queries.list_headings_without_embedding(db)
+    embedded = 0
+    if missing:
+        try:
+            vectors = gemini.embed_texts([h.description for h in missing], "RETRIEVAL_DOCUMENT")
+            hs_queries.set_heading_embeddings(
+                db, {h.code: v for h, v in zip(missing, vectors, strict=True)}
+            )
+            embedded = len(missing)
+        except AppError as error:
+            log.warning(
+                "seed.hs_embedding_failed", extra={"missing": len(missing), "error": error.code}
+            )
+    db.commit()
+    total, with_embedding = hs_queries.count_hs_headings(db)
+    counts = {"hs_headings": total, "hs_embedded_now": embedded, "hs_embedded": with_embedding}
+    log.info("seed.hs_headings_loaded", extra=counts)
     return counts
 
 
@@ -238,6 +318,7 @@ def main() -> None:
     configure_logging(settings.log_level, settings.resolved_log_format)
     with open_session() as db:
         counts = seed_reference_data(db)
+        counts |= seed_hs_headings(db)
     print("Reference data loaded: " + ", ".join(f"{v} {k}" for k, v in counts.items()))
 
 

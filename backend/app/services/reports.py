@@ -2,7 +2,8 @@
 
 Two kinds, generated from the same data as the trade map (services/trade_map.py):
 - order: one order, its market's document checklist with the official text behind each line,
-  and the CSV row it came from.
+  what its latest analysis found (costs, playbook rules, next step; services/analysis.py), and
+  the CSV row it came from.
 - company: what is happening (checklist changes, new regulation versions, floods near suppliers
   and sites, news alerts) and what it affects (orders with document gaps, suppliers).
 
@@ -10,7 +11,8 @@ Generating stores a draft with the report twice: `original` and an editable `con
 part of `content` can be edited, but the PDF shades each line that differs from `original`,
 and says what was changed, added or removed and by whom. Sending locks the draft.
 
-Neither is the phase 2 exposure report (docs/REQUIREMENTS.md §4.6), which prices exposures.
+The order report is the shareable copy of the order's analysis: analysis (GET /reports/{id})
+decides statuses and costs, and this report repeats them for a reader outside the app.
 """
 
 import html
@@ -30,11 +32,13 @@ from app.core.email import EmailAttachment, OutgoingEmail, get_email_sender
 from app.core.errors import AppError, not_found_error
 from app.core.news_alerts import fetch_news_alerts
 from app.database.models import ReportDraft, ReportKind
+from app.database.queries import analysis as analysis_queries
 from app.database.queries import audit as audit_queries
+from app.database.queries import news_reviews as news_queries
 from app.database.queries import orders as order_queries
 from app.database.queries import regulations as regulation_queries
 from app.database.queries import reports as report_queries
-from app.database.queries import trade_map as map_queries
+from app.schemas.analysis import ReportContentOut as AnalysisContent
 from app.schemas.orders import OrderOut
 from app.schemas.reports import (
     ReportContent,
@@ -108,6 +112,18 @@ def plural(count: int, word: str, many: str | None = None) -> str:
     return f"{count} {word if count == 1 else many or word + 's'}"
 
 
+_TRAILING_URL = re.compile(r"^(.*)\n(https?://\S+)\s*$", re.DOTALL)
+
+
+def cell_link(text: str) -> tuple[str, str | None]:
+    """'Publisher\nhttps://…' renders as 'Publisher ›' linking to the URL, so long feed URLs
+    don't swell a table row. Any other text is shown as written."""
+    match = _TRAILING_URL.match(text)
+    if not match or not match.group(1).strip():
+        return text, None
+    return f"{match.group(1).strip()} ›", match.group(2)
+
+
 def report_filename(title: str) -> str:
     safe = re.sub(r"[^A-Za-z0-9._-]+", "-", title).strip("-.")[:80] or "report"
     return f"exportmate-{safe}.pdf"
@@ -171,6 +187,101 @@ def _check_rows(checklist: MapOrderOut, citations: _Citations) -> list[ReportRow
             tone="gap" if check.status in GAP_STATUSES else None,
         )
         for check in checklist.checks
+    ]
+
+
+def money_text(amount_minor: int, currency: str) -> str:
+    return f"{currency} {amount_minor / 100:,.2f}"
+
+
+def _analysis_sections(db: Session, order, checklist: MapOrderOut) -> list[ReportSection]:
+    """What the order's latest analysis found. Analysis is started by an editor (POST /runs),
+    never by preparing a report, since it changes order statuses."""
+    report = analysis_queries.get_latest_order_report(db, order.id)
+    analysis = AnalysisContent.model_validate(report.content) if report else None
+    rows: list[ReportRow] = []
+    note = "Not analysed yet: run an analysis to see costs and the next step."
+    if analysis:
+        note = f"From the analysis of {format_day(report.created_at.date())}."
+        then = {f.requirement_key: f.status for f in analysis.findings}
+        now = {c.requirement_key: c.status for c in checklist.checks}
+        if then != now:
+            note += " The checklist has changed since; run the analysis again."
+        totals = ", ".join(money_text(v, c) for c, v in sorted(analysis.cost_totals.items()))
+        rows = [
+            ReportRow(id="analysis-next", cells=["Next step", analysis.suggested_action.text]),
+            ReportRow(id="analysis-cost", cells=["Estimated cost", totals or "None"]),
+            ReportRow(
+                id="analysis-state",
+                cells=["Review", report.state.value.replace("_", " ")],
+                tone="warn" if report.state.value != "pass" else None,
+            ),
+            *[
+                ReportRow(
+                    id=f"analysis-rule-{i}",
+                    cells=[
+                        "Playbook rule",
+                        f"{r.text} ({r.action.replace('_', ' ')})"
+                        + (f": {r.note}" if r.note else ""),
+                    ],
+                )
+                for i, r in enumerate(analysis.rules_fired)
+            ],
+            *[
+                ReportRow(id=f"analysis-missing-{i}", cells=["Missing data", text], tone="warn")
+                for i, text in enumerate(analysis.missing_data)
+            ],
+        ]
+    cost_rows = (
+        [
+            ReportRow(
+                id=f"cost-{i}",
+                cells=[
+                    line.label,
+                    line.formula,
+                    money_text(line.amount_minor, line.currency),
+                    ", ".join(b.label for b in line.basis),
+                ],
+            )
+            for i, line in enumerate(analysis.cost_lines)
+        ]
+        + [
+            ReportRow(
+                id=f"unpriced-{i}",
+                cells=[cost.label, cost.reason, "Not priced", cost.source.regulation_title],
+                tone="warn",
+            )
+            for i, cost in enumerate(analysis.unpriced_costs)
+        ]
+        if analysis
+        else []
+    )
+    return [
+        ReportSection(
+            id="analysis",
+            layout="facts",
+            heading="Analysis",
+            note=note,
+            empty="No analysis for this order yet.",
+            columns=["Item", "Detail"],
+            widths=[32, 68],
+            tone_column=1,
+            rows=rows,
+        ),
+        ReportSection(
+            id="costs",
+            layout="table",
+            heading="Estimated costs",
+            note="Each amount names where its number came from: the regulation, the company's "
+            "own setting, or the default.",
+            empty="No costs: nothing missing, and no duty applies."
+            if analysis
+            else "No analysis for this order yet.",
+            columns=["Cost", "How", "Amount", "Based on"],
+            widths=[30, 28, 16, 26],
+            tone_column=2,
+            rows=cost_rows,
+        ),
     ]
 
 
@@ -243,6 +354,7 @@ def build_order_report_content(db: Session, ctx: CompanyContext, order_id: str) 
                 tone_column=1,
                 rows=check_rows,
             ),
+            *_analysis_sections(db, order, checklist),
             citations.section(),
             ReportSection(
                 id="origin",
@@ -280,47 +392,32 @@ class _CompanyFacts:
 
 def _change_section(
     db: Session,
+    ctx: CompanyContext,
     open_orders: list[MapOrderOut],
-    market_names: dict[str, str],
     today: date,
     until: date,
     citations: _Citations,
     facts: _CompanyFacts,
 ) -> ReportSection:
-    shipped_to = {m.placement.market for m in open_orders if m.placement.market}
-    changing = [
-        (day, kind, req)
-        for req in map_queries.list_market_requirements(db)
-        if req.market_code in shipped_to
-        for day, kind in ((req.effective_on, "effective"), (req.changes_on, "changes"))
-        if day and today <= day <= until
-    ]
-    sources = trade_map_service.load_requirement_sources(db, {"": [r for _, _, r in changing]})
+    changes = trade_map_service.list_checklist_changes(
+        db, ctx.company_id, [(m.order, m.placement.market) for m in open_orders], today, until
+    )
     rows = []
-    for day, kind, req in sorted(changing, key=lambda c: (c[0], c[2].market_code, c[2].title)):
-        affected = [
-            m.order.id
-            for m in open_orders
-            if m.placement.market == req.market_code
-            and trade_map_service.applies_to(req, m.order.hs_code)
-            and m.order.ship_date >= day
-        ]
-        facts.change_orders.update(affected)
-        source = sources[req.regulation_document_id].model_copy(update={"quote": req.source_quote})
+    for change in changes:
+        facts.change_orders.update(change.order_ids)
         rows.append(
             ReportRow(
-                id=f"change-{req.market_code}-{req.requirement_key}-{kind}",
+                id=f"change-{change.market}-{change.requirement_key}-{change.kind}",
                 cells=[
-                    format_day(day),
-                    market_names.get(req.market_code, req.market_code),
-                    req.title,
-                    f"Takes effect. {req.why}"
-                    if kind == "effective"
-                    else req.change_note or req.why,
-                    join_limited(affected) or "None of your open orders ship after this date.",
-                    citations.cite(source, req.title),
+                    format_day(change.on),
+                    change.market_name,
+                    change.title,
+                    change.what_changes,
+                    join_limited(change.order_ids)
+                    or "None of your open orders ship after this date.",
+                    citations.cite(change.source, change.title),
                 ],
-                tone="warn" if affected else None,
+                tone="warn" if change.order_ids else None,
             )
         )
     facts.changes = len(rows)
@@ -338,7 +435,13 @@ def _change_section(
     )
 
 
-def _news_section(alerts: list[dict] | None, since: date, facts: _CompanyFacts) -> ReportSection:
+def _news_section(
+    alerts: list[dict] | None,
+    since: date,
+    facts: _CompanyFacts,
+    confirmed: dict[str, list[str]] | None = None,
+) -> ReportSection:
+    """`confirmed`: alert ID → the orders a person confirmed it affects in News watch."""
     rows = []
     if alerts is not None:
         recent = []
@@ -361,7 +464,14 @@ def _news_section(alerts: list[dict] | None, since: date, facts: _CompanyFacts) 
             stock_text = join_limited(names, 3) or "No stock item named"
             if isinstance(stock, int | float) and stock:
                 stock_text += f" · USD {stock:,.0f} in stock"
-            source = " ".join(str(p) for p in (alert.get("publisher"), alert.get("url")) if p)
+            alert_id = str(alert.get("id") or alert.get("articleId") or "")
+            orders = (confirmed or {}).get(alert_id, [])
+            if orders:
+                stock_text += f"\nConfirmed for orders {join_limited(orders, 5)}"
+            # A last line holding only a URL becomes a link in the PDF (see cell_link).
+            source = "\n".join(
+                str(p) for p in (alert.get("publisher") or "Source", alert.get("url")) if p
+            )
             rows.append(
                 ReportRow(
                     id=f"news-{str(alert.get('articleId') or alert.get('id') or len(rows))[:60]}",
@@ -371,7 +481,7 @@ def _news_section(alerts: list[dict] | None, since: date, facts: _CompanyFacts) 
                         str(alert.get("severity")).capitalize(),
                         str(alert.get("why") or alert.get("action") or "")[:1500],
                         stock_text,
-                        source[:600],
+                        source[:2000],
                     ],
                     tone="gap" if alert.get("severity") == "high" else "warn",
                 )
@@ -385,7 +495,8 @@ def _news_section(alerts: list[dict] | None, since: date, facts: _CompanyFacts) 
         layout="table",
         heading="News alerts",
         note="High and medium alerts from News watch in this window. An AI model matches each "
-        "article to your stock list (sample stock in this prototype), not to orders.",
+        "article to your stock list (sample stock in this prototype); orders are named only "
+        "where someone in your company confirmed in News watch that the alert affects them.",
         empty="News watch could not be reached when this report was generated."
         if alerts is None
         else "No high or medium alert in this window.",
@@ -408,8 +519,13 @@ def build_company_report_content(
     citations = _Citations()
     facts = _CompanyFacts(open_orders=len(open_orders))
 
-    changes = _change_section(db, open_orders, market_names, today, until, citations, facts)
-    news = _news_section(fetch_news_alerts(authorization), since, facts)
+    changes = _change_section(db, ctx, open_orders, today, until, citations, facts)
+    news = _news_section(
+        fetch_news_alerts(authorization),
+        since,
+        facts,
+        news_queries.list_confirmed_news_by_impact(db, ctx.company_id),
+    )
 
     # Floods near the company's suppliers and sites.
     supplier_orders = {
@@ -830,7 +946,8 @@ class _ReportPdf(FPDF):
                         else (110 if facts and i == 0 else None),
                         fill_color=EDITED_FILL if shaded else None,
                     )
-                    out.cell(text, style=style)
+                    shown, link = cell_link(text)
+                    out.cell(shown, style=style, link=link)
 
     def edit_note(self, section: ReportSection, edits: SectionEdits):
         parts = []

@@ -13,6 +13,9 @@ dependencies = [
     "firebase-admin>=6.6",
     "google-cloud-storage>=2.18",
     "fpdf2>=2.8",
+    "google-genai>=1.0",
+    "pgvector>=0.3",
+    "pypdf>=5",
 ]
 
 [dependency-groups]

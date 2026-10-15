@@ -10,6 +10,8 @@ import {
   ArrowDown,
 } from "lucide-react";
 import { openDemo } from "./account-store";
+import { sendContactMessage } from "./api";
+import { errorMessage } from "./auth";
 import "./landing.css";
 import "./landing-sections.css";
 const TradeGlobe = lazy(() => import("./TradeGlobe"));
@@ -46,21 +48,17 @@ export default function Landing({ section = "" }: { section?: string }) {
   const page = useRef<HTMLDivElement>(null);
   const photo = useRef<HTMLDivElement>(null);
   const [step, setStep] = useState(0);
-  const [saved, setSaved] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
-  const [draft, setDraft] = useState(() => {
-    try {
-      const d = JSON.parse(localStorage.getItem("em-inquiry") || "null");
-      return d &&
-        typeof d.name === "string" &&
-        typeof d.email === "string" &&
-        typeof d.message === "string"
-        ? d
-        : { name: "", email: "", message: "" };
-    } catch {
-      return { name: "", email: "", message: "" };
-    }
-  });
+  const emptyInquiry = { name: "", email: "", company: "", message: "" };
+  const [draft, setDraft] = useState(emptyInquiry);
+  // Hidden from people; a bot that fills it in is ignored by the backend.
+  const [website, setWebsite] = useState("");
+  const edit = (change: Partial<typeof emptyInquiry>) => {
+    setDraft({ ...draft, ...change });
+    setSent(false);
+  };
   useEffect(() => {
     document.body.classList.add("landing-body");
     const motion = matchMedia("(prefers-reduced-motion: reduce)");
@@ -469,16 +467,25 @@ export default function Landing({ section = "" }: { section?: string }) {
               <strong>conversation.</strong>
             </h2>
             <form
-              onSubmit={(e) => {
+              onSubmit={async (e) => {
                 e.preventDefault();
+                if (sending) return;
+                setSending(true);
+                setError("");
                 try {
-                  localStorage.setItem("em-inquiry", JSON.stringify(draft));
-                  setSaved(true);
-                  setError("");
-                } catch {
-                  setError(
-                    "Browser storage is unavailable. Your draft was not saved.",
-                  );
+                  await sendContactMessage({
+                    name: draft.name.trim(),
+                    email: draft.email.trim(),
+                    company: draft.company.trim() || null,
+                    message: draft.message.trim(),
+                    website,
+                  });
+                  setDraft(emptyInquiry);
+                  setSent(true);
+                } catch (err) {
+                  setError(errorMessage(err));
+                } finally {
+                  setSending(false);
                 }
               }}
             >
@@ -487,11 +494,9 @@ export default function Landing({ section = "" }: { section?: string }) {
                   Name
                   <input
                     required
+                    maxLength={200}
                     value={draft.name}
-                    onChange={(e) => {
-                      setDraft({ ...draft, name: e.target.value });
-                      setSaved(false);
-                    }}
+                    onChange={(e) => edit({ name: e.target.value })}
                     placeholder="Your name"
                   />
                 </label>
@@ -500,57 +505,59 @@ export default function Landing({ section = "" }: { section?: string }) {
                   <input
                     required
                     type="email"
+                    maxLength={254}
                     value={draft.email}
-                    onChange={(e) => {
-                      setDraft({ ...draft, email: e.target.value });
-                      setSaved(false);
-                    }}
+                    onChange={(e) => edit({ email: e.target.value })}
                     placeholder="you@company.com"
                   />
                 </label>
               </div>
               <label>
+                Company (optional)
+                <input
+                  maxLength={200}
+                  value={draft.company}
+                  onChange={(e) => edit({ company: e.target.value })}
+                  placeholder="Your company"
+                />
+              </label>
+              <label className="contact-website" aria-hidden="true">
+                Website
+                <input
+                  tabIndex={-1}
+                  autoComplete="off"
+                  value={website}
+                  onChange={(e) => setWebsite(e.target.value)}
+                />
+              </label>
+              <label>
                 What are you working on?
                 <textarea
                   required
                   rows={3}
-                  maxLength={2000}
+                  maxLength={5000}
                   value={draft.message}
-                  onChange={(e) => {
-                    setDraft({ ...draft, message: e.target.value });
-                    setSaved(false);
-                  }}
+                  onChange={(e) => edit({ message: e.target.value })}
                   placeholder="A little about your business…"
                 />
               </label>
-              <button type="submit" className="contact-submit">
-                {saved ? "Draft saved" : "Save inquiry draft"}
-                {saved ? <Check size={20} /> : <ArrowUpRight size={20} />}
+              <button
+                type="submit"
+                className="contact-submit"
+                disabled={sending}
+              >
+                {sent ? "Message sent" : sending ? "Sending…" : "Send message"}
+                {sent ? <Check size={20} /> : <ArrowUpRight size={20} />}
               </button>
-              <div className="contact-status" role="status">
+              <div
+                className="contact-status"
+                role={error ? "alert" : "status"}
+              >
                 {error ||
-                  (saved
-                    ? "Saved in this browser. Not sent."
-                    : "Demo form · saved locally, not sent.")}
+                  (sent
+                    ? "Received. We'll reply to your email."
+                    : "Sent to the ExportMate team.")}
               </div>
-              {(saved || draft.message) && (
-                <button
-                  type="button"
-                  className="contact-clear"
-                  onClick={() => {
-                    try {
-                      localStorage.removeItem("em-inquiry");
-                      setDraft({ name: "", email: "", message: "" });
-                      setSaved(false);
-                      setError("");
-                    } catch {
-                      setError("Could not clear the draft.");
-                    }
-                  }}
-                >
-                  Clear draft
-                </button>
-              )}
             </form>
           </div>
         </div>

@@ -59,6 +59,14 @@ resource "google_project_iam_member" "backend_cloudsql_client" {
   member  = "serviceAccount:${google_service_account.backend.email}"
 }
 
+# Gemini on Vertex AI for the backend's AI steps, such as reading supplier documents
+# (backend/app/core/gemini.py).
+resource "google_project_iam_member" "backend_vertex" {
+  project = var.project_id
+  role    = "roles/aiplatform.user"
+  member  = "serviceAccount:${google_service_account.backend.email}"
+}
+
 # Verify ID tokens with check_revoked, and revoke them on logout.
 resource "google_project_iam_member" "backend_firebase_auth_admin" {
   project = var.project_id

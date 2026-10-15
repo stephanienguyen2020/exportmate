@@ -35,7 +35,7 @@ import {
   type Profile,
 } from "./account-store";
 import "./account.css";
-import { api, cacheAccount, type Account } from "./api";
+import { api, cacheAccount, type Account, type ReceivedInvite } from "./api";
 import { clearChat } from "../ai/chat/Chat";
 import { AssistantMemories } from "../ai/chat/Memories";
 import {
@@ -534,14 +534,22 @@ export default function AccountPage({ route }: { route: string }) {
   const [error, setError] = useState("");
   const [step, setStep] = useState(0);
   const [done, setDone] = useState(false);
+  // Invitations to this person's address: joining one replaces onboarding a new company.
+  const [invites, setInvites] = useState<ReceivedInvite[]>([]);
   useEffect(() => {
     setError("");
     setPassword("");
     setConfirm("");
     setDone(false);
+    setInvites([]);
     if (route === "onboarding") {
       setP(getProfile());
       setStep(0);
+      // No invitations (or no backend) just leaves the wizard.
+      api
+        .receivedInvites()
+        .then(setInvites)
+        .catch(() => setInvites([]));
     }
     if (route === "logout") {
       const live = isApiSession();
@@ -981,6 +989,51 @@ export default function AccountPage({ route }: { route: string }) {
                   </form>
                 </>
               ))}
+            {route === "onboarding" && invites.length > 0 && (
+              <section className="ac-invites" aria-label="Invitations">
+                <h2>You're invited.</h2>
+                {invites.map((invite) => (
+                  <div key={invite.id} className="ac-invite">
+                    <p>
+                      {invite.invitedBy ? `${invite.invitedBy.name} invited you` : "You're invited"}{" "}
+                      to join <b>{invite.companyName}</b> as {invite.role}.
+                    </p>
+                    <div>
+                      <button
+                        className="ac-primary"
+                        type="button"
+                        disabled={busy}
+                        onClick={() =>
+                          void run(async () => {
+                            const account = await api.acceptInvite(invite.id);
+                            cacheAccount(account);
+                            startSession("api");
+                            navigate("workspace/data");
+                          })
+                        }
+                      >
+                        Join {invite.companyName}
+                        <ArrowRight size={18} />
+                      </button>
+                      <button
+                        className="ac-small-link"
+                        type="button"
+                        disabled={busy}
+                        onClick={() =>
+                          void run(async () => {
+                            await api.declineInvite(invite.id);
+                            setInvites((all) => all.filter((i) => i.id !== invite.id));
+                          })
+                        }
+                      >
+                        Decline
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                <p className="ac-invites-or">Or set up a company of your own:</p>
+              </section>
+            )}
             {route === "onboarding" && (
               <>
                 <div className="ac-onboarding-progress">
