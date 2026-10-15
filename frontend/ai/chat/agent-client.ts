@@ -41,7 +41,13 @@ export type GuardFlag = { where: string; match: string };
 export type AuditStep = {
   at: number;
   // cache: the answer was reused from an earlier audit (auditId, answeredAt); its steps follow.
-  kind: "plan" | "tool" | "draft" | "review" | "answer" | "cache";
+  // delegate: a specialist's report to the analyst (agent, request, excerpt).
+  // memory: what Memory Bank recalled about the signed-in user before the turn (facts).
+  kind: "plan" | "tool" | "draft" | "review" | "answer" | "cache" | "delegate" | "memory";
+  // The agent that made the step: quick_answer, analyst or a specialist (stock_specialist, …).
+  agent?: string;
+  request?: string;
+  facts?: string[];
   latencyMs?: number;
   note?: string;
   calls?: { name: string; args: Record<string, unknown> }[];
@@ -90,7 +96,9 @@ export type Audit = {
   flags?: GuardFlag[];
   // The router's choice: simple (small fast model) or complex, the signals behind it, and
   // whether a simple-tier draft the auditor sent back was revised on the complex tier.
-  route?: { tier: "simple" | "complex"; reasons: string[]; escalated?: boolean };
+  // agent: who the router chose; answeredBy: who wrote the answer (the analyst after an escalation).
+  route?: { tier: "simple" | "complex"; reasons: string[]; escalated?: boolean; agent?: string; answeredBy?: string };
+  usageByAgent?: Record<string, { promptTokens: number; outputTokens: number; thinkingTokens: number; modelCalls: number }>;
   // Present when the answer was reused from an earlier audit against the same data.
   cache?: { auditId: string; answeredAt: string };
 };
@@ -220,4 +228,24 @@ export function downloadJson(filename: string, value: unknown) {
   const a = Object.assign(document.createElement("a"), { href: url, download: filename });
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// What Memory Bank remembers about the signed-in company user (Account page).
+export type Memory = { id: string; fact: string; updatedAt?: string };
+
+// keepDays: how long Memory Bank keeps a memory, from the Agent Runtime instance (null if unknown).
+export type MemoryList = { memories: Memory[]; enabled: boolean; keepDays?: number | null };
+
+export async function listMemories(): Promise<MemoryList> {
+  const res = await fetch(`${API}/memories`, { headers: await companyAuth() });
+  // An AI service from before Memory Bank has no such route: memory isn't on there.
+  if (res.status === 404) return { memories: [], enabled: false };
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || "Couldn't load what the assistant remembers.");
+  return data;
+}
+
+export async function deleteMemory(id: string): Promise<void> {
+  const res = await fetch(`${API}/memories/${encodeURIComponent(id)}`, { method: "DELETE", headers: await companyAuth() });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Couldn't forget that.");
 }

@@ -39,13 +39,17 @@ export const normalizeText = (text) =>
     .replace(/[\s?!.。？！]+$/u, "")
     .trim();
 
-/** The cache document id for a conversation in a given company, data state and day. */
-export function answerKey({ messages, companyId = null, disabled = [], dataVersion, policyVersion, models, day }) {
+/**
+ * The cache document id for a conversation in a given company, data state and day. `userKey` is
+ * set for users whose remembered preferences (Memory Bank) can shape the answer.
+ */
+export function answerKey({ messages, companyId = null, userKey = null, disabled = [], dataVersion, policyVersion, models, day }) {
   return sha256(
     stableJson({
       v: CACHE_VERSION,
       conversation: messages.map((m) => [m.role, normalizeText(m.text), ...(m.role === "model" ? [m.sources || []] : [])]),
       companyId,
+      ...(userKey ? { userKey } : {}),
       disabled: [...disabled].sort(),
       dataVersion,
       policyVersion,
