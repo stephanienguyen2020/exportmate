@@ -24,6 +24,7 @@ test("anything the answer depends on changes the key", () => {
     { messages: [{ role: "user", text: "Who supplies PLY-102?" }] },
     { companyId: "co-1" },
     { disabled: ["src-1"] },
+    { skipOld: false },
     { dataVersion: "d2" },
     { policyVersion: "p2" },
     { models: { simple: "s2", complex: "c" } },
@@ -32,6 +33,8 @@ test("anything the answer depends on changes the key", () => {
   ])
     assert.notEqual(answerKey({ ...base, ...change }), key, JSON.stringify(change));
   assert.equal(answerKey({ ...base, disabled: ["b", "a"] }), answerKey({ ...base, disabled: ["a", "b"] }));
+  // The age rule on (the default) keeps the keys answers were cached under before it existed.
+  assert.equal(answerKey({ ...base, skipOld: true }), key);
 });
 
 test("fingerprints ignore key order", () => {

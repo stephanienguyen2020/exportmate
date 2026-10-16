@@ -92,11 +92,13 @@ async function listFiles(corpus) {
   return files;
 }
 
-// Which sources a record came from and who owns them, so searches only return what the
-// asking company may see (access.js). Records from before sources had owners have neither.
+// Which sources a record came from, who owns them and how old the article was when scanned, so
+// searches only return what the asking company may see (access.js). Records from before sources
+// had owners have no sources; those from before the age rule have no age.
 const origin = (r) => ({
   ...(r.sourceIds ? { sourceIds: r.sourceIds } : r.sourceId ? { sourceIds: [r.sourceId] } : {}),
   ...(r.sourceCompanyIds ? { sourceCompanyIds: r.sourceCompanyIds } : {}),
+  ...(Number.isFinite(r.ageDays) ? { ageDays: r.ageDays } : {}),
 });
 
 // One searchable document per record. `text` is what gets embedded.

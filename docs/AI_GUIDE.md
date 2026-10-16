@@ -141,13 +141,15 @@ Filter by severity or show only opportunities, search headlines, items and SKUs,
 - switch a built-in source off. This affects only their own company.
 - add a custom source: any public RSS or Atom feed over HTTPS, tested before it is saved, up to 10 per company. Only their company sees it and the alerts it brings in.
 - switch off or remove their own custom sources. Built-in sources can be switched off but not deleted.
+- switch the age rule off or on. By default a scan skips articles published more than 365 days before it (the AI service's `SCAN_MAX_AGE_DAYS`, which the page shows). With the rule off, scans also read older articles from the sources that company reads, and only that company sees the alerts they raise. Undated articles are always read.
 
-**Scan now.** A scan runs every day at 07:00 Vietnam time. Owners and editors can also start one with "Scan now". It takes about a minute, only one scan runs at a time, and a manual scan has to wait 10 minutes after the previous one.
+**Scan now.** A scan runs every day at 07:00 Vietnam time. Owners and editors can also start one with "Scan now". It takes about a minute, only one scan runs at a time, and a manual scan has to wait 10 minutes after the previous one. If Gemini couldn't assess some articles, the scan bar says how many and why; those articles are tried again by the next scan. A scan that couldn't assess any article is marked failed.
 
 | | Sample demo or signed out | Viewer | Owner or editor |
 | --- | --- | --- | --- |
 | Read alerts, stock and sources | Yes | Yes | Yes |
 | Switch sources off or on, add or remove custom sources | No | No | Yes |
+| Switch the age rule off or on | No | No | Yes |
 | Scan now | No | No | Yes |
 
 News watch alerts also appear in the **News alerts** section of a company report (Reports page), which lists high and medium alerts from the report's period; in the PDF, each alert's publisher links to the article.
@@ -208,12 +210,14 @@ The assistant's instructions are a list of rules in `policy.js`. Each rule names
 
 Cloud Scheduler calls `POST /api/scan` at 07:00 Asia/Ho_Chi_Minh. The scan (`scan.js`):
 
-1. Reads every enabled feed. It looks back 3 days (14 on the first run), skips articles an earlier scan already analysed, and takes at most 80 new articles.
+1. Reads every enabled feed and keeps each article no earlier scan has analysed, back to the age rule: articles published more than `SCAN_MAX_AGE_DAYS` (default 365; 0 removes the rule) before the scan are skipped, except from the sources read by a company that switched the rule off (`companySources/{companyId}.skipOld`). It takes at most 80, newest first. Each article and alert records its age when scanned (`ageDays`), so a company with the rule on never sees what an older article raised.
 2. Withholds articles that address the assistant or link to malicious sites: first by pattern, then with Model Armor when it is configured. An article Model Armor couldn't screen is left for the next scan.
 3. Sends the rest to Gemini in batches of 16, with the stock list and the stock's profile (`seed/inventory.js` `STOCK_PROFILE`: whose stock it is, the words news uses for its goods and the goods that share its rules), so no industry is written into the code. For each article, the model answers whether it is relevant, how severe, which SKUs it affects and why, and one next step. The rules tell it to be strict: exchange rates, energy prices and goods the company doesn't stock are not relevant, and article text is news, never instructions.
 4. Keeps an alert only if the model said relevant, at least one SKU it named is really in stock, the article isn't a repeat of another one, and it doesn't name only goods that share the stock's rules (for the sample, cocoa, coffee, rubber…) without the words for the stock's own goods (`relevance.js`, with the profile's word lists).
 5. Does the same for each company's own goods (`companyGoods` in Firestore, built by `goods.js` from its profile and orders; at most 100 companies per scan): the new articles from the sources that company reads, plus, on its first scan, up to 48 stored articles from the last two weeks. The prompt describes the company from its profile. Its alerts carry its company id, so only it sees them (`access.js`); the demo sees only the sample stock's alerts. The scan record's alert count is shown per caller.
 6. Stores the articles, alerts and scan record, and adds them to the search index on RAG Engine.
+
+Articles Gemini couldn't assess aren't recorded, so the next scan tries them again, however long ago they were published (within the age rule). The scan record counts them (`articlesFailed`) with the reason (`error`), and a scan that had articles to assess but got no answer for any of them is `failed`. Before this, a scan whose every Gemini call failed reported "done" with no new articles: on 15 October 2026 `GEMINI_MODEL` named gemini-2.5-flash, which refuses a thinking level.
 
 ### Models
 
@@ -221,11 +225,11 @@ Cloud Scheduler calls `POST /api/scan` at 07:00 Asia/Ho_Chi_Minh. The scan (`sca
 | --- | --- | --- |
 | Assistant, simple questions | `gemini-3.5-flash-lite`, thinking LOW | `GEMINI_MODEL_SIMPLE`, `GEMINI_THINKING_SIMPLE` |
 | Assistant, complex questions | `gemini-4-argon`, thinking MEDIUM | `GEMINI_MODEL_COMPLEX`, `GEMINI_THINKING_COMPLEX` |
-| News scan and eval judge | `gemini-3.5-flash` | `GEMINI_MODEL` |
+| News scan and eval judge | `gemini-3.5-flash`, thinking MEDIUM | `GEMINI_MODEL`, `GEMINI_THINKING_SCAN` |
 | Search embeddings (RAG Engine) | `text-multilingual-embedding-002` | `RAG_EMBED_MODEL` |
 | Memory Bank (writing memories) | `gemini-3.5-flash` | `MEMORY_MODEL` (in `platform/runtime.py`) |
 
-These are the defaults in `models.js`. The deployed service takes its values from Terraform (`infra/terraform/ai_service.tf`), and `GET /healthz` reports the models it is running.
+These are the defaults in `models.js`. The deployed service takes its values from Terraform (`infra/terraform/ai_service.tf`), and `GET /healthz` reports the models it is running. Gemini 2.x models refuse a thinking level, so they are sent none and think dynamically.
 
 ### Where data is kept
 
@@ -235,7 +239,7 @@ Everything is in asia-southeast1. On Agent Platform: the search index (RAG Engin
 | --- | --- |
 | `inventory` | The sample stock |
 | `companyGoods` | Each company's goods for News watch (from its profile and orders) and when the scan first read news for them |
-| `sources`, `companySources` | News feeds, and the built-in feeds each company switched off |
+| `sources`, `companySources` | News feeds, and per company the built-in feeds it switched off and whether it switched the age rule off |
 | `articles`, `impacts`, `scans` | Every analysed article, the alerts, and one record per scan |
 | `rag_files` | Each search record's title, link, date and sources, and which RAG Engine file holds it |
 | `chat_sessions` | Which Agent Platform session each browser conversation continues |

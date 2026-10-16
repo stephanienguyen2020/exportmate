@@ -42,10 +42,15 @@ type Scan = {
   finishedAt?: string;
   articlesFetched?: number;
   articlesAnalysed?: number;
+  // Articles Gemini couldn't assess; the next scan retries them.
+  articlesFailed?: number;
   impactsFound?: number;
   sources?: { id: string; ok: boolean }[];
   error?: string;
 };
+// The age rule: a scan skips articles published more than maxAgeDays before it unless the
+// company switched it off (skipOld false). Null when the AI service sets no rule.
+type ScanRules = { maxAgeDays: number; skipOld: boolean } | null;
 type Item = {
   sku: string;
   name: string;
@@ -336,7 +341,7 @@ function ScanBar({
         <span className="eyebrow">LAST SCAN</span>
         <strong>{scan ? when(scan.finishedAt || scan.startedAt) : "No scan yet"}</strong>
       </div>
-      {scan?.status === "done" && (
+      {scan?.status !== "running" && scan?.sources && (
         <>
           <div>
             <span className="eyebrow">SOURCES READ</span>
@@ -362,6 +367,13 @@ function ScanBar({
         {locked && !message && <small>{locked}</small>}
         {message && <small role="status">{message}</small>}
       </div>
+      {scan?.error && scan.status !== "running" && (
+        <p className="news-scanbar-error" role="alert">
+          {scan.status === "failed" ? "The last scan failed. " : ""}
+          {scan.error}
+          {scan.articlesFailed ? " The next scan tries these articles again." : ""}
+        </p>
+      )}
     </section>
   );
 }
@@ -437,6 +449,13 @@ function GoodsTable({ list, impacts }: { list: StockList; impacts: Impact[] }) {
       )}
     </>
   );
+}
+
+// What a finished "Scan now" reports.
+function scanMessage(scan: Scan) {
+  if (scan.status === "failed") return "The scan failed.";
+  const found = `${scan.impactsFound} new alert${scan.impactsFound === 1 ? "" : "s"} from ${scan.articlesAnalysed} new articles.`;
+  return scan.articlesFailed ? `${found} ${scan.articlesFailed} couldn't be assessed.` : found;
 }
 
 function StockTable({ impacts }: { impacts: Impact[] }) {
@@ -525,13 +544,17 @@ function StockTable({ impacts }: { impacts: Impact[] }) {
 // `locked` explains why this session can't change them.
 function Sources({ locked }: { locked?: string }) {
   const [list, setList] = useState<Source[] | null>(null);
+  const [rules, setRules] = useState<ScanRules>(null);
   const [error, setError] = useState("");
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [adding, setAdding] = useState(false);
   const load = () =>
-    api<{ sources: Source[] }>("/sources")
-      .then((d) => setList(d.sources))
+    api<{ sources: Source[]; scanRules?: ScanRules }>("/sources")
+      .then((d) => {
+        setList(d.sources);
+        setRules(d.scanRules ?? null);
+      })
       .catch((e) => setError(e.message));
   useEffect(() => {
     load();
@@ -560,6 +583,13 @@ function Sources({ locked }: { locked?: string }) {
       load();
     });
   };
+  const toggleSkipOld = async (r: NonNullable<ScanRules>) => {
+    setRules({ ...r, skipOld: !r.skipOld });
+    await change("/scan-rules", "PATCH", { skipOld: !r.skipOld }).catch((e) => {
+      setError(e.message);
+      load();
+    });
+  };
   const remove = async (s: Source) => {
     await change(`/sources/${s.id}`, "DELETE").catch((e) => setError(e.message));
     load();
@@ -571,6 +601,24 @@ function Sources({ locked }: { locked?: string }) {
         Only these approved sources are read. Each daily scan checks enabled feeds for new articles. Switching off a
         built-in source only affects your company; a source you add is only read for your company.
       </p>
+      {rules && (
+        <ul className="news-sources news-rules">
+          <li>
+            <label className="news-toggle">
+              <input type="checkbox" checked={rules.skipOld} onChange={() => toggleSkipOld(rules)} disabled={Boolean(locked)} />
+              <span />
+              <span className="sr-only">Skip old articles</span>
+            </label>
+            <div>
+              <strong>Skip articles published more than {rules.maxAgeDays} days before a scan</strong>
+              <small>
+                On by default. Switch it off and scans also read older articles from your sources; only your company sees the
+                alerts they raise. Undated articles are always read.
+              </small>
+            </div>
+          </li>
+        </ul>
+      )}
       <ul className="news-sources">
         {list.map((s) => (
           <li key={s.id}>
@@ -766,7 +814,7 @@ export default function NewsWatchPage({
     try {
       const d = await api<{ scan: Scan }>("/scan", { method: "POST" });
       setScan(d.scan);
-      setMessage(`${d.scan.impactsFound} new alert${d.scan.impactsFound === 1 ? "" : "s"} from ${d.scan.articlesAnalysed} new articles.`);
+      setMessage(scanMessage(d.scan));
       await load();
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "Scan failed.");
