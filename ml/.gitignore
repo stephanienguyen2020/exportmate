@@ -1,0 +1,2 @@
+# Training data stays local (later in a GCS bucket), never in git.
+data/
