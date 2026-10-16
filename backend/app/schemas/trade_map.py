@@ -65,6 +65,10 @@ class RequirementCheckOut(CamelCaseModel):
     status: CheckStatus
     note: str
     source: RequirementSourceOut
+    # The supplier document that answers it and the standards it accepts, so a form can ask
+    # for the right one. Absent from reports saved before they were added.
+    document_kind: str | None = None
+    accepted_standards: list[str] = Field(default_factory=list)
 
 
 class MapOrderOut(CamelCaseModel):
@@ -317,6 +321,14 @@ class SupplierOut(CamelCaseModel):
     contact_name: str | None
     contact_email: str | None
     documents: list[SupplierDocumentOut]
+    # Orders analysed again because this change touched what their checks read (the name
+    # they match on, or the documents). Empty when none name it or the analysis failed.
+    analysed_order_ids: list[str] = Field(default_factory=list)
+
+
+class SupplierDeletedOut(CamelCaseModel):
+    deleted: bool
+    analysed_order_ids: list[str]
 
 
 class SiteIn(CamelCaseModel):

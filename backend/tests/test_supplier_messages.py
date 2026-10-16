@@ -179,6 +179,19 @@ def test_ai_drafts_are_checked(client, lan, fake_gemini):
     assert draft(client, lan, report_id).status_code == 503  # a link the report doesn't cite
 
 
+def test_line_breaks_escaped_twice_become_line_breaks(client, lan, fake_gemini):
+    report_id = analyse(client, lan)["PO-1"]["id"]
+    fake_gemini.answers["supplier_message"] = lambda p, f: {
+        "subject": "PO-1: plot\\ngeolocation needed",
+        "body": "Dear Minh,\\n\\nFor order PO-1 please send the plot geolocation.\\n\\nBest,\\nlan",
+    }
+    message = draft(client, lan, report_id).json()["data"]
+    assert message["subject"] == "PO-1: plot geolocation needed"
+    assert message["body"] == (
+        "Dear Minh,\n\nFor order PO-1 please send the plot geolocation.\n\nBest,\nlan"
+    )
+
+
 def test_a_refused_send_is_failed_and_can_be_sent_again(client, lan, outbox, monkeypatch):
     report_id = analyse(client, lan)["PO-1"]["id"]
     message = draft(client, lan, report_id).json()["data"]

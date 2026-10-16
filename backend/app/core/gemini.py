@@ -25,6 +25,9 @@ log = logging.getLogger(__name__)
 AnswerT = TypeVar("AnswerT", bound=BaseModel)
 EMBEDDING_DIMENSIONS = 768  # hs_headings.embedding
 EMBED_BATCH = 50
+# Transient answers worth another attempt: timeouts, rate limits, cancelled (499) and server
+# errors. Timeouts on our side are retried too.
+RETRY_STATUS_CODES = [408, 429, 499, 500, 502, 503, 504]
 
 
 @lru_cache
@@ -36,7 +39,12 @@ def _client() -> genai.Client:
         vertexai=True,
         project=settings.google_cloud_project,
         location=settings.gemini_location,
-        http_options=types.HttpOptions(timeout=settings.gemini_timeout_seconds * 1000),
+        http_options=types.HttpOptions(
+            timeout=settings.gemini_timeout_seconds * 1000,
+            retry_options=types.HttpRetryOptions(
+                attempts=settings.gemini_attempts, http_status_codes=RETRY_STATUS_CODES
+            ),
+        ),
     )
 
 
