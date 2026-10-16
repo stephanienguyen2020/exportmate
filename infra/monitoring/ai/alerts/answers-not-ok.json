@@ -1,0 +1,35 @@
+{
+  "displayName": "ExportMate AI service: assistant answers failing",
+  "documentation": {
+    "mimeType": "text/markdown",
+    "content": "Three or more assistant answers in an hour ended other than ok (error, max_steps, needs_review). `npm run ops -- --days=1` lists why; each audit is in Firestore `audits`.\n\nLogs Explorer, project ${PROJECT_ID}: `resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"${SERVICE}\" AND jsonPayload.message=\"chat.completed\" AND jsonPayload.status!=\"ok\"`"
+  },
+  "combiner": "OR",
+  "conditions": [
+    {
+      "displayName": "Answers not ok in an hour",
+      "conditionThreshold": {
+        "filter": "metric.type=\"logging.googleapis.com/user/exportmate_ai/chat_answers\" AND resource.type=\"cloud_run_revision\" AND metric.label.status!=\"ok\"",
+        "aggregations": [
+          {
+            "alignmentPeriod": "3600s",
+            "perSeriesAligner": "ALIGN_SUM",
+            "crossSeriesReducer": "REDUCE_SUM"
+          }
+        ],
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 2,
+        "duration": "0s",
+        "trigger": {
+          "count": 1
+        }
+      }
+    }
+  ],
+  "alertStrategy": {
+    "autoClose": "86400s"
+  },
+  "notificationChannels": [
+    "${CHANNEL}"
+  ]
+}

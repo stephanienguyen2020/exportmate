@@ -1,0 +1,25 @@
+{
+  "displayName": "ExportMate AI service: daily news scan not started",
+  "documentation": {
+    "mimeType": "text/markdown",
+    "content": "Cloud Scheduler could not run a job (the daily news scan's POST /api/scan failed or was refused).\n\nLogs Explorer, project ${PROJECT_ID}: `resource.type=\"cloud_scheduler_job\" AND severity>=ERROR`"
+  },
+  "combiner": "OR",
+  "conditions": [
+    {
+      "displayName": "Scheduler attempt failed",
+      "conditionMatchedLog": {
+        "filter": "resource.type=\"cloud_scheduler_job\" AND severity>=ERROR"
+      }
+    }
+  ],
+  "alertStrategy": {
+    "autoClose": "86400s",
+    "notificationRateLimit": {
+      "period": "3600s"
+    }
+  },
+  "notificationChannels": [
+    "${CHANNEL}"
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "displayName": "ExportMate AI service",
+  "monitoredResource": {
+    "type": "uptime_url",
+    "labels": {
+      "project_id": "${PROJECT_ID}",
+      "host": "${HOST}"
+    }
+  },
+  "httpCheck": {
+    "path": "/",
+    "port": 443,
+    "useSsl": true,
+    "validateSsl": true,
+    "requestMethod": "GET"
+  },
+  "contentMatchers": [
+    {
+      "content": "\"ok\":true",
+      "matcher": "CONTAINS_STRING"
+    }
+  ],
+  "period": "300s",
+  "timeout": "30s"
+}
