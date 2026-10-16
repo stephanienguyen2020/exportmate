@@ -35,11 +35,18 @@ npm test          # harness unit tests (no GCP needed)
 npm run eval      # golden-set eval against live Gemini + Firestore (--only=<ids>, --judge, --tier=, --engine = the deployed agents); exits 1 on regressions
 npm run eval:vertex  # the same, then an evaluation run on Agent Platform › Evaluation (platform/evaluate.py, needs uv)
 npm run eval:scan # news-scan relevance on labeled articles against live Gemini (--only=<ids>, --repeat=N); exits 1 on regressions
-npm run ops       # health summary of recent chat audits (--days=1, --json)
+npm run ops       # health summary of recent chat audits and news scans (--days=1, --json)
 PROJECT_ID=skilful-scarab-511320-q9 ./deploy.sh   # Cloud Build image -> Cloud Run service + job + Agent Runtime (GATEWAY=…, AGENTS=0 to skip)
 uv run --project platform python platform/runtime.py show|create|deploy|delete   # the Agent Runtime instance (Sessions, Memory Bank, container, Agent Identity)
 PROJECT_ID=… RUNTIME=… ../../infra/agent-platform/govern.sh   # owner: Agent Identity roles, Agent Registry, egress IAM, Agent Gateway + Model Armor (ENFORCE=1 to block)
 gcloud run jobs execute exportmate-ai-task --region asia-southeast1 --wait --args="node eval/run.js"   # any npm script's command, on GCP
+```
+
+Monitoring (`infra/monitoring/`, per service, safe to re-run): log-based metrics, an email channel, an uptime check, alert policies and a dashboard from the JSON files in `ai/` and `backend/`:
+
+```sh
+PROJECT_ID=exportmate-app PART=ai SERVICE=exportmate-ai ALERT_EMAIL=… infra/monitoring/apply.sh
+PROJECT_ID=skilful-scarab-511320-q9 PART=backend SERVICE=exportmate-backend WEBSITE_HOST=exportmate.vercel.app ALERT_EMAIL=… infra/monitoring/apply.sh
 ```
 
 CI (`.github/workflows/ci.yml`, on pushes to main and on PRs) runs the frontend build and `npm test`, backend ruff + `alembic check` + pytest against Postgres, and a parse check plus the unit tests of `ai/server` (the golden-set eval needs GCP and runs by hand). Beyond that, verification is manual headless-Chrome checks at multiple widths; `frontend/docs/VALIDATION.md` records the flows that have been exercised.

@@ -321,11 +321,15 @@ export async function runScan({ trigger = "manual", maxAgeDays = MAX_AGE_DAYS } 
       await b.commit();
     }
     // 6. Make the new articles and alerts searchable by the assistant.
+    // A failed import isn't retried by later scans (they skip analysed articles); `npm run index`
+    // rebuilds the index, and the scan record's indexError is what tells ops to run it.
     let indexed = null;
+    let indexError = null;
     try {
       indexed = await indexDocs([...analysed.filter((a) => !a.withheld).map(toDoc.article), ...found.map(toDoc.alert)]);
     } catch (e) {
-      log("ERROR", "scan.index_failed", { scanId: scanRef.id, error: String(e?.message || e) });
+      indexError = String(e?.message || e);
+      log("ERROR", "scan.index_failed", { scanId: scanRef.id, error: indexError });
     }
     const now = new Date().toISOString();
     await Promise.all(
@@ -359,12 +363,15 @@ export async function runScan({ trigger = "manual", maxAgeDays = MAX_AGE_DAYS } 
       companyImpacts,
       companyArticlesFailed: companyScan.failed,
       ...(companyScan.error ? { companyError: companyScan.error.slice(0, 300) } : {}),
-      indexed: indexed?.embedded ?? null,
+      // Records sent to RAG Engine (new or changed); null when the import failed.
+      indexed: indexed ? indexed.imported : null,
+      ...(indexError ? { indexError: indexError.slice(0, 300) } : {}),
     };
     await scanRef.update(summary);
-    log(summary.status === "failed" ? "ERROR" : failed || companyScan.failed ? "WARNING" : "INFO", "scan.completed", { scanId: scanRef.id, trigger, ...summary, sources: undefined });
+    log(summary.status === "failed" ? "ERROR" : failed || companyScan.failed || indexError ? "WARNING" : "INFO", "scan.completed", { scanId: scanRef.id, trigger, ...summary, sources: undefined });
     return { id: scanRef.id, startedAt, ...summary };
   } catch (e) {
+    log("ERROR", "scan.failed", { scanId: scanRef.id, trigger, error: String(e?.message || e) });
     await scanRef.update({ status: "failed", finishedAt: new Date().toISOString(), error: String(e.message || e) });
     throw e;
   }
