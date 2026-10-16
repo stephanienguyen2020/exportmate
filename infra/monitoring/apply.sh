@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Monitoring for one ExportMate service: log-based metrics, an email channel, an uptime check,
-# alert policies and a dashboard, from the JSON files in ai/ or backend/. Safe to run again:
+# alert policies (errors, 5xx, file storage, ...) and a dashboard, from the JSON files in ai/ or backend/. Safe to run again:
 # each item is found by its name and updated in place.
 #
 #   PROJECT_ID=exportmate-app PART=ai SERVICE=exportmate-ai ALERT_EMAIL=you@example.com ./apply.sh
@@ -23,6 +23,19 @@ if [[ "$PART" == backend ]]; then
 else
   HOST="$(gcloud run services describe "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format='value(status.url)' | sed 's|https://||')"
 fi
+# The service's data bucket, from its own settings (the AI service's RAG_BUCKET defaults to
+# <project>-kb, as in ai/server/rag.js).
+env_of() {
+  gcloud run services describe "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format=json |
+    jq -r --arg n "$1" '.spec.template.spec.containers[0].env[]? | select(.name == $n) | .value // empty'
+}
+if [[ "$PART" == backend ]]; then
+  BUCKET="${BUCKET:-$(env_of REGULATION_DOCUMENT_BUCKET)}"
+else
+  BUCKET="${BUCKET:-$(env_of RAG_BUCKET)}"
+  BUCKET="${BUCKET:-$PROJECT_ID-kb}"
+fi
+: "${BUCKET:?no data bucket found; set BUCKET}"
 TOKEN="$(gcloud auth print-access-token)"
 LOGGING="https://logging.googleapis.com/v2/projects/$PROJECT_ID"
 MONITORING="https://monitoring.googleapis.com/v3/projects/$PROJECT_ID"
@@ -41,7 +54,7 @@ api() {
 
 # The files' placeholders, filled in.
 fill() {
-  sed -e "s|\${PROJECT_ID}|$PROJECT_ID|g" -e "s|\${SERVICE}|$SERVICE|g" -e "s|\${HOST}|$HOST|g" \
+  sed -e "s|\${PROJECT_ID}|$PROJECT_ID|g" -e "s|\${SERVICE}|$SERVICE|g" -e "s|\${HOST}|$HOST|g" -e "s|\${BUCKET}|$BUCKET|g" \
     -e "s|\${CHANNEL}|${CHANNEL:-}|g" -e "s|\${UPTIME_ID}|${UPTIME_ID:-}|g" "$1"
 }
 
