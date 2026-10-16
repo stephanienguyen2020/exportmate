@@ -55,7 +55,10 @@ class Settings(BaseSettings):
     # from Terraform's gemini_model, the model the AI service's news scan uses.
     gemini_model: str = "gemini-3.5-flash"
     gemini_location: str = "global"
-    gemini_timeout_seconds: int = 90
+    # Per attempt. A call that stalls (Gemini sometimes hangs until its deadline) or fails with
+    # a transient error is tried again, up to gemini_attempts in all.
+    gemini_timeout_seconds: int = 45
+    gemini_attempts: int = 2
     # Embeddings for HS heading and document search; same model as ai/server's vector index.
     embedding_model: str = "gemini-embedding-001"
     # Per user per hour.

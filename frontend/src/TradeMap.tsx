@@ -11,7 +11,6 @@ import {
 import { type Order } from "./data";
 import {
   api,
-  asOrder,
   type MarketComparison,
   type SatelliteObservation,
   type TradeMap,
@@ -42,9 +41,10 @@ import {
   type ViewId,
   WORLD_VIEW,
   floodView,
-  isGap,
   lonLat,
   productionView,
+  rowOf,
+  supplierGroupOf,
   supplierKey,
   worst,
 } from "./trade-map/model";
@@ -60,6 +60,8 @@ export type TradeMapProps = {
   onNavigate: (path: string) => void;
   signature: string;
   companyOrigin: string;
+  // A supplier change analysed these orders again (their checks read its documents).
+  onOrdersAnalysed?: (orderIds: string[]) => void;
 };
 
 export default function TradeMapPage(props: TradeMapProps) {
@@ -144,6 +146,7 @@ export default function TradeMapPage(props: TradeMapProps) {
 function TradeMapView({
   data,
   onReload,
+  onOrdersAnalysed,
   editable,
   focus,
   toneOf,
@@ -157,32 +160,11 @@ function TradeMapView({
     () => new Map(markets.map((m) => [m.code, m])),
     [markets],
   );
-  const rows = useMemo<Row[]>(
-    () =>
-      data.orders.map((o) => ({
-        order: asOrder(o.order),
-        placement: o.placement,
-        checks: o.checks,
-        gaps: o.checks.filter(isGap),
-      })),
-    [data.orders],
-  );
+  const rows = useMemo<Row[]>(() => data.orders.map(rowOf), [data.orders]);
   const suppliers = useMemo<SupplierGroup[]>(() => {
     const byId = new Map(rows.map((r) => [r.order.id, r]));
     return data.suppliers
-      .map((s) => ({
-        key: supplierKey(s.name),
-        id: s.id,
-        name: s.name,
-        country: s.country,
-        place: s.place,
-        at: s.location ? lonLat(s.location) : null,
-        supplies: s.supplies,
-        contactName: s.contactName ?? null,
-        contactEmail: s.contactEmail ?? null,
-        documents: s.documents,
-        rows: s.orderIds.map((id) => byId.get(id)!).filter(Boolean),
-      }))
+      .map((s) => supplierGroupOf(s, byId))
       .sort((a, b) => b.rows.length - a.rows.length);
   }, [data.suppliers, rows]);
   const supplierByKey = useMemo(
@@ -459,8 +441,14 @@ function TradeMapView({
         countries={data.countries}
         pin={pin}
         onPin={setPin}
-        onSaved={(name) => finishEditing({ kind: "supplier", name })}
-        onDeleted={() => finishEditing(null)}
+        onSaved={async (name, saved) => {
+          await finishEditing({ kind: "supplier", name });
+          onOrdersAnalysed?.(saved.analysedOrderIds);
+        }}
+        onDeleted={async (analysed) => {
+          await finishEditing(null);
+          onOrdersAnalysed?.(analysed);
+        }}
         onCancel={() => {
           setEditing(null);
           setPin(null);

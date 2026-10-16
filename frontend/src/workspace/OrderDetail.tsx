@@ -23,7 +23,7 @@ import {
 import { api, asOrder, type OrderDetail } from "../api";
 import { errorMessage } from "../auth";
 import { CostWhy } from "../CostWhy";
-import { OrderFacts } from "./OrderFacts";
+import { OrderFacts, type OrderEditRequest } from "./OrderFacts";
 import { OrderStatus } from "./OrderTable";
 import type { Workspace } from "./store";
 import { Button, PageHeading, go, orderPath, type Notify } from "./ui";
@@ -37,11 +37,13 @@ function OrderHeading({
   ws,
   notify,
   onSaved,
+  editRequest,
 }: {
   order: Order;
   ws: Workspace;
   notify: Notify;
   onSaved?: (detail: OrderDetail) => void | Promise<void>;
+  editRequest?: OrderEditRequest | null;
 }) {
   return (
     <>
@@ -59,7 +61,13 @@ function OrderHeading({
         description={order.product + " · " + order.destination}
         action={<OrderStatus order={order} ws={ws} />}
       />
-      <OrderFacts order={order} ws={ws} notify={notify} onSaved={onSaved} />
+      <OrderFacts
+        order={order}
+        ws={ws}
+        notify={notify}
+        onSaved={onSaved}
+        editRequest={editRequest}
+      />
     </>
   );
 }
@@ -76,6 +84,8 @@ export function CompanyOrder({
 }) {
   const [detail, setDetail] = useState<OrderDetail | null>(null);
   const [error, setError] = useState("");
+  // A next move in the analysis report opens the order's form at a field.
+  const [editRequest, setEditRequest] = useState<OrderEditRequest | null>(null);
   useEffect(() => {
     let active = true;
     api
@@ -99,6 +109,7 @@ export function CompanyOrder({
         order={order}
         ws={ws}
         notify={notify}
+        editRequest={editRequest}
         onSaved={(next) => {
           // Only if the visitor is still on this order.
           if (location.hash.endsWith("/" + orderPath(next.order.id)))
@@ -113,6 +124,34 @@ export function CompanyOrder({
         If this order went to another market, what would change?
         <ArrowUpRight size={15} />
       </button>
+      {/* What to do next first: the analysis, its next moves and the supplier messages. */}
+      <Suspense
+        fallback={
+          <section className="panel" role="status">
+            Loading the analysis…
+          </section>
+        }
+      >
+        <OrderAnalysis
+          key={detail.order.id}
+          orderId={detail.order.id}
+          hsCode={detail.order.hsCode}
+          latestReportId={detail.latestReportId ?? null}
+          role={ws.account?.role ?? null}
+          notify={notify}
+          onEditOrder={(field) => setEditRequest({ field, at: Date.now() })}
+          onChanged={async () => {
+            const orderId = detail.order.id;
+            const [next] = await Promise.all([
+              api.detail(orderId),
+              ws.refreshOrders(),
+            ]);
+            // Only if the visitor is still on this order.
+            if (location.hash.endsWith("/" + orderPath(orderId)))
+              setDetail(next);
+          }}
+        />
+      </Suspense>
       <section className="panel report-actions">
         <div>
           <h2>Compliance report</h2>
@@ -147,32 +186,6 @@ export function CompanyOrder({
             if (location.hash.endsWith("/" + orderPath(next.order.id)))
               setDetail(next);
             await ws.refreshOrders();
-          }}
-        />
-      </Suspense>
-      <Suspense
-        fallback={
-          <section className="panel" role="status">
-            Loading the analysis…
-          </section>
-        }
-      >
-        <OrderAnalysis
-          key={detail.order.id}
-          orderId={detail.order.id}
-          hsCode={detail.order.hsCode}
-          latestReportId={detail.latestReportId ?? null}
-          role={ws.account?.role ?? null}
-          notify={notify}
-          onChanged={async () => {
-            const orderId = detail.order.id;
-            const [next] = await Promise.all([
-              api.detail(orderId),
-              ws.refreshOrders(),
-            ]);
-            // Only if the visitor is still on this order.
-            if (location.hash.endsWith("/" + orderPath(orderId)))
-              setDetail(next);
           }}
         />
       </Suspense>
