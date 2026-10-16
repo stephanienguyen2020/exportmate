@@ -1,0 +1,39 @@
+{
+  "displayName": "ExportMate AI service: file storage refused or failing",
+  "documentation": {
+    "mimeType": "text/markdown",
+    "content": "Requests to the AI service's bucket gs://${BUCKET} were refused (permission) or failed on Google's side. A refused write means files never land: check the service account's role on the bucket. GetBucketMetadata refusals are left out: the client asks for them, the object-only role refuses, and reads still work."
+  },
+  "combiner": "OR",
+  "conditions": [
+    {
+      "displayName": "Refused or failed object requests in 5 minutes",
+      "conditionThreshold": {
+        "filter": "metric.type=\"storage.googleapis.com/api/request_count\" AND resource.type=\"gcs_bucket\" AND resource.label.bucket_name=\"${BUCKET}\" AND metric.label.method!=\"GetBucketMetadata\" AND metric.label.response_code=one_of(\"PERMISSION_DENIED\",\"UNAUTHENTICATED\",\"INTERNAL\",\"UNAVAILABLE\",\"DEADLINE_EXCEEDED\")",
+        "aggregations": [
+          {
+            "alignmentPeriod": "300s",
+            "perSeriesAligner": "ALIGN_SUM",
+            "crossSeriesReducer": "REDUCE_SUM",
+            "groupByFields": [
+              "metric.label.method",
+              "metric.label.response_code"
+            ]
+          }
+        ],
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 0,
+        "duration": "0s",
+        "trigger": {
+          "count": 1
+        }
+      }
+    }
+  ],
+  "alertStrategy": {
+    "autoClose": "86400s"
+  },
+  "notificationChannels": [
+    "${CHANNEL}"
+  ]
+}
