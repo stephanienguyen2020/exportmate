@@ -2,7 +2,9 @@
 
 Orders match a supplier by its name key (trimmed, single-spaced, lower-case), so renaming a
 supplier moves which orders it is checked against. Deleting one leaves its orders in place,
-named on the order but without a record (their supplier checks become "unknown").
+named on the order but without a record (their supplier checks become "unknown"). Adding,
+renaming or deleting a supplier, or changing its documents, analyses the orders that name it
+again, so their statuses and next steps follow the record.
 """
 
 import logging
@@ -16,14 +18,17 @@ from app.core.context import CompanyContext
 from app.core.errors import AppError, not_found_error
 from app.database.models import Supplier, SupplierDocument
 from app.database.queries import audit as audit_queries
+from app.database.queries import orders as order_queries
 from app.database.queries import trade_map as map_queries
 from app.schemas.trade_map import (
     GeoPoint,
+    SupplierDeletedOut,
     SupplierDocumentIn,
     SupplierIn,
     SupplierOut,
     SupplierUpdate,
 )
+from app.services import analysis as analysis_service
 from app.services.trade_map import supplier_documents_out, supplier_name_key
 
 log = logging.getLogger(__name__)
@@ -129,6 +134,24 @@ def _record_change(db: Session, ctx: CompanyContext, action: str, supplier: Supp
     log.info(action, extra={"company_id": str(ctx.company_id), "supplier_id": str(supplier.id)})
 
 
+def _analyse_orders_naming(db: Session, ctx: CompanyContext, keys: set[str]) -> list[str]:
+    """Analyse again the orders whose supplier matches one of these name keys: their checks
+    read this supplier's documents. The supplier change is saved either way; if the run fails,
+    it is recorded as failed and the orders wait for "Analyse orders"."""
+    order_ids = [
+        order.external_id
+        for order in order_queries.list_company_orders(db, ctx.company_id)
+        if supplier_name_key(order.supplier) in keys
+    ]
+    if not order_ids:
+        return []
+    try:
+        analysis_service.start_run(db, ctx, order_ids)
+    except AppError:
+        return []
+    return order_ids
+
+
 def create_supplier(db: Session, ctx: CompanyContext, payload: SupplierIn) -> SupplierOut:
     name = " ".join(payload.name.split())
     key = supplier_name_key(name)
@@ -151,7 +174,8 @@ def create_supplier(db: Session, ctx: CompanyContext, payload: SupplierIn) -> Su
     _flush_name(db, lambda: map_queries.add_supplier(db, supplier))
     _save_documents(db, supplier.id, payload.documents)
     _record_change(db, ctx, "supplier.created", supplier)
-    return _supplier_out(db, supplier)
+    analysed = _analyse_orders_naming(db, ctx, {key})
+    return _supplier_out(db, supplier).model_copy(update={"analysed_order_ids": analysed})
 
 
 def update_supplier(
@@ -161,6 +185,7 @@ def update_supplier(
     if not supplier:
         raise not_found_error("Supplier")
     sent = payload.model_fields_set
+    keys = {supplier.name_key}  # orders matched before the change, and after it
     if "name" in sent:
         name = " ".join(payload.name.split())
         key = supplier_name_key(name)
@@ -168,6 +193,7 @@ def update_supplier(
         if other and other.id != supplier.id:
             raise _supplier_exists_error()
         supplier.name, supplier.name_key = name, key
+        keys.add(key)
     if "country" in sent:
         _check_country(db, payload.country)
         supplier.country_alpha2 = payload.country
@@ -187,12 +213,18 @@ def update_supplier(
         supplier.longitude = payload.location.longitude if payload.location else None
     _flush_name(db, db.flush)
     _record_change(db, ctx, "supplier.updated", supplier)
-    return _supplier_out(db, supplier)
+    # A new place, contact or location changes nothing an analysis reads.
+    analysed = _analyse_orders_naming(db, ctx, keys) if len(keys) > 1 or "documents" in sent else []
+    return _supplier_out(db, supplier).model_copy(update={"analysed_order_ids": analysed})
 
 
-def delete_supplier(db: Session, ctx: CompanyContext, supplier_id: uuid.UUID) -> None:
+def delete_supplier(db: Session, ctx: CompanyContext, supplier_id: uuid.UUID) -> SupplierDeletedOut:
     supplier = map_queries.get_company_supplier(db, ctx.company_id, supplier_id)
     if not supplier:
         raise not_found_error("Supplier")
+    key = supplier.name_key
     map_queries.delete_supplier(db, supplier)
     _record_change(db, ctx, "supplier.deleted", supplier)
+    return SupplierDeletedOut(
+        deleted=True, analysed_order_ids=_analyse_orders_naming(db, ctx, {key})
+    )
