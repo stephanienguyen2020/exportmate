@@ -48,9 +48,17 @@ def checks_of(data: dict, order_id: str) -> dict[str, str]:
     return {c["requirementKey"]: c["status"] for c in order["checks"]}
 
 
-def audit_actions() -> list[str]:
+def audit_actions(prefix: str = "") -> list[str]:
     with open_session() as db:
-        return list(db.scalars(select(AuditEvent.action).order_by(AuditEvent.created_at)))
+        actions = db.scalars(select(AuditEvent.action).order_by(AuditEvent.created_at))
+        return [action for action in actions if action.startswith(prefix)]
+
+
+def latest_report(client, headers, order_id: str) -> dict:
+    detail = client.get(f"/api/v1/orders/{order_id}", headers=headers).json()["data"]
+    response = client.get(f"/api/v1/reports/{detail['latestReportId']}", headers=headers)
+    assert response.status_code == 200, response.text
+    return response.json()["data"]
 
 
 def test_new_supplier_is_matched_to_its_orders_and_checked(client, reference):
@@ -77,7 +85,7 @@ def test_new_supplier_is_matched_to_its_orders_and_checked(client, reference):
     checks = checks_of(after, "PO-1")
     assert checks["legality"] == "on_file"
     assert checks["geolocation"] == "missing"
-    assert audit_actions()[-1] == "supplier.created"
+    assert audit_actions("supplier.")[-1] == "supplier.created"
 
 
 def test_supplier_names_are_unique_per_company(client, reference):
@@ -146,12 +154,59 @@ def test_update_and_delete_supplier(client, reference):
     assert cleared.status_code == 422
 
     deleted = client.delete(f"/api/v1/suppliers/{supplier_id}", headers=headers)
-    assert deleted.json()["data"] == {"deleted": True}
+    assert deleted.json()["data"] == {"deleted": True, "analysedOrderIds": ["PO-1"]}
     data = get_map(client, headers)
     # The order stays, named but without a record: supplier evidence is unknown again.
     assert [s["id"] for s in data["suppliers"]] == [None]
     assert checks_of(data, "PO-1")["legality"] == "unknown"
-    assert audit_actions()[-3:] == ["supplier.created", "supplier.updated", "supplier.deleted"]
+    assert audit_actions("supplier.") == [
+        "supplier.created",
+        "supplier.updated",
+        "supplier.deleted",
+    ]
+
+
+def test_saving_a_supplier_analyses_the_orders_that_name_it(client, reference):
+    headers = onboard(client, "lan@example.com")
+    import_orders(
+        client,
+        headers,
+        ORDERS_CSV
+        + 'PO-2,Rubberwood sideboard,Tan Uyen Rubberwood,"Los Angeles, US",31600,2026-12-11,'
+        "9403.60\n",
+    )
+    # Imported orders are analysed at once; without a record the next step is to add one.
+    before = latest_report(client, headers, "PO-1")
+    assert before["missingData"] == ["Add Dong Nai  veneer to the suppliers, with their documents."]
+    assert before["suggestedAction"]["kind"] == "complete_data"
+    # Each check names the document that answers it and the standards it accepts.
+    us_checks = {c["requirementKey"]: c for c in latest_report(client, headers, "PO-2")["findings"]}
+    assert us_checks["formaldehyde"]["documentKind"] == "formaldehyde"
+    assert us_checks["formaldehyde"]["acceptedStandards"] == ["TSCA Title VI"]
+    assert us_checks["lacey"]["documentKind"] is None
+
+    created = client.post("/api/v1/suppliers", headers=headers, json=SUPPLIER).json()["data"]
+    assert created["analysedOrderIds"] == ["PO-1"]
+    after = latest_report(client, headers, "PO-1")
+    assert after["id"] != before["id"]
+    assert after["missingData"] == []
+    assert after["suggestedAction"]["kind"] != "complete_data"
+    assert latest_report(client, headers, "PO-2")["missingData"]  # another supplier: untouched
+
+    def patch(change: dict) -> list[str]:
+        response = client.patch(f"/api/v1/suppliers/{created['id']}", headers=headers, json=change)
+        assert response.status_code == 200, response.text
+        return response.json()["data"]["analysedOrderIds"]
+
+    # Nothing an analysis reads: no new run.
+    assert patch({"contactEmail": "sales@dongnai.example", "place": "Bien Hoa"}) == []
+    assert patch({"documents": SUPPLIER["documents"][:1]}) == ["PO-1"]
+    # A rename re-checks the orders it leaves and the orders it now matches.
+    assert patch({"name": "Tan Uyen Rubberwood"}) == ["PO-1", "PO-2"]
+    assert latest_report(client, headers, "PO-1")["missingData"] == [
+        "Add Dong Nai  veneer to the suppliers, with their documents."
+    ]
+    assert latest_report(client, headers, "PO-2")["missingData"] == []
 
 
 def test_renaming_into_another_suppliers_name_conflicts(client, reference):

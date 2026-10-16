@@ -21,6 +21,13 @@ export const listNames = (names: string[]) =>
   names.length > 2
     ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`
     : names.join(" and ");
+// The end of a toast after a change analysed orders again, e.g. " PO-1 and PO-2 analysed again."
+export const analysedAgain = (orderIds: string[]) =>
+  !orderIds.length
+    ? ""
+    : orderIds.length > 4
+      ? ` ${plural(orderIds.length, "order")} analysed again.`
+      : ` ${listNames(orderIds)} analysed again.`;
 export const download = (name: string, content: string, type = "text/csv") => {
   const url = URL.createObjectURL(new Blob([content], { type }));
   const a = document.createElement("a");

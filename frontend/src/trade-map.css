@@ -934,6 +934,16 @@ button.tm-callout.tm-callout-row {
 .tm-doc-field .tm-check {
   margin-top: 0;
 }
+.tm-doc-needed {
+  margin-left: auto;
+  padding: 2px 7px;
+  background: var(--lime);
+  font-size: 10px;
+  white-space: nowrap;
+}
+.tm-form small.tm-doc-hint {
+  margin-top: 0;
+}
 .tm-form .tm-doc-field input:not([type="checkbox"]) {
   padding: 8px 10px;
 }

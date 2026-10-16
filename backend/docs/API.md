@@ -78,8 +78,8 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
 | `POST /trade-map/scenarios/suggest` | editor | Trade map: "What if" panel, "Suggest a note with AI" |
 | `PATCH /trade-map/scenarios/{id}` | editor | (not yet: the panel re-saves through `POST`) |
 | `DELETE /trade-map/scenarios/{id}` | editor | Trade map: "Saved what-ifs", delete |
-| `POST /suppliers` | editor | Trade map: "Add supplier" / "Add a supplier record" |
-| `PATCH /suppliers/{id}` | editor | Trade map: "Edit supplier" |
+| `POST /suppliers` | editor | Trade map: "Add supplier" / "Add a supplier record"; an order's analysis report: "Add … with its documents" |
+| `PATCH /suppliers/{id}` | editor | Trade map: "Edit supplier"; an order's analysis report: "Record documents from …" |
 | `DELETE /suppliers/{id}` | editor | Trade map: "Delete supplier" |
 | `POST /suppliers/{id}/documents` | editor | Trade map supplier panel: "Upload certificate" |
 | `POST /supplier-documents/{id}/confirm` | editor | Trade map supplier panel: "Confirm certificate" |
@@ -392,7 +392,7 @@ Everything the map draws, in one call when the page opens:
 | --- | --- |
 | `markets` | `code` (`EU`), name, hub point, `countryIds` (ISO numeric, matching world-atlas), `searchTerms` |
 | `orders[]` | `order`, `placement` (city, country, market, location, `approximate` = placed at the country centre), `checks[]`, `gapCount` |
-| `orders[].checks[]` | `requirementKey`, `title`, `level` (`supplier` / `shipment` / `check`), `status` (`on_file` / `missing` / `mismatch` / `prepare` / `check` / `unknown`), `note`, `source` |
+| `orders[].checks[]` | `requirementKey`, `title`, `level` (`supplier` / `shipment` / `check`), `status` (`on_file` / `missing` / `mismatch` / `prepare` / `check` / `unknown`), `note`, `source`, `documentKind` (the supplier document that answers it, `null` for shipment paperwork and checks) and `acceptedStandards`. An analysis report's `findings[]` have the same shape; reports saved before `documentKind` was added don't carry it |
 | `checks[].source` | The shared regulation version behind the requirement and the sentence that requires it: `regulationTitle`, `officialId`, `documentId` (→ `GET /regulation-documents/{id}/file`), `versionNumber`, `sourceUrl`, `quote` |
 | `suppliers[]` | From orders (matched by trimmed, lower-case name) + the supplier list. `id`/`documents` are `null` when the supplier is only named on orders. A document has `kind`, `detail`, `standards`, `documentNumber`, `issuer`, `expiresOn` (typed in or read from an upload) and `fromUpload` |
 | `sites[]` | Factories, ports, warehouses. `isRouteOrigin` marks the company's route start |
@@ -464,7 +464,7 @@ A what-if from the compare panel kept on record with a note: a proposal, not a c
 The company report's "Checklist changes coming up" section is built from the same list (`trade_map.list_checklist_changes`). `422` for `days` outside 1–365.
 
 ### Suppliers and sites (editor)
-Editors enter them in the map's side panel; viewers don't see the controls. The location comes from a click on the 2D map (which also suggests the country) or from typed `latitude, longitude`. After a save or delete the page reloads `GET /trade-map`, so order checks and flood proximity are recomputed. Each change writes an audit event (`supplier.created|updated|deleted`, `company_site.created|updated|deleted`).
+Editors enter them in the map's side panel, or a supplier from an order's analysis report (its next moves open the same form); viewers don't see the controls. The location comes from a click on the 2D map (which also suggests the country) or from typed `latitude, longitude`. After a save or delete the page reloads `GET /trade-map`, so order checks and flood proximity are recomputed. Each change writes an audit event (`supplier.created|updated|deleted`, `company_site.created|updated|deleted`).
 
 `POST /suppliers` → `201`:
 ```json
@@ -472,13 +472,13 @@ Editors enter them in the map's side panel; viewers don't see the controls. The 
  "location": {"latitude": 10.95, "longitude": 106.82}, "supplies": "Acacia veneer",
  "documents": [{"kind": "formaldehyde", "detail": "Test report, May 2026", "standards": ["EN 717-1"]}]}
 ```
-Only `name` (1–300) is required. `place` ≤200, `supplies` ≤1000 (blank is stored as `null`), `country` an alpha-2 code from `countries` (`UK` is read as `GB`), `location` −90..90 / −180..180, `contactName` ≤200 and `contactEmail` (one address; supplier messages are pre-filled with it), up to 20 `documents`, one per `kind` from `documentKinds` (`detail` 1–500, up to 10 `standards`, optional `documentNumber` ≤100, `issuer` ≤200, `expiresOn` `YYYY-MM-DD`). A typed document and one confirmed from an upload (`POST /supplier-documents/{id}/confirm`) are the same record; a kind kept in the list keeps its upload link (`fromUpload`). Returns the supplier with `id` and labelled `documents`.
+Only `name` (1–300) is required. `place` ≤200, `supplies` ≤1000 (blank is stored as `null`), `country` an alpha-2 code from `countries` (`UK` is read as `GB`), `location` −90..90 / −180..180, `contactName` ≤200 and `contactEmail` (one address; supplier messages are pre-filled with it), up to 20 `documents`, one per `kind` from `documentKinds` (`detail` 1–500, up to 10 `standards`, optional `documentNumber` ≤100, `issuer` ≤200, `expiresOn` `YYYY-MM-DD`). A typed document and one confirmed from an upload (`POST /supplier-documents/{id}/confirm`) are the same record; a kind kept in the list keeps its upload link (`fromUpload`). Returns the supplier with `id`, labelled `documents` and `analysedOrderIds`: the orders that name it (by the name key below) were analysed again, as `POST /runs` would, so their statuses and next steps follow the new record. Empty when no order names it, or when the run failed (the supplier is saved either way and the orders wait for "Analyse orders").
 - `409 supplier_exists`: the company has a supplier with the same name, ignoring case and spacing. Orders match suppliers on that key, so a renamed supplier stops matching orders written with the old name.
 - `422 invalid_input` with `fieldErrors.country` / `fieldErrors.documents` for an unknown country or document kind.
 
-`PATCH /suppliers/{id}` changes only the fields sent; `null` clears `place`, `country`, `location`, `supplies`. `documents` replaces the whole list (send `[]` to clear it). `name` and `documents` can't be `null`. Same errors as `POST`.
+`PATCH /suppliers/{id}` changes only the fields sent; `null` clears `place`, `country`, `location`, `supplies`. `documents` replaces the whole list (send `[]` to clear it). `name` and `documents` can't be `null`. Same errors as `POST`. Sending `documents`, or a `name` with another key, analyses again the orders that matched before and after (`analysedOrderIds`); a new place, contact or location runs nothing.
 
-`DELETE /suppliers/{id}` → `{"deleted": true}`. Its documents go with it; its orders stay, named on the order without a record (supplier checks become `unknown`).
+`DELETE /suppliers/{id}` → `{"deleted": true, "analysedOrderIds": [...]}`. Its documents go with it; its orders stay, named on the order without a record (supplier checks become `unknown`), and are analysed again, so their next step is to add the supplier.
 
 `POST /sites` → `201`:
 ```json

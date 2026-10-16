@@ -215,6 +215,8 @@ def check_order(
             source=sources[req.regulation_document_id].model_copy(
                 update={"quote": req.source_quote}
             ),
+            document_kind=req.document_kind,
+            accepted_standards=req.accepted_standards,
         )
         for req, status, note in _evaluate(order, requirements, documents)
     ]
