@@ -125,11 +125,14 @@ def test_run_reports_each_order(client, lan):
 
     assert (reports["PO-3"]["state"], reports["PO-3"]["orderStatus"]) == ("pass", "exposed")
     assert reports["PO-3"]["missingData"][0].startswith("No checklist for Dubai AE")
-    assert reports["PO-3"]["messageBlockedReason"].startswith("Complete the order's data")
+    assert reports["PO-3"]["messageBlockedReason"].startswith("No checklist for Dubai AE")
     assert reports["PO-4"]["orderStatus"] == "exposed"
     assert reports["PO-4"]["missingData"] == [
         "Add Song Be Timber to the suppliers, with their documents."
     ]
+    assert reports["PO-4"]["messageBlockedReason"] == (
+        "Add Song Be Timber to the suppliers, with their documents. Then run the analysis again."
+    )
     assert reports["PO-4"]["suggestedAction"]["kind"] == "complete_data"
 
     # Order statuses, the overview and the order page follow the latest run.

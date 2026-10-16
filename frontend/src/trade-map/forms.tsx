@@ -3,8 +3,10 @@ import { Check, Loader2, Trash2 } from "lucide-react";
 import {
   api,
   type MapSite,
+  type RequirementCheck,
   type SiteInput,
   type SupplierInput,
+  type SupplierRecord,
   type TradeMap,
 } from "../api";
 import { errorMessage } from "../auth";
@@ -37,12 +39,14 @@ function LocationField({
   id,
   pin,
   required,
+  mapless,
   onPin,
   onValid,
 }: {
   id: string;
   pin: Pin | null;
   required?: boolean;
+  mapless?: boolean; // the form is open away from the map (an order's page)
   onPin: (pin: Pin | null) => void;
   onValid: (valid: boolean) => void;
 }) {
@@ -79,7 +83,9 @@ function LocationField({
       <small id={id + "-hint"} className={invalid ? "tm-field-error" : ""}>
         {invalid
           ? "Write latitude, then longitude, for example 10.95, 106.82."
-          : "Click the map, or paste latitude and longitude from a map app."}
+          : mapless
+            ? "Paste latitude and longitude from a map app."
+            : "Click the map, or paste latitude and longitude from a map app."}
       </small>
     </>
   );
@@ -199,12 +205,18 @@ type DocumentDraft = {
   expiresOn: string;
 };
 
+// An order's supplier checks still to answer, and the order they come from: the form lists
+// those documents first and says what the checklist accepts.
+export type NeededDocuments = { orderId: string; checks: RequirementCheck[] };
+
 export function SupplierForm({
   group,
   name: suggestedName,
   documentKinds,
   countries,
   pin,
+  needed,
+  mapless,
   onPin,
   onSaved,
   onDeleted,
@@ -215,12 +227,24 @@ export function SupplierForm({
   documentKinds: TradeMap["documentKinds"];
   countries: TradeMap["countries"];
   pin: Pin | null;
+  needed?: NeededDocuments;
+  mapless?: boolean;
   onPin: (pin: Pin | null) => void;
-  onSaved: (name: string) => Promise<void>;
-  onDeleted: () => Promise<void>;
+  // `saved.analysedOrderIds`: the orders the backend analysed again after the change.
+  onSaved: (name: string, saved: SupplierRecord) => Promise<void>;
+  onDeleted: (analysedOrderIds: string[]) => Promise<void>;
   onCancel: () => void;
 }) {
   const record = group?.id ? group : null;
+  const neededByKind = new Map(
+    (needed?.checks ?? [])
+      .filter((check) => check.documentKind)
+      .map((check) => [check.documentKind!, check]),
+  );
+  const kinds = [
+    ...documentKinds.filter(({ kind }) => neededByKind.has(kind)),
+    ...documentKinds.filter(({ kind }) => !neededByKind.has(kind)),
+  ];
   const [name, setName] = useState(group?.name ?? suggestedName ?? "");
   const [place, setPlace] = useState(record?.place ?? "");
   const [country, setCountry] = useState(record?.country ?? "");
@@ -297,7 +321,7 @@ export function SupplierForm({
       const saved = record
         ? await api.updateSupplier(record.id!, body)
         : await api.createSupplier(body);
-      await onSaved(saved.name);
+      await onSaved(saved.name, saved);
     });
   };
 
@@ -340,6 +364,7 @@ export function SupplierForm({
       <LocationField
         id="tm-supplier-location"
         pin={pin}
+        mapless={mapless}
         onPin={onPin}
         onValid={setLocationValid}
       />
@@ -373,11 +398,20 @@ export function SupplierForm({
         <small>
           Tick what this supplier has given you. Orders' market checklists are
           checked against it.
+          {neededByKind.size > 0 &&
+            ` The ${plural(neededByKind.size, "document")} ${needed!.orderId}'s checklist asks for ${neededByKind.size === 1 ? "is" : "are"} first.`}
         </small>
-        {documentKinds.map(({ kind, label }) => {
+        {kinds.map(({ kind, label }) => {
           const doc = documents[kind];
+          const check = neededByKind.get(kind);
+          const accepted = check?.acceptedStandards ?? [];
           return (
-            <div key={kind} className={"tm-doc-field" + (doc.on ? " on" : "")}>
+            <div
+              key={kind}
+              className={
+                "tm-doc-field" + (doc.on ? " on" : "") + (check ? " needed" : "")
+              }
+            >
               <label className="tm-check">
                 <input
                   type="checkbox"
@@ -385,7 +419,19 @@ export function SupplierForm({
                   onChange={(e) => editDocument(kind, { on: e.target.checked })}
                 />
                 {label}
+                {check && (
+                  <span className="tm-doc-needed">
+                    Needed for {needed!.orderId}
+                  </span>
+                )}
               </label>
+              {check && (check.status === "mismatch" || accepted.length > 0) && (
+                <small className="tm-doc-hint">
+                  {check.status === "mismatch"
+                    ? check.note
+                    : `Accepted: ${accepted.join(" or ")}.`}
+                </small>
+              )}
               {doc.on && (
                 <>
                   <input
@@ -404,7 +450,11 @@ export function SupplierForm({
                     onChange={(e) =>
                       editDocument(kind, { standards: e.target.value })
                     }
-                    placeholder="Test standards, comma-separated (optional)"
+                    placeholder={
+                      accepted.length
+                        ? `Test standards, e.g. ${accepted[0]}`
+                        : "Test standards, comma-separated (optional)"
+                    }
                   />
                   <input
                     aria-label={`${label}: document number`}
@@ -458,8 +508,8 @@ export function SupplierForm({
           }`}
           onDelete={() =>
             run(async () => {
-              await api.deleteSupplier(record.id!);
-              await onDeleted();
+              const deleted = await api.deleteSupplier(record.id!);
+              await onDeleted(deleted.analysedOrderIds);
             })
           }
         />
