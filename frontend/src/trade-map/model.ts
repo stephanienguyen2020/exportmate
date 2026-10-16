@@ -11,6 +11,7 @@ import world110Url from "world-atlas/countries-110m.json?url";
 import world50Url from "world-atlas/countries-50m.json?url";
 import { date, type Order } from "../data";
 import {
+  asOrder,
   type GeoPoint,
   type MapMarket,
   type MapOrder,
@@ -232,6 +233,31 @@ export const lonLat = (p: GeoPoint): LonLat => [p.longitude, p.latitude];
 
 export const isGap = (c: RequirementCheck) =>
   c.status === "missing" || c.status === "mismatch";
+
+export const rowOf = (o: MapOrder): Row => ({
+  order: asOrder(o.order),
+  placement: o.placement,
+  checks: o.checks,
+  gaps: o.checks.filter(isGap),
+});
+
+// A supplier from /trade-map with its orders' rows (looked up by order ID).
+export const supplierGroupOf = (
+  s: MapSupplier,
+  rowsById: Map<string, Row>,
+): SupplierGroup => ({
+  key: supplierKey(s.name),
+  id: s.id,
+  name: s.name,
+  country: s.country,
+  place: s.place,
+  at: s.location ? lonLat(s.location) : null,
+  supplies: s.supplies,
+  contactName: s.contactName ?? null,
+  contactEmail: s.contactEmail ?? null,
+  documents: s.documents,
+  rows: s.orderIds.map((id) => rowsById.get(id)!).filter(Boolean),
+});
 
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 

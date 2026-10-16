@@ -6,12 +6,13 @@ Usage:  uv run python -m app.seed_demo_data --email lan@example.com
 With AUTH_MODE=dev, sign in as that user with the token "dev:lan@example.com".
 For a real Firebase user, pass --firebase-uid <uid> as well.
 
-Companies: `binh-duong` (default) is the frontend's demo, 12 orders to the EU and Asia whose
-statuses copy the frontend (2 exposed, 10 clear). `us-furniture` is Vietnam Google AI Builder
-Furniture, 16 furniture orders from Vietnam to US ports (seed_data/us_furniture_company.json).
-Statuses are demo values, not the result of an analysis. A user belongs to one company, so
-each company needs its own email. Shared reference data (markets, checklists, ...) is loaded
-first. Running it again changes nothing.
+Companies: `binh-duong` (default) is the frontend's demo, 12 orders to the EU and Asia.
+`us-furniture` is Vietnam Google AI Builder Furniture, 16 furniture orders from Vietnam to US
+ports (seed_data/us_furniture_company.json). As with an import, the orders are analysed once
+the suppliers are loaded, so statuses and reports (and supplier messages drafted from them)
+come from the analysis. A user belongs to one company, so each company needs its own email.
+Shared reference data (markets, checklists, ...) is loaded first. Running it again changes
+nothing, except that it analyses orders that have never been analysed.
 """
 
 import argparse
@@ -24,8 +25,10 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.context import CompanyContext
+from app.core.errors import AppError
 from app.core.logging import configure_logging
 from app.database.models import Order, OrderStatus
+from app.database.queries import analysis as analysis_queries
 from app.database.queries import orders as order_queries
 from app.database.queries import trade_map as map_queries
 from app.database.session import open_session
@@ -34,6 +37,7 @@ from app.schemas.playbook import RuleIn
 from app.seed_data import load_seed_file
 from app.seed_reference_data import seed_reference_data
 from app.services import accounts
+from app.services import analysis as analysis_service
 from app.services import playbook as playbook_service
 from app.services.trade_map import supplier_name_key
 
@@ -85,7 +89,6 @@ def build_demo_orders() -> list[dict]:
             "value": 24000,
             "ship_date": date(2026, 10, 27),
             "hs_code": "4412.33",
-            "status": OrderStatus.exposed,
         },
         {
             "external_id": "PO-2304",
@@ -95,7 +98,6 @@ def build_demo_orders() -> list[dict]:
             "value": 18000,
             "ship_date": date(2026, 10, 30),
             "hs_code": "4412.33",
-            "status": OrderStatus.exposed,
         },
     ]
     for i, destination in enumerate(_OTHER_DESTINATIONS):
@@ -109,7 +111,6 @@ def build_demo_orders() -> list[dict]:
                 "value": 12000 + i * 1500,
                 "ship_date": date(2026, 11, i + 2),
                 "hs_code": "4412.32" if odd else "4418.99",
-                "status": OrderStatus.clear,
             }
         )
     return orders
@@ -135,7 +136,6 @@ def build_seed_file_orders(data: dict) -> list[dict]:
             "value": o["value"],
             "ship_date": date.fromisoformat(o["shipDate"]),
             "hs_code": o["hsCode"],
-            "status": OrderStatus(o["status"]),
         }
         for o in data["orders"]
     ]
@@ -242,6 +242,27 @@ def seed_company_profile(
     return sorted(missing)
 
 
+def analyse_unanalysed_orders(db: Session, ctx: CompanyContext) -> int:
+    """Analyse the company's orders that have no analysis report yet, as an import does, so
+    their statuses and reports come from the analysis. Returns how many were analysed; if the
+    run fails, the orders wait for "Analyse orders"."""
+    waiting = [
+        order.external_id
+        for order in order_queries.list_company_orders(db, ctx.company_id)
+        if analysis_queries.get_latest_order_report(db, order.id) is None
+    ]
+    if not waiting:
+        return 0
+    try:
+        analysis_service.start_run(db, ctx, waiting)
+    except AppError as error:
+        log.warning(
+            "seed.analysis_failed", extra={"company_id": str(ctx.company_id), "error": error.code}
+        )
+        return 0
+    return len(waiting)
+
+
 def seed_demo_data(email: str, firebase_uid: str, company_key: str = "binh-duong") -> None:
     seed = load_demo_company_seed(company_key)
     with open_session() as db:
@@ -275,7 +296,7 @@ def seed_demo_data(email: str, firebase_uid: str, company_key: str = "binh-duong
                 currency=company.currency,
                 ship_date=o["ship_date"],
                 hs_code=o["hs_code"],
-                status=o["status"],
+                status=OrderStatus.awaiting_analysis,
             )
             for o in demo
             if o["external_id"] not in existing
@@ -289,18 +310,21 @@ def seed_demo_data(email: str, firebase_uid: str, company_key: str = "binh-duong
                 playbook_service.create_playbook_rule(db, ctx, rule)
         profile_fields = seed_company_profile(db, ctx, seed.profile)
         suppliers, sites = seed_company_map_data(db, company.id, seed.seed_file)
+        analysed = analyse_unanalysed_orders(db, ctx)
         log.info(
             "seed.demo_loaded",
             extra={
                 "company_id": str(company.id),
                 "orders_added": len(new_orders),
                 "orders_existing": len(existing),
+                "orders_analysed": analysed,
                 "rules_added": 0 if rules else len(seed.rules),
             },
         )
 
         print(f"Company: {company.name} ({company.id})")
         print(f"Orders added: {len(new_orders)} (already there: {len(existing)})")
+        print(f"Orders analysed: {analysed}")
         print(f"Rules added: {0 if rules else len(seed.rules)}")
         print(f"Profile fields filled: {', '.join(profile_fields) or 'none (already set)'}")
         print(f"Trade map: {suppliers} suppliers, {sites} sites")

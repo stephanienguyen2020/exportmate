@@ -25,6 +25,7 @@ import {
 } from "./api";
 import { errorMessage } from "./auth";
 import { CostWhy } from "./CostWhy";
+import NextMoves, { type OrderField } from "./NextMoves";
 import { documentLink, RegulationCitation } from "./Regulations";
 import Solutions from "./Solutions";
 import "./analysis.css";
@@ -277,6 +278,7 @@ export default function OrderAnalysis({
   latestReportId,
   role,
   onChanged,
+  onEditOrder,
   notify,
 }: {
   orderId: string;
@@ -284,6 +286,8 @@ export default function OrderAnalysis({
   latestReportId: string | null;
   role: Role;
   onChanged: () => Promise<void>;
+  // Opens the order's own form at a field, for a next move that changes the order.
+  onEditOrder?: (field: OrderField) => void;
   notify: Notify;
 }) {
   const editable = role === "owner" || role === "editor";
@@ -356,6 +360,19 @@ export default function OrderAnalysis({
             </button>
           )}
         </div>
+        {report && editable && onEditOrder && (
+          <NextMoves
+            report={report}
+            notify={notify}
+            onEditOrder={onEditOrder}
+            onAskSupplier={() =>
+              document
+                .getElementById("supplier-messages")
+                ?.scrollIntoView({ behavior: "smooth", block: "start" })
+            }
+            onChanged={onChanged}
+          />
+        )}
         {error ? (
           <p role="alert">{error}</p>
         ) : !reportId ? (
@@ -841,7 +858,11 @@ function SupplierMessages({
     ]);
   const blocked = report.messageBlockedReason;
   return (
-    <section className="panel an-messages" aria-label="Supplier messages">
+    <section
+      id="supplier-messages"
+      className="panel an-messages"
+      aria-label="Supplier messages"
+    >
       <div className="an-report-head">
         <div>
           <span className="eyebrow">YOUR NEXT MOVE</span>

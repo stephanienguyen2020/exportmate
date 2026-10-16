@@ -503,6 +503,10 @@ export type RequirementCheck = {
   level: "supplier" | "shipment" | "check";
   status: CheckStatus;
   note: string;
+  // The supplier document that answers it and the standards it accepts. Absent from
+  // analysis reports saved before the backend added them.
+  documentKind?: string | null;
+  acceptedStandards?: string[];
 };
 // A checklist line that takes effect or changes soon in a market the company ships to.
 export type ChecklistChange = {
@@ -624,6 +628,8 @@ export type SupplierInput = {
 export type SupplierRecord = Omit<SupplierInput, "documents"> & {
   id: string;
   documents: NonNullable<MapSupplier["documents"]>;
+  // Orders the save analysed again (a new name or new documents changes their checks).
+  analysedOrderIds: string[];
 };
 export type SiteInput = {
   kind: MapSite["kind"];
@@ -1045,19 +1051,24 @@ export const api = {
     request<ChecklistChanges>("/trade-map/changes", { signal }).then(
       (r) => r.data,
     ),
+  // `analysedOrderIds` defaults to none: a backend deployed before it was added doesn't
+  // send it (Vercel deploys the frontend first).
   createSupplier: (supplier: SupplierInput) =>
     request<SupplierRecord>("/suppliers", {
       method: "POST",
       body: JSON.stringify(supplier),
-    }).then((r) => r.data),
+    }).then((r) => ({ ...r.data, analysedOrderIds: r.data.analysedOrderIds ?? [] })),
   // Sends every field: null clears place, country, location and supplies.
   updateSupplier: (id: string, supplier: SupplierInput) =>
     request<SupplierRecord>(`/suppliers/${encodeURIComponent(id)}`, {
       method: "PATCH",
       body: JSON.stringify(supplier),
-    }).then((r) => r.data),
+    }).then((r) => ({ ...r.data, analysedOrderIds: r.data.analysedOrderIds ?? [] })),
   deleteSupplier: (id: string) =>
-    request(`/suppliers/${encodeURIComponent(id)}`, { method: "DELETE" }),
+    request<{ deleted: boolean; analysedOrderIds?: string[] }>(
+      `/suppliers/${encodeURIComponent(id)}`,
+      { method: "DELETE" },
+    ).then((r) => ({ analysedOrderIds: r.data.analysedOrderIds ?? [] })),
   createSite: (site: SiteInput) =>
     request<MapSite>("/sites", {
       method: "POST",

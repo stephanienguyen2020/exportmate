@@ -55,6 +55,26 @@
   min-width: 0;
   flex: 1 1 280px;
 }
+.an-moves {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin: 16px 0 4px;
+}
+.an-moves .btn {
+  gap: 8px;
+  max-width: 100%;
+}
+.an-fix {
+  margin: 16px 0 8px;
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  background: #fafbf5;
+}
+.an-fix .tm-head h2 {
+  font-size: 22px;
+}
 .an-run-result {
   display: grid;
   gap: 12px;
