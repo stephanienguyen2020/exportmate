@@ -1,0 +1,785 @@
+{
+ "_about": "Annex I of the EU Deforestation Regulation: for each relevant commodity, the Combined Nomenclature codes of the products made from it (hsCode = first 6 digits). partOfCode: the Annex says 'ex', so only the goods of that code made from the commodity. Built by app/knowledge_graph/build_eudr_products.py from the document below.",
+ "regulationOfficialId": "32023R1115",
+ "documentKey": "eudr-consolidated-2026-09-18",
+ "sourceUrl": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:02023R1115-20260918",
+ "downloadedOn": "2026-10-16",
+ "commodities": [
+  {
+   "commodity": "Cattle",
+   "products": [
+    {
+     "cnCode": "0102",
+     "hsCode": "0102",
+     "partOfCode": true,
+     "description": "Live cattle"
+    },
+    {
+     "cnCode": "0201",
+     "hsCode": "0201",
+     "partOfCode": true,
+     "description": "Meat of cattle, fresh or chilled"
+    },
+    {
+     "cnCode": "0202",
+     "hsCode": "0202",
+     "partOfCode": true,
+     "description": "Meat of cattle, frozen"
+    },
+    {
+     "cnCode": "0206 10",
+     "hsCode": "0206.10",
+     "partOfCode": true,
+     "description": "Edible offal of cattle, fresh or chilled"
+    },
+    {
+     "cnCode": "0206 21 00",
+     "hsCode": "0206.21",
+     "partOfCode": true,
+     "description": "Frozen cattle tongues",
+     "appliesFrom": "2027-12-30"
+    },
+    {
+     "cnCode": "0206 22",
+     "hsCode": "0206.22",
+     "partOfCode": true,
+     "description": "Edible cattle livers, frozen"
+    },
+    {
+     "cnCode": "0206 29",
+     "hsCode": "0206.29",
+     "partOfCode": true,
+     "description": "Edible cattle offal (excluding tongues and livers), frozen"
+    },
+    {
+     "cnCode": "1602 50",
+     "hsCode": "1602.50",
+     "partOfCode": true,
+     "description": "Other prepared or preserved meat, meat offal, blood, of cattle"
+    }
+   ]
+  },
+  {
+   "commodity": "Cocoa",
+   "products": [
+    {
+     "cnCode": "1801",
+     "hsCode": "1801",
+     "partOfCode": false,
+     "description": "Cocoa beans, whole or broken, raw or roasted"
+    },
+    {
+     "cnCode": "1802",
+     "hsCode": "1802",
+     "partOfCode": false,
+     "description": "Cocoa shells, husks, skins and other cocoa waste",
+     "notes": [
+      "not including waste as defined in Article 3, point (1), of Directive 2008/98/EC"
+     ]
+    },
+    {
+     "cnCode": "1803",
+     "hsCode": "1803",
+     "partOfCode": false,
+     "description": "Cocoa paste, whether or not defatted"
+    },
+    {
+     "cnCode": "1804",
+     "hsCode": "1804",
+     "partOfCode": false,
+     "description": "Cocoa butter, fat and oil"
+    },
+    {
+     "cnCode": "1805",
+     "hsCode": "1805",
+     "partOfCode": false,
+     "description": "Cocoa powder, not containing added sugar or other sweetening matter"
+    },
+    {
+     "cnCode": "1806",
+     "hsCode": "1806",
+     "partOfCode": false,
+     "description": "Chocolate and other food preparations containing cocoa"
+    }
+   ]
+  },
+  {
+   "commodity": "Coffee",
+   "products": [
+    {
+     "cnCode": "0901",
+     "hsCode": "0901",
+     "partOfCode": false,
+     "description": "Coffee, whether or not roasted or decaffeinated; coffee husks and skins; coffee substitutes containing coffee in any proportion"
+    },
+    {
+     "cnCode": "2101 11 00",
+     "hsCode": "2101.11",
+     "partOfCode": false,
+     "description": "Extracts, essences, and concentrates of coffee",
+     "appliesFrom": "2027-12-30"
+    }
+   ]
+  },
+  {
+   "commodity": "Oil palm",
+   "products": [
+    {
+     "cnCode": "1207 10 00",
+     "hsCode": "1207.10",
+     "partOfCode": true,
+     "description": "Palm nuts and kernels"
+    },
+    {
+     "cnCode": "1511",
+     "hsCode": "1511",
+     "partOfCode": true,
+     "description": "Palm oil and its fractions, whether or not refined, but not chemically modified",
+     "notes": [
+      "not including waste as defined in Article 3, point (1), of Directive 2008/98/EC"
+     ]
+    },
+    {
+     "cnCode": "1513 21",
+     "hsCode": "1513.21",
+     "partOfCode": true,
+     "description": "Crude palm kernel and babassu oil and fractions thereof, whether or not refined, but not chemically modified",
+     "notes": [
+      "not including waste as defined in Article 3, point (1), of Directive 2008/98/EC"
+     ]
+    },
+    {
+     "cnCode": "1513 29",
+     "hsCode": "1513.29",
+     "partOfCode": true,
+     "description": "Palm kernel and babassu oil and their fractions, whether or not refined, other than crude oil, but not chemically modified",
+     "notes": [
+      "not including waste as defined in Article 3, point (1), of Directive 2008/98/EC"
+     ]
+    },
+    {
+     "cnCode": "1516 20",
+     "hsCode": "1516.20",
+     "partOfCode": true,
+     "description": "Palm, palm kernel and babassu oils and their fractions, partly or wholly hydrogenated, inter-esterified, re-esterified or elaidinised, whether or not refined, but not further prepared",
+     "notes": [
+      "not including products to the extent they are used in the manufacturing of medicinal products for human or veterinary use within the scope of Directive 2001/83/EC of the European Parliament and of the Council , Regulation (EC) No 726/2004 of the European parliament and of the Council , or Regulation (EU) 2019/6 of the European Parliament and of the Council"
+     ],
+     "appliesFrom": "2027-12-30"
+    },
+    {
+     "cnCode": "1518 00",
+     "hsCode": "1518.00",
+     "partOfCode": true,
+     "description": "Palm, palm kernel and babassu oils and their fractions boiled, oxidised, dehydrated, sulphurised, blown, polymerised by heat in vacuum or in inert gas or otherwise chemically modified, excluding those of heading 1516 ; inedible mixtures or preparations of animal, vegetable or microbial fats or oils or of fractions of different fats or oils of this chapter, that contain or have been made using oil palm",
+     "notes": [
+      "not including waste as defined in Article 3, point (1), of Directive 2008/98/EC"
+     ],
+     "appliesFrom": "2027-12-30"
+    },
+    {
+     "cnCode": "1520 00",
+     "hsCode": "1520.00",
+     "partOfCode": true,
+     "description": "Crude glycerol, glycerol waters and lyes that have been produced using oil palm",
+     "appliesFrom": "2027-12-30"
+    },
+    {
+     "cnCode": "2306 60 00",
+     "hsCode": "2306.60",
+     "partOfCode": true,
+     "description": "Oilcake and other solid residues of palm nuts or kernels, whether or not ground or in the form of pellets, resulting from the extraction of palm nut or kernel fats or oils"
+    },
+    {
+     "cnCode": "2905 16",
+     "hsCode": "2905.16",
+     "partOfCode": true,
+     "description": "Octanol (octyl alcohol) and isomers thereof, that have been synthesized using oil palm",
+     "appliesFrom": "2027-12-30"
+    },
+    {
+     "cnCode": "2905 17 00",
+     "hsCode": "2905.17",
+     "partOfCode": true,
+     "description": "Dodecan-1-ol (lauryl alcohol), hexadecan-1-ol (cetyl alcohol) and octadecan-1-ol (stearyl alcohol), that have been synthesized using oil palm",
+     "notes": [
+      "not including products to the extent they are used in the manufacturing of medicinal products for human or veterinary use within the scope of Directive 2001/83/EC, Regulation (EC) No 726/2004 or Regulation (EU) 2019/6"
+     ],
+     "appliesFrom": "2027-12-30"
+    },
+    {
+     "cnCode": "2905 19 00",
+     "hsCode": "2905.19",
+     "partOfCode": true,
+     "description": "Other saturated monohydric alcohols, not elsewhere specified or included, that have synthesized using oil palm",
+     "appliesFrom": "2027-12-30"
+    },
+    {
+     "cnCode": "2905 45",
+     "hsCode": "2905.45",
+     "partOfCode": true,
+     "description": "Glycerol, with a purity of 95 % or more (calculated on the weight of the dry product), that has been synthesized using oil palm",
+     "notes": [
+      "not including products to the extent they are used in the manufacturing of medicinal products for human or veterinary use within the scope of Directive 2001/83/EC, Regulation (EC) No 726/2004 or Regulation (EU) 2019/6"
+     ]
+    },
+    {
+     "cnCode": "2915 39",
+     "hsCode": "2915.39",
+     "partOfCode": true,
+     "description": "Esters of acetic acid, other than ethyl acetate, vinyl acetate, n-butyl acetate and dinoseb (ISO) acetate, that have been synthesized using oil palm",
+     "appliesFrom": "2027-12-30"
+    },
+    {
+     "cnCode": "2915 70",
+     "hsCode": "2915.70",
+     "partOfCode": true,
+     "description": "Palmitic acid, stearic acid, their salts and esters that have been synthesized using oil palm",
+     "notes": [
+      "not including products to the extent they are used in the manufacturing of medicinal products for human or veterinary use within the scope of Directive 2001/83/EC, Regulation (EC) No 726/2004 or Regulation (EU) 2019/6"
+     ]
+    },
+    {
+     "cnCode": "2915 90",
+     "hsCode": "2915.90",
+     "partOfCode": true,
+     "description": "Saturated acyclic monocarboxylic acids, their anhydrides, halides, peroxides and peroxyacids; their halogenated, sulphonated, nitrated or nitrosated derivatives, other than formic acid, its salts and esters, acetic acid and its salts; acetic anhydride, esters of acetic acid, mono-, di- or trichloroacetic acids, their salts and esters, propionic acid, its salts and esters that have been synthesized using oil palm, butanoic acids, pentanoic acids, their salts and esters and palmitic acid, stearic acid, their salts and esters, that have been synthesized using oil palm",
+     "notes": [
+      "not including products to the extent they are used in the manufacturing of medicinal products for human or veterinary use within the scope of Directive 2001/83/EC, Regulation (EC) No 726/2004 or Regulation (EU) 2019/6"
+     ]
+    },
+    {
+     "cnCode": "2916 15",
+     "hsCode": "2916.15",
+     "partOfCode": true,
+     "description": "Oleic, linoleic, linolenic acids, their salts and esters that have been synthesized using oil palm",
+     "appliesFrom": "2027-12-30"
+    },
+    {
+     "cnCode": "2916 19 10",
+     "hsCode": "2916.19",
+     "partOfCode": true,
+     "description": "Undecenoic acids, its salts and esters that have been synthesized using oil palm",
+     "appliesFrom": "2027-12-30"
+    },
+    {
+     "cnCode": "2921 19",
+     "hsCode": "2921.19",
+     "partOfCode": true,
+     "description": "Acyclic monoamines and their derivatives; salts thereof, other than methylamine, di- or trimethylamine and their salts, 2-(N,N-dimethylamino)ethylchloride hydrochloride, 2-(N,N-diethylamino)ethylchloride hydrochloride and 2-(N,N-diisopropylamino)ethylchloride hydrochloride, that have been synthesized using oil palm",
+     "notes": [
+      "not including products to the extent they are used in the manufacturing of medicinal products for human or veterinary use within the scope of Directive 2001/83/EC, Regulation (EC) No 726/2004 or Regulation (EU) 2019/6"
+     ],
+     "appliesFrom": "2027-12-30"
+    },
+    {
+     "cnCode": "2923 90 00",
+     "hsCode": "2923.90",
+     "partOfCode": true,
+     "description": "Quaternary ammonium salts and hydroxides, other than choline and its salts, tetraethylammonium perfluorooctane sulphonate and didecyldimethylammonium perfluorooctane sulphonate, that have been synthesized using oil palm",
+     "notes": [
+      "not including products to the extent they are used in the manufacturing of medicinal products for human or veterinary use within the scope of Directive 2001/83/EC, Regulation (EC) No 726/2004 or Regulation (EU) 2019/6"
+     ],
+     "appliesFrom": "2027-12-30"
+    },
+    {
+     "cnCode": "2924 19 00",
+     "hsCode": "2924.19",
+     "partOfCode": true,
+     "description": "Acyclic amides, carbamates and their salts, other than meprobamate (INN), fluoroacetamide (ISO), monocrotophos (ISO) and phosphamidon (ISO), that have been synthesized using oil palm",
+     "notes": [
+      "not including products to the extent they are used in the manufacturing of medicinal products for human or veterinary use within the scope of Directive 2001/83/EC, Regulation (EC) No 726/2004 or Regulation (EU) 2019/6"
+     ],
+     "appliesFrom": "2027-12-30"
+    },
+    {
+     "cnCode": "3401 11 00",
+     "hsCode": "3401.11",
+     "partOfCode": true,
+     "description": "Soap in the form of bars, cakes, moulded pieces or shapes for toilet use (including medicated products), that contain or have been made using oil palm",
+     "appliesFrom": "2027-12-30",
+     "notes": [
+      "not including products to the extent they are used in the manufacturing of medicinal products for human or veterinary use within the scope of Directive 2001/83/EC, Regulation (EC) No 726/2004 or Regulation (EU) 2019/6"
+     ]
+    },
+    {
+     "cnCode": "3401 20",
+     "hsCode": "3401.20",
+     "partOfCode": true,
+     "description": "Soap in forms other than bars, cakes, moulded pieces or shapes, that contain or have been made using oil palm",
+     "appliesFrom": "2027-12-30"
+    },
+    {
+     "cnCode": "3823 11 00",
+     "hsCode": "3823.11",
+     "partOfCode": true,
+     "description": "Stearic acid, industrial that has been synthesized using oil palm",
+     "notes": [
+      "not including products to the extent they are used in the manufacturing of medicinal products for human or veterinary use within the scope of Directive 2001/83/EC, Regulation (EC) No 726/2004 or Regulation (EU) 2019/6"
+     ]
+    },
+    {
+     "cnCode": "3823 12 00",
+     "hsCode": "3823.12",
+     "partOfCode": true,
+     "description": "Oleic acid, industrial that has been synthesized using oil palm",
+     "notes": [
+      "not including products to the extent they are used in the manufacturing of medicinal products for human or veterinary use within the scope of Directive 2001/83/EC, Regulation (EC) No 726/2004 or Regulation (EU) 2019/6"
+     ]
+    },
+    {
+     "cnCode": "3823 19",
+     "hsCode": "3823.19",
+     "partOfCode": true,
+     "description": "Industrial monocarboxylic fatty acids; acid oils from refining other than stearic acid, oleic acid and tall oil fatty acids, that have been synthesized using oil palm",
+     "notes": [
+      "not including waste as defined in Article 3, point (1), of Directive 2008/98/EC"
+     ]
+    },
+    {
+     "cnCode": "3823 70 00",
+     "hsCode": "3823.70",
+     "partOfCode": true,
+     "description": "Industrial fatty alcohols that have been synthesized using oil palm"
+    },
+    {
+     "cnCode": "3824 99",
+     "hsCode": "3824.99",
+     "partOfCode": true,
+     "description": "Other chemical products and preparations of the chemical or allied industries (including those consisting of mixtures of natural products), not elsewhere specified or included, that contain or have been made using oil palm",
+     "notes": [
+      "not including products to the extent they are used in the manufacturing of medicinal products for human or veterinary use within the scope of Directive 2001/83/EC, Regulation (EC) No 726/2004 or Regulation (EU) 2019/6"
+     ],
+     "appliesFrom": "2027-12-30"
+    },
+    {
+     "cnCode": "3907 29",
+     "hsCode": "3907.29",
+     "partOfCode": true,
+     "description": "Other polyethers in primary forms, other than bis(polyoxyethylene) methylphosphonate, that have been made using oil palm",
+     "notes": [
+      "not including products to the extent they are used in the manufacturing of medicinal products for human or veterinary use within the scope of Directive 2001/83/EC, Regulation (EC) No 726/2004 or Regulation (EU) 2019/6"
+     ],
+     "appliesFrom": "2027-12-30"
+    }
+   ]
+  },
+  {
+   "commodity": "Rubber",
+   "products": [
+    {
+     "cnCode": "4001",
+     "hsCode": "4001",
+     "partOfCode": true,
+     "description": "Natural rubber, balata, gutta-percha, guayule, chicle and similar natural gums, in primary forms or in plates, sheets or strip"
+    },
+    {
+     "cnCode": "4005",
+     "hsCode": "4005",
+     "partOfCode": true,
+     "description": "Compounded rubber, unvulcanised, in primary forms or in plates, sheets or strip"
+    },
+    {
+     "cnCode": "4006",
+     "hsCode": "4006",
+     "partOfCode": true,
+     "description": "Unvulcanised rubber in other forms (e.g. rods, tubes and profile shapes) and articles (e.g. discs and rings)"
+    },
+    {
+     "cnCode": "4007",
+     "hsCode": "4007",
+     "partOfCode": true,
+     "description": "Vulcanised rubber thread and cord"
+    },
+    {
+     "cnCode": "4008",
+     "hsCode": "4008",
+     "partOfCode": true,
+     "description": "Plates, sheets, strips, rods and profile shapes, of vulcanised rubber other than hard rubber",
+     "notes": [
+      "not including used products and second-hand products"
+     ]
+    },
+    {
+     "cnCode": "4011",
+     "hsCode": "4011",
+     "partOfCode": true,
+     "description": "New pneumatic tyres, of rubber"
+    },
+    {
+     "cnCode": "4012 90 30",
+     "hsCode": "4012.90",
+     "partOfCode": true,
+     "description": "Tyre treads"
+    },
+    {
+     "cnCode": "4013",
+     "hsCode": "4013",
+     "partOfCode": true,
+     "description": "Inner tubes, of rubber"
+    },
+    {
+     "cnCode": "4015",
+     "hsCode": "4015",
+     "partOfCode": true,
+     "description": "Articles of apparel and clothing accessories (including gloves, mittens and mitts), for all purposes, of vulcanised rubber other than hard rubber",
+     "notes": [
+      "not including used products and second-hand products"
+     ]
+    },
+    {
+     "cnCode": "4017",
+     "hsCode": "4017",
+     "partOfCode": true,
+     "description": "Hard rubber (e.g. ebonite) in all forms including waste and scrap; articles of hard rubber",
+     "notes": [
+      "not including waste as defined in Article 3, point (1), of Directive 2008/98/EC",
+      "not including used products and second-hand products"
+     ]
+    }
+   ]
+  },
+  {
+   "commodity": "Soya",
+   "products": [
+    {
+     "cnCode": "1201 90 00",
+     "hsCode": "1201.90",
+     "partOfCode": false,
+     "description": "Soya beans, whether or not broken: other"
+    },
+    {
+     "cnCode": "1208 10",
+     "hsCode": "1208.10",
+     "partOfCode": false,
+     "description": "Soya bean flour and meal"
+    },
+    {
+     "cnCode": "1507",
+     "hsCode": "1507",
+     "partOfCode": false,
+     "description": "Soya-bean oil and its fractions, whether or not refined, but not chemically modified"
+    },
+    {
+     "cnCode": "2304",
+     "hsCode": "2304",
+     "partOfCode": false,
+     "description": "Oilcake and other solid residues, whether or not ground or in the form of pellets, resulting from the extraction of soya-bean oil"
+    }
+   ]
+  },
+  {
+   "commodity": "Wood",
+   "products": [
+    {
+     "cnCode": "4401",
+     "hsCode": "4401",
+     "partOfCode": true,
+     "description": "Fuel wood, in logs, in billets, in twigs, in faggots or in similar forms; wood in chips or particles; sawdust and wood waste and scrap, whether or not agglomerated in logs, briquettes, pellets or similar forms",
+     "notes": [
+      "not including waste as defined in Article 3, point (1), of Directive 2008/98/EC",
+      "not including single use packing material and packing containers used exclusively to support, protect or carry another product made available on the market or exported and presented with that product"
+     ]
+    },
+    {
+     "cnCode": "4402",
+     "hsCode": "4402",
+     "partOfCode": true,
+     "description": "Wood charcoal (including shell or nut charcoal), whether or not agglomerated"
+    },
+    {
+     "cnCode": "4403",
+     "hsCode": "4403",
+     "partOfCode": true,
+     "description": "Wood in the rough, whether or not stripped of bark or sapwood, or roughly squared",
+     "notes": [
+      "not including used products and second-hand products"
+     ]
+    },
+    {
+     "cnCode": "4404",
+     "hsCode": "4404",
+     "partOfCode": true,
+     "description": "Hoopwood; split poles; piles, pickets and stakes of wood, pointed but not sawn lengthwise; wooden sticks, roughly trimmed but not turned, bent or otherwise worked, suitable for the manufacture of walking sticks, umbrellas, tool handles or the like; chipwood and the like",
+     "notes": [
+      "not including used products and second-hand products"
+     ]
+    },
+    {
+     "cnCode": "4405",
+     "hsCode": "4405",
+     "partOfCode": true,
+     "description": "Wood wool; wood flour",
+     "notes": [
+      "not including single use packing material and packing containers used exclusively to support, protect or carry another product made available on the market or exported and presented with that product"
+     ]
+    },
+    {
+     "cnCode": "4406",
+     "hsCode": "4406",
+     "partOfCode": true,
+     "description": "Railway or tramway sleepers (cross-ties) of wood",
+     "notes": [
+      "not including used products and second-hand products"
+     ]
+    },
+    {
+     "cnCode": "4407",
+     "hsCode": "4407",
+     "partOfCode": true,
+     "description": "Wood sawn or chipped lengthwise, sliced or peeled, whether or not planed, sanded or end-jointed, of a thickness exceeding 6 mm",
+     "notes": [
+      "not including used products and second-hand products"
+     ]
+    },
+    {
+     "cnCode": "4408",
+     "hsCode": "4408",
+     "partOfCode": true,
+     "description": "Sheets for veneering (including those obtained by slicing laminated wood), for plywood or for other similar laminated wood and other wood, sawn lengthwise, sliced or peeled, whether or not planed, sanded, spliced or end-jointed, of a thickness not exceeding 6 mm"
+    },
+    {
+     "cnCode": "4409",
+     "hsCode": "4409",
+     "partOfCode": true,
+     "description": "Wood (including strips and friezes for parquet flooring, not assembled) continuously shaped (tongued, grooved, rebated, chamfered, V-jointed, beaded, moulded, rounded or the like) along any of its edges, ends or faces, whether or not planed, sanded or end-jointed",
+     "notes": [
+      "not including used products and second-hand products"
+     ]
+    },
+    {
+     "cnCode": "4410",
+     "hsCode": "4410",
+     "partOfCode": true,
+     "description": "Particle board, oriented strand board (OSB) and similar board (for example, waferboard) of wood or other ligneous materials, whether or not agglomerated with resins or other organic binding substances",
+     "notes": [
+      "not including used products and second-hand products"
+     ]
+    },
+    {
+     "cnCode": "4411",
+     "hsCode": "4411",
+     "partOfCode": true,
+     "description": "Fibreboard of wood or other ligneous materials, whether or not bonded with resins or other organic substances",
+     "notes": [
+      "not including used products and second-hand products"
+     ]
+    },
+    {
+     "cnCode": "4412",
+     "hsCode": "4412",
+     "partOfCode": true,
+     "description": "Plywood, veneered panels and similar laminated wood",
+     "notes": [
+      "not including used products and second-hand products"
+     ]
+    },
+    {
+     "cnCode": "4413",
+     "hsCode": "4413",
+     "partOfCode": true,
+     "description": "Densified wood, in blocks, plates, strips or profile shapes",
+     "notes": [
+      "not including used products and second-hand products"
+     ]
+    },
+    {
+     "cnCode": "4414",
+     "hsCode": "4414",
+     "partOfCode": true,
+     "description": "Wooden frames for paintings, photographs, mirrors or similar objects",
+     "notes": [
+      "not including used products and second-hand products"
+     ]
+    },
+    {
+     "cnCode": "4415",
+     "hsCode": "4415",
+     "partOfCode": true,
+     "description": "Packing cases, boxes, crates, drums and similar packings, of wood; cable-drums of wood; pallets, box pallets and other load boards, of wood; pallet collars of wood",
+     "notes": [
+      "not including used products and second-hand products",
+      "not including single use packing material and packing containers used exclusively to support, protect or carry another product made available on the market or exported and presented with that product",
+      "not including packing material and packing containers clearly suitable for repetitive use used exclusively to support, protect or carry another product made available on the market or exported and presented with that product from the moment they are used for such purpose and onwards"
+     ]
+    },
+    {
+     "cnCode": "4416",
+     "hsCode": "4416",
+     "partOfCode": true,
+     "description": "Casks, barrels, vats, tubs and other coopers’ products and parts thereof, of wood, including staves",
+     "notes": [
+      "not including used products and second-hand products",
+      "not including single use packing material and packing containers used exclusively to support, protect or carry another product made available on the market or exported and presented with that product",
+      "not including packing material and packing containers clearly suitable for repetitive use used exclusively to support, protect or carry another product made available on the market or exported and presented with that product from the moment they are used for such purpose and onwards"
+     ]
+    },
+    {
+     "cnCode": "4417",
+     "hsCode": "4417",
+     "partOfCode": true,
+     "description": "Tools, tool bodies, tool handles, broom or brush bodies and handles, of wood; boot or shoe lasts and trees, of wood",
+     "notes": [
+      "not including used products and second-hand products"
+     ]
+    },
+    {
+     "cnCode": "4418",
+     "hsCode": "4418",
+     "partOfCode": true,
+     "description": "Builders’ joinery and carpentry of wood, including cellular wood panels, assembled flooring panels, shingles and shakes",
+     "notes": [
+      "not including used products and second-hand products"
+     ]
+    },
+    {
+     "cnCode": "4419",
+     "hsCode": "4419",
+     "partOfCode": true,
+     "description": "Tableware and kitchenware, of wood",
+     "notes": [
+      "not including used products and second-hand products"
+     ]
+    },
+    {
+     "cnCode": "4420",
+     "hsCode": "4420",
+     "partOfCode": true,
+     "description": "Wood marquetry and inlaid wood; caskets and cases for jewellery or cutlery, and similar articles, of wood; statuettes and other ornaments, of wood; wooden articles of furniture not falling in Chapter 94",
+     "notes": [
+      "not including used products and second-hand products"
+     ]
+    },
+    {
+     "cnCode": "4421",
+     "hsCode": "4421",
+     "partOfCode": true,
+     "description": "Other articles of wood",
+     "notes": [
+      "not including used products and second-hand products"
+     ]
+    },
+    {
+     "cnCode": "47",
+     "hsCode": "47",
+     "partOfCode": true,
+     "description": "Pulp of wood",
+     "notes": [
+      "not including used products and second-hand products",
+      "not including recovered (waste and scrap) products and products derived from recovered (waste and scrap) products"
+     ]
+    },
+    {
+     "cnCode": "48",
+     "hsCode": "48",
+     "partOfCode": true,
+     "description": "Paper and Paperboard: Articles of paper pulp, of paper or of paperboard",
+     "notes": [
+      "not including waste as defined in Article 3, point (1), of Directive 2008/98/EC",
+      "not including used products and second-hand products",
+      "not including recovered (waste and scrap) products and products derived from recovered (waste and scrap) products",
+      "not including single use packing material and packing containers used exclusively to support, protect or carry another product made available on the market or exported and presented with that product",
+      "not including packing material and packing containers clearly suitable for repetitive use used exclusively to support, protect or carry another product made available on the market or exported and presented with that product from the moment they are used for such purpose and onwards",
+      "not including items of correspondence and marketing and information materials exclusively accompanying another product made available on the market or exported, or supplied for marketing or information purposes free of charge"
+     ]
+    },
+    {
+     "cnCode": "9401 31 00",
+     "hsCode": "9401.31",
+     "partOfCode": true,
+     "description": "Swivel seats with variable height adjustment, of wood",
+     "notes": [
+      "not including used products and second-hand products"
+     ]
+    },
+    {
+     "cnCode": "9401 41 00",
+     "hsCode": "9401.41",
+     "partOfCode": true,
+     "description": "Seats other than garden seats or camping equipment, convertible into beds, of wood",
+     "notes": [
+      "not including used products and second-hand products"
+     ]
+    },
+    {
+     "cnCode": "9401 61 00",
+     "hsCode": "9401.61",
+     "partOfCode": true,
+     "description": "Other seats, with wooden frames, upholstered",
+     "notes": [
+      "not including used products and second-hand products"
+     ]
+    },
+    {
+     "cnCode": "9401 69 00",
+     "hsCode": "9401.69",
+     "partOfCode": true,
+     "description": "Other seats, with wooden frames, other than upholstered",
+     "notes": [
+      "not including used products and second-hand products"
+     ]
+    },
+    {
+     "cnCode": "9401 80 00",
+     "hsCode": "9401.80",
+     "partOfCode": true,
+     "description": "Other seats, of wood",
+     "notes": [
+      "not including used products and second-hand products"
+     ]
+    },
+    {
+     "cnCode": "9401 91 90",
+     "hsCode": "9401.91",
+     "partOfCode": true,
+     "description": "Other parts of seats, of wood",
+     "notes": [
+      "not including used products and second-hand products"
+     ]
+    },
+    {
+     "cnCode": "9403 30",
+     "hsCode": "9403.30",
+     "partOfCode": true,
+     "description": "Wooden furniture, and parts thereof"
+    },
+    {
+     "cnCode": "9403 40",
+     "hsCode": "9403.40",
+     "partOfCode": true,
+     "description": "Wooden furniture, and parts thereof"
+    },
+    {
+     "cnCode": "9403 50",
+     "hsCode": "9403.50",
+     "partOfCode": true,
+     "description": "Wooden furniture, and parts thereof"
+    },
+    {
+     "cnCode": "9403 60",
+     "hsCode": "9403.60",
+     "partOfCode": true,
+     "description": "Wooden furniture, and parts thereof"
+    },
+    {
+     "cnCode": "9403 91",
+     "hsCode": "9403.91",
+     "partOfCode": true,
+     "description": "Wooden furniture, and parts thereof",
+     "notes": [
+      "not including used products and second-hand products"
+     ]
+    },
+    {
+     "cnCode": "9406 10 00",
+     "hsCode": "9406.10",
+     "partOfCode": true,
+     "description": "Prefabricated buildings of wood",
+     "notes": [
+      "not including used products and second-hand products"
+     ]
+    }
+   ]
+  }
+ ]
+}

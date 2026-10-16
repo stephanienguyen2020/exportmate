@@ -8,3 +8,4 @@ tests/
 samples/
 scripts/
 docker-compose.yml
+app/knowledge_graph/sources/
