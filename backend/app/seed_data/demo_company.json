@@ -22,6 +22,7 @@
         11.54
       ],
       "supplies": "Acacia plywood, outdoor furniture, cabinets",
+      "sourcing": [{ "material": "acacia", "country": "VN", "form": "roundwood", "basis": "species document" }],
       "documents": [
         {
           "kind": "legality",
@@ -55,6 +56,7 @@
         11.56
       ],
       "supplies": "Rubberwood panels, tables, cabinets, flooring",
+      "sourcing": [{ "material": "rubberwood", "country": "VN", "form": "roundwood", "basis": "species document" }, { "material": "acacia", "country": "VN", "form": "roundwood", "basis": "species document" }],
       "documents": [
         {
           "kind": "legality",
@@ -87,6 +89,7 @@
         10.03
       ],
       "supplies": "Veneered plywood, flooring, furniture",
+      "sourcing": [{ "material": "birch", "country": "RU", "form": "veneer", "basis": "sample stock (ai/server/seed/inventory.js)" }, { "material": "okoume", "country": "GA", "form": "veneer", "basis": "sample stock (ai/server/seed/inventory.js)" }, { "material": "oak", "country": "US", "form": "veneer", "basis": "sample stock (ai/server/seed/inventory.js)" }, { "material": "eucalyptus", "country": "VN", "form": "roundwood", "basis": "species document" }],
       "documents": [
         {
           "kind": "legality",
@@ -123,6 +126,7 @@
         13.97
       ],
       "supplies": "Film-faced plywood, pellets, sofa frames",
+      "sourcing": [{ "material": "acacia", "country": "VN", "form": "roundwood", "basis": "species document" }, { "material": "eucalyptus", "country": "VN", "form": "roundwood", "basis": "species document" }],
       "documents": [
         {
           "kind": "legality",
@@ -155,6 +159,7 @@
         16.57
       ],
       "supplies": "Eucalyptus outdoor furniture",
+      "sourcing": [{ "material": "eucalyptus", "country": "LA", "form": "roundwood", "basis": "species document" }],
       "documents": [
         {
           "kind": "species",
