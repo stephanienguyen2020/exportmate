@@ -103,7 +103,7 @@ test("CSV checks match the backend and say how many problems are hidden", async 
   });
   await expect(
     page.getByText(
-      "Row 2: hsCode must look like 4412.33 (digits, optional dots).",
+      "Row 2: hsCode must look like 1234.56 (digits, optional dots).",
     ),
   ).toBeVisible();
   await expect(page.getByText("…and 5 more.", { exact: false })).toBeVisible();

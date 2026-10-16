@@ -104,7 +104,7 @@ def _clean_value(
     if field.type == "hs_code":
         digits = re.sub(r"\D", "", value) if isinstance(value, str) else ""
         if not _HS.match(digits):
-            raise RuleError(where, "2 to 10 digits, e.g. 9403")
+            raise RuleError(where, "2 to 10 digits, e.g. 1234")
         return digits
     if field.type == "number":
         if (

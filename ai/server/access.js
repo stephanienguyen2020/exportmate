@@ -6,6 +6,9 @@
 // belongs to the company that added it: only that company sees it and what it brought
 // in, and only that company's owners and editors can switch it off or remove it.
 //
+// News alerts and stock items are about someone's goods: a company's own (they carry its
+// companyId; scan.js, goods.js) or the sample stock, which only the browser demo sees.
+//
 // `access` is { companyId, disabled }: the caller's company (null for the demo) and the
 // shared sources that company switched off.
 
@@ -34,12 +37,22 @@ function sourceIdsOf(item) {
   return [];
 }
 
+/** Whether a caller may see an alert or stock item for whose goods it is; other records pass. */
+export function goodsVisible(item, access) {
+  // Stored alerts carry no type; index hits do.
+  const aboutGoods = item.type ? item.type === "alert" || item.type === "item" : Array.isArray(item.affected);
+  if (!aboutGoods) return true;
+  return item.companyId ? item.companyId === access.companyId : !access.companyId;
+}
+
 /**
- * Whether a caller may see an impact, article or index hit. Visible when any source it came
+ * Whether a caller may see an impact, article or index hit. An alert or stock item must be about
+ * the caller's goods (goodsVisible); then it is visible when any source it came
  * from is visible and switched on for the caller. Records whose sources were deleted fall back
  * to the owner stored with them (`sourceCompanyIds`); records from before owners existed are shared.
  */
 export function itemVisible(item, sourcesById, access) {
+  if (!goodsVisible(item, access)) return false;
   const ids = sourceIdsOf(item);
   if (!ids.length) return true; // stock items, guides
   const known = ids.map((id) => sourcesById.get(id)).filter(Boolean);
@@ -53,6 +66,17 @@ export const visibleItems = (items, sources, access) => {
   const byId = new Map(sources.map((s) => [s.id, s]));
   return items.filter((item) => itemVisible(item, byId, access));
 };
+
+/**
+ * A scan record as a caller sees it: `impactsFound` is the alerts it raised for the caller's
+ * goods (the sample stock's in the demo, the company's own otherwise); other companies' counts
+ * stay on the server.
+ */
+export function presentScan(scan, access) {
+  if (!scan) return scan;
+  const { companyImpacts, ...shown } = scan;
+  return access.companyId ? { ...shown, impactsFound: companyImpacts?.[access.companyId] ?? 0 } : shown;
+}
 
 // Audits: an anonymous (demo) chat's audit is readable with its session id, as before.
 // One made in a company workspace also needs a token from that company.

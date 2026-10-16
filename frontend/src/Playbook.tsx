@@ -260,7 +260,7 @@ export function RuleBuilder({
                     value={c.value}
                     placeholder={
                       field?.type === "hs_code"
-                        ? "9403"
+                        ? "1234"
                         : field?.type === "number"
                           ? "21"
                           : ""
