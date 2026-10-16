@@ -84,7 +84,9 @@ def test_open_orders_with_the_items_heading_and_market_are_suggested(client, lan
     assert match["market"] == "EU"
     assert match["review"] is None
     assert "HS 4412 and ships to EU" in match["reason"]
-    assert "PLY-18" in match["reason"]
+    assert (
+        match["reason"] == "HS 4412 and ships to EU, like Acacia plywood 18 mm named in this alert."
+    )
     # News watch is read with the caller's own token.
     assert news_watch["auth"] == ["Bearer dev:lan@example.com"]
 
@@ -174,5 +176,5 @@ def test_items_without_an_export_market_match_on_the_heading_alone():
     stock = {s["sku"]: s for s in STOCK}
     found = news_service.suggest_orders(alert, stock, [(logs, "KR"), (other, "KR")])
     assert [s.order.external_id for s in found] == ["PO-9"]
-    assert found[0].reason.startswith("HS 4403, like LOG-1")
+    assert found[0].reason == "HS 4403, like Acacia logs named in this alert."
     assert news_service.hs_heading("44.1") == ""

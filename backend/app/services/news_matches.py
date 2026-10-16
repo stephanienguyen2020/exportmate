@@ -1,8 +1,9 @@
 """Which orders a News watch alert may affect, and people's verdicts on it.
 
-The AI service matches each article to items in its sample stock (SKU, HS code, markets). Here
-an open order is suggested for an alert when it shares an HS heading (first four digits) with
-an item the alert names and ships to one of that item's markets. A suggestion is only a guess:
+The AI service matches each article to the company's goods (what its profile names and its
+orders ship, each with an HS code and markets; ai/server/goods.js). Here an open order is
+suggested for an alert when it shares an HS heading (first four digits) with an item the
+alert names and ships to one of that item's markets. A suggestion is only a guess:
 an editor confirms or rejects it, or links an order that wasn't suggested, and reports and the
 order list only treat confirmed links as fact.
 """
@@ -44,7 +45,7 @@ class SuggestedOrder:
 
 
 def hs_heading(hs_code: object) -> str:
-    """The first four digits of an HS code ("4412.33" → "4412"); "" when there are fewer."""
+    """The first four digits of an HS code ("1234.56" → "1234"); "" when there are fewer."""
     digits = re.sub(r"\D", "", str(hs_code or ""))
     return digits[:4] if len(digits) >= 4 else ""
 
@@ -72,13 +73,11 @@ def suggest_orders(
             if markets and market not in markets:
                 continue
             where = f" and ships to {market}" if markets else ""
-            name = item.get("name") or entry.get("name") or ""
+            name = item.get("name") or entry.get("name") or entry.get("sku")
             suggested[order.id] = SuggestedOrder(
                 order=order,
                 market=market,
-                reason=f"HS {heading}{where}, like {entry.get('sku')} {name} named in this alert."[
-                    :500
-                ],
+                reason=f"HS {heading}{where}, like {name} named in this alert."[:500],
             )
     return list(suggested.values())
 

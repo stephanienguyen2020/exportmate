@@ -232,7 +232,7 @@ function OrderForm({
               maxLength={
                 key === "currency" ? 3 : (MAX_LENGTHS[key] ?? undefined)
               }
-              placeholder={key === "hsCode" ? "e.g. 4412.33" : undefined}
+              placeholder={key === "hsCode" ? "e.g. 1234.56" : undefined}
               value={draft[key]}
               aria-invalid={errors.has(key)}
               onChange={(e) => onDraft({ ...draft, [key]: e.target.value })}

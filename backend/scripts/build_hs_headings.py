@@ -2,8 +2,8 @@
 
 The HTS is public and its first 6 digits are the international HS code. We keep the 4-digit
 headings and 6-digit subheadings of every HS chapter, so HS code suggestions work whatever a
-company makes, each with its full description path, e.g. "Seats (other than those of heading
-9402)…: Other seats, with wooden frames: Upholstered".
+company makes, each with its full description path, e.g. "Coffee, whether or not roasted…:
+Coffee, roasted: Not decaffeinated".
 
 Run it when the HS edition changes (HS 2027 takes effect on 1 January 2027), then commit the
 JSON; the reference seed loads it and embeds new or changed lines.

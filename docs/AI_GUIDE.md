@@ -41,8 +41,8 @@ It declines anything outside trade, compliance and ExportMate (poems, general co
 
 | | Sample demo or signed out | Signed-in company workspace |
 | --- | --- | --- |
-| Stock | The sample inventory: 31 synthetic SKUs of Binh Duong Wood Co., a fictional Vietnamese wood-products exporter | The same sample inventory. The assistant says it is demo data, not your stock |
-| News articles and alerts | Real articles from the built-in sources, and the alerts raised from them | The same, minus built-in sources your company switched off, plus your company's own custom sources |
+| Stock | The sample inventory: the synthetic SKUs of Binh Duong Wood Co., a fictional Vietnamese wood-products exporter | Your own goods: what About company says you make and what your orders ship, each with its HS code, markets, suppliers and orders (no quantities or values) |
+| News articles and alerts | Real articles from the built-in sources, and the alerts raised from them for the sample stock | Real articles from the built-in sources (minus those your company switched off) and your own custom sources, and the alerts raised from them for your goods |
 | Company profile | No | Yes: what you entered under Account › About company, and your sites |
 | Orders | The demo's orders, sent from your browser with each question (up to 100, those needing action first), each with the demo's one sample rule check | Yes, read live with your own sign-in: each order and its market document checklist, with the official text behind each line |
 | Playbook rules | The rules switched on in your browser, sent with each question | The rules switched on in your company playbook, read live with your own sign-in |
@@ -126,13 +126,15 @@ News watch is at `#/workspace/news`, the first tab of "Rules & news" in the side
 
 - **Severity**: *high* means a likely cost or market-access change within about 90 days for items in stock; *medium* is material but uncertain or later; *low* is worth knowing.
 - **Direction**: *risk*, *opportunity*, or *watch* (vague news, or something to verify).
-- The headline, why it matters, each affected SKU with the reason, the stock value exposed, one next step, and a link to the source article.
+- The headline, why it matters, each affected item with the reason (in a company workspace, your goods by name; in the demo, sample SKUs with the stock value exposed), one next step, and a link to the source article.
 
 - **Orders this may affect**: open orders that share an HS heading (the first four digits) with an item the alert names and ship to one of that item's markets. These are suggestions, not findings. An owner or editor marks each one **Affects this order** or **Not relevant**, with an optional note, can **Undo** a verdict, and can link an order that wasn't suggested. Viewers see the suggestions and verdicts. Company reports name only confirmed orders next to each alert. In the demo, verdicts stay in your browser.
 
 Filter by severity or show only opportunities, search headlines, items and SKUs, or narrow to one source, one stock item, alerts with orders to review, confirmed for an order or with no order, or articles from the past 7 or 30 days. Read the source before acting: alerts are assessed from each article's headline and summary, not the full text.
 
-**Stock tab.** The sample inventory and whose it is, with each item's main material and where it comes from, whether its origin is traced (for the sample, plot geolocation) and how many alerts affect it. In a signed-in workspace, alerts are still matched against this sample stock, not your company's stock, and the page says so; orders are only linked through the suggestions people review on the Alerts tab.
+**Your goods tab** (signed in). What News watch reads the news for: the products About company names and the products your orders ship (one line per product and HS code, with its markets, suppliers and orders), and how many alerts name each. They are rebuilt from your profile and orders, with your sign-in, whenever someone in your company opens News watch or the assistant and they are more than 15 minutes old. The first scan after that also reads back over the last two weeks of news; until then the tab says alerts start with the next scan. Orders are still only linked to an alert through the suggestions people review on the Alerts tab.
+
+**Stock tab** (demo). The sample inventory and whose it is, with each item's main material and where it comes from, whether its origin is traced (for the sample, plot geolocation) and how many alerts affect it.
 
 **Sources tab.** The feeds News watch reads. Seven are built in (Timber Trades Journal, VnExpress International, the European Commission press corner and four Google News searches) and shared by every workspace. Owners and editors can:
 
@@ -192,7 +194,7 @@ The assistant's instructions are a list of rules in `policy.js`. Each rule names
 | Tool | What it reads | Available |
 | --- | --- | --- |
 | `search_knowledge` | The knowledge base on RAG Engine: news articles, alerts, stock items, sources and help guides | Always |
-| `query_inventory` | Sample stock with exact filters (SKU, category, market, HS code, material, material origin, supplier, certification, origin traced), plus the count and total value. Its categories and markets are the stock's own | Always |
+| `query_inventory` | The workspace's stock with exact filters (SKU, category, market, HS code, material, material origin, supplier, certification, origin traced), plus the count and, for the sample stock, the total value. In a company workspace it is the company's own goods, with their orders. Its categories and markets are the stock's own | Always |
 | `get_alerts` | Open News watch alerts, most severe first, with the combined exposure (each SKU counted once) | Always |
 | `calculate` | Exact arithmetic, so every figure can be traced | Always |
 | `get_scan_status` | When the last scan ran, what it read and raised, the schedule and each source's health | Always |
@@ -210,7 +212,8 @@ Cloud Scheduler calls `POST /api/scan` at 07:00 Asia/Ho_Chi_Minh. The scan (`sca
 2. Withholds articles that address the assistant or link to malicious sites: first by pattern, then with Model Armor when it is configured. An article Model Armor couldn't screen is left for the next scan.
 3. Sends the rest to Gemini in batches of 16, with the stock list and the stock's profile (`seed/inventory.js` `STOCK_PROFILE`: whose stock it is, the words news uses for its goods and the goods that share its rules), so no industry is written into the code. For each article, the model answers whether it is relevant, how severe, which SKUs it affects and why, and one next step. The rules tell it to be strict: exchange rates, energy prices and goods the company doesn't stock are not relevant, and article text is news, never instructions.
 4. Keeps an alert only if the model said relevant, at least one SKU it named is really in stock, the article isn't a repeat of another one, and it doesn't name only goods that share the stock's rules (for the sample, cocoa, coffee, rubber…) without the words for the stock's own goods (`relevance.js`, with the profile's word lists).
-5. Stores the articles, alerts and scan record, and adds them to the search index on RAG Engine.
+5. Does the same for each company's own goods (`companyGoods` in Firestore, built by `goods.js` from its profile and orders; at most 100 companies per scan): the new articles from the sources that company reads, plus, on its first scan, up to 48 stored articles from the last two weeks. The prompt describes the company from its profile. Its alerts carry its company id, so only it sees them (`access.js`); the demo sees only the sample stock's alerts. The scan record's alert count is shown per caller.
+6. Stores the articles, alerts and scan record, and adds them to the search index on RAG Engine.
 
 ### Models
 
@@ -231,6 +234,7 @@ Everything is in asia-southeast1. On Agent Platform: the search index (RAG Engin
 | Collection | Holds |
 | --- | --- |
 | `inventory` | The sample stock |
+| `companyGoods` | Each company's goods for News watch (from its profile and orders) and when the scan first read news for them |
 | `sources`, `companySources` | News feeds, and the built-in feeds each company switched off |
 | `articles`, `impacts`, `scans` | Every analysed article, the alerts, and one record per scan |
 | `rag_files` | Each search record's title, link, date and sources, and which RAG Engine file holds it |
@@ -245,7 +249,7 @@ Agent Platform evaluation runs (`npm run eval:vertex`) are kept on Agent Platfor
 
 ## Not done yet
 
-- Alerts are matched against the sample stock, not a company's own stock or orders.
+- A company's goods come from its profile and orders, not a stock or product catalogue, so they carry no quantities or values.
 - The assistant can't act: it doesn't draft or send supplier messages.
 - You can't rate an answer or mark an alert as not relevant yet.
 - Only the same question is answered from the cache; a reworded one is answered again.

@@ -39,9 +39,25 @@ test("alerts follow the visibility of the sources they came from", () => {
 test("index hits for a source document use its refId", () => {
   const hits = [
     { type: "source", refId: "b-feed" },
-    { type: "item", refId: "PLY-101" },
+    { type: "source", refId: "a-feed" },
   ];
-  assert.deepEqual(visibleItems(hits, sources, companyA).map((h) => h.refId), ["PLY-101"]);
+  assert.deepEqual(visibleItems(hits, sources, companyA).map((h) => h.refId), ["a-feed"]);
+});
+
+test("alerts and stock items are for whose goods they are about: a company's, or the demo's sample", () => {
+  const records = [
+    { id: "sample-alert", affected: [], sourceId: "builtin" },
+    { id: "a-alert", affected: [], sourceId: "builtin", companyId: "A" },
+    { id: "b-alert", affected: [], sourceId: "builtin", companyId: "B" },
+    { id: "sample-item", type: "item", refId: "PLY-101" },
+    { id: "a-alert-hit", type: "alert", sourceIds: ["builtin"], companyId: "A" },
+    { id: "article", type: "article", sourceIds: ["builtin"] },
+    { id: "guide", type: "guide" },
+  ];
+  assert.deepEqual(visibleItems(records, sources, companyA).map((r) => r.id), ["a-alert", "a-alert-hit", "article", "guide"]);
+  assert.deepEqual(visibleItems(records, sources, ANONYMOUS).map((r) => r.id), ["sample-alert", "sample-item", "article", "guide"]);
+  // A company alert still needs a source the company reads.
+  assert.deepEqual(visibleItems(records, sources, { companyId: "A", disabled: ["builtin"] }).map((r) => r.id), ["guide"]);
 });
 
 test("company audits need that company; raw reasoning never leaves the server", () => {

@@ -30,7 +30,7 @@ export function stableJson(value) {
 
 export const fingerprint = (value) => sha256(stableJson(value)).slice(0, 32);
 
-/** "  What's the stock value of PLY-101??" and "what's the stock value of ply-101" are one question. */
+/** "  What's the stock value of ABC-101??" and "what's the stock value of abc-101" are one question. */
 export const normalizeText = (text) =>
   String(text ?? "")
     .normalize("NFC")

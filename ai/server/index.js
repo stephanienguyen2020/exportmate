@@ -4,12 +4,13 @@ import { FieldValue } from "@google-cloud/firestore";
 import { OAuth2Client } from "google-auth-library";
 import { db, inventory, sources, impacts, scans, companySources, locks, list } from "./db.js";
 import { STOCK_PROFILE } from "./seed/inventory.js";
+import { companyStock, goodsReader } from "./goods-store.js";
 import { fetchFeed } from "./feeds.js";
 import { runScan } from "./scan.js";
 import { runAgent, audits, clearCaches } from "./agent.js";
 import { indexDocs, removeDocs, toDoc } from "./rag.js";
 import { log } from "./log.js";
-import { ANONYMOUS, auditVisible, isShared, presentSources, publicAudit, publicStep, sourceVisible, visibleItems } from "./access.js";
+import { ANONYMOUS, auditVisible, isShared, presentScan, presentSources, publicAudit, publicStep, sourceVisible, visibleItems } from "./access.js";
 import { readJson, scanBlocked } from "./limits.js";
 import { deleteMemory, listMemories, memoryKeepDays, remembers, userKeyFor } from "./agents/platform.js";
 import { AGENTS_AT, callAgents, streamTurn } from "./agents/remote.js";
@@ -305,11 +306,13 @@ async function scanNow(scheduled, who = {}) {
     if (!refusal) t.set(scanLock, { startedAt: new Date().toISOString(), running: true, trigger: scheduled ? "schedule" : "manual", ...who });
     return refusal;
   });
-  if (blocked) return [blocked[0], { error: blocked[1], scan: await latestScan() }];
+  // The caller sees the alerts raised for its own goods (access.js presentScan).
+  const viewer = { companyId: who.companyId ?? null };
+  if (blocked) return [blocked[0], { error: blocked[1], scan: presentScan(await latestScan(), viewer) }];
   try {
     const scan = await runScan({ trigger: scheduled ? "schedule" : "manual" });
     clearCaches();
-    return [200, { scan }];
+    return [200, { scan: presentScan(scan, viewer) }];
   } finally {
     await scanLock.set({ running: false }, { merge: true }).catch((e) => log("ERROR", "scan.unlock_failed", { error: String(e?.message || e) }));
   }
@@ -368,20 +371,49 @@ async function setSourceEnabled(source, enabled, editor) {
   log("INFO", enabled ? "source.enabled" : "source.disabled", { sourceId: source.id, shared: isShared(source), userId: editor.userId, companyId: editor.companyId });
 }
 
+// The newest alerts about the caller's goods: a company's own (by companyId alone, which needs no
+// composite index, then sorted here), or the newest of all for the demo, filtered by visibleItems.
+const RECENT_ALERTS = 120;
+async function recentAlerts(access) {
+  if (!access.companyId) return list(impacts.orderBy("createdAt", "desc").limit(RECENT_ALERTS));
+  const own = await list(impacts.where("companyId", "==", access.companyId));
+  return own.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, RECENT_ALERTS);
+}
+
+// The stock News watch reads news against: a company's own goods (goods.js), refreshed with the
+// caller's token when stale, or the browser demo's sample stock. `watchedSince`: when the scan
+// first read news for these goods (null: from the next scan).
+async function stockList(req) {
+  const access = await readerAccess(req);
+  if (!access.companyId)
+    return [200, { kind: "sample", items: await list(inventory.orderBy("sku")), owner: { company: STOCK_PROFILE.company, about: STOCK_PROFILE.about } }];
+  const authorization = req.headers.authorization;
+  const read = goodsReader(
+    (path) => backendGet(path, authorization),
+    async () => (await companyKnowledge(authorization))?.company ?? null,
+  );
+  const goods = await companyStock(access.companyId, read);
+  return [
+    200,
+    {
+      kind: "company",
+      items: goods.items ?? [],
+      owner: { company: goods.profile?.company ?? "", about: goods.profile?.about ?? "" },
+      updatedAt: goods.updatedAt ?? null,
+      watchedSince: goods.backfilledAt ?? null,
+    },
+  ];
+}
+
 async function route(method, path, body, req, query) {
   if (method === "GET" && path === "/api/audits") return sessionAudits(query, await readerAccess(req));
   const a = path.match(/^\/api\/audits\/([\w-]{1,40})$/);
   if (method === "GET" && a) return oneAudit(a[1], query, await readerAccess(req));
-  if (method === "GET" && path === "/api/inventory")
-    return [200, { items: await list(inventory.orderBy("sku")), owner: { company: STOCK_PROFILE.company, about: STOCK_PROFILE.about } }];
+  if (method === "GET" && path === "/api/inventory") return stockList(req);
   if (method === "GET" && path === "/api/impacts") {
-    const [access, stored, all, scan] = await Promise.all([
-      readerAccess(req),
-      list(impacts.orderBy("createdAt", "desc").limit(120)),
-      list(sources),
-      latestScan(),
-    ]);
-    return [200, { impacts: visibleItems(stored, all, access).slice(0, 60), scan }];
+    const access = await readerAccess(req);
+    const [stored, all, scan] = await Promise.all([recentAlerts(access), list(sources), latestScan()]);
+    return [200, { impacts: visibleItems(stored, all, access).slice(0, 60), scan: presentScan(scan, access) }];
   }
   if (method === "POST" && path === "/api/scan") {
     if (await fromScheduler(req)) return scanNow(true);

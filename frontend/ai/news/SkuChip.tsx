@@ -23,6 +23,7 @@ export function SkuChip({
   orders,
   rejected,
   error,
+  named = false,
 }: {
   entry: Affected;
   item?: StockItem;
@@ -30,7 +31,10 @@ export function SkuChip({
   rejected: Set<string>;
   // Why orders can't be matched (stock or orders didn't load).
   error?: string;
+  // Shown by name rather than SKU: a company's goods have ids, not SKUs people know.
+  named?: boolean;
 }) {
+  const label = named ? entry.name || entry.sku : entry.sku;
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLSpanElement>(null);
   const button = useRef<HTMLButtonElement>(null);
@@ -57,7 +61,7 @@ export function SkuChip({
     const { order, reason } = found[0];
     return (
       <a className="news-sku" href={orderLink(order.id)} title={`${entry.name}: open ${order.id}. ${reason}`}>
-        {entry.sku} <ArrowUpRight size={10} />
+        {label} <ArrowUpRight size={10} />
       </a>
     );
   }
@@ -69,18 +73,16 @@ export function SkuChip({
         type="button"
         className="news-sku"
         aria-expanded={open}
-        aria-label={`${entry.sku}: ${found.length ? `${found.length} matching orders` : "show matching orders"}`}
+        aria-label={`${label}: ${found.length ? `${found.length} matching orders` : "show matching orders"}`}
         title={`${entry.name}: ${entry.reason}`}
         onClick={() => setOpen(!open)}
       >
-        {entry.sku}
+        {label}
         {found.length > 1 && <em>{found.length}</em>}
       </button>
       {open && (
-        <div className="news-sku-pop" role="dialog" aria-label={`Orders for ${entry.sku}`}>
-          <strong>
-            {entry.sku} · {entry.name}
-          </strong>
+        <div className="news-sku-pop" role="dialog" aria-label={`Orders for ${label}`}>
+          <strong>{named ? entry.name : `${entry.sku} · ${entry.name}`}</strong>
           {item && (
             <small>
               HS {heading || item.hsCode || "—"}
