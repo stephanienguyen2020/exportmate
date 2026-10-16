@@ -1,5 +1,6 @@
 """News watch alerts matched to orders: suggestions, people's verdicts, and links they add."""
 
+import uuid
 from datetime import date, timedelta
 
 import pytest
@@ -10,6 +11,7 @@ from app.database.models import AuditEvent, Order, Role
 from app.database.session import open_session
 from app.seed_reference_data import seed_reference_data
 from app.services import news_matches as news_service
+from app.services.knowledge_graph import GraphWalker, hs_heading
 
 
 def ships_in(days: int) -> str:
@@ -167,12 +169,14 @@ def test_news_watch_down(client, lan, news_watch):
     assert review(client, lan, "PO-1", "relevant").status_code == 503
 
 
-def test_items_without_an_export_market_match_on_the_heading_alone():
+def test_items_without_an_export_market_match_on_the_heading_alone(lan):
     alert = {"affected": [{"sku": "LOG-1"}, {"sku": "UNKNOWN"}]}
     logs = Order(id=1, external_id="PO-9", hs_code="4403.49", destination="Busan, KR")
     other = Order(id=2, external_id="PO-8", hs_code="4412.33", destination="Busan, KR")
     stock = {s["sku"]: s for s in STOCK}
-    found = news_service.suggest_orders(alert, stock, [(logs, "KR"), (other, "KR")])
+    with open_session() as db:
+        walker = GraphWalker(db, uuid.uuid4())
+        found = news_service.suggest_orders(walker, alert, stock, [(logs, "KR"), (other, "KR")])
     assert [s.order.external_id for s in found] == ["PO-9"]
     assert found[0].reason.startswith("HS 4403, like LOG-1")
-    assert news_service.hs_heading("44.1") == ""
+    assert hs_heading("44.1") == ""

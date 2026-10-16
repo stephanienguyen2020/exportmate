@@ -460,27 +460,27 @@
   font-weight: 400;
   color: #6f7869;
 }
-.news-orders ul {
+.news-orders > ul {
   list-style: none;
   margin: 10px 0 0;
   padding: 0;
   border: 1px solid var(--line);
   background: #fff;
 }
-.news-orders li {
+.news-orders > ul > li {
   display: flex;
   flex-direction: column;
   gap: 6px;
   padding: 8px 10px;
   border-left: 3px solid transparent;
 }
-.news-orders li + li {
+.news-orders > ul > li + li {
   border-top: 1px solid var(--line);
 }
-.news-orders li.confirmed {
+.news-orders > ul > li.confirmed {
   border-left-color: var(--green);
 }
-.news-orders li.rejected {
+.news-orders > ul > li.rejected {
   opacity: 0.7;
 }
 .news-order-row {
@@ -502,6 +502,40 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.news-path {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 6px;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--green);
+}
+.news-path li + li::before {
+  content: "→";
+  margin-right: 6px;
+  color: #9aa294;
+}
+.news-path-link {
+  color: #6f7869;
+  font-style: italic;
+}
+.news-path-supplier .news-path-label {
+  font-weight: 600;
+}
+.news-path-source {
+  display: inline-flex;
+  margin-left: 3px;
+  color: #6f7869;
+  vertical-align: middle;
+}
+.news-path-source:hover,
+.news-path-source:focus-visible {
+  color: var(--green);
 }
 .news-order-head {
   display: flex;

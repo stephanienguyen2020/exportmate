@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import { Check, ChevronDown, Link2, Loader2, Undo2, X } from "lucide-react";
-import type { NewsMatch, NewsVerdict } from "../../src/api";
+import { Check, ChevronDown, ExternalLink, Link2, Loader2, Undo2, X } from "lucide-react";
+import type { NewsMatch, NewsPathStep, NewsVerdict } from "../../src/api";
 import { date, type Order } from "../../src/data";
 
 type Actions = {
@@ -18,6 +18,36 @@ export function matchCounts(matches: NewsMatch[] = []) {
     confirmed: matches.filter((m) => m.review?.verdict === "relevant").length,
     total: matches.length,
   };
+}
+
+const isWebLink = (url: string | null): url is string => Boolean(url && /^https?:\/\//.test(url));
+
+/** How the knowledge graph reached the order: what the alert names, the supplier that buys it,
+ * and each step of the material chain to the order's product, with the source behind each link. */
+function MatchPath({ path }: { path: NewsPathStep[] }) {
+  const steps = path.filter((s) => s.kind !== "order");
+  return (
+    <ol className="news-path" aria-label="How this order is linked to the alert">
+      {steps.map((step, i) => (
+        <li key={i} className={`news-path-${step.kind}`}>
+          <span className="news-path-link">{step.kind === "mention" ? "named in the alert" : step.link}</span>{" "}
+          <span className="news-path-label">{step.label}</span>
+          {isWebLink(step.sourceUrl) && (
+            <a
+              className="news-path-source"
+              href={step.sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={step.quote ? `${step.sourceTitle}: “${step.quote}”` : step.sourceTitle || undefined}
+            >
+              <ExternalLink size={10} aria-hidden="true" />
+              <span className="sr-only">Source: {step.sourceTitle}</span>
+            </a>
+          )}
+        </li>
+      ))}
+    </ol>
+  );
 }
 
 function MatchRow({ match, canReview, onReview, onClear }: { match: NewsMatch; canReview: boolean } & Actions) {
@@ -53,6 +83,7 @@ function MatchRow({ match, canReview, onReview, onClear }: { match: NewsMatch; c
             </span>
           </div>
           <small title={match.reason}>{match.reason}</small>
+          {match.path?.some((s) => s.kind === "supplier") && <MatchPath path={match.path} />}
           {review && (
             <small>
               {review.reviewedBy.name} · {reviewedOn(review.reviewedAt)}
@@ -182,7 +213,7 @@ export function OrderMatches({
             ))}
           </ul>
         ) : (
-          <p className="news-note">No open order has the HS heading and market of an item this alert names.</p>
+          <p className="news-note">No open order is linked to what this alert names.</p>
         ))}
       {open && canReview && linkable.length > 0 && (
         <form className="news-order-link" onSubmit={link}>

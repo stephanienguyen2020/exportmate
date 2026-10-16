@@ -1,6 +1,6 @@
 """Knowledge graph data: the material chain and the EUDR's commodity → product links.
 
-Not loaded into Postgres yet (docs/NEWS_IMPACT_PLAN.md, phase 1). See README.md here.
+Loaded into Postgres by the reference seed (docs/NEWS_IMPACT_PLAN.md, phase 1). See README.md here.
 """
 
 import json

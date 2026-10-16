@@ -1,7 +1,8 @@
 """Load the shared trade-map reference data into Postgres.
 
 Markets, countries, ports, document kinds, order statuses, per-market requirement checklists,
-cost defaults and sample satellite observations, from the JSON files in app/seed_data/. Each market requirement cites
+cost defaults and sample satellite observations, from the JSON files in app/seed_data/, and the
+knowledge graph's material chain from app/knowledge_graph/data/. Each market requirement cites
 an official text (regulation_sources.json): the seed downloads each text once into a shared
 regulation document. A market requirement whose text can't be downloaded is left out until
 the next run.
@@ -27,10 +28,12 @@ from app.core.config import get_settings
 from app.core.errors import AppError
 from app.core.logging import configure_logging
 from app.database.queries import hs_codes as hs_queries
+from app.database.queries import knowledge_graph as graph_queries
 from app.database.queries import orders as order_queries
 from app.database.queries import regulations as regulation_queries
 from app.database.queries import trade_map as map_queries
 from app.database.session import open_session
+from app.knowledge_graph import load_graph_file
 from app.seed_data import load_seed_file
 from app.services import regulations as regulation_service
 
@@ -130,6 +133,83 @@ def seed_order_statuses(db: Session) -> int:
         ],
     )
     return len(statuses)
+
+
+def _slug(name: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+
+
+def seed_knowledge_graph(db: Session) -> dict[str, int]:
+    """The graph's sources, nodes and links (app/knowledge_graph/data/). Nodes are updated in
+    place; links not in the file are removed."""
+    chain = load_graph_file("material_chain.json")
+    eudr = load_graph_file("eudr_products.json")
+    graph_queries.upsert_graph_sources(
+        db, [{"key": k, "title": v["title"], "url": v["url"]} for k, v in chain["sources"].items()]
+    )
+    industry_of_commodity = {i["eudrCommodity"]: i["key"] for i in chain["industries"]}
+    nodes = [
+        {
+            "key": f"commodity.{_slug(c['commodity'])}",
+            "kind": "commodity",
+            "industry": industry_of_commodity.get(c["commodity"]),
+            "name": c["commodity"],
+            "hs_prefixes": sorted({_digits(p["hsCode"]) for p in c["products"]}),
+            "aliases": [c["commodity"].lower()],
+            "details": {"lines": c["products"]},
+            "source_key": "eudr-annex-i",
+        }
+        for c in eudr["commodities"]
+    ]
+    edges = []
+    for industry in chain["industries"]:
+        nodes += [
+            {
+                "key": f"{industry['key']}.{p['key']}",
+                "kind": "product",
+                "industry": industry["key"],
+                "name": p["name"],
+                "hs_prefixes": [_digits(code) for code in p["hsCodes"]],
+                "aliases": [p["name"].lower()],
+                "details": {"stage": p["stage"]},
+                "source_key": None,
+            }
+            for p in industry["products"]
+        ]
+        edges += [
+            {
+                "from_key": f"{industry['key']}.{link['from']}",
+                "to_key": f"{industry['key']}.{link['to']}",
+                "relation": link["relation"],
+                "source_key": link["source"],
+                "quote": link.get("quote"),
+                "basis": link.get("basis"),
+                "reviewed": link["reviewed"],
+            }
+            for link in industry["links"]
+        ]
+    nodes += [
+        {
+            "key": f"material.{m['key']}",
+            "kind": "material",
+            "industry": m["industry"],
+            "name": m["name"],
+            "hs_prefixes": [],
+            "aliases": sorted(
+                {a.lower() for a in [m["name"], *m["aliases"], *m["scientificNames"]]}
+            ),
+            "details": {
+                "scientificNames": m["scientificNames"],
+                "woodType": m.get("woodType"),
+                "note": m.get("note"),
+            },
+            "source_key": None,
+        }
+        for m in chain["materials"]
+    ]
+    graph_queries.upsert_graph_nodes(db, nodes)
+    graph_queries.replace_graph_edges(db, edges)
+    return {"graph_nodes": len(nodes), "graph_edges": len(edges)}
 
 
 def seed_reference_data(db: Session) -> dict[str, int]:
@@ -259,6 +339,7 @@ def seed_reference_data(db: Session) -> dict[str, int]:
             for o in observations
         ],
     )
+    graph_counts = seed_knowledge_graph(db)
     regulation_service.commit_or_delete_saved_files(db, saved_paths)
     counts = {
         "official_texts": len(document_ids),
@@ -270,6 +351,7 @@ def seed_reference_data(db: Session) -> dict[str, int]:
         "requirements": requirement_count,
         "cost_defaults": len(reference["costDefaults"]),
         "observations": len(observations),
+        **graph_counts,
     }
     log.info("seed.reference_loaded", extra=counts)
     return counts

@@ -2,7 +2,8 @@
 
 Data for phase 1 of [`docs/NEWS_IMPACT_PLAN.md`](../../../docs/NEWS_IMPACT_PLAN.md): following
 links from a news article to the orders it may hit (material → products made from it →
-suppliers that source it → their orders). Not loaded into Postgres or used by the API yet.
+suppliers that source it → their orders). The reference seed loads it into `graph_sources`,
+`graph_nodes` and `graph_edges`; the company seeds load suppliers' sourcing into `supplier_sourcing`.
 
 ## Files
 
@@ -17,13 +18,14 @@ Company data stays with the company seeds: each supplier's `sourcing` (which mat
 from which country, in what form, and how we know) is in `seed_data/demo_company.json` and
 `seed_data/us_furniture_company.json`.
 
-## Where code will go
+## Where the code is
 
-The backend's layers stay as they are: tables in `database/models/`, SQL in `database/queries/`,
-the graph walk in `services/`, loading in the reference seed. This folder holds only the
-graph's source data and the scripts that build it.
+The backend's layers stay as they are: tables in `database/models/knowledge_graph.py`, SQL (the
+recursive walk) in `database/queries/knowledge_graph.py`, the walk from an alert's mentions to
+orders in `services/knowledge_graph.py` (used by `services/news_matches.py`), loading in
+`seed_reference_data.py` and `seed_demo_data.py`. This folder holds only the graph's source
+data and the scripts that build it.
 
 ## Known gaps
 
 - Only wood has a chain; other commodities have only EUDR's commodity → product links.
-- Russia (RU) and Gabon (GA), named in supplier sourcing, aren't in `seed_data/reference.json` `countries` yet.
