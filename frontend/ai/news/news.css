@@ -220,6 +220,12 @@
   font-size: 10px;
   color: #6f7869;
 }
+.news-scanbar-error {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 11px;
+  color: var(--red);
+}
 .news-scanbar .btn,
 .news-add .btn {
   display: inline-flex;
@@ -305,6 +311,9 @@
   margin: 0;
   padding: 0;
   border-top: 1px solid var(--line);
+}
+.news-sources.news-rules {
+  margin-bottom: 26px;
 }
 .news-sources li {
   display: flex;

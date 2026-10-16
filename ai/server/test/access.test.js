@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ANONYMOUS, auditVisible, presentSources, publicAudit, visibleItems } from "../access.js";
+import { ANONYMOUS, ageDays, auditVisible, presentSources, publicAudit, scanRules, skipsOld, visibleItems } from "../access.js";
 
 const sources = [
   { id: "builtin", name: "Timber news", builtIn: true, enabled: true },
@@ -67,4 +67,34 @@ test("company audits need that company; raw reasoning never leaves the server", 
   assert.ok(auditVisible({ companyId: "A" }, companyA));
   const shown = publicAudit({ id: "x", steps: [{ kind: "plan", thought: "secret", note: "n" }, { kind: "tool" }] });
   assert.deepEqual(shown.steps, [{ kind: "plan", note: "n" }, { kind: "tool" }]);
+});
+
+test("alerts from articles older than the age rule when scanned show only to companies that switched it off", () => {
+  const alerts = [
+    { id: "recent", sourceIds: ["builtin"], ageDays: 3 },
+    { id: "old", sourceIds: ["builtin"], ageDays: 400 },
+    { id: "undated", sourceIds: ["builtin"], ageDays: null },
+    { id: "before-rule", sourceIds: ["builtin"] },
+  ];
+  const ids = (access, maxAgeDays) => visibleItems(alerts, sources, access, maxAgeDays).map((a) => a.id);
+  assert.deepEqual(ids(companyA, 365), ["recent", "undated", "before-rule"]);
+  assert.deepEqual(ids(ANONYMOUS, 365), ["recent", "undated", "before-rule"]);
+  assert.deepEqual(ids({ ...companyA, skipOld: false }, 365), ["recent", "old", "undated", "before-rule"]);
+  assert.deepEqual(ids(companyA, 0), ["recent", "old", "undated", "before-rule"]); // no rule configured
+});
+
+test("the age rule is on unless a company switches it off, and absent when not configured", () => {
+  assert.ok(skipsOld(ANONYMOUS, 365));
+  assert.ok(!skipsOld({ ...companyA, skipOld: false }, 365));
+  assert.deepEqual(scanRules(companyA, 365), { maxAgeDays: 365, skipOld: true });
+  assert.deepEqual(scanRules({ ...companyA, skipOld: false }, 365), { maxAgeDays: 365, skipOld: false });
+  assert.equal(scanRules(companyA, 0), null);
+});
+
+test("an article's age is whole days before the scan, null when undated", () => {
+  const at = Date.parse("2026-10-15T12:00:00Z");
+  assert.equal(ageDays("2026-10-14T13:00:00Z", at), 0);
+  assert.equal(ageDays("2025-10-14T12:00:00Z", at), 366);
+  assert.equal(ageDays(null, at), null);
+  assert.equal(ageDays("not a date", at), null);
 });
