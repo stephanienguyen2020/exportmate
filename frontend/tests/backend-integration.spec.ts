@@ -1260,6 +1260,13 @@ test("new accounts onboard through the API and the sample demo stays local", asy
 // only signed-in owners and editors may change them (with their own token).
 async function sourcesFixture(page: Page) {
   const changes: { method: string; auth: string | undefined }[] = [];
+  let scanRules = { maxAgeDays: 365, skipOld: true };
+  await page.route("**/api/scan-rules**", async (route) => {
+    const request = route.request();
+    changes.push({ method: `${request.method()} rules`, auth: request.headers().authorization });
+    scanRules = { ...scanRules, ...request.postDataJSON() };
+    await route.fulfill({ json: { scanRules } });
+  });
   let sources = [
     {
       id: "source-1",
@@ -1274,7 +1281,7 @@ async function sourcesFixture(page: Page) {
     const request = route.request();
     const method = request.method();
     if (method === "GET") {
-      await route.fulfill({ json: { sources } });
+      await route.fulfill({ json: { sources, scanRules } });
       return;
     }
     changes.push({ method, auth: request.headers().authorization });
@@ -1329,6 +1336,27 @@ test("owners add and switch off news sources with their token", async ({
   ).toBeTruthy();
 });
 
+test("owners switch off the age rule for their company with their token", async ({
+  page,
+}) => {
+  await fixture(page);
+  const changes = await sourcesFixture(page);
+  await login(page);
+  await expect(page.getByText("CONNECTED WORKSPACE")).toBeVisible();
+  await openSources(page);
+  const rule = page.getByRole("checkbox", { name: "Skip old articles" });
+  await expect(rule).toBeChecked();
+  await page.locator("label").filter({ has: rule }).click();
+  await expect(rule).not.toBeChecked();
+  expect(changes).toEqual([
+    { method: "PATCH rules", auth: "Bearer dev:owner@example.com" },
+  ]);
+  // The setting comes back from the AI service on the next visit.
+  await page.reload();
+  await page.getByRole("button", { name: "Sources", exact: true }).click();
+  await expect(rule).not.toBeChecked();
+});
+
 test("viewers and the sample demo can't change news sources", async ({
   page,
 }) => {
@@ -1342,6 +1370,9 @@ test("viewers and the sample demo can't change news sources", async ({
   ).toBeVisible();
   await expect(
     page.getByRole("checkbox", { name: "Read Timber news" }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("checkbox", { name: "Skip old articles" }),
   ).toBeDisabled();
   await expect(page.getByRole("button", { name: "Add source" })).toHaveCount(0);
   await page.goto("/#/logout");
@@ -1790,7 +1821,7 @@ test("owners edit an order's details, then remove the order", async ({ page }) =
   await expect(form.getByText("product is required.")).toBeVisible();
   await form.getByLabel("PRODUCT").fill("API plywood, 18 mm");
   await form.getByLabel("HS CODE").fill("44.12");
-  await expect(form.getByText("hsCode must look like 4412.33")).toBeVisible();
+  await expect(form.getByText("hsCode must look like 1234.56")).toBeVisible();
   await expect(save).toBeDisabled();
   await form.getByLabel("HS CODE").fill("4412.33");
   await form.getByLabel("ORDER VALUE").fill("2,000.50");
@@ -2154,4 +2185,61 @@ test("viewers see suggested orders awaiting review without the buttons", async (
   await expect(page.getByRole("button", { name: /affects this order/ })).toHaveCount(0);
   await expect(page.getByLabel("Order to link")).toHaveCount(0);
   expect(reviews).toHaveLength(0);
+});
+
+test("a company's News watch is about its own goods, shown by name", async ({ page }) => {
+  await fixture(page);
+  const tee = { sku: "G-3FA2C1", name: "Cotton T-shirt", hsCode: "6109.10", markets: ["EU"], supplier: "Mill A", orders: ["PO-1"], source: "orders" };
+  const sweaters = { sku: "G-00A1B2", name: "Merino sweaters", hsCode: "", markets: [], supplier: "", orders: [], source: "profile" };
+  let stockAuth: string | undefined;
+  await page.route("**/api/inventory**", (route) => {
+    stockAuth = route.request().headers().authorization;
+    return route.fulfill({ json: { kind: "company", items: [tee, sweaters], owner: { company: "Acme", about: "" }, watchedSince: null } });
+  });
+  await page.route("**/api/impacts**", (route) =>
+    route.fulfill({
+      json: {
+        scan: null,
+        impacts: [
+          {
+            id: "labels~co-1",
+            title: "EU textile labelling",
+            url: "https://news.example/labels",
+            publisher: "EU press",
+            sourceName: "Trade news",
+            publishedAt: new Date().toISOString(),
+            severity: "medium",
+            direction: "watch",
+            headline: "EU revises textile fibre labelling",
+            why: "Why it matters.",
+            action: "",
+            affected: [{ sku: tee.sku, name: tee.name, reason: "EU-bound cotton tees" }],
+            createdAt: new Date().toISOString(),
+          },
+        ],
+      },
+    }),
+  );
+  await page.route("**/api/v1/news-matches**", (route) =>
+    route.fulfill({ json: { data: { newsAvailable: true, matches: [] }, meta: {} } }),
+  );
+  await login(page);
+  await expect(page.getByText("CONNECTED WORKSPACE")).toBeVisible();
+  await page.goto("/#/workspace/news");
+  await expect(page.getByRole("heading", { name: "News that moves your goods." })).toBeVisible();
+  const card = page.locator(".news-list .news-card");
+  await expect(card.getByRole("button", { name: /^Cotton T-shirt:/ })).toBeVisible();
+  await expect(card).toContainText("Cotton T-shirt EU-bound cotton tees");
+  await expect(card).not.toContainText("G-3FA2C1");
+  await expect(card).not.toContainText("stock exposed");
+
+  await page.getByRole("button", { name: "Your goods", exact: true }).click();
+  await expect(page.getByText(/2 items News watch reads the news for/)).toBeVisible();
+  await expect(page.getByText(/Alerts about them start with the next scan/)).toBeVisible();
+  const row = page.getByRole("row", { name: /Cotton T-shirt/ });
+  await expect(row).toContainText("6109.10");
+  await expect(row).toContainText("PO-1");
+  await expect(row).toContainText("Mill A");
+  await expect(page.getByRole("row", { name: /Merino sweaters/ })).toContainText("From About company");
+  expect(stockAuth).toBe("Bearer dev:owner@example.com");
 });

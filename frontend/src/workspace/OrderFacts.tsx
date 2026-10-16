@@ -4,7 +4,7 @@
 // (DELETE /orders/{id}); the demo checks a change against the sample rule change. The fields
 // follow the same rules as a CSV row. The order ID never changes: reports, solutions and the
 // activity log name the order by it.
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Check, Loader2, PenLine, Trash2 } from "lucide-react";
 import { date, money, type Order } from "../data";
 import type { OrderChange, OrderDetail } from "../api";
@@ -58,17 +58,23 @@ function changeOf(order: Order, draft: Draft): OrderChange {
   return change;
 }
 
+// A request from elsewhere on the page (a next move in the analysis report) to edit the
+// order at one field. `at` tells two requests for the same field apart.
+export type OrderEditRequest = { field: string; at: number };
+
 export function OrderFacts({
   order,
   ws,
   notify,
   onSaved,
+  editRequest,
 }: {
   order: Order;
   ws: Workspace;
   notify: Notify;
   // Signed in: the order's page after the change and its new analysis.
   onSaved?: (detail: OrderDetail) => void | Promise<void>;
+  editRequest?: OrderEditRequest | null;
 }) {
   const [mode, setMode] = useState<"view" | "edit" | "remove">("view");
   const [draft, setDraft] = useState(() => draftOf(order));
@@ -76,12 +82,17 @@ export function OrderFacts({
     setDraft(draftOf(order));
     setMode("edit");
   };
+  useEffect(() => {
+    if (!editRequest || !ws.editable) return;
+    if (mode !== "edit") edit();
+  }, [editRequest?.at]);
   if (mode === "edit")
     return (
       <OrderForm
         order={order}
         draft={draft}
         onDraft={setDraft}
+        focus={editRequest}
         ws={ws}
         onCancel={() => setMode("view")}
         onSubmit={(change) =>
@@ -192,6 +203,7 @@ function OrderForm({
   order,
   draft,
   onDraft,
+  focus,
   ws,
   onCancel,
   onSubmit,
@@ -199,10 +211,22 @@ function OrderForm({
   order: Order;
   draft: Draft;
   onDraft: (draft: Draft) => void;
+  focus?: OrderEditRequest | null; // the field a next move asked to change
   ws: Workspace;
   onCancel: () => void;
   onSubmit: (change: OrderChange) => void;
 }) {
+  const form = useRef<HTMLFormElement>(null);
+  useEffect(() => {
+    const input = focus
+      ? form.current?.querySelector<HTMLInputElement>(
+          `input[name="${focus.field}"]`,
+        )
+      : null;
+    if (!input) return;
+    input.scrollIntoView({ behavior: "smooth", block: "center" });
+    input.focus({ preventScroll: true });
+  }, [focus?.at]);
   // The first problem of each field, by the CSV's rules.
   const errors = new Map<string, string>();
   for (const { column, message } of orderCellErrors((column) =>
@@ -217,6 +241,7 @@ function OrderForm({
   }
   return (
     <form
+      ref={form}
       className="order-edit"
       aria-label={`Edit ${order.id}`}
       onSubmit={save}
@@ -232,7 +257,7 @@ function OrderForm({
               maxLength={
                 key === "currency" ? 3 : (MAX_LENGTHS[key] ?? undefined)
               }
-              placeholder={key === "hsCode" ? "e.g. 4412.33" : undefined}
+              placeholder={key === "hsCode" ? "e.g. 1234.56" : undefined}
               value={draft[key]}
               aria-invalid={errors.has(key)}
               onChange={(e) => onDraft({ ...draft, [key]: e.target.value })}

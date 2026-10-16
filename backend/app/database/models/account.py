@@ -42,7 +42,7 @@ class Company(Base):
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="USD")
     description: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
     products: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
-    # Main materials and where they come from, e.g. "Acacia (Vietnam), birch veneer (Russia)".
+    # Main materials and where they come from, e.g. "Organic cotton (India), polyester (Vietnam)".
     materials: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
     certifications: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
     website: Mapped[str | None] = mapped_column(String(300))

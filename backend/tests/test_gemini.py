@@ -8,6 +8,7 @@ from google.auth.exceptions import DefaultCredentialsError
 from pydantic import BaseModel
 
 from app.core import gemini
+from app.core.config import get_settings
 from app.core.errors import AppError
 from app.core.gemini import embed_texts, generate_json
 
@@ -38,3 +39,23 @@ def test_missing_google_credentials_mean_ai_is_not_configured(monkeypatch, ask):
     with pytest.raises(AppError) as raised:
         ask()
     assert (raised.value.status, raised.value.code) == (503, "ai_not_configured")
+
+
+def test_stalled_and_transient_calls_are_tried_again(monkeypatch):
+    made = {}
+    monkeypatch.setattr(gemini.genai, "Client", lambda **options: made.update(options))
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "test-project")
+    monkeypatch.setenv("GEMINI_TIMEOUT_SECONDS", "30")
+    monkeypatch.setenv("GEMINI_ATTEMPTS", "3")
+    get_settings.cache_clear()
+    gemini._client.cache_clear()
+    try:
+        gemini._client()
+    finally:
+        monkeypatch.undo()
+        get_settings.cache_clear()
+        gemini._client.cache_clear()
+    options = made["http_options"]
+    assert options.timeout == 30_000  # each attempt
+    assert options.retry_options.attempts == 3
+    assert {499, 503, 504} <= set(options.retry_options.http_status_codes)

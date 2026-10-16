@@ -4,12 +4,13 @@ import { FieldValue } from "@google-cloud/firestore";
 import { OAuth2Client } from "google-auth-library";
 import { db, inventory, sources, impacts, scans, companySources, locks, list } from "./db.js";
 import { STOCK_PROFILE } from "./seed/inventory.js";
+import { companyStock, goodsReader } from "./goods-store.js";
 import { fetchFeed } from "./feeds.js";
 import { runScan } from "./scan.js";
 import { runAgent, audits, clearCaches } from "./agent.js";
 import { indexDocs, removeDocs, toDoc } from "./rag.js";
 import { log } from "./log.js";
-import { ANONYMOUS, auditVisible, isShared, presentSources, publicAudit, publicStep, sourceVisible, visibleItems } from "./access.js";
+import { ANONYMOUS, auditVisible, isShared, presentScan, presentSources, publicAudit, publicStep, scanRules, sourceVisible, visibleItems } from "./access.js";
 import { readJson, scanBlocked } from "./limits.js";
 import { deleteMemory, listMemories, memoryKeepDays, remembers, userKeyFor } from "./agents/platform.js";
 import { AGENTS_AT, callAgents, streamTurn } from "./agents/remote.js";
@@ -77,14 +78,19 @@ async function callerAccount(authorization) {
   return result;
 }
 
-// Shared sources a company switched off for itself, kept briefly per instance.
-const disabledCache = new Map();
-async function disabledSources(companyId) {
-  const hit = disabledCache.get(companyId);
+// A company's news settings, kept briefly per instance: the shared sources it switched off for
+// itself, and skipOld false when it switched the age rule off (access.js). As an access.
+const settingsCache = new Map();
+async function companyAccess(companyId) {
+  const hit = settingsCache.get(companyId);
   if (hit && Date.now() - hit.at < 30_000) return hit.value;
   const doc = await companySources.doc(companyId).get();
-  const value = doc.exists && Array.isArray(doc.get("disabled")) ? doc.get("disabled") : [];
-  disabledCache.set(companyId, { at: Date.now(), value });
+  const value = {
+    companyId,
+    disabled: doc.exists && Array.isArray(doc.get("disabled")) ? doc.get("disabled") : [],
+    ...(doc.exists && doc.get("skipOld") === false ? { skipOld: false } : {}),
+  };
+  settingsCache.set(companyId, { at: Date.now(), value });
   return value;
 }
 
@@ -93,7 +99,7 @@ async function readerAccess(req) {
   if (!req.headers.authorization) return ANONYMOUS;
   const { status, body } = await callerAccount(req.headers.authorization);
   const companyId = status === 200 ? body.data?.company?.id : null;
-  return companyId ? { companyId, disabled: await disabledSources(companyId) } : ANONYMOUS;
+  return companyId ? companyAccess(companyId) : ANONYMOUS;
 }
 
 // The caller's company profile and sites, or null (demo chat, signed out, backend down).
@@ -107,12 +113,12 @@ async function companyKnowledge(authorization) {
 
 // Changing sources and starting a scan need a signed-in company owner or editor; the backend
 // checks the token and reports the role. `action` completes "… can …", e.g. "change news sources".
-// Returns { userId, companyId, disabled } for the change and its log, or { error: [status, payload] }.
+// Returns the company's access with userId for the change and its log, or { error: [status, payload] }.
 async function companyEditor(req, action) {
   const { status, body, reason } = await callerAccount(req.headers.authorization);
   const account = body.data;
   if (status === 200 && account?.company && ["owner", "editor"].includes(account.role))
-    return { userId: account.user.id, companyId: account.company.id, disabled: await disabledSources(account.company.id) };
+    return { userId: account.user.id, ...(await companyAccess(account.company.id)) };
   if (status === 200) return { error: [403, { error: `Only company owners and editors can ${action}.` }] };
   if (status === 401) return { error: [401, { error: `Sign in to a company workspace to ${action}.` }] };
   if (status === 403) return { error: [403, { error: body.error?.message || `Your account can't ${action}.` }] };
@@ -226,7 +232,7 @@ async function streamChat(req, res, body, origin, requestId) {
   const write = (event) => res.write(JSON.stringify(event) + "\n");
   try {
     const company = await companyKnowledge(req.headers.authorization);
-    const access = company ? { companyId: company.company.id, disabled: await disabledSources(company.company.id) } : ANONYMOUS;
+    const access = company ? await companyAccess(company.company.id) : ANONYMOUS;
     // The signed-in user: their Agent Platform session and Memory Bank memories are their own.
     const user = company ? (await callerAccount(req.headers.authorization)).body.data?.user ?? null : null;
     const turn = {
@@ -305,11 +311,13 @@ async function scanNow(scheduled, who = {}) {
     if (!refusal) t.set(scanLock, { startedAt: new Date().toISOString(), running: true, trigger: scheduled ? "schedule" : "manual", ...who });
     return refusal;
   });
-  if (blocked) return [blocked[0], { error: blocked[1], scan: await latestScan() }];
+  // The caller sees the alerts raised for its own goods (access.js presentScan).
+  const viewer = { companyId: who.companyId ?? null };
+  if (blocked) return [blocked[0], { error: blocked[1], scan: presentScan(await latestScan(), viewer) }];
   try {
     const scan = await runScan({ trigger: scheduled ? "schedule" : "manual" });
     clearCaches();
-    return [200, { scan }];
+    return [200, { scan: presentScan(scan, viewer) }];
   } finally {
     await scanLock.set({ running: false }, { merge: true }).catch((e) => log("ERROR", "scan.unlock_failed", { error: String(e?.message || e) }));
   }
@@ -359,7 +367,7 @@ async function setSourceEnabled(source, enabled, editor) {
         { disabled: enabled ? FieldValue.arrayRemove(source.id) : FieldValue.arrayUnion(source.id), updatedAt: new Date().toISOString(), updatedBy: editor.userId },
         { merge: true },
       );
-    disabledCache.delete(editor.companyId);
+    settingsCache.delete(editor.companyId);
   } else {
     await sources.doc(source.id).update({ enabled });
     await indexDocs([toDoc.source({ ...source, enabled })]).catch((e) => log("ERROR", "index.failed", { sourceId: source.id, error: String(e?.message || e) }));
@@ -368,20 +376,60 @@ async function setSourceEnabled(source, enabled, editor) {
   log("INFO", enabled ? "source.enabled" : "source.disabled", { sourceId: source.id, shared: isShared(source), userId: editor.userId, companyId: editor.companyId });
 }
 
+// The newest alerts about the caller's goods: a company's own (by companyId alone, which needs no
+// composite index, then sorted here), or the newest of all for the demo, filtered by visibleItems.
+const RECENT_ALERTS = 120;
+async function recentAlerts(access) {
+  if (!access.companyId) return list(impacts.orderBy("createdAt", "desc").limit(RECENT_ALERTS));
+  const own = await list(impacts.where("companyId", "==", access.companyId));
+  return own.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, RECENT_ALERTS);
+}
+
+// The stock News watch reads news against: a company's own goods (goods.js), refreshed with the
+// caller's token when stale, or the browser demo's sample stock. `watchedSince`: when the scan
+// first read news for these goods (null: from the next scan).
+async function stockList(req) {
+  const access = await readerAccess(req);
+  if (!access.companyId)
+    return [200, { kind: "sample", items: await list(inventory.orderBy("sku")), owner: { company: STOCK_PROFILE.company, about: STOCK_PROFILE.about } }];
+  const authorization = req.headers.authorization;
+  const read = goodsReader(
+    (path) => backendGet(path, authorization),
+    async () => (await companyKnowledge(authorization))?.company ?? null,
+  );
+  const goods = await companyStock(access.companyId, read);
+  return [
+    200,
+    {
+      kind: "company",
+      items: goods.items ?? [],
+      owner: { company: goods.profile?.company ?? "", about: goods.profile?.about ?? "" },
+      updatedAt: goods.updatedAt ?? null,
+      watchedSince: goods.backfilledAt ?? null,
+    },
+  ];
+}
+
+// The age rule (access.js) for the caller's company only; the scan reads old articles from the
+// sources a company that switched it off reads, and only that company sees what they raise.
+async function setSkipOld(skipOld, editor) {
+  await companySources
+    .doc(editor.companyId)
+    .set({ skipOld, updatedAt: new Date().toISOString(), updatedBy: editor.userId }, { merge: true });
+  settingsCache.delete(editor.companyId);
+  clearCaches();
+  log("INFO", skipOld ? "scan_rules.skip_old_on" : "scan_rules.skip_old_off", { userId: editor.userId, companyId: editor.companyId });
+}
+
 async function route(method, path, body, req, query) {
   if (method === "GET" && path === "/api/audits") return sessionAudits(query, await readerAccess(req));
   const a = path.match(/^\/api\/audits\/([\w-]{1,40})$/);
   if (method === "GET" && a) return oneAudit(a[1], query, await readerAccess(req));
-  if (method === "GET" && path === "/api/inventory")
-    return [200, { items: await list(inventory.orderBy("sku")), owner: { company: STOCK_PROFILE.company, about: STOCK_PROFILE.about } }];
+  if (method === "GET" && path === "/api/inventory") return stockList(req);
   if (method === "GET" && path === "/api/impacts") {
-    const [access, stored, all, scan] = await Promise.all([
-      readerAccess(req),
-      list(impacts.orderBy("createdAt", "desc").limit(120)),
-      list(sources),
-      latestScan(),
-    ]);
-    return [200, { impacts: visibleItems(stored, all, access).slice(0, 60), scan }];
+    const access = await readerAccess(req);
+    const [stored, all, scan] = await Promise.all([recentAlerts(access), list(sources), latestScan()]);
+    return [200, { impacts: visibleItems(stored, all, access).slice(0, 60), scan: presentScan(scan, access) }];
   }
   if (method === "POST" && path === "/api/scan") {
     if (await fromScheduler(req)) return scanNow(true);
@@ -390,7 +438,15 @@ async function route(method, path, body, req, query) {
   }
   if (method === "GET" && path === "/api/sources") {
     const [access, all] = await Promise.all([readerAccess(req), list(sources.orderBy("name"))]);
-    return [200, { sources: presentSources(all, access) }];
+    return [200, { sources: presentSources(all, access), scanRules: scanRules(access) }];
+  }
+  if (method === "PATCH" && path === "/api/scan-rules") {
+    const editor = await companyEditor(req, "change scan rules");
+    if (editor.error) return editor.error;
+    if (!scanRules(editor)) return [400, { error: "No scan rules are set on this service." }];
+    if (typeof body.skipOld !== "boolean") return [400, { error: "Expected { skipOld: boolean }" }];
+    await setSkipOld(body.skipOld, editor);
+    return [200, { scanRules: scanRules({ ...editor, skipOld: body.skipOld }) }];
   }
   if (method === "POST" && path === "/api/sources") {
     const editor = await companyEditor(req, "change news sources");

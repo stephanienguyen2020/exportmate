@@ -1,5 +1,5 @@
 {
-  "_note": "A second fictional demo company (Vietnam Google AI Builder Furniture) that makes furniture in Vietnam for the United States: onboarding answers, About company profile, suppliers with their documents, sites, 16 orders and 4 playbook rules. Loaded by `python -m app.seed_demo_data --company us-furniture --email <another user>`. Each supplier's documents are chosen against the US checklist in reference.json, and each order's status is the result that checklist gives (exposed = a document missing, not the accepted standard or expired by the ship date, needs_data = no supplier record). Coordinates are [longitude, latitude]. Province names follow Vietnam's July 2025 mergers.",
+  "_note": "A second fictional demo company (Vietnam Google AI Builder Furniture) that makes furniture in Vietnam for the United States: onboarding answers, About company profile, suppliers with their documents, sites, 16 orders and 4 playbook rules. Loaded by `python -m app.seed_demo_data --company us-furniture --email <another user>`. Each supplier's documents are chosen against the US checklist in reference.json; the seed analyses the orders, so each status is what that checklist gives (exposed = a document missing, not the accepted standard or expired by the ship date, or no supplier record, as for Hiep Phuoc Rattan). Coordinates are [longitude, latitude]. Province names follow Vietnam's July 2025 mergers.",
   "owner": "Mr. Minh",
   "company": {
     "companyName": "Vietnam Google AI Builder Furniture",
@@ -134,22 +134,22 @@
     }
   ],
   "orders": [
-    { "id": "PO-3101", "product": "Rubberwood dining table · 6-seat", "supplier": "Tan Uyen Rubberwood", "destination": "Los Angeles, US", "value": 38400, "shipDate": "2026-10-23", "hsCode": "9403.60", "status": "clear" },
-    { "id": "PO-3102", "product": "Rubberwood dining chair", "supplier": "Tan Uyen Rubberwood", "destination": "Savannah, US", "value": 26800, "shipDate": "2026-10-29", "hsCode": "9401.69", "status": "clear" },
-    { "id": "PO-3103", "product": "FSC acacia folding garden chair", "supplier": "Phu Cat Acacia", "destination": "Houston, US", "value": 22150, "shipDate": "2026-11-04", "hsCode": "9401.69", "status": "clear" },
-    { "id": "PO-3104", "product": "Upholstered dining chair · linen", "supplier": "Bien Hoa Upholstery Works", "destination": "Long Beach, US", "value": 41250, "shipDate": "2026-11-06", "hsCode": "9401.61", "status": "exposed" },
-    { "id": "PO-3105", "product": "Shaker kitchen cabinet set", "supplier": "Long An Panel Co.", "destination": "Savannah, US", "value": 58600, "shipDate": "2026-11-12", "hsCode": "9403.40", "status": "exposed" },
-    { "id": "PO-3106", "product": "Okoume-faced hardwood plywood · 18 mm", "supplier": "Kon Tum Veneer Mill", "destination": "Norfolk, US", "value": 29900, "shipDate": "2026-11-18", "hsCode": "4412.33", "status": "exposed" },
-    { "id": "PO-3107", "product": "Rubberwood bed frame · queen", "supplier": "Tan Uyen Rubberwood", "destination": "New York, US", "value": 44700, "shipDate": "2026-11-20", "hsCode": "9403.50", "status": "clear" },
-    { "id": "PO-3108", "product": "FSC acacia chaise lounger", "supplier": "Phu Cat Acacia", "destination": "Charleston, US", "value": 24300, "shipDate": "2026-11-25", "hsCode": "9401.69", "status": "clear" },
-    { "id": "PO-3109", "product": "Rattan-wrapped accent chair", "supplier": "Hiep Phuoc Rattan", "destination": "Oakland, US", "value": 18750, "shipDate": "2026-12-02", "hsCode": "9401.59", "status": "exposed" },
-    { "id": "PO-3110", "product": "Two-seat upholstered sofa", "supplier": "Bien Hoa Upholstery Works", "destination": "Seattle, US", "value": 47900, "shipDate": "2026-12-09", "hsCode": "9401.61", "status": "exposed" },
-    { "id": "PO-3111", "product": "Rubberwood sideboard", "supplier": "Tan Uyen Rubberwood", "destination": "Charleston, US", "value": 31600, "shipDate": "2026-12-11", "hsCode": "9403.60", "status": "clear" },
-    { "id": "PO-3112", "product": "Kitchen cabinet set · white oak doors", "supplier": "Long An Panel Co.", "destination": "Houston, US", "value": 63200, "shipDate": "2026-12-29", "hsCode": "9403.40", "status": "exposed" },
-    { "id": "PO-3113", "product": "Upholstered rubberwood dining chair", "supplier": "Tan Uyen Rubberwood", "destination": "Los Angeles, US", "value": 39800, "shipDate": "2027-01-08", "hsCode": "9401.61", "status": "clear" },
-    { "id": "PO-3114", "product": "Kitchen cabinet set · painted", "supplier": "Long An Panel Co.", "destination": "New York, US", "value": 61400, "shipDate": "2027-01-15", "hsCode": "9403.40", "status": "exposed" },
-    { "id": "PO-3115", "product": "Acacia-core hardwood plywood · 12 mm", "supplier": "Kon Tum Veneer Mill", "destination": "Long Beach, US", "value": 27350, "shipDate": "2027-01-20", "hsCode": "4412.33", "status": "exposed" },
-    { "id": "PO-3116", "product": "Rubberwood bookcase", "supplier": "Tan Uyen Rubberwood", "destination": "Savannah, US", "value": 19850, "shipDate": "2027-02-03", "hsCode": "9403.60", "status": "exposed" }
+    { "id": "PO-3101", "product": "Rubberwood dining table · 6-seat", "supplier": "Tan Uyen Rubberwood", "destination": "Los Angeles, US", "value": 38400, "shipDate": "2026-10-23", "hsCode": "9403.60" },
+    { "id": "PO-3102", "product": "Rubberwood dining chair", "supplier": "Tan Uyen Rubberwood", "destination": "Savannah, US", "value": 26800, "shipDate": "2026-10-29", "hsCode": "9401.69" },
+    { "id": "PO-3103", "product": "FSC acacia folding garden chair", "supplier": "Phu Cat Acacia", "destination": "Houston, US", "value": 22150, "shipDate": "2026-11-04", "hsCode": "9401.69" },
+    { "id": "PO-3104", "product": "Upholstered dining chair · linen", "supplier": "Bien Hoa Upholstery Works", "destination": "Long Beach, US", "value": 41250, "shipDate": "2026-11-06", "hsCode": "9401.61" },
+    { "id": "PO-3105", "product": "Shaker kitchen cabinet set", "supplier": "Long An Panel Co.", "destination": "Savannah, US", "value": 58600, "shipDate": "2026-11-12", "hsCode": "9403.40" },
+    { "id": "PO-3106", "product": "Okoume-faced hardwood plywood · 18 mm", "supplier": "Kon Tum Veneer Mill", "destination": "Norfolk, US", "value": 29900, "shipDate": "2026-11-18", "hsCode": "4412.33" },
+    { "id": "PO-3107", "product": "Rubberwood bed frame · queen", "supplier": "Tan Uyen Rubberwood", "destination": "New York, US", "value": 44700, "shipDate": "2026-11-20", "hsCode": "9403.50" },
+    { "id": "PO-3108", "product": "FSC acacia chaise lounger", "supplier": "Phu Cat Acacia", "destination": "Charleston, US", "value": 24300, "shipDate": "2026-11-25", "hsCode": "9401.69" },
+    { "id": "PO-3109", "product": "Rattan-wrapped accent chair", "supplier": "Hiep Phuoc Rattan", "destination": "Oakland, US", "value": 18750, "shipDate": "2026-12-02", "hsCode": "9401.59" },
+    { "id": "PO-3110", "product": "Two-seat upholstered sofa", "supplier": "Bien Hoa Upholstery Works", "destination": "Seattle, US", "value": 47900, "shipDate": "2026-12-09", "hsCode": "9401.61" },
+    { "id": "PO-3111", "product": "Rubberwood sideboard", "supplier": "Tan Uyen Rubberwood", "destination": "Charleston, US", "value": 31600, "shipDate": "2026-12-11", "hsCode": "9403.60" },
+    { "id": "PO-3112", "product": "Kitchen cabinet set · white oak doors", "supplier": "Long An Panel Co.", "destination": "Houston, US", "value": 63200, "shipDate": "2026-12-29", "hsCode": "9403.40" },
+    { "id": "PO-3113", "product": "Upholstered rubberwood dining chair", "supplier": "Tan Uyen Rubberwood", "destination": "Los Angeles, US", "value": 39800, "shipDate": "2027-01-08", "hsCode": "9401.61" },
+    { "id": "PO-3114", "product": "Kitchen cabinet set · painted", "supplier": "Long An Panel Co.", "destination": "New York, US", "value": 61400, "shipDate": "2027-01-15", "hsCode": "9403.40" },
+    { "id": "PO-3115", "product": "Acacia-core hardwood plywood · 12 mm", "supplier": "Kon Tum Veneer Mill", "destination": "Long Beach, US", "value": 27350, "shipDate": "2027-01-20", "hsCode": "4412.33" },
+    { "id": "PO-3116", "product": "Rubberwood bookcase", "supplier": "Tan Uyen Rubberwood", "destination": "Savannah, US", "value": 19850, "shipDate": "2027-02-03", "hsCode": "9403.60" }
   ],
   "rules": [
     { "text": "Flag any order where the projected margin drops below 10% after US duties.", "category": "Threshold" },

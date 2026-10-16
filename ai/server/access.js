@@ -6,10 +6,34 @@
 // belongs to the company that added it: only that company sees it and what it brought
 // in, and only that company's owners and editors can switch it off or remove it.
 //
-// `access` is { companyId, disabled }: the caller's company (null for the demo) and the
-// shared sources that company switched off.
+// News alerts and stock items are about someone's goods: a company's own (they carry its
+// companyId; scan.js, goods.js) or the sample stock, which only the browser demo sees.
+//
+// `access` is { companyId, disabled, skipOld }: the caller's company (null for the demo), the
+// shared sources that company switched off, and false when it switched the age rule off.
+//
+// The age rule: by default a scan skips articles published more than MAX_AGE_DAYS before it
+// (SCAN_MAX_AGE_DAYS; 0 removes the rule for everyone). A company can switch it off for itself;
+// the scan then also reads old articles from the sources that company reads, and only that
+// company sees what they raise. Undated articles have no known age and are always read.
 
 export const ANONYMOUS = Object.freeze({ companyId: null, disabled: [] });
+
+const envDays = process.env.SCAN_MAX_AGE_DAYS;
+export const MAX_AGE_DAYS = /^\d+$/.test(envDays || "") ? Number(envDays) : 365;
+
+/** Whether the age rule applies to this caller (on unless their company switched it off). */
+export const skipsOld = (access, maxAgeDays = MAX_AGE_DAYS) => maxAgeDays > 0 && access.skipOld !== false;
+
+/** The age rule as a caller sees it, for News watch: null when no rule is configured. */
+export const scanRules = (access, maxAgeDays = MAX_AGE_DAYS) =>
+  maxAgeDays > 0 ? { maxAgeDays, skipOld: skipsOld(access, maxAgeDays) } : null;
+
+/** Whole days between an article's publication and `at` (a scan's start), or null when undated. */
+export function ageDays(publishedAt, at) {
+  const published = Date.parse(publishedAt || "");
+  return Number.isNaN(published) ? null : Math.max(0, Math.floor((at - published) / 86_400_000));
+}
 
 export const isShared = (source) => Boolean(source.builtIn) || !source.companyId;
 
@@ -17,6 +41,12 @@ export const sourceVisible = (source, access) => isShared(source) || (Boolean(ac
 
 export const sourceEnabled = (source, access) =>
   Boolean(source.enabled) && !(isShared(source) && access.disabled.includes(source.id));
+
+/**
+ * Whether a scan reads old articles from `source`: some company that switched the age rule off
+ * (`oldReaders`, each an access) can see the source and has it switched on.
+ */
+export const readsOld = (source, oldReaders) => oldReaders.some((access) => sourceVisible(source, access) && sourceEnabled(source, access));
 
 /** The sources a caller sees, with `enabled` as it applies to them and no owner ids. */
 export function presentSources(sources, access) {
@@ -34,12 +64,25 @@ function sourceIdsOf(item) {
   return [];
 }
 
+/** Whether a caller may see an alert or stock item for whose goods it is; other records pass. */
+export function goodsVisible(item, access) {
+  // Stored alerts carry no type; index hits do.
+  const aboutGoods = item.type ? item.type === "alert" || item.type === "item" : Array.isArray(item.affected);
+  if (!aboutGoods) return true;
+  return item.companyId ? item.companyId === access.companyId : !access.companyId;
+}
+
 /**
- * Whether a caller may see an impact, article or index hit. Visible when any source it came
- * from is visible and switched on for the caller. Records whose sources were deleted fall back
+ * Whether a caller may see an impact, article or index hit. An alert or stock item must be about
+ * the caller's goods (goodsVisible) and pass the caller's age rule; then it is visible when any
+ * source it came from is visible and switched on for the caller. Records whose sources were deleted fall back
  * to the owner stored with them (`sourceCompanyIds`); records from before owners existed are shared.
  */
-export function itemVisible(item, sourcesById, access) {
+export function itemVisible(item, sourcesById, access, maxAgeDays = MAX_AGE_DAYS) {
+  if (!goodsVisible(item, access)) return false;
+  // Older than the age rule when scanned: read only for a company that switched the rule off.
+  // Records scanned before the rule have no ageDays.
+  if (skipsOld(access, maxAgeDays) && item.ageDays > maxAgeDays) return false;
   const ids = sourceIdsOf(item);
   if (!ids.length) return true; // stock items, guides
   const known = ids.map((id) => sourcesById.get(id)).filter(Boolean);
@@ -49,10 +92,21 @@ export function itemVisible(item, sourcesById, access) {
   return !owners.length || owners.some((owner) => !owner || owner === access.companyId);
 }
 
-export const visibleItems = (items, sources, access) => {
+export const visibleItems = (items, sources, access, maxAgeDays = MAX_AGE_DAYS) => {
   const byId = new Map(sources.map((s) => [s.id, s]));
-  return items.filter((item) => itemVisible(item, byId, access));
+  return items.filter((item) => itemVisible(item, byId, access, maxAgeDays));
 };
+
+/**
+ * A scan record as a caller sees it: `impactsFound` is the alerts it raised for the caller's
+ * goods (the sample stock's in the demo, the company's own otherwise); other companies' counts
+ * stay on the server.
+ */
+export function presentScan(scan, access) {
+  if (!scan) return scan;
+  const { companyImpacts, ...shown } = scan;
+  return access.companyId ? { ...shown, impactsFound: companyImpacts?.[access.companyId] ?? 0 } : shown;
+}
 
 // Audits: an anonymous (demo) chat's audit is readable with its session id, as before.
 // One made in a company workspace also needs a token from that company.

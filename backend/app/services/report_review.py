@@ -34,7 +34,9 @@ def message_blocked_reason(db: Session, report: AnalysisReport) -> str | None:
     if report.blocked:
         return "A playbook rule blocks messages from this report."
     if report.state == ReportState.needs_data or content.missing_data:
-        return "Complete the order's data first, then run the analysis again."
+        # Name what is missing (e.g. the supplier record), so the editor knows what to add.
+        missing = " ".join(content.missing_data) or "Complete the order's data first."
+        return f"{missing} Then run the analysis again."
     if report.state == ReportState.rejected or not content.audit.passed:
         return "The report failed its checks: run the analysis again."
     if report.state == ReportState.needs_human_review and report.reviewed_at is None:

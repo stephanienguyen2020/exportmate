@@ -1,10 +1,11 @@
 """Which orders a News watch alert may affect, and people's verdicts on it.
 
-The AI service matches each article to items in its sample stock (SKU, HS code, markets), and
-records what the article names (`mentions`: materials, HS codes, origin countries, markets).
-Orders are suggested by walking the knowledge graph (services/knowledge_graph.py) from those
-mentions, through suppliers' sourcing and the material chain, and from each stock item the
-alert names (same HS heading, shipping to one of the item's markets). A suggestion is only a guess:
+The AI service matches each article to the company's goods (what its profile names and its
+orders ship, each with an HS code and markets; ai/server/goods.js), and records what the
+article names (`mentions`: materials, HS codes, origin countries, markets). Orders are
+suggested by walking the knowledge graph (services/knowledge_graph.py) from those mentions,
+through suppliers' sourcing and the material chain, and from each item the alert names (same
+HS heading, shipping to one of the item's markets). A suggestion is only a guess:
 an editor confirms or rejects it, or links an order that wasn't suggested, and reports and the
 order list only treat confirmed links as fact.
 """
@@ -71,12 +72,12 @@ def alert_mentions(alert: dict, stock_by_sku: dict[str, dict]) -> list[GraphMent
         markets = tuple(
             m for m in item.get("markets") or [] if isinstance(m, str) and MARKET_CODE.match(m)
         )
-        name = item.get("name") or entry.get("name") or ""
+        name = item.get("name") or entry.get("name") or entry.get("sku")
         found.append(
             GraphMentions(
                 hs_codes=(str(item["hsCode"]),),
                 markets=markets,
-                named_as=f"like {entry.get('sku')} {name} named in this alert",
+                named_as=f"like {name} named in this alert",
             )
         )
     return found

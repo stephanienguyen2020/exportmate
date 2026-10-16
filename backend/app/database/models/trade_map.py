@@ -70,7 +70,7 @@ class Market(Base):
     short_name: Mapped[str] = mapped_column(String(40), nullable=False)
     hub_latitude: Mapped[float] = mapped_column(Float, nullable=False)
     hub_longitude: Mapped[float] = mapped_column(Float, nullable=False)
-    # Words that tie a news item to this market, e.g. "EUDR". Matched case-sensitively.
+    # Words that tie a news item to this market, e.g. "EU", "European". Matched case-sensitively.
     search_terms: Mapped[list[str]] = mapped_column(ARRAY(String(60)), nullable=False, default=list)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
@@ -99,7 +99,7 @@ class Port(Base):
 
 class DocumentKind(Base):
     __tablename__ = "document_kinds"
-    kind: Mapped[str] = mapped_column(String(40), primary_key=True)  # "geolocation"
+    kind: Mapped[str] = mapped_column(String(40), primary_key=True)  # e.g. "rohs"
     label: Mapped[str] = mapped_column(String(100), nullable=False)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 

@@ -30,8 +30,9 @@ export type Impact = {
   headline: string;
   why: string;
   action: string;
-  affected: { sku: string; name: string; reason: string; stockValueUsd: number }[];
-  stockValueUsd: number;
+  // A company's goods have no stock value, so its alerts carry none.
+  affected: { sku: string; name: string; reason: string; stockValueUsd?: number }[];
+  stockValueUsd?: number;
   createdAt: string;
 };
 type Scan = {
@@ -41,10 +42,15 @@ type Scan = {
   finishedAt?: string;
   articlesFetched?: number;
   articlesAnalysed?: number;
+  // Articles Gemini couldn't assess; the next scan retries them.
+  articlesFailed?: number;
   impactsFound?: number;
   sources?: { id: string; ok: boolean }[];
   error?: string;
 };
+// The age rule: a scan skips articles published more than maxAgeDays before it unless the
+// company switched it off (skipOld false). Null when the AI service sets no rule.
+type ScanRules = { maxAgeDays: number; skipOld: boolean } | null;
 type Item = {
   sku: string;
   name: string;
@@ -55,7 +61,7 @@ type Item = {
   supplier: string;
   markets: string[];
   certifications: string[];
-  // Origin traced to where the material was produced, e.g. plot geolocation.
+  // Origin traced to where the material was produced, e.g. plot geolocation or farm records.
   originTraced: boolean;
   warehouse: string;
   unit: string;
@@ -137,31 +143,56 @@ const REASONS_SHOWN = 3;
 // Stock-item chips shown on a card before the "+N" button.
 const SKUS_SHOWN = 4;
 
-// The stock list alerts are matched against (the demo matches its orders to it in the browser).
-// Loaded once per page load (it's the same sample list for everyone); a failure is retried.
-let stockRequest: Promise<StockItem[]> | null = null;
-const loadStock = () =>
-  (stockRequest ??= api<{ items: StockItem[] }>("/inventory")
-    .then((d) => d.items)
-    .catch((e) => {
-      stockRequest = null;
+// Whose stock it is: a company's own goods, or the sample company's stock in the demo.
+type StockOwner = { company: string; about: string };
+// What alerts are matched against: a signed-in company's own goods (what About company names
+// and its orders ship, with no quantities or values), or the demo's sample stock, which the
+// demo matches its orders to in the browser. `watchedSince`: when the scan first read news for
+// a company's goods (null: from the next scan).
+type StockList = {
+  kind: "company" | "sample";
+  items: (StockItem & Partial<Item> & Partial<Goods>)[];
+  owner?: StockOwner;
+  watchedSince?: string | null;
+};
+type Goods = { supplier: string; orders: string[]; source: "profile" | "orders" };
+
+// Loaded once per session token; a failure is retried.
+let stockRequest: { key: string; list: Promise<StockList> } | null = null;
+async function loadStockList() {
+  const key = JSON.stringify(await companyAuth());
+  if (stockRequest?.key !== key) {
+    const list = api<StockList>("/inventory").catch((e) => {
+      if (stockRequest?.list === list) stockRequest = null;
       throw e;
-    }));
+    });
+    stockRequest = { key, list };
+  }
+  return stockRequest.list;
+}
+const loadStock = () => loadStockList().then((d) => d.items);
 
 function useStock() {
-  const [stock, setStock] = useState<Map<string, StockItem> | null>(null);
+  const [list, setList] = useState<StockList | null>(null);
   const [error, setError] = useState("");
   useEffect(() => {
-    loadStock()
-      .then((items) => setStock(new Map(items.map((i) => [i.sku, i]))))
+    loadStockList()
+      .then(setList)
       .catch(() => setError("Couldn't load the stock list, so no orders can be matched."));
   }, []);
-  return { stock, error };
+  const stock = list ? new Map(list.items.map((i) => [i.sku, i as StockItem])) : null;
+  return { stock, list, error, named: list?.kind === "company" };
 }
 
 // What a card's stock-item chips need to link to orders. `rejected`: orders a person marked
-// not relevant to the alert.
-type ChipData = { stock: Map<string, StockItem> | null; orders: Order[] | null; error: string; rejected?: Set<string> };
+// not relevant to the alert; `named`: items are a company's goods, shown by name.
+type ChipData = {
+  stock: Map<string, StockItem> | null;
+  orders: Order[] | null;
+  error: string;
+  rejected?: Set<string>;
+  named?: boolean;
+};
 
 function ImpactCard({
   impact,
@@ -178,6 +209,7 @@ function ImpactCard({
   const [allSkus, setAllSkus] = useState(false);
   const reasons = expanded ? impact.affected : impact.affected.slice(0, REASONS_SHOWN);
   const skus = allSkus ? impact.affected : impact.affected.slice(0, SKUS_SHOWN);
+  const label = (a: { sku: string; name: string }) => (chips?.named ? a.name || a.sku : a.sku);
   return (
     <article className={`news-card ${compact ? "compact" : ""}`}>
       <div className="news-card-top">
@@ -197,6 +229,7 @@ function ImpactCard({
               item={chips.stock?.get(a.sku)}
               orders={chips.orders}
               rejected={chips.rejected || new Set()}
+              named={chips.named}
               error={
                 chips.error ||
                 (chips.stock && !chips.stock.has(a.sku) ? "This item isn't in the stock list, so no orders can be matched." : "")
@@ -204,7 +237,7 @@ function ImpactCard({
             />
           ) : (
             <span key={a.sku} title={`${a.name}: ${a.reason}`}>
-              {a.sku}
+              {label(a)}
             </span>
           ),
         )}
@@ -219,16 +252,14 @@ function ImpactCard({
             {allSkus ? "Fewer" : `+${impact.affected.length - SKUS_SHOWN}`}
           </button>
         )}
-        <b>{usd(impact.stockValueUsd)} stock exposed</b>
+        {typeof impact.stockValueUsd === "number" && <b>{usd(impact.stockValueUsd)} stock exposed</b>}
       </div>
       {!compact && (
         <>
           <ul className="news-reasons">
             {reasons.map((a) => (
               <li key={a.sku}>
-                <strong>
-                  {a.sku} · {a.name}
-                </strong>{" "}
+                <strong>{chips?.named ? a.name : `${a.sku} · ${a.name}`}</strong>{" "}
                 {a.reason}
               </li>
             ))}
@@ -253,8 +284,8 @@ function ImpactCard({
   );
 }
 
-// Alerts are matched against the synthetic demo inventory, not a signed-in company's own stock.
-const SAMPLE_STOCK_NOTE = "Matched against ExportMate's sample inventory, not your company's own stock.";
+// A signed-in company's alerts are about its own goods.
+const GOODS_NOTE = "Matched against your goods: what About company says you make and what your orders ship (Your goods tab).";
 // The demo's stock list and its orders are separate samples, so their exposure figures differ.
 const DEMO_STOCK_NOTE = "Matched against the demo company's stock list (Stock tab), which is separate from its orders.";
 
@@ -269,8 +300,8 @@ export function NewsHighlights({ live = false, orders }: { live?: boolean; order
       <div className="section-heading news-section">
         <div>
           <span className="eyebrow">FROM THE NEWS · SCANNED {when(scan?.finishedAt || scan?.startedAt).toUpperCase()}</span>
-          <h2>{live ? "What the news means for the sample stock." : "What the news means for your stock."}</h2>
-          <p className="news-note">{live ? SAMPLE_STOCK_NOTE : DEMO_STOCK_NOTE}</p>
+          <h2>{live ? "What the news means for your goods." : "What the news means for your stock."}</h2>
+          <p className="news-note">{live ? GOODS_NOTE : DEMO_STOCK_NOTE}</p>
         </div>
         <a className="text-link" href="#/workspace/news">
           All {impacts.length} alerts <ArrowUpRight size={16} />
@@ -278,7 +309,12 @@ export function NewsHighlights({ live = false, orders }: { live?: boolean; order
       </div>
       <div className="news-grid">
         {top.map((i) => (
-          <ImpactCard key={i.id} impact={i} compact chips={{ ...stock, orders: orders || null }} />
+          <ImpactCard
+            key={i.id}
+            impact={i}
+            compact
+            chips={{ stock: stock.stock, error: stock.error, named: stock.named, orders: orders || null }}
+          />
         ))}
       </div>
     </>
@@ -305,7 +341,7 @@ function ScanBar({
         <span className="eyebrow">LAST SCAN</span>
         <strong>{scan ? when(scan.finishedAt || scan.startedAt) : "No scan yet"}</strong>
       </div>
-      {scan?.status === "done" && (
+      {scan?.status !== "running" && scan?.sources && (
         <>
           <div>
             <span className="eyebrow">SOURCES READ</span>
@@ -331,29 +367,111 @@ function ScanBar({
         {locked && !message && <small>{locked}</small>}
         {message && <small role="status">{message}</small>}
       </div>
+      {scan?.error && scan.status !== "running" && (
+        <p className="news-scanbar-error" role="alert">
+          {scan.status === "failed" ? "The last scan failed. " : ""}
+          {scan.error}
+          {scan.articlesFailed ? " The next scan tries these articles again." : ""}
+        </p>
+      )}
     </section>
   );
 }
 
-// Whose sample stock it is, as the AI service seeds it.
-type StockOwner = { company: string; about: string };
+// How many alerts name each item.
+function alertCounts(impacts: Impact[]) {
+  const alerts = new Map<string, number>();
+  impacts.forEach((i) => i.affected.forEach((a) => alerts.set(a.sku, (alerts.get(a.sku) || 0) + 1)));
+  return alerts;
+}
+
+function AlertCount({ count }: { count?: number }) {
+  return count ? (
+    <span className="status red">
+      <i />
+      {count}
+    </span>
+  ) : (
+    <span className="muted">—</span>
+  );
+}
+
+// A signed-in company's goods: what News watch reads the news for.
+function GoodsTable({ list, impacts }: { list: StockList; impacts: Impact[] }) {
+  const alerts = alertCounts(impacts);
+  const { items } = list;
+  return (
+    <>
+      <p className="news-note">
+        {items.length} {items.length === 1 ? "item" : "items"} News watch reads the news for: what About company
+        (Account) says you make and what your orders ship.{" "}
+        {list.watchedSince
+          ? `Watched since ${day(list.watchedSince)}.`
+          : "Alerts about them start with the next scan, which also reads back over the last two weeks."}
+      </p>
+      {items.length ? (
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th>HS code</th>
+                <th>Markets</th>
+                <th>Suppliers</th>
+                <th>Orders</th>
+                <th>News alerts</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((i) => (
+                <tr key={i.sku}>
+                  <td>
+                    {i.name}
+                    {i.source === "profile" && <small>From About company</small>}
+                  </td>
+                  <td className="mono">{i.hsCode || "—"}</td>
+                  <td>{i.markets.join(", ") || "—"}</td>
+                  <td>{i.supplier || "—"}</td>
+                  <td className="mono">{i.orders?.join(", ") || "—"}</td>
+                  <td>
+                    <AlertCount count={alerts.get(i.sku)} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="news-empty">
+          <Newspaper size={18} /> Nothing to watch yet. Say what you make under Account › About company, or import
+          orders.
+        </div>
+      )}
+    </>
+  );
+}
+
+// What a finished "Scan now" reports.
+function scanMessage(scan: Scan) {
+  if (scan.status === "failed") return "The scan failed.";
+  const found = `${scan.impactsFound} new alert${scan.impactsFound === 1 ? "" : "s"} from ${scan.articlesAnalysed} new articles.`;
+  return scan.articlesFailed ? `${found} ${scan.articlesFailed} couldn't be assessed.` : found;
+}
 
 function StockTable({ impacts }: { impacts: Impact[] }) {
-  const [items, setItems] = useState<Item[] | null>(null);
-  const [owner, setOwner] = useState<StockOwner | null>(null);
+  const [list, setList] = useState<StockList | null>(null);
   const [error, setError] = useState("");
   useEffect(() => {
-    api<{ items: Item[]; owner?: StockOwner }>("/inventory")
-      .then((d) => {
-        setItems(d.items);
-        setOwner(d.owner ?? null);
-      })
+    loadStockList()
+      .then(setList)
       .catch((e) => setError(e.message));
   }, []);
   if (error) return <div className="news-error">{error}</div>;
-  if (!items) return <Loading />;
-  const alerts = new Map<string, number>();
-  impacts.forEach((i) => i.affected.forEach((a) => alerts.set(a.sku, (alerts.get(a.sku) || 0) + 1)));
+  if (!list) return <Loading />;
+  if (list.kind === "company") return <GoodsTable list={list} impacts={impacts} />;
+  const items = list.items as Item[];
+  const owner = list.owner;
+  const alerts = alertCounts(impacts);
   const total = items.reduce((s, i) => s + i.qtyOnHand * i.unitCostUsd, 0);
   return (
     <>
@@ -411,14 +529,7 @@ function StockTable({ impacts }: { impacts: Impact[] }) {
                   </span>
                 </td>
                 <td>
-                  {alerts.get(i.sku) ? (
-                    <span className="status red">
-                      <i />
-                      {alerts.get(i.sku)}
-                    </span>
-                  ) : (
-                    <span className="muted">—</span>
-                  )}
+                  <AlertCount count={alerts.get(i.sku)} />
                 </td>
               </tr>
             ))}
@@ -433,13 +544,17 @@ function StockTable({ impacts }: { impacts: Impact[] }) {
 // `locked` explains why this session can't change them.
 function Sources({ locked }: { locked?: string }) {
   const [list, setList] = useState<Source[] | null>(null);
+  const [rules, setRules] = useState<ScanRules>(null);
   const [error, setError] = useState("");
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [adding, setAdding] = useState(false);
   const load = () =>
-    api<{ sources: Source[] }>("/sources")
-      .then((d) => setList(d.sources))
+    api<{ sources: Source[]; scanRules?: ScanRules }>("/sources")
+      .then((d) => {
+        setList(d.sources);
+        setRules(d.scanRules ?? null);
+      })
       .catch((e) => setError(e.message));
   useEffect(() => {
     load();
@@ -468,6 +583,13 @@ function Sources({ locked }: { locked?: string }) {
       load();
     });
   };
+  const toggleSkipOld = async (r: NonNullable<ScanRules>) => {
+    setRules({ ...r, skipOld: !r.skipOld });
+    await change("/scan-rules", "PATCH", { skipOld: !r.skipOld }).catch((e) => {
+      setError(e.message);
+      load();
+    });
+  };
   const remove = async (s: Source) => {
     await change(`/sources/${s.id}`, "DELETE").catch((e) => setError(e.message));
     load();
@@ -479,6 +601,24 @@ function Sources({ locked }: { locked?: string }) {
         Only these approved sources are read. Each daily scan checks enabled feeds for new articles. Switching off a
         built-in source only affects your company; a source you add is only read for your company.
       </p>
+      {rules && (
+        <ul className="news-sources news-rules">
+          <li>
+            <label className="news-toggle">
+              <input type="checkbox" checked={rules.skipOld} onChange={() => toggleSkipOld(rules)} disabled={Boolean(locked)} />
+              <span />
+              <span className="sr-only">Skip old articles</span>
+            </label>
+            <div>
+              <strong>Skip articles published more than {rules.maxAgeDays} days before a scan</strong>
+              <small>
+                On by default. Switch it off and scans also read older articles from your sources; only your company sees the
+                alerts they raise. Undated articles are always read.
+              </small>
+            </div>
+          </li>
+        </ul>
+      )}
       <ul className="news-sources">
         {list.map((s) => (
           <li key={s.id}>
@@ -563,11 +703,14 @@ function AlertFilterBar({
   filters,
   onChange,
   withOrders,
+  named = false,
 }: {
   impacts: Impact[];
   filters: AlertFilters;
   onChange: (f: AlertFilters) => void;
   withOrders: boolean;
+  // Items are a company's goods, listed by name.
+  named?: boolean;
 }) {
   const set = (patch: Partial<AlertFilters>) => onChange({ ...filters, ...patch });
   const sources = [...new Set(impacts.map((i) => i.sourceName).filter(Boolean))].sort();
@@ -604,11 +747,11 @@ function AlertFilterBar({
           </select>
         )}
         {skus.length > 1 && (
-          <select aria-label="Stock item" value={filters.sku} onChange={(e) => set({ sku: e.target.value })}>
-            <option value="">All stock items</option>
+          <select aria-label={named ? "Goods" : "Stock item"} value={filters.sku} onChange={(e) => set({ sku: e.target.value })}>
+            <option value="">{named ? "All goods" : "All stock items"}</option>
             {skus.map((s) => (
               <option key={s} value={s}>
-                {s} · {items.get(s)}
+                {named ? items.get(s) || s : `${s} · ${items.get(s)}`}
               </option>
             ))}
           </select>
@@ -658,6 +801,8 @@ export default function NewsWatchPage({
   const stock = useStock();
   const byAlert = new Map<string, NewsMatch[]>();
   news.matches?.forEach((m) => byAlert.set(m.impactId, [...(byAlert.get(m.impactId) || []), m]));
+  // A company's alerts are about its own goods; the demo's about its sample stock.
+  const stockTab = live ? "Your goods" : "Stock";
   const [tab, setTab] = useState("Alerts");
   const [filters, setFilters] = useState(NO_FILTERS);
   const [scanning, setScanning] = useState(false);
@@ -669,7 +814,7 @@ export default function NewsWatchPage({
     try {
       const d = await api<{ scan: Scan }>("/scan", { method: "POST" });
       setScan(d.scan);
-      setMessage(`${d.scan.impactsFound} new alert${d.scan.impactsFound === 1 ? "" : "s"} from ${d.scan.articlesAnalysed} new articles.`);
+      setMessage(scanMessage(d.scan));
       await load();
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "Scan failed.");
@@ -685,17 +830,17 @@ export default function NewsWatchPage({
       <section className="page-heading">
         <div>
           <span className="eyebrow">NEWS WATCH · GEMINI ON VERTEX AI</span>
-          <h1>News that moves your stock.</h1>
+          <h1>{live ? "News that moves your goods." : "News that moves your stock."}</h1>
           <p>
-            Every morning ExportMate reads your approved sources and flags the stock items each story could affect. Alerts are
-            AI assessments of headlines; open the source before acting.
+            Every morning ExportMate reads your approved sources and flags the {live ? "goods" : "stock items"} each story could
+            affect. Alerts are AI assessments of headlines; open the source before acting.
           </p>
-          <p className="news-note">{live ? SAMPLE_STOCK_NOTE : DEMO_STOCK_NOTE}</p>
+          <p className="news-note">{live ? GOODS_NOTE : DEMO_STOCK_NOTE}</p>
         </div>
       </section>
       <ScanBar scan={scan} onScan={scanNow} scanning={scanning} message={message} locked={scanLocked} />
       <div className="tabs news-tabs">
-        {["Alerts", "Stock", "Sources"].map((t) => (
+        {["Alerts", stockTab, "Sources"].map((t) => (
           <button key={t} className={tab === t ? "selected" : ""} onClick={() => setTab(t)}>
             {t}
             {t === "Alerts" && impacts ? ` (${impacts.length})` : ""}
@@ -709,7 +854,13 @@ export default function NewsWatchPage({
           <Loading />
         ) : (
           <>
-            <AlertFilterBar impacts={impacts} filters={filters} onChange={setFilters} withOrders={Boolean(news.matches)} />
+            <AlertFilterBar
+              impacts={impacts}
+              filters={filters}
+              onChange={setFilters}
+              withOrders={Boolean(news.matches)}
+              named={stock.named}
+            />
             {news.error && <div className="news-error">{news.error}</div>}
             {filtered && (
               <p className="news-note news-filter-count" role="status">
@@ -729,6 +880,7 @@ export default function NewsWatchPage({
                       stock: stock.stock,
                       orders: news.matches ? news.orders : null,
                       error: stock.error || (news.error && "Couldn't load the orders, so none can be matched."),
+                      named: stock.named,
                       rejected: new Set(
                         (byAlert.get(i.id) || []).filter((m) => m.review?.verdict === "not_relevant").map((m) => m.orderId),
                       ),
@@ -749,12 +901,17 @@ export default function NewsWatchPage({
               </div>
             ) : (
               <div className="news-empty">
-                <Newspaper size={18} /> No alerts here. Run a scan or change the filters.
+                <Newspaper size={18} />{" "}
+                {stock.named && !stock.list?.items.length
+                  ? "Nothing to watch yet. Say what you make under Account › About company, or import orders."
+                  : stock.named && !stock.list?.watchedSince
+                    ? "Alerts about your goods start with the next scan."
+                    : "No alerts here. Run a scan or change the filters."}
               </div>
             )}
           </>
         ))}
-      {tab === "Stock" && <StockTable impacts={impacts || []} />}
+      {tab === stockTab && <StockTable impacts={impacts || []} />}
       {tab === "Sources" && <Sources locked={sourcesLocked} />}
     </>
   );

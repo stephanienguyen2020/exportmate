@@ -66,7 +66,7 @@ def test_row_errors_name_the_row_and_field():
         "Row 3: value must be a positive number with at most 2 decimals.",
         "Row 4: use a valid YYYY-MM-DD ship date.",
         "Row 5: use a valid YYYY-MM-DD ship date.",
-        "Row 6: hsCode must look like 4412.33 (digits, optional dots).",
+        "Row 6: hsCode must look like 1234.56 (digits, optional dots).",
         "Row 7: product is required.",
     ]
     assert parsed.valid_rows == []

@@ -15,7 +15,7 @@ const LINKED_REASON = "Linked by a reviewer; ExportMate did not suggest this ord
 const DEMO_REVIEWS = "em-news-reviews";
 type DemoReview = { verdict: NewsVerdict; note: string | null; suggested: boolean; reason: string; reviewedAt: string };
 
-/** "4412.33" → "4412"; "" when there are fewer than four digits. */
+/** "1234.56" → "1234"; "" when there are fewer than four digits. */
 export function hsHeading(hs: string | undefined) {
   const digits = String(hs || "").replace(/\D/g, "");
   return digits.length >= 4 ? digits.slice(0, 4) : "";
@@ -38,7 +38,7 @@ export function suggestOrders(alert: Alert, stock: Map<string, StockItem>, open:
       found.set(order.id, {
         order,
         market,
-        reason: `HS ${heading}${where}, like ${entry.sku} ${item.name || entry.name} named in this alert.`,
+        reason: `HS ${heading}${where}, like ${item.name || entry.name || entry.sku} named in this alert.`,
       });
     }
   }

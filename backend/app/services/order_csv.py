@@ -1,7 +1,7 @@
 """Parse and validate an orders CSV. Pure: no database, so it is easy to test.
 
 Columns: id, product, supplier, destination, value, shipDate, hsCode (+ optional currency).
-Example row: PO-2291,Acacia plywood 18 mm,Binh Phu Wood,"Rotterdam, NL",24000,2026-10-27,4412.33
+Example row: PO-2291,Cotton T-shirt,Saigon Knit Co.,"Rotterdam, NL",24000,2026-10-27,6109.10
 """
 
 import csv
@@ -23,7 +23,7 @@ MAX_LENGTHS = {"id": 100, "product": 300, "supplier": 300, "destination": 200}
 MAX_VALUE = Decimal(1000000000000)  # 1 trillion; anything above is a typo
 
 DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-# 4412 / 4412.33 / 441233 / 4412.33.00 — kept as text so "0401.10" keeps its zero.
+# 1234 / 1234.56 / 123456 / 1234.56.00 — kept as text so "0401.10" keeps its zero.
 HS_CODE_PATTERN = re.compile(r"^\d{4}(\.?\d{2}){0,3}$")
 
 
@@ -110,7 +110,7 @@ def _validate_row(
 
     hs_code = cells.get("hsCode", "")
     if hs_code and not HS_CODE_PATTERN.match(hs_code):
-        fail("hsCode", "hsCode must look like 4412.33 (digits, optional dots).")
+        fail("hsCode", "hsCode must look like 1234.56 (digits, optional dots).")
 
     currency = (cells.get("currency") or default_currency).upper()
     if not is_currency(currency):
