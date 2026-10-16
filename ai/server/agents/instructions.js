@@ -5,16 +5,17 @@ import { asData } from "../guard.js";
 import { STOCK_PROFILE } from "../seed/inventory.js";
 
 // Who the assistant works for. A signed-in company's profile comes from the backend
-// (GET /api/v1/company/knowledge); without one, the demo company, which owns the sample stock
-// (seed/inventory.js STOCK_PROFILE) and whose orders and playbook the browser sends with the
-// question (when it has them). `session` is { company, orders, playbook } (agent.js).
+// (GET /api/v1/company/knowledge) and its stock is its own goods (goods.js); without one, the
+// demo company, which owns the sample stock (seed/inventory.js STOCK_PROFILE) and whose orders
+// and playbook the browser sends with the question (when it has them). `session` is
+// { company, orders, playbook, stock } (agent.js).
 function workspace(session) {
   const { company } = session;
   const sample = STOCK_PROFILE;
   if (!company)
     return `The workspace belongs to ${sample.company}, ${sample.about}, in ExportMate's browser demo. ${session.orders ? "Its sample orders (order ids such as PO-2291, values, ship dates, statuses and the demo's one sample rule check) come from query_orders; they include any the user imported. " : ""}${session.playbook ? "Its playbook rules come from get_playbook. " : ""}Its stock data is synthetic demo data, separate from its orders; its news articles are real, from approved sources.`;
   const c = company.company;
-  return `You are working for ${c.name} (${c.businessRole}, based in ${c.origin}, primary market ${c.destination}). Its own company profile (what it does and makes, materials, certifications, sites, size, website) comes from get_company_profile, its own orders (order ids such as PO-2291, values, ship dates, statuses and each order's document checklist) from query_orders, and its playbook rules from get_playbook. The stock items and news alerts in the other tools are synthetic demo data for ${sample.company}, ${sample.about}, not ${c.name}'s own records: say so when you use them. News articles are real, from approved sources.`;
+  return `You are working for ${c.name} (${c.businessRole}, based in ${c.origin}, primary market ${c.destination}). Its own company profile (what it does and makes, materials, certifications, sites, size, website) comes from get_company_profile, its own orders (order ids such as PO-2291, values, ship dates, statuses and each order's document checklist) from query_orders, and its playbook rules from get_playbook. Its stock items (query_inventory) are its own goods: the products its profile names and its orders ship, each with the ids of those orders; they have no quantities or stock values, so for money at stake use those orders' values from query_orders. Its news alerts (get_alerts) are AI readings of real news against those goods, not confirmed effects on an order. News articles are real, from approved sources.`;
 }
 
 const today = () => new Date().toISOString().slice(0, 10);

@@ -58,6 +58,8 @@ type StockItem = {
 type Fetched = {
   impacts?: Impact[];
   stock?: StockItem[];
+  // The stock is a signed-in company's own goods (ids, not SKUs people know), shown by name.
+  goods?: boolean;
   map?: TradeMap;
   regulations?: Regulation[];
   reports?: ReportSummary[];
@@ -138,7 +140,7 @@ function buildHits(
       hit(
         "stock",
         s.sku,
-        `${s.sku} · ${s.name}`,
+        data.goods ? s.name : `${s.sku} · ${s.name}`,
         [s.category, s.material, s.supplier].filter(Boolean).join(" · "),
         [s.hsCode, ...s.markets],
         { path: "news" },
@@ -287,7 +289,10 @@ export default function WorkspaceSearch({
     setLoading(true);
     const tasks = [
       load("news", aiService<{ impacts: Impact[] }>("/impacts", signal), (v) => ({ impacts: v.impacts })),
-      load("stock", aiService<{ items: StockItem[] }>("/inventory", signal), (v) => ({ stock: v.items })),
+      load("stock", aiService<{ items: StockItem[]; kind?: string }>("/inventory", signal), (v) => ({
+        stock: v.items,
+        goods: v.kind === "company",
+      })),
     ];
     // Suppliers, sites, markets, regulations and reports exist only for a signed-in company.
     if (live)

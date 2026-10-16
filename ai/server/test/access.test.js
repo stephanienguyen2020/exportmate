@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ANONYMOUS, auditVisible, presentSources, publicAudit, visibleItems } from "../access.js";
+import { ANONYMOUS, ageDays, auditVisible, presentSources, publicAudit, scanRules, skipsOld, visibleItems } from "../access.js";
 
 const sources = [
   { id: "builtin", name: "Timber news", builtIn: true, enabled: true },
@@ -39,9 +39,25 @@ test("alerts follow the visibility of the sources they came from", () => {
 test("index hits for a source document use its refId", () => {
   const hits = [
     { type: "source", refId: "b-feed" },
-    { type: "item", refId: "PLY-101" },
+    { type: "source", refId: "a-feed" },
   ];
-  assert.deepEqual(visibleItems(hits, sources, companyA).map((h) => h.refId), ["PLY-101"]);
+  assert.deepEqual(visibleItems(hits, sources, companyA).map((h) => h.refId), ["a-feed"]);
+});
+
+test("alerts and stock items are for whose goods they are about: a company's, or the demo's sample", () => {
+  const records = [
+    { id: "sample-alert", affected: [], sourceId: "builtin" },
+    { id: "a-alert", affected: [], sourceId: "builtin", companyId: "A" },
+    { id: "b-alert", affected: [], sourceId: "builtin", companyId: "B" },
+    { id: "sample-item", type: "item", refId: "PLY-101" },
+    { id: "a-alert-hit", type: "alert", sourceIds: ["builtin"], companyId: "A" },
+    { id: "article", type: "article", sourceIds: ["builtin"] },
+    { id: "guide", type: "guide" },
+  ];
+  assert.deepEqual(visibleItems(records, sources, companyA).map((r) => r.id), ["a-alert", "a-alert-hit", "article", "guide"]);
+  assert.deepEqual(visibleItems(records, sources, ANONYMOUS).map((r) => r.id), ["sample-alert", "sample-item", "article", "guide"]);
+  // A company alert still needs a source the company reads.
+  assert.deepEqual(visibleItems(records, sources, { companyId: "A", disabled: ["builtin"] }).map((r) => r.id), ["guide"]);
 });
 
 test("company audits need that company; raw reasoning never leaves the server", () => {
@@ -51,4 +67,34 @@ test("company audits need that company; raw reasoning never leaves the server", 
   assert.ok(auditVisible({ companyId: "A" }, companyA));
   const shown = publicAudit({ id: "x", steps: [{ kind: "plan", thought: "secret", note: "n" }, { kind: "tool" }] });
   assert.deepEqual(shown.steps, [{ kind: "plan", note: "n" }, { kind: "tool" }]);
+});
+
+test("alerts from articles older than the age rule when scanned show only to companies that switched it off", () => {
+  const alerts = [
+    { id: "recent", sourceIds: ["builtin"], ageDays: 3 },
+    { id: "old", sourceIds: ["builtin"], ageDays: 400 },
+    { id: "undated", sourceIds: ["builtin"], ageDays: null },
+    { id: "before-rule", sourceIds: ["builtin"] },
+  ];
+  const ids = (access, maxAgeDays) => visibleItems(alerts, sources, access, maxAgeDays).map((a) => a.id);
+  assert.deepEqual(ids(companyA, 365), ["recent", "undated", "before-rule"]);
+  assert.deepEqual(ids(ANONYMOUS, 365), ["recent", "undated", "before-rule"]);
+  assert.deepEqual(ids({ ...companyA, skipOld: false }, 365), ["recent", "old", "undated", "before-rule"]);
+  assert.deepEqual(ids(companyA, 0), ["recent", "old", "undated", "before-rule"]); // no rule configured
+});
+
+test("the age rule is on unless a company switches it off, and absent when not configured", () => {
+  assert.ok(skipsOld(ANONYMOUS, 365));
+  assert.ok(!skipsOld({ ...companyA, skipOld: false }, 365));
+  assert.deepEqual(scanRules(companyA, 365), { maxAgeDays: 365, skipOld: true });
+  assert.deepEqual(scanRules({ ...companyA, skipOld: false }, 365), { maxAgeDays: 365, skipOld: false });
+  assert.equal(scanRules(companyA, 0), null);
+});
+
+test("an article's age is whole days before the scan, null when undated", () => {
+  const at = Date.parse("2026-10-15T12:00:00Z");
+  assert.equal(ageDays("2026-10-14T13:00:00Z", at), 0);
+  assert.equal(ageDays("2025-10-14T12:00:00Z", at), 366);
+  assert.equal(ageDays(null, at), null);
+  assert.equal(ageDays("not a date", at), null);
 });

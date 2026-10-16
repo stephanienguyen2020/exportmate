@@ -31,7 +31,14 @@ import Overview from "./Overview";
 import PlaybookPage from "./PlaybookPage";
 import RuleWatchPage from "./RuleWatchPage";
 import { useWorkspace, type Workspace as WorkspaceData } from "./store";
-import { Button, Loading, go, initialsOf, type Notify } from "./ui";
+import {
+  Button,
+  Loading,
+  analysedAgain,
+  go,
+  initialsOf,
+  type Notify,
+} from "./ui";
 
 const RegulationsPage = lazy(() => import("../Regulations"));
 const CompanySettings = lazy(() => import("../CompanySettings"));
@@ -126,7 +133,7 @@ const routes: Record<string, Page> = {
       />
     ) : null;
   },
-  map: ({ ws, sub, route }) => (
+  map: ({ ws, sub, route, notify }) => (
     <Suspense fallback={<Loading icon>Loading the map…</Loading>}>
       <TradeMapPage
         key={route}
@@ -138,6 +145,12 @@ const routes: Record<string, Page> = {
         onNavigate={go}
         signature={`${ws.profile.name} · ${ws.profile.company || "Your company"}`}
         companyOrigin={ws.profile.origin}
+        onOrdersAnalysed={(orderIds) => {
+          if (!orderIds.length) return;
+          notify(`Supplier saved.${analysedAgain(orderIds)}`);
+          // If this fails, the order lists catch up on the next load.
+          ws.refreshOrders().catch(() => undefined);
+        }}
       />
     </Suspense>
   ),

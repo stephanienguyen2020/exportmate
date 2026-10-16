@@ -30,7 +30,7 @@ export function stableJson(value) {
 
 export const fingerprint = (value) => sha256(stableJson(value)).slice(0, 32);
 
-/** "  What's the stock value of PLY-101??" and "what's the stock value of ply-101" are one question. */
+/** "  What's the stock value of ABC-101??" and "what's the stock value of abc-101" are one question. */
 export const normalizeText = (text) =>
   String(text ?? "")
     .normalize("NFC")
@@ -43,7 +43,7 @@ export const normalizeText = (text) =>
  * The cache document id for a conversation in a given company, data state and day. `userKey` is
  * set for users whose remembered preferences (Memory Bank) can shape the answer.
  */
-export function answerKey({ messages, companyId = null, userKey = null, disabled = [], dataVersion, policyVersion, models, day }) {
+export function answerKey({ messages, companyId = null, userKey = null, disabled = [], skipOld = true, dataVersion, policyVersion, models, day }) {
   return sha256(
     stableJson({
       v: CACHE_VERSION,
@@ -51,6 +51,8 @@ export function answerKey({ messages, companyId = null, userKey = null, disabled
       companyId,
       ...(userKey ? { userKey } : {}),
       disabled: [...disabled].sort(),
+      // A company that switched the age rule off sees alerts from older articles (access.js).
+      ...(skipOld === false ? { skipOld } : {}),
       dataVersion,
       policyVersion,
       models,

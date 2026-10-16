@@ -92,11 +92,13 @@ async function listFiles(corpus) {
   return files;
 }
 
-// Which sources a record came from and who owns them, so searches only return what the
-// asking company may see (access.js). Records from before sources had owners have neither.
+// Which sources a record came from, who owns them and how old the article was when scanned, so
+// searches only return what the asking company may see (access.js). Records from before sources
+// had owners have no sources; those from before the age rule have no age.
 const origin = (r) => ({
   ...(r.sourceIds ? { sourceIds: r.sourceIds } : r.sourceId ? { sourceIds: [r.sourceId] } : {}),
   ...(r.sourceCompanyIds ? { sourceCompanyIds: r.sourceCompanyIds } : {}),
+  ...(Number.isFinite(r.ageDays) ? { ageDays: r.ageDays } : {}),
 });
 
 // One searchable document per record. `text` is what gets embedded.
@@ -113,19 +115,21 @@ export const toDoc = {
       `Certifications: ${i.certifications.join(", ") || "none"}. Origin trace ${i.originTraced ? "on file" : "missing"}. ` +
       `${i.qtyOnHand} ${i.unit} on hand at ${i.warehouse}, unit cost USD ${i.unitCostUsd}, stock value USD ${Math.round(i.qtyOnHand * i.unitCostUsd)}.`,
   }),
+  // A company's alert (scan.js) has an id of its own and its companyId: only it sees the alert.
   alert: (a) => ({
-    id: `alert:${a.articleId}`,
+    id: `alert:${a.impactId ?? a.articleId}`,
     type: "alert",
-    refId: a.articleId,
+    refId: a.impactId ?? a.articleId,
     ...origin(a),
+    ...(a.companyId ? { companyId: a.companyId } : {}),
     title: a.headline,
     url: a.url,
     publishedAt: a.publishedAt,
     source: a.publisher,
     text:
       `News alert, ${a.severity} severity, ${a.direction}: ${a.headline}. ${a.why} ` +
-      `Affected stock: ${a.affected.map((x) => `${x.sku} ${x.name} (${x.reason})`).join("; ")}. ` +
-      `Stock value exposed USD ${a.stockValueUsd}. Next step: ${a.action} Source article: "${a.title}", ${a.publisher}, ${day(a.publishedAt)}.`,
+      `Affected ${a.companyId ? "goods" : "stock"}: ${a.affected.map((x) => `${x.sku} ${x.name} (${x.reason})`).join("; ")}. ` +
+      `${Number.isFinite(a.stockValueUsd) ? `Stock value exposed USD ${a.stockValueUsd}. ` : ""}Next step: ${a.action} Source article: "${a.title}", ${a.publisher}, ${day(a.publishedAt)}.`,
   }),
   article: (a) => ({
     id: `article:${a.id}`,
@@ -222,7 +226,7 @@ export async function reindexAll() {
     ...items.map(toDoc.item),
     ...srcs.map(toDoc.source),
     ...arts.map(toDoc.article),
-    ...alerts.map((a) => toDoc.alert({ ...a, articleId: a.articleId || a.id })),
+    ...alerts.map((a) => toDoc.alert({ ...a, impactId: a.id, articleId: a.articleId || a.id })),
     ...GUIDES.map(toDoc.guide),
   ];
   const result = await indexDocs(docs);

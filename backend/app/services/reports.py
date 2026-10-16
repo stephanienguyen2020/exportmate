@@ -461,7 +461,7 @@ def _news_section(
             affected = alert.get("affected") if isinstance(alert.get("affected"), list) else []
             names = [str(a.get("name") or a.get("sku")) for a in affected if isinstance(a, dict)]
             stock = alert.get("stockValueUsd")
-            stock_text = join_limited(names, 3) or "No stock item named"
+            stock_text = join_limited(names, 3) or "No goods named"
             if isinstance(stock, int | float) and stock:
                 stock_text += f" · USD {stock:,.0f} in stock"
             alert_id = str(alert.get("id") or alert.get("articleId") or "")
@@ -495,12 +495,12 @@ def _news_section(
         layout="table",
         heading="News alerts",
         note="High and medium alerts from News watch in this window. An AI model matches each "
-        "article to your stock list (sample stock in this prototype); orders are named only "
+        "article to your goods (what About company names and your orders ship); orders are named only "
         "where someone in your company confirmed in News watch that the alert affects them.",
         empty="News watch could not be reached when this report was generated."
         if alerts is None
         else "No high or medium alert in this window.",
-        columns=["Published", "Alert", "Severity", "Why it matters", "Stock affected", "Source"],
+        columns=["Published", "Alert", "Severity", "Why it matters", "Goods affected", "Source"],
         widths=[12, 22, 9, 27, 15, 15],
         tone_column=2,
         rows=rows,
