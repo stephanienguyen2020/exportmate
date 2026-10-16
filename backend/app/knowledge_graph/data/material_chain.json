@@ -1,5 +1,5 @@
 {
- "_about": "The knowledge graph's material chain (docs/NEWS_IMPACT_PLAN.md, phase 1): which products are made from which, by HS code, per industry, and the materials (species) news and supplier documents name. Hand-written from the sources below; every link cites one. data/eudr_products.json adds the official commodity → product links (EUDR Annex I). Not loaded by any seed yet. reviewed: false until a person has checked the link.",
+ "_about": "The knowledge graph's material chain (docs/NEWS_IMPACT_PLAN.md, phase 1): which products are made from which, by HS code, per industry, and the materials (species) news and supplier documents name. Hand-written from the sources below; every link cites one. data/eudr_products.json adds the official commodity → product links (EUDR Annex I). Loaded by seed_reference_data. reviewed: false until a person has checked the link.",
  "sources": {
   "eudr-annex-i": {
    "title": "EU Deforestation Regulation (EU) 2023/1115, Annex I (consolidated 18 September 2026)",

@@ -1,8 +1,10 @@
 """Which orders a News watch alert may affect, and people's verdicts on it.
 
-The AI service matches each article to items in its sample stock (SKU, HS code, markets). Here
-an open order is suggested for an alert when it shares an HS heading (first four digits) with
-an item the alert names and ships to one of that item's markets. A suggestion is only a guess:
+The AI service matches each article to items in its sample stock (SKU, HS code, markets), and
+records what the article names (`mentions`: materials, HS codes, origin countries, markets).
+Orders are suggested by walking the knowledge graph (services/knowledge_graph.py) from those
+mentions, through suppliers' sourcing and the material chain, and from each stock item the
+alert names (same HS heading, shipping to one of the item's markets). A suggestion is only a guess:
 an editor confirms or rejects it, or links an order that wasn't suggested, and reports and the
 order list only treat confirmed links as fact.
 """
@@ -10,7 +12,6 @@ order list only treat confirmed links as fact.
 import logging
 import re
 import uuid
-from dataclasses import dataclass
 from datetime import UTC, date, datetime
 
 from sqlalchemy.orm import Session
@@ -25,10 +26,12 @@ from app.database.queries import orders as order_queries
 from app.schemas.news import (
     NewsMatchesOut,
     NewsOrderMatchOut,
+    NewsPathStepOut,
     NewsReviewerOut,
     NewsReviewIn,
     NewsReviewOut,
 )
+from app.services.knowledge_graph import GraphMatch, GraphMentions, GraphPathStep, GraphWalker
 from app.services.trade_map import load_gazetteer, locate_destination
 
 log = logging.getLogger(__name__)
@@ -36,50 +39,60 @@ MARKET_CODE = re.compile(r"^[A-Z]{2}$")
 LINKED_REASON = "Linked by a reviewer; ExportMate did not suggest this order."
 
 
-@dataclass(frozen=True)
-class SuggestedOrder:
-    order: Order
-    market: str | None
-    reason: str
+def _strings(value: object) -> tuple[str, ...]:
+    if not isinstance(value, list):
+        return ()
+    return tuple(str(v).strip()[:100] for v in value if isinstance(v, str | int) and str(v).strip())
 
 
-def hs_heading(hs_code: object) -> str:
-    """The first four digits of an HS code ("4412.33" → "4412"); "" when there are fewer."""
-    digits = re.sub(r"\D", "", str(hs_code or ""))
-    return digits[:4] if len(digits) >= 4 else ""
-
-
-def suggest_orders(
-    alert: dict, stock_by_sku: dict[str, dict], open_orders: list[tuple[Order, str | None]]
-) -> list[SuggestedOrder]:
-    """Open orders sharing an HS heading and a market with an item the alert names."""
-    suggested: dict[uuid.UUID, SuggestedOrder] = {}
+def alert_mentions(alert: dict, stock_by_sku: dict[str, dict]) -> list[GraphMentions]:
+    """What to walk the graph from: what the article names, then each stock item it affects."""
+    found: list[GraphMentions] = []
+    mentions = alert.get("mentions")
+    if isinstance(mentions, dict):
+        found.append(
+            GraphMentions(
+                materials=_strings(mentions.get("materials")),
+                hs_codes=_strings(mentions.get("hsCodes")),
+                origin_countries=tuple(
+                    c.upper() for c in _strings(mentions.get("originCountries")) if len(c) == 2
+                ),
+                markets=tuple(m for m in _strings(mentions.get("markets")) if MARKET_CODE.match(m)),
+            )
+        )
     affected = alert.get("affected") if isinstance(alert.get("affected"), list) else []
     for entry in affected:
         if not isinstance(entry, dict):
             continue
         item = stock_by_sku.get(str(entry.get("sku")))
-        heading = hs_heading(item.get("hsCode")) if item else ""
-        if not heading:
+        if not item or not item.get("hsCode"):
             continue
         # "Raw material" and the like aren't export markets: match on the heading alone.
-        markets = {
+        markets = tuple(
             m for m in item.get("markets") or [] if isinstance(m, str) and MARKET_CODE.match(m)
-        }
-        for order, market in open_orders:
-            if order.id in suggested or hs_heading(order.hs_code) != heading:
-                continue
-            if markets and market not in markets:
-                continue
-            where = f" and ships to {market}" if markets else ""
-            name = item.get("name") or entry.get("name") or ""
-            suggested[order.id] = SuggestedOrder(
-                order=order,
-                market=market,
-                reason=f"HS {heading}{where}, like {entry.get('sku')} {name} named in this alert."[
-                    :500
-                ],
+        )
+        name = item.get("name") or entry.get("name") or ""
+        found.append(
+            GraphMentions(
+                hs_codes=(str(item["hsCode"]),),
+                markets=markets,
+                named_as=f"like {entry.get('sku')} {name} named in this alert",
             )
+        )
+    return found
+
+
+def suggest_orders(
+    walker: GraphWalker,
+    alert: dict,
+    stock_by_sku: dict[str, dict],
+    open_orders: list[tuple[Order, str | None]],
+) -> list[GraphMatch]:
+    """Open orders the graph reaches from the alert; the first path found for an order wins."""
+    suggested: dict[uuid.UUID, GraphMatch] = {}
+    for mentions in alert_mentions(alert, stock_by_sku):
+        for match in walker.find_matches(mentions, open_orders):
+            suggested.setdefault(match.order.id, match)
     return list(suggested.values())
 
 
@@ -118,6 +131,7 @@ def build_news_matches(
     today = date.today()
     open_orders = [(o, markets[o.id]) for o in orders if o.ship_date >= today]
     orders_by_id = {o.id: o for o in orders}
+    walker = GraphWalker(db, ctx.company_id)
     reviews = {
         (r.impact_id, r.order_id): r for r in news_queries.list_news_reviews(db, ctx.company_id)
     }
@@ -127,7 +141,7 @@ def build_news_matches(
         if not impact_id:
             continue
         shown: set[uuid.UUID] = set()
-        for suggestion in suggest_orders(alert, stock, open_orders):
+        for suggestion in suggest_orders(walker, alert, stock, open_orders):
             shown.add(suggestion.order.id)
             matches.append(
                 _match_out(
@@ -138,6 +152,7 @@ def build_news_matches(
                     True,
                     suggestion.reason,
                     reviews.get((impact_id, suggestion.order.id)),
+                    suggestion.path,
                 )
             )
         # Orders a person linked, or that are no longer suggested (shipped, HS code changed),
@@ -162,6 +177,7 @@ def _match_out(
     suggested: bool,
     reason: str,
     review: NewsOrderReview | None,
+    path: list[GraphPathStep] | None = None,
 ) -> NewsOrderMatchOut:
     return NewsOrderMatchOut(
         impact_id=impact_id,
@@ -173,6 +189,7 @@ def _match_out(
         suggested=suggested,
         reason=reason,
         review=_review_out(db, review),
+        path=[NewsPathStepOut.model_validate(step, from_attributes=True) for step in path or []],
     )
 
 
@@ -203,7 +220,13 @@ def review_news_match(
     stock = {str(i.get("sku")): i for i in fetch_news_stock(authorization) or []}
     market = locate_destination(order.destination, load_gazetteer(db)).market
     suggestion = next(
-        (s for s in suggest_orders(alert, stock, [(order, market)]) if s.order.id == order.id),
+        (
+            s
+            for s in suggest_orders(
+                GraphWalker(db, ctx.company_id), alert, stock, [(order, market)]
+            )
+            if s.order.id == order.id
+        ),
         None,
     )
     existing = news_queries.get_news_review(db, ctx.company_id, impact_id, order.id)
