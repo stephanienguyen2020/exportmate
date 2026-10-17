@@ -2302,3 +2302,92 @@ test("a company's News watch is about its own goods, shown by name", async ({ pa
   await expect(page.getByRole("row", { name: /Merino sweaters/ })).toContainText("From About company");
   expect(stockAuth).toBe("Bearer dev:owner@example.com");
 });
+
+test("the material chain shows each link's source, check and the team's verdicts", async ({
+  page,
+}) => {
+  await fixture(page);
+  const link = (fields: Record<string, unknown>) => ({
+    relation: "used_to_make",
+    secondary: false,
+    sourceTitle: "FAO forest products definitions",
+    sourceUrl: "https://fao.org/forestry-fao/definitions.pdf",
+    quote: null,
+    basis: null,
+    aiCheck: null,
+    company: { confirmed: 0, rejected: 0 },
+    everyone: { confirmed: 0, rejected: 0 },
+    doubt: null,
+    ...fields,
+  });
+  await page.route("**/api/v1/knowledge-graph/chain", (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          industries: [
+            {
+              key: "wood",
+              name: "Wood",
+              products: [
+                { key: "wood.roundwood", name: "Logs (wood in the rough)", hsCodes: ["4403"], stage: "raw" },
+                { key: "wood.veneer", name: "Veneer sheets", hsCodes: ["4408"], stage: "first processing" },
+              ],
+              links: [
+                link({
+                  fromKey: "wood.roundwood",
+                  fromName: "Logs (wood in the rough)",
+                  toKey: "wood.veneer",
+                  toName: "Veneer sheets",
+                  quote: "sawlogs and veneer logs",
+                  aiCheck: { verdict: "agree", note: "Veneer is peeled from logs.", by: "Claude", on: "2026-10-16" },
+                  company: { confirmed: 3, rejected: 0 },
+                }),
+                link({
+                  fromKey: "wood.sawnwood",
+                  fromName: "Sawn wood (lumber)",
+                  toKey: "wood.wooden-furniture",
+                  toName: "Wooden furniture",
+                  sourceTitle: "Harmonized System headings",
+                  sourceUrl: "https://hts.usitc.gov/",
+                  basis: "Solid-wood furniture is made from sawn wood.",
+                  company: { confirmed: 0, rejected: 2 },
+                  doubt: "Often rejected at your company",
+                }),
+              ],
+            },
+          ],
+          materials: [
+            { key: "acacia", name: "Acacia", industry: "wood", scientificNames: ["Acacia mangium"], woodType: "non-coniferous" },
+          ],
+          byWay: [{ via: "supplier", confirmed: 3, rejected: 2 }],
+        },
+        meta: {},
+      },
+    }),
+  );
+  await login(page);
+  await expect(page.getByText("CONNECTED WORKSPACE")).toBeVisible();
+  await page.goto("/#/workspace/chain");
+  await expect(page.getByRole("heading", { name: "Material chain." })).toBeVisible();
+  await expect(
+    page.getByRole("navigation", { name: "Rules & news" }).getByRole("link", { name: "Material chain" }),
+  ).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("region", { name: "How suggestions did" })).toContainText(
+    "Through a supplier's materials3 confirmed · 2 rejected",
+  );
+  const links = page.getByRole("list", { name: "Wood links" });
+  await expect(links.getByRole("listitem")).toHaveCount(2);
+  await expect(links.getByRole("listitem").first()).toContainText(
+    "Checked by Claude, 2026-10-16: agree. Veneer is peeled from logs.",
+  );
+  await expect(links.getByRole("link", { name: /FAO forest products definitions/ })).toHaveAttribute(
+    "href",
+    "https://fao.org/forestry-fao/definitions.pdf",
+  );
+  const doubted = links.locator("li.doubted");
+  await expect(doubted).toContainText("Often rejected at your company");
+  await expect(doubted).toContainText("Your team: 0 confirmed · 2 rejected");
+  await page.getByLabel("Search links").fill("veneer");
+  await expect(links.getByRole("listitem")).toHaveCount(1);
+  await expect(page.getByText("Acacia mangium · non-coniferous")).toBeVisible();
+});

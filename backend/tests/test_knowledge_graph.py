@@ -14,6 +14,7 @@ from app.database.session import open_session
 from app.seed_demo_data import seed_company_map_data
 from app.seed_reference_data import seed_reference_data
 from app.services import news_matches as news_service
+from app.services.graph_feedback import LinkFeedback, LinkVerdicts
 
 
 def ships_in(days: int) -> str:
@@ -221,3 +222,95 @@ def test_verdicts_measure_each_way_and_link(client, lan, news_watch):
     ]
     assert (sawn_to_furniture["confirmed"], sawn_to_furniture["rejected"]) == (0, 1)
     assert accuracy["byLink"][0]["rejected"] == 1  # most rejected first
+
+
+def test_links_people_keep_rejecting_are_avoided_and_marked(client, lan, news_watch):
+    acacia = {"materials": ["acacia logs"], "originCountries": ["VN"]}
+
+    def reject_cabinets(alert_id: str) -> None:
+        news_watch["alerts"] = [{**alert(acacia), "id": alert_id}]
+        found = matches(client, lan)
+        assert "Sawn wood (lumber) (HS 4407)" in found["PO-4"]["reason"]
+        url = f"/api/v1/news-matches/{alert_id}/orders/PO-4"
+        assert client.put(url, headers=lan, json={"verdict": "not_relevant"}).status_code == 200
+
+    # Twice rejected: logs → sawn wood → furniture is doubted at this company.
+    reject_cabinets("article-1")
+    reject_cabinets("article-2")
+    news_watch["alerts"] = [{**alert(acacia), "id": "article-3"}]
+    found = matches(client, lan)
+    # The walk now takes the other path as short (through veneer), with no doubted link on it.
+    assert "Veneer sheets (HS 4408) → Wooden furniture" in found["PO-4"]["reason"]
+    assert not any(step["doubt"] for step in found["PO-4"]["path"])
+    assert "rejected" not in found["PO-1"]["reason"]
+
+    accuracy = client.get("/api/v1/news-matches/accuracy", headers=lan).json()["data"]
+    sawn = next(row for row in accuracy["byLink"] if row["toKey"] == "wood.wooden-furniture")
+    assert (sawn["fromKey"], sawn["rejected"], sawn["doubt"]) == (
+        "wood.sawnwood",
+        2,
+        "Often rejected at your company",
+    )
+
+
+def test_a_link_is_doubted_by_its_company_first_then_by_everyone():
+    assert LinkFeedback(LinkVerdicts(0, 1), LinkVerdicts(0, 1)).doubt is None
+    assert (
+        LinkFeedback(LinkVerdicts(0, 2), LinkVerdicts(0, 2)).doubt
+        == "Often rejected at your company"
+    )
+    # Confirmed as often as rejected: not doubted.
+    assert LinkFeedback(LinkVerdicts(2, 2), LinkVerdicts(2, 2)).doubt is None
+    # Other companies' rejections count once there are enough of them.
+    assert LinkFeedback(LinkVerdicts(), LinkVerdicts(1, 4)).doubt is None
+    assert (
+        LinkFeedback(LinkVerdicts(), LinkVerdicts(1, 5)).doubt == "Often rejected across companies"
+    )
+
+
+def test_the_material_chain_page_shows_links_sources_checks_and_verdicts(client, lan, news_watch):
+    # One rejection of the cabinets order counts on each link of its path.
+    news_watch["alerts"] = [alert({"materials": ["acacia logs"], "originCountries": ["VN"]})]
+    matches(client, lan)
+    url = "/api/v1/news-matches/article-1/orders/PO-4"
+    assert client.put(url, headers=lan, json={"verdict": "not_relevant"}).status_code == 200
+
+    response = client.get("/api/v1/knowledge-graph/chain", headers=lan)
+    assert response.status_code == 200, response.text
+    chain = response.json()["data"]
+    [wood] = chain["industries"]
+    assert (wood["key"], wood["name"]) == ("wood", "Wood")
+    # Products read from forest to finished goods.
+    assert wood["products"][0]["key"] == "wood.roundwood"
+    assert {
+        "key": "wood.plywood",
+        "name": "Plywood and veneered panels",
+        "hsCodes": ["4412"],
+        "stage": "panel",
+    } in wood["products"]
+    assert len(wood["links"]) == 25
+    assert wood["links"][0]["fromKey"] == "wood.roundwood"
+    veneer = next(
+        link
+        for link in wood["links"]
+        if (link["fromKey"], link["toKey"]) == ("wood.roundwood", "wood.veneer")
+    )
+    assert veneer["sourceUrl"].startswith("https://fao.org/")
+    assert "veneer logs" in veneer["quote"]
+    assert veneer["aiCheck"]["verdict"] == "agree"
+    assert veneer["secondary"] is False
+    sawn = next(
+        link
+        for link in wood["links"]
+        if (link["fromKey"], link["toKey"]) == ("wood.sawnwood", "wood.wooden-furniture")
+    )
+    assert sawn["company"] == {"confirmed": 0, "rejected": 1}
+    assert sawn["doubt"] is None  # one rejection isn't enough
+    furniture_veneer = next(
+        link
+        for link in wood["links"]
+        if (link["fromKey"], link["toKey"]) == ("wood.veneer", "wood.wooden-furniture")
+    )
+    assert furniture_veneer["secondary"] is True
+    assert {m["key"] for m in chain["materials"]} >= {"acacia", "okoume"}
+    assert chain["byWay"] == [{"via": "supplier", "confirmed": 0, "rejected": 1}]

@@ -15,6 +15,7 @@ from app.api import (
     health,
     hs_suggestions,
     imports,
+    knowledge_graph,
     market_requirements,
     members,
     news_matches,
@@ -134,6 +135,7 @@ def create_app() -> FastAPI:
         solutions,
         audit_log,
         news_matches,
+        knowledge_graph,
         members,
     ):
         api.include_router(module.router)

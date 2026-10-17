@@ -38,6 +38,7 @@ from app.schemas.news import (
     NewsReviewIn,
     NewsReviewOut,
 )
+from app.services import graph_feedback
 from app.services.knowledge_graph import GraphMatch, GraphMentions, GraphPathStep, GraphWalker
 from app.services.trade_map import load_gazetteer, locate_destination
 
@@ -335,15 +336,29 @@ def news_match_accuracy(db: Session, ctx: CompanyContext) -> NewsMatchAccuracyOu
         steps = review.path or []
         for before, step in pairwise(steps):
             if before.get("kind") == "product" and step.get("kind") == "product":
-                links[(before["label"], step["label"], step.get("link") or "", verdict)] += 1
+                links[
+                    (
+                        before["label"],
+                        step["label"],
+                        step.get("link") or "",
+                        before.get("key"),
+                        step.get("key"),
+                        verdict,
+                    )
+                ] += 1
     by_link = {}
-    for (from_label, to_label, link, verdict), count in links.items():
+    feedback = graph_feedback.link_feedback(db, ctx.company_id)
+    for (from_label, to_label, link, from_key, to_key, verdict), count in links.items():
+        known = feedback.get((from_key, to_key)) if from_key and to_key else None
         row = by_link.setdefault(
             (from_label, to_label, link),
             {
                 "from_label": from_label,
                 "to_label": to_label,
                 "link": link,
+                "from_key": from_key,
+                "to_key": to_key,
+                "doubt": known.doubt if known else None,
                 "confirmed": 0,
                 "rejected": 0,
             },
