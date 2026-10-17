@@ -1357,6 +1357,65 @@ test("owners switch off the age rule for their company with their token", async 
   await expect(rule).not.toBeChecked();
 });
 
+// A scan runs inside its request. The website's proxy gives up on it after 120 s with a 502
+// (as on 17 October 2026, for a scan that took 274 s) while the scan carries on in the AI service.
+async function scanFixture(page: Page, { starts }: { starts: boolean }) {
+  let latest: Record<string, unknown> = {
+    id: "scan-1",
+    status: "done",
+    startedAt: "2026-10-16T04:40:00.000Z",
+    finishedAt: "2026-10-16T04:42:00.000Z",
+    sources: [{ id: "source-1", ok: true }],
+    articlesAnalysed: 11,
+    impactsFound: 1,
+  };
+  const polls = { after: 0 };
+  await page.route("**/api/impacts**", async (route) => {
+    if (latest.id === "scan-2" && ++polls.after > 1) {
+      latest = {
+        ...latest,
+        status: "done",
+        finishedAt: new Date().toISOString(),
+        sources: [{ id: "source-1", ok: true }],
+        articlesAnalysed: 48,
+        impactsFound: 2,
+      };
+    }
+    await route.fulfill({ json: { impacts: [], scan: latest } });
+  });
+  await page.route("**/api/scan", async (route) => {
+    if (starts) latest = { id: "scan-2", status: "running", startedAt: new Date().toISOString() };
+    await route.fulfill({ status: 502, contentType: "text/html", body: "<html>Bad gateway</html>" });
+  });
+  return polls;
+}
+
+test("Scan now follows a scan that outlasts the website's proxy", async ({ page }) => {
+  test.setTimeout(60_000);
+  await fixture(page);
+  const polls = await scanFixture(page, { starts: true });
+  await login(page);
+  await expect(page.getByText("CONNECTED WORKSPACE")).toBeVisible();
+  await page.goto("/#/workspace/news");
+  await page.getByRole("button", { name: "Scan now" }).click();
+  const bar = page.locator(".news-scanbar");
+  await expect(bar.getByRole("button", { name: "Scanning… a few minutes" })).toBeVisible();
+  await expect(bar.getByRole("status")).toHaveText("2 new alerts from 48 new articles.", { timeout: 20_000 });
+  await expect(bar.getByText("48", { exact: true })).toBeVisible();
+  expect(polls.after).toBeGreaterThanOrEqual(2);
+});
+
+test("Scan now keeps the proxy's error when no scan started", async ({ page }) => {
+  test.setTimeout(60_000);
+  await fixture(page);
+  await scanFixture(page, { starts: false });
+  await login(page);
+  await expect(page.getByText("CONNECTED WORKSPACE")).toBeVisible();
+  await page.goto("/#/workspace/news");
+  await page.getByRole("button", { name: "Scan now" }).click();
+  await expect(page.locator(".news-scanbar").getByRole("status")).toHaveText("Request failed (502)", { timeout: 20_000 });
+});
+
 test("viewers and the sample demo can't change news sources", async ({
   page,
 }) => {
@@ -2101,6 +2160,35 @@ async function newsReviewFixture(page: Page) {
               suggested: true,
               reason: "HS 4412 and ships to EU, like PLY-001 named in this alert.",
               review,
+              path: [
+                { kind: "mention", label: "HS 4412", link: null, sourceTitle: null, sourceUrl: null, quote: null },
+                { kind: "order", label: "PO-1 Acacia plywood", link: "same HS heading", sourceTitle: null, sourceUrl: null, quote: null },
+              ],
+            },
+            {
+              impactId: "eudr",
+              orderId: "PO-2",
+              product: "Acacia plywood 12 mm",
+              destination: "Hamburg, DE",
+              market: "EU",
+              shipDate: "2026-12-10",
+              suggested: true,
+              reason: "Binh Phu Wood buys acacia from Vietnam; Logs (HS 4403) → Veneer sheets (HS 4408) → Plywood (HS 4412), this order's product.",
+              review: null,
+              path: [
+                { kind: "mention", label: "acacia logs, VN", link: null, sourceTitle: null, sourceUrl: null, quote: null },
+                { kind: "supplier", label: "Binh Phu Wood", link: "buys acacia from Vietnam (species document)", sourceTitle: null, sourceUrl: null, quote: null },
+                { kind: "product", label: "Logs (HS 4403)", link: "bought as", sourceTitle: null, sourceUrl: null, quote: null },
+                {
+                  kind: "product",
+                  label: "Veneer sheets (HS 4408)",
+                  link: "used to make",
+                  sourceTitle: "FAO forest products definitions",
+                  sourceUrl: "https://fao.org/forestry-fao/definitions.pdf",
+                  quote: "sawlogs and veneer logs",
+                },
+                { kind: "order", label: "PO-2 Acacia plywood 12 mm", link: "supplied by Binh Phu Wood", sourceTitle: null, sourceUrl: null, quote: null },
+              ],
             },
           ],
         },
@@ -2120,12 +2208,21 @@ test("owners confirm which orders a news alert affects with their token", async 
   await expect(page.getByText("CONNECTED WORKSPACE")).toBeVisible();
   await page.goto("/#/workspace/news");
   await page.getByRole("button", { name: /Orders this may affect/ }).click();
+  // A supplier path is shown step by step, its sources linked; an HS match shows its reason only.
+  const chain = page.getByRole("list", { name: "How this order is linked to the alert" });
+  await expect(chain).toHaveCount(1);
+  await expect(chain).toContainText("Binh Phu Wood");
+  await expect(chain).toContainText("used to make");
+  await expect(chain.getByRole("link", { name: "Source: FAO forest products definitions" })).toHaveAttribute(
+    "href",
+    "https://fao.org/forestry-fao/definitions.pdf",
+  );
   await page.getByRole("button", { name: "Add a note on PO-1" }).click();
   await page.getByLabel("PO-1 (optional)").fill("Rotterdam lot");
   await page.getByRole("button", { name: "PO-1: affects this order" }).click();
-  await expect(page.locator(".news-orders li.confirmed")).toContainText("Lan");
+  await expect(page.locator(".news-orders > ul > li.confirmed")).toContainText("Lan");
   await page.getByRole("button", { name: "Undo the verdict on PO-1" }).click();
-  await expect(page.getByText("1 to review")).toBeVisible();
+  await expect(page.getByText("2 to review")).toBeVisible();
   expect(reviews.map((r) => [r.method, r.path])).toEqual([
     ["PUT", "/api/v1/news-matches/eudr/orders/PO-1"],
     ["DELETE", "/api/v1/news-matches/eudr/orders/PO-1"],
@@ -2143,7 +2240,7 @@ test("viewers see suggested orders awaiting review without the buttons", async (
   await expect(page.getByText("CONNECTED WORKSPACE")).toBeVisible();
   await page.goto("/#/workspace/news");
   await page.getByRole("button", { name: /Orders this may affect/ }).click();
-  await expect(page.locator(".news-orders li")).toContainText("Awaiting review");
+  await expect(page.locator(".news-orders > ul > li").first()).toContainText("Awaiting review");
   await expect(page.getByRole("button", { name: /affects this order/ })).toHaveCount(0);
   await expect(page.getByLabel("Order to link")).toHaveCount(0);
   expect(reviews).toHaveLength(0);
