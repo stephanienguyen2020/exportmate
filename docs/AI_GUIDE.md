@@ -143,7 +143,7 @@ Filter by severity or show only opportunities, search headlines, items and SKUs,
 - switch off or remove their own custom sources. Built-in sources can be switched off but not deleted.
 - switch the age rule off or on. By default a scan skips articles published more than 365 days before it (the AI service's `SCAN_MAX_AGE_DAYS`, which the page shows). With the rule off, scans also read older articles from the sources that company reads, and only that company sees the alerts they raise. Undated articles are always read.
 
-**Scan now.** A scan runs every day at 07:00 Vietnam time. Owners and editors can also start one with "Scan now". It takes about a minute, only one scan runs at a time, and a manual scan has to wait 10 minutes after the previous one. If Gemini couldn't assess some articles, the scan bar says how many and why; those articles are tried again by the next scan. A scan that couldn't assess any article is marked failed.
+**Scan now.** A scan runs every day at 07:00 Vietnam time. Owners and editors can also start one with "Scan now". It takes a few minutes (if it outlasts the website's two-minute limit on a request, the scan bar follows it until it ends), only one scan runs at a time, and a manual scan has to wait 10 minutes after the previous one. If Gemini couldn't assess some articles, the scan bar says how many and why; those articles are tried again by the next scan. A scan that couldn't assess any article is marked failed.
 
 | | Sample demo or signed out | Viewer | Owner or editor |
 | --- | --- | --- | --- |
