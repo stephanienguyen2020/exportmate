@@ -13,7 +13,10 @@ order list only treat confirmed links as fact.
 import logging
 import re
 import uuid
+from collections import Counter
+from dataclasses import asdict
 from datetime import UTC, date, datetime
+from itertools import pairwise
 
 from sqlalchemy.orm import Session
 
@@ -25,6 +28,9 @@ from app.database.queries import audit as audit_queries
 from app.database.queries import news_reviews as news_queries
 from app.database.queries import orders as order_queries
 from app.schemas.news import (
+    AccuracyByLinkOut,
+    AccuracyByWayOut,
+    NewsMatchAccuracyOut,
     NewsMatchesOut,
     NewsOrderMatchOut,
     NewsPathStepOut,
@@ -233,6 +239,15 @@ def review_news_match(
     existing = news_queries.get_news_review(db, ctx.company_id, impact_id, order.id)
     # A link a person made stays theirs; a suggestion keeps the reason it was suggested for.
     suggested = existing.suggested if existing else suggestion is not None
+    # How it was found, kept from the first verdict like the reason.
+    via = existing.via if existing else suggestion.via if suggestion else None
+    path = (
+        existing.path
+        if existing
+        else [asdict(step) for step in suggestion.path]
+        if suggestion
+        else None
+    )
     reason = existing.reason if existing else suggestion.reason if suggestion else LINKED_REASON
     note = (payload.note or "").strip() or None
     news_queries.upsert_news_review(
@@ -245,6 +260,8 @@ def review_news_match(
             "note": note,
             "suggested": suggested,
             "reason": reason,
+            "via": via,
+            "path": path,
             "headline": str(alert.get("headline") or alert.get("title") or "")[:500],
             "url": str(alert.get("url") or "")[:2000] or None,
             "reviewed_by": ctx.user.id,
@@ -262,6 +279,7 @@ def review_news_match(
             "impactId": impact_id,
             "verdict": payload.verdict,
             "suggested": suggested,
+            "via": via,
             "note": note,
         },
     )
@@ -302,4 +320,45 @@ def clear_news_review(db: Session, ctx: CompanyContext, impact_id: str, external
             "impact_id": impact_id,
             "order_id": str(order.id),
         },
+    )
+
+
+def news_match_accuracy(db: Session, ctx: CompanyContext) -> NewsMatchAccuracyOut:
+    """Confirmed and rejected verdicts by the way each suggestion was found, and by each chain
+    link in the supplier paths people judged: a link that keeps showing up in rejected paths
+    is a candidate to fix or mark secondary."""
+    ways: Counter = Counter()
+    links: Counter = Counter()
+    for review in news_queries.list_news_reviews(db, ctx.company_id):
+        verdict = "confirmed" if review.verdict == NewsVerdict.relevant else "rejected"
+        ways[(review.via or "linked", verdict)] += 1
+        steps = review.path or []
+        for before, step in pairwise(steps):
+            if before.get("kind") == "product" and step.get("kind") == "product":
+                links[(before["label"], step["label"], step.get("link") or "", verdict)] += 1
+    by_link = {}
+    for (from_label, to_label, link, verdict), count in links.items():
+        row = by_link.setdefault(
+            (from_label, to_label, link),
+            {
+                "from_label": from_label,
+                "to_label": to_label,
+                "link": link,
+                "confirmed": 0,
+                "rejected": 0,
+            },
+        )
+        row[verdict] += count
+    return NewsMatchAccuracyOut(
+        by_way=[
+            AccuracyByWayOut(
+                via=via, confirmed=ways[(via, "confirmed")], rejected=ways[(via, "rejected")]
+            )
+            for via in ("supplier", "hs", "linked")
+            if ways[(via, "confirmed")] or ways[(via, "rejected")]
+        ],
+        by_link=sorted(
+            (AccuracyByLinkOut(**row) for row in by_link.values()),
+            key=lambda row: (-row.rejected, -row.confirmed, row.from_label),
+        ),
     )

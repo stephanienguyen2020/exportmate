@@ -108,6 +108,7 @@ export type SupplierGroup = {
   contactName: string | null;
   contactEmail: string | null;
   documents: MapSupplier["documents"];
+  sourcing: NonNullable<MapSupplier["sourcing"]>;
   rows: Row[];
 };
 
@@ -256,6 +257,7 @@ export const supplierGroupOf = (
   contactName: s.contactName ?? null,
   contactEmail: s.contactEmail ?? null,
   documents: s.documents,
+  sourcing: s.sourcing ?? [],
   rows: s.orderIds.map((id) => rowsById.get(id)!).filter(Boolean),
 });
 

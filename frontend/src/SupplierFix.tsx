@@ -97,6 +97,7 @@ function FixForm({
       name={supplier}
       documentKinds={data.documentKinds}
       countries={data.countries}
+      materials={data.materials}
       pin={pin}
       onPin={setPin}
       mapless

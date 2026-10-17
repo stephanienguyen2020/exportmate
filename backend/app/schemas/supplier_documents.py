@@ -5,6 +5,19 @@ from pydantic import BaseModel, Field
 
 from app.database.models import SupplierDocumentUploadStatus
 from app.schemas.common import CamelCaseModel
+from app.schemas.trade_map import SupplierSourcingIn
+
+
+class SuggestedSourcing(CamelCaseModel):
+    """A material the document says the goods are made of, matched to the knowledge graph:
+    a suggestion for the supplier's sourcing until a person accepts it."""
+
+    material: str  # material key, e.g. "acacia"
+    material_name: str
+    country: str | None  # where it comes from, when the document says
+    form: str | None  # chain step, e.g. "roundwood"
+    form_name: str | None
+    read_as: str  # the words in the document, e.g. "Acacia mangium logs, Vietnam"
 
 
 class ReadDocumentFields(CamelCaseModel):
@@ -18,6 +31,8 @@ class ReadDocumentFields(CamelCaseModel):
     standards: list[str]  # e.g. ["ISO 9001:2015"], ["GOTS 7.0"]
     detail: str  # one line, e.g. "ISO 9001 certificate QMS-001234, valid to 15 Dec 2026"
     notes: str | None  # what was hard to read
+    # Materials it names that the knowledge graph knows (older uploads have none).
+    sourcing: list[SuggestedSourcing] = Field(default_factory=list)
 
 
 class SupplierDocumentUploadOut(CamelCaseModel):
@@ -41,6 +56,8 @@ class SupplierDocumentConfirmIn(CamelCaseModel):
     document_number: str | None = Field(default=None, max_length=100)
     issuer: str | None = Field(default=None, max_length=200)
     expires_on: date | None = None
+    # Suggested materials the person accepted: added to the supplier's sourcing.
+    sourcing: list[SupplierSourcingIn] = Field(default_factory=list, max_length=20)
 
 
 class ConfirmedSupplierDocumentOut(CamelCaseModel):
@@ -55,6 +72,12 @@ class ConfirmedSupplierDocumentOut(CamelCaseModel):
     upload_id: uuid.UUID | None
 
 
+class ReadMaterial(BaseModel):
+    name: str  # as printed, e.g. "Acacia mangium"
+    country: str | None  # ISO alpha-2 of where it comes from
+    form: str | None  # e.g. "logs", "veneer", "sawn timber"
+
+
 class ReadCertificate(BaseModel):
     """The AI's answer (checked in code before saving)."""
 
@@ -66,3 +89,4 @@ class ReadCertificate(BaseModel):
     standards: list[str]
     detail: str
     notes: str | None
+    materials: list[ReadMaterial] = Field(default_factory=list)

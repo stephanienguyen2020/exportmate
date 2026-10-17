@@ -10,7 +10,7 @@ suppliers that source it → their orders). The reference seed loads it into `gr
 | Path | What | Made by |
 | --- | --- | --- |
 | `data/eudr_products.json` | EUDR Annex I: for each commodity (wood, cocoa, coffee, oil palm, rubber, soya, cattle), the HS codes of the products made from it | `build_eudr_products.py` (official, regenerate; don't edit by hand) |
-| `data/material_chain.json` | Per industry (wood so far): products by HS code, "used to make" / "by-product" links between them, each citing a source; and the materials (species) news and documents name | By hand, from the FAO definitions and HS headings. `reviewed: false` until a person checks a link |
+| `data/material_chain.json` | Per industry (wood so far): products by HS code (with the words news uses for them, `aliases`: "plywood", "logs"), "used to make" / "by-product" links between them, each citing a source; the broad words for the industry's materials (`genericTerms`: "timber" = every wood, "hardwood" = non-coniferous and tropical); and the materials (species) news and documents name | By hand, from the FAO definitions and HS headings; `aiCheck` records who checked each link and why |
 | `build_eudr_products.py` | Downloads the EUDR version named in `seed_data/regulation_sources.json` and parses Annex I | `uv run python -m app.knowledge_graph.build_eudr_products` |
 | `sources/` (git-ignored) | Downloaded EUDR HTML and FAO PDF, to check quotes | Download again from the URLs in `material_chain.json` `sources` |
 

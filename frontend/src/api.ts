@@ -329,6 +329,16 @@ export type ReadDocumentFields = {
   standards: string[];
   detail: string;
   notes: string | null;
+  // Materials the document names that the knowledge graph knows: suggested sourcing.
+  sourcing?: SuggestedSourcing[];
+};
+export type SuggestedSourcing = {
+  material: string;
+  materialName: string;
+  country: string | null; // null: the document doesn't say where it comes from
+  form: string | null;
+  formName: string | null;
+  readAs: string; // the words in the document
 };
 export type SupplierDocumentUpload = {
   id: string;
@@ -538,6 +548,22 @@ export type MapOrder = {
   checks: RequirementCheck[];
   gapCount: number;
 };
+/** A material a supplier buys, where it comes from and in what form (the knowledge graph
+ * follows news about that material or country to the supplier's orders). */
+export type SupplierSourcing = {
+  material: string; // material key, e.g. "acacia"
+  materialName: string;
+  country: string;
+  form: string | null; // chain step it is bought as, e.g. "roundwood"
+  formName: string | null;
+  basis: string; // how we know
+};
+export type SourcingMaterial = {
+  key: string;
+  name: string;
+  industry: string | null;
+  forms: { key: string; name: string; hsCodes: string[] }[];
+};
 export type MapSupplier = {
   id: string | null;
   name: string;
@@ -560,6 +586,7 @@ export type MapSupplier = {
       }[]
     | null;
   orderIds: string[];
+  sourcing?: SupplierSourcing[] | null; // null: no supplier record
 };
 export type MapSite = {
   id: string;
@@ -604,6 +631,7 @@ export type TradeMap = {
   observations: SatelliteObservation[];
   documentKinds: { kind: string; label: string }[];
   countries: { code: string; numericCode: string; name: string }[];
+  materials?: SourcingMaterial[]; // what supplier sourcing can name
   homeCountryIds: string[];
   checkRadiusKm: number;
 };
@@ -624,10 +652,12 @@ export type SupplierInput = {
   contactName: string | null;
   contactEmail: string | null;
   documents: SupplierDocumentInput[];
+  sourcing?: { material: string; country: string; form: string | null; basis: string | null }[];
 };
-export type SupplierRecord = Omit<SupplierInput, "documents"> & {
+export type SupplierRecord = Omit<SupplierInput, "documents" | "sourcing"> & {
   id: string;
   documents: NonNullable<MapSupplier["documents"]>;
+  sourcing: SupplierSourcing[];
   // Orders the save analysed again (a new name or new documents changes their checks).
   analysedOrderIds: string[];
 };
@@ -1219,7 +1249,12 @@ export const api = {
       { method: "POST", body: form },
     ).then((r) => r.data);
   },
-  confirmSupplierDocument: (uploadId: string, fields: SupplierDocumentInput) =>
+  confirmSupplierDocument: (
+    uploadId: string,
+    fields: SupplierDocumentInput & {
+      sourcing?: { material: string; country: string; form: string | null }[];
+    },
+  ) =>
     request(`/supplier-documents/${encodeURIComponent(uploadId)}/confirm`, {
       method: "POST",
       body: JSON.stringify(fields),

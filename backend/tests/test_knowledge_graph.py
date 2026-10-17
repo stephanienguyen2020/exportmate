@@ -76,7 +76,8 @@ def test_seed_loads_the_material_chain_and_sourcing(lan):
     }
     assert {"4403", "4412", "940360"} <= set(wood.hs_prefixes)
     assert wood.source_key == "eudr-annex-i"
-    assert edges == 23
+    assert {"wood", "timber", "hardwood"} <= set(wood.aliases)
+    assert edges == 25
     by_material = {(s.material_key, s.country_alpha2, s.form_key) for s in sourcing}
     assert ("material.acacia", "VN", "wood.roundwood") in by_material
     assert ("material.okoume", "GA", "wood.veneer") in by_material
@@ -103,6 +104,9 @@ def test_an_article_reaches_orders_through_the_suppliers_sourcing(client, lan, n
     found = matches(client, lan)
     # Binh Phu Wood buys acacia logs from Vietnam: its plywood and cabinets are made from them.
     assert set(found) == {"PO-1", "PO-4"}
+    # Furniture is reached through sawn wood: veneer → furniture is a secondary route, mostly a
+    # surface, used only when no equally short path avoids it.
+    assert "Sawn wood (lumber) (HS 4407) → Wooden furniture" in found["PO-4"]["reason"]
     plywood = found["PO-1"]
     assert plywood["reason"] == (
         "Binh Phu Wood buys acacia from Vietnam; Logs (wood in the rough) (HS 4403) → "
@@ -151,3 +155,69 @@ def test_markets_and_named_products_narrow_the_orders(client, lan, news_watch):
 def test_an_unknown_material_reaches_nothing(client, lan, news_watch):
     news_watch["alerts"] = [alert({"materials": ["cocoa beans"], "originCountries": ["CI"]})]
     assert matches(client, lan) == {}
+
+
+def test_broad_words_stand_for_their_materials(client, lan, news_watch):
+    # "hardwood": the non-coniferous and tropical species; every supplier here buys some.
+    news_watch["alerts"] = [alert({"materials": ["hardwood"], "markets": ["US"]})]
+    assert set(matches(client, lan)) == {"PO-4"}
+    # The more specific word wins: "tropical timber" is okoume (Mekong Timber), not every wood.
+    news_watch["alerts"] = [alert({"materials": ["tropical timber"]})]
+    assert set(matches(client, lan)) == {"PO-3"}
+    # A named species wins over a broad word: oak only (Mekong Timber's oak veneer).
+    news_watch["alerts"] = [alert({"materials": ["oak", "hardwood"]})]
+    assert set(matches(client, lan)) == {"PO-3"}
+    # No supplier here buys softwood.
+    news_watch["alerts"] = [alert({"materials": ["softwood lumber"]})]
+    assert matches(client, lan) == {}
+
+
+def test_product_words_count_like_hs_codes(client, lan, news_watch):
+    # "plywood" from Vietnam: plywood and cabinets of suppliers buying Vietnamese wood (Binh Phu
+    # Wood's acacia, Mekong Timber's eucalyptus cores), not Savannakhet Timber's Lao chairs.
+    news_watch["alerts"] = [alert({"materials": ["plywood"], "originCountries": ["VN"]})]
+    found = matches(client, lan)
+    assert set(found) == {"PO-1", "PO-3", "PO-4"}
+    assert "Plywood and veneered panels (HS 4412)" in found["PO-4"]["reason"]
+    # Paper isn't made into any of these orders' products.
+    news_watch["alerts"] = [alert({"materials": ["paper"], "originCountries": ["VN"]})]
+    assert matches(client, lan) == {}
+
+
+def test_verdicts_measure_each_way_and_link(client, lan, news_watch):
+    # A company's own alert ("<articleId>~<companyId>") is reviewed like any other.
+    impact = "article-9~company-1"
+    news_watch["alerts"] = [
+        {
+            "id": impact,
+            "headline": "Vietnam limits acacia log exports",
+            "affected": [],
+            "mentions": {"materials": ["acacia logs"], "originCountries": ["VN"]},
+        }
+    ]
+    assert set(matches(client, lan)) == {"PO-1", "PO-4"}
+    url = f"/api/v1/news-matches/{impact}/orders"
+    assert client.put(f"{url}/PO-1", headers=lan, json={"verdict": "relevant"}).status_code == 200
+    rejected = client.put(f"{url}/PO-4", headers=lan, json={"verdict": "not_relevant"})
+    assert rejected.status_code == 200, rejected.text
+    # A person links an order the graph didn't suggest.
+    linked = client.put(f"{url}/PO-3", headers=lan, json={"verdict": "relevant"})
+    assert linked.status_code == 200, linked.text
+
+    accuracy = client.get("/api/v1/news-matches/accuracy", headers=lan).json()["data"]
+    assert accuracy["byWay"] == [
+        {"via": "supplier", "confirmed": 1, "rejected": 1},
+        {"via": "linked", "confirmed": 1, "rejected": 0},
+    ]
+    links = {(row["fromLabel"], row["toLabel"]): row for row in accuracy["byLink"]}
+    # PO-1 went logs → veneer → plywood; PO-4 logs → sawn wood → furniture.
+    logs_to_veneer = links[("Logs (wood in the rough) (HS 4403)", "Veneer sheets (HS 4408)")]
+    assert (logs_to_veneer["confirmed"], logs_to_veneer["rejected"]) == (1, 0)
+    sawn_to_furniture = links[
+        (
+            "Sawn wood (lumber) (HS 4407)",
+            "Wooden furniture (office, kitchen, bedroom, other) and parts (HS 9403.30, 9403.40)",
+        )
+    ]
+    assert (sawn_to_furniture["confirmed"], sawn_to_furniture["rejected"]) == (0, 1)
+    assert accuracy["byLink"][0]["rejected"] == 1  # most rejected first

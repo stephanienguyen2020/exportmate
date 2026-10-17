@@ -80,6 +80,18 @@ def walk_downstream(db: Session, start_keys: set[str], max_depth: int) -> list[G
     return [GraphWalkRow(r.start_key, r.node_key, r.depth, list(r.edge_ids)) for r in rows]
 
 
+def list_supplier_sourcing(db: Session, supplier_ids: list[uuid.UUID]) -> list[SupplierSourcing]:
+    if not supplier_ids:
+        return []
+    return list(
+        db.scalars(
+            select(SupplierSourcing)
+            .where(SupplierSourcing.supplier_id.in_(supplier_ids))
+            .order_by(SupplierSourcing.material_key, SupplierSourcing.country_alpha2)
+        )
+    )
+
+
 def list_company_sourcing(
     db: Session, company_id: uuid.UUID
 ) -> list[tuple[SupplierSourcing, Supplier]]:

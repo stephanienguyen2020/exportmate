@@ -59,6 +59,7 @@ from app.schemas.trade_map import (
     SupplierDocumentOut,
     TradeMapOut,
 )
+from app.services import supplier_sourcing as sourcing_service
 
 log = logging.getLogger(__name__)
 
@@ -527,6 +528,7 @@ def build_trade_map(db: Session, ctx: CompanyContext) -> TradeMapOut:
             )
         )
 
+    sourcing = sourcing_service.sourcing_by_supplier(db, [s.id for s in suppliers])
     map_suppliers = [
         MapSupplierOut(
             id=s.id,
@@ -539,6 +541,7 @@ def build_trade_map(db: Session, ctx: CompanyContext) -> TradeMapOut:
             contact_email=s.contact_email,
             documents=supplier_documents_out(list(documents[s.id].values()), kinds),
             order_ids=order_ids.get(s.name_key, []),
+            sourcing=sourcing.get(s.id, []),
         )
         for s in suppliers
     ]
@@ -625,6 +628,7 @@ def build_trade_map(db: Session, ctx: CompanyContext) -> TradeMapOut:
             ),
             key=lambda c: c.name,
         ),
+        materials=sourcing_service.sourcing_options(db),
         home_country_ids=sorted(
             gazetteer.countries[c].numeric_code for c in home if c in gazetteer.countries
         ),
