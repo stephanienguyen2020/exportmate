@@ -48,6 +48,11 @@ def _client() -> genai.Client:
     )
 
 
+def _thinking(model: str, level: str) -> types.ThinkingConfig | None:
+    """Gemini 2.x models refuse a thinking level (400 "thinking_level is not supported")."""
+    return None if model.startswith("gemini-2.") else types.ThinkingConfig(thinking_level=level)
+
+
 def _no_credentials(error: google_auth_errors.GoogleAuthError, task: str) -> AppError:
     """No usable Google credentials (locally: `gcloud auth application-default login`)."""
     log.warning("gemini.no_credentials", extra={"task": task, "error": type(error).__name__})
@@ -77,6 +82,7 @@ def generate_json(
                 temperature=0,
                 response_mime_type="application/json",
                 response_schema=schema,
+                thinking_config=_thinking(settings.gemini_model, settings.gemini_thinking_level),
             ),
         )
         result = schema.model_validate_json(response.text or "")

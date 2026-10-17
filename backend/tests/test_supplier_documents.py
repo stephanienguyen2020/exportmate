@@ -182,3 +182,13 @@ def test_editing_a_supplier_keeps_typed_and_uploaded_document_fields(client, lan
         expires,
         True,
     )
+
+
+def test_deleting_a_supplier_deletes_its_uploaded_files(client, lan, fake_gemini, file_storage):
+    headers, supplier_id = lan
+    fake_gemini.answers["supplier_document_reading"] = read_as()
+    assert upload(client, headers, supplier_id).status_code == 201
+    assert supplier_files(file_storage)
+    response = client.delete(f"/api/v1/suppliers/{supplier_id}", headers=headers)
+    assert response.status_code == 200
+    assert supplier_files(file_storage) == []

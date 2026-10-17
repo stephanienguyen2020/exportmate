@@ -18,6 +18,7 @@ from app.database.models import (
     SatelliteObservation,
     Supplier,
     SupplierDocument,
+    SupplierDocumentUpload,
 )
 
 # --- Shared reference data
@@ -137,6 +138,17 @@ def replace_supplier_documents(
     db.execute(delete(SupplierDocument).where(SupplierDocument.supplier_id == supplier_id))
     db.add_all(documents)
     db.flush()
+
+
+def list_supplier_upload_paths(db: Session, supplier_id: uuid.UUID) -> list[str]:
+    """Where the certificates uploaded for this supplier are in Cloud Storage."""
+    return list(
+        db.scalars(
+            select(SupplierDocumentUpload.storage_path).where(
+                SupplierDocumentUpload.supplier_id == supplier_id
+            )
+        )
+    )
 
 
 def delete_supplier(db: Session, supplier: Supplier) -> None:

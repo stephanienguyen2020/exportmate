@@ -1,0 +1,27 @@
+{
+  "name": "exportmate_backend/gemini_latency",
+  "description": "Time of each backend Gemini step (supplier documents, requirements, HS codes, solutions, messages, scenarios) by task.",
+  "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"${SERVICE}\" AND jsonPayload.message=\"gemini.completed\"",
+  "valueExtractor": "EXTRACT(jsonPayload.duration_ms)",
+  "metricDescriptor": {
+    "metricKind": "DELTA",
+    "valueType": "DISTRIBUTION",
+    "unit": "ms",
+    "labels": [
+      {
+        "key": "task",
+        "valueType": "STRING"
+      }
+    ]
+  },
+  "labelExtractors": {
+    "task": "EXTRACT(jsonPayload.task)"
+  },
+  "bucketOptions": {
+    "exponentialBuckets": {
+      "numFiniteBuckets": 16,
+      "growthFactor": 1.6,
+      "scale": 250
+    }
+  }
+}

@@ -66,6 +66,25 @@ def test_resend_errors_become_app_errors(monkeypatch, status, code):
     assert raised.value.code == code
 
 
+def test_resend_refusal_is_logged_with_its_reason_but_no_address(monkeypatch, caplog):
+    def failing_urlopen(request, timeout):
+        body = io.BytesIO(
+            b'{"name": "validation_error", "message": "The exportmate.app domain is not verified.'
+            b' You can only send testing emails to your own email address (owner@example.com)."}'
+        )
+        raise urllib.error.HTTPError(request.full_url, 403, "error", {}, body)
+
+    monkeypatch.setattr(email_module.urllib.request, "urlopen", failing_urlopen)
+    sender = ResendEmailSender("re_key", "reports@exportmate.app")
+    with pytest.raises(AppError) as raised, caplog.at_level("WARNING"):
+        sender.send_email(OutgoingEmail(to=["a@example.com"], subject="s", html="", text=""))
+    assert raised.value.code == "email_failed"
+    rejected = next(r for r in caplog.records if r.getMessage() == "email.rejected")
+    assert rejected.provider_error == "validation_error"
+    assert "domain is not verified" in rejected.provider_message
+    assert "@" not in rejected.provider_message and "[address]" in rejected.provider_message
+
+
 @pytest.fixture
 def ai_service_url(monkeypatch: pytest.MonkeyPatch):
     def use(url: str) -> None:
