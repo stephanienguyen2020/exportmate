@@ -148,6 +148,7 @@ def seed_knowledge_graph(db: Session) -> dict[str, int]:
         db, [{"key": k, "title": v["title"], "url": v["url"]} for k, v in chain["sources"].items()]
     )
     industry_of_commodity = {i["eudrCommodity"]: i["key"] for i in chain["industries"]}
+    generic_terms = {i["eudrCommodity"]: i.get("genericTerms", {}) for i in chain["industries"]}
     nodes = [
         {
             "key": f"commodity.{_slug(c['commodity'])}",
@@ -155,8 +156,12 @@ def seed_knowledge_graph(db: Session) -> dict[str, int]:
             "industry": industry_of_commodity.get(c["commodity"]),
             "name": c["commodity"],
             "hs_prefixes": sorted({_digits(p["hsCode"]) for p in c["products"]}),
-            "aliases": [c["commodity"].lower()],
-            "details": {"lines": c["products"]},
+            "aliases": sorted({c["commodity"].lower(), *generic_terms.get(c["commodity"], {})}),
+            # Broad words for the commodity's materials, and the wood types each stands for.
+            "details": {
+                "lines": c["products"],
+                "genericTerms": generic_terms.get(c["commodity"], {}),
+            },
             "source_key": "eudr-annex-i",
         }
         for c in eudr["commodities"]
@@ -170,7 +175,7 @@ def seed_knowledge_graph(db: Session) -> dict[str, int]:
                 "industry": industry["key"],
                 "name": p["name"],
                 "hs_prefixes": [_digits(code) for code in p["hsCodes"]],
-                "aliases": [p["name"].lower()],
+                "aliases": sorted({p["name"].lower(), *p.get("aliases", [])}),
                 "details": {"stage": p["stage"]},
                 "source_key": None,
             }
@@ -184,7 +189,7 @@ def seed_knowledge_graph(db: Session) -> dict[str, int]:
                 "source_key": link["source"],
                 "quote": link.get("quote"),
                 "basis": link.get("basis"),
-                "reviewed": link["reviewed"],
+                "secondary": link.get("secondary", False),
             }
             for link in industry["links"]
         ]

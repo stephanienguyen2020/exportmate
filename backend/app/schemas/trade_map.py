@@ -94,6 +94,33 @@ class SupplierDocumentOut(CamelCaseModel):
     from_upload: bool = False  # confirmed from an uploaded file (its file stays in storage)
 
 
+class SupplierSourcingOut(CamelCaseModel):
+    """A material a supplier buys, where it comes from and in what form (the knowledge graph
+    follows it from news about that material or country to the supplier's orders)."""
+
+    material: str  # material key, e.g. "acacia"
+    material_name: str
+    country: str
+    form: str | None  # chain step it is bought as, e.g. "roundwood"
+    form_name: str | None
+    basis: str  # how we know, e.g. "species document"
+
+
+class SourcingFormOut(CamelCaseModel):
+    key: str
+    name: str
+    hs_codes: list[str]
+
+
+class SourcingMaterialOut(CamelCaseModel):
+    """A material a supplier's sourcing can name, with the chain steps it can be bought as."""
+
+    key: str
+    name: str
+    industry: str | None
+    forms: list[SourcingFormOut]
+
+
 class MapSupplierOut(CamelCaseModel):
     id: uuid.UUID | None  # None: named on orders but not in the supplier list
     name: str
@@ -105,6 +132,7 @@ class MapSupplierOut(CamelCaseModel):
     contact_email: str | None = None  # supplier messages are pre-filled with it
     documents: list[SupplierDocumentOut] | None  # None: no supplier record to check against
     order_ids: list[str]
+    sourcing: list[SupplierSourcingOut] | None = None  # None: no supplier record
 
 
 class SiteOut(CamelCaseModel):
@@ -153,6 +181,7 @@ class TradeMapOut(CamelCaseModel):
     observations: list[SatelliteObservationOut]
     document_kinds: list[DocumentKindOut]
     countries: list[CountryOut]  # the countries a supplier or site can be in
+    materials: list[SourcingMaterialOut] = Field(default_factory=list)  # for supplier sourcing
     home_country_ids: list[str]  # countries with the company's sites or suppliers
     check_radius_km: float
 
@@ -210,6 +239,7 @@ ShortText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1
 CountryCode = Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^[A-Za-z]{2}$")]
 Standard = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
 MAX_SUPPLIER_DOCUMENTS = 20
+MAX_SUPPLIER_SOURCING = 20
 MAX_STANDARDS = 10
 
 
@@ -257,6 +287,24 @@ class SupplierDocumentIn(CamelCaseModel):
     _optional = field_validator("document_number", "issuer")(_optional_text)
 
 
+class SupplierSourcingIn(CamelCaseModel):
+    material: str = Field(min_length=1, max_length=60)  # material key, e.g. "acacia"
+    country: CountryCode
+    form: str | None = Field(default=None, max_length=60)  # chain step, e.g. "roundwood"
+    basis: str | None = Field(default=None, max_length=200)  # default: entered on the map
+
+    _optional = field_validator("form", "basis")(_optional_text)
+    _country = field_validator("country")(_country_code)
+
+
+def _one_sourcing_per_material_and_country(sourcing: list[SupplierSourcingIn] | None):
+    if sourcing is not None:
+        pairs = [(s.material, s.country) for s in sourcing]
+        if len(pairs) != len(set(pairs)):
+            raise ValueError("One line per material and country")
+    return sourcing
+
+
 def _one_document_per_kind(documents: list[SupplierDocumentIn] | None):
     if documents is not None:
         kinds = [d.kind for d in documents]
@@ -276,15 +324,19 @@ class SupplierIn(CamelCaseModel):
     documents: list[SupplierDocumentIn] = Field(
         default_factory=list, max_length=MAX_SUPPLIER_DOCUMENTS
     )
+    sourcing: list[SupplierSourcingIn] = Field(
+        default_factory=list, max_length=MAX_SUPPLIER_SOURCING
+    )
 
     _optional = field_validator("place", "supplies", "contact_name")(_optional_text)
     _email = field_validator("contact_email")(_optional_email)
     _country = field_validator("country")(_country_code)
     _documents = field_validator("documents")(_one_document_per_kind)
+    _sourcing = field_validator("sourcing")(_one_sourcing_per_material_and_country)
 
 
 class SupplierUpdate(CamelCaseModel):
-    """Changes only the fields sent. `documents` replaces the whole list."""
+    """Changes only the fields sent. `documents` and `sourcing` each replace the whole list."""
 
     name: (
         Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)]
@@ -299,15 +351,19 @@ class SupplierUpdate(CamelCaseModel):
     documents: list[SupplierDocumentIn] | None = Field(
         default=None, max_length=MAX_SUPPLIER_DOCUMENTS
     )
+    sourcing: list[SupplierSourcingIn] | None = Field(
+        default=None, max_length=MAX_SUPPLIER_SOURCING
+    )
 
     _optional = field_validator("place", "supplies", "contact_name")(_optional_text)
     _email = field_validator("contact_email")(_optional_email)
     _country = field_validator("country")(_country_code)
     _documents = field_validator("documents")(_one_document_per_kind)
+    _sourcing = field_validator("sourcing")(_one_sourcing_per_material_and_country)
 
     @model_validator(mode="after")
     def required_fields_stay_set(self):
-        _keep_required(self, ("name", "documents"))
+        _keep_required(self, ("name", "documents", "sourcing"))
         return self
 
 
@@ -321,6 +377,7 @@ class SupplierOut(CamelCaseModel):
     contact_name: str | None
     contact_email: str | None
     documents: list[SupplierDocumentOut]
+    sourcing: list[SupplierSourcingOut] = Field(default_factory=list)
     # Orders analysed again because this change touched what their checks read (the name
     # they match on, or the documents). Empty when none name it or the analysis failed.
     analysed_order_ids: list[str] = Field(default_factory=list)

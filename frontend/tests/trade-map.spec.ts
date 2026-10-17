@@ -153,11 +153,35 @@ async function openMap(
     origin?: string;
     role?: "owner" | "viewer";
     writes?: { method: string; path: string; body: any }[];
+    materials?: boolean;
   } = {},
 ) {
   const comparisons: URL[] = [];
   // Saved suppliers and sites show up when the map reloads.
   const current: TradeMap = structuredClone(mapData);
+  if (options.materials) {
+    current.materials = [
+      {
+        key: "acacia",
+        name: "Acacia",
+        industry: "wood",
+        forms: [
+          { key: "roundwood", name: "Logs (wood in the rough)", hsCodes: ["4403"] },
+          { key: "veneer", name: "Veneer sheets", hsCodes: ["4408"] },
+        ],
+      },
+    ];
+    current.suppliers[0].sourcing = [
+      {
+        material: "acacia",
+        materialName: "Acacia",
+        country: "VN",
+        form: "roundwood",
+        formName: "Logs (wood in the rough)",
+        basis: "species document",
+      },
+    ];
+  }
   const scenarios: Record<string, unknown>[] = [];
   await page.route("**/api/impacts**", (r) =>
     r.fulfill({ json: { impacts: [], scan: null } }),
@@ -215,6 +239,24 @@ async function openMap(
           standards: ["FSC-STD-40-004"],
           detail: "FSC chain of custody SGS-COC-001234",
           notes: "The stamp is faint.",
+          sourcing: [
+            {
+              material: "acacia",
+              materialName: "Acacia",
+              country: "VN",
+              form: "roundwood",
+              formName: "Logs (wood in the rough)",
+              readAs: "Acacia mangium, logs, VN",
+            },
+            {
+              material: "eucalyptus",
+              materialName: "Eucalyptus",
+              country: null,
+              form: null,
+              formName: null,
+              readAs: "Eucalyptus",
+            },
+          ],
         },
         createdAt: "2026-10-15T08:00:00Z",
         confirmedAt: null,
@@ -236,7 +278,17 @@ async function openMap(
       const body = route.request().postDataJSON();
       options.writes?.push({ method, path, body });
       if (path === "/suppliers") {
-        data = { id: "supplier-2", ...body, documents: [] };
+        data = {
+          id: "supplier-2",
+          ...body,
+          documents: [],
+          sourcing: (body.sourcing ?? []).map((s: any) => ({
+            ...s,
+            materialName: "Acacia",
+            formName: s.form && "Veneer sheets",
+            basis: s.basis ?? "Entered on the trade map",
+          })),
+        };
         current.suppliers.push({
           ...(data as TradeMap["suppliers"][number]),
           orderIds: [],
@@ -618,6 +670,36 @@ test("editors add a supplier from a map click or typed coordinates", async ({
   ]);
 });
 
+test("suppliers show and take the materials they buy, for the knowledge graph", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 1050 });
+  const writes: { method: string; path: string; body: any }[] = [];
+  await openMap(page, { writes, materials: true, hash: "map/supplier/Sample%20supplier" });
+  const panel = page.locator(".tm-panel");
+  await expect(panel.getByRole("heading", { name: "Materials it buys" })).toBeVisible();
+  await expect(panel.locator(".tm-sourcing")).toContainText(
+    "Acacia from Vietnam as logs (wood in the rough)",
+  );
+
+  await page.goto("/#/workspace/map");
+  await page.getByRole("button", { name: "Add supplier" }).click();
+  const form = page.locator(".tm-panel form");
+  await form.getByLabel("Name").fill("Kampot Timber");
+  await form.getByLabel("Country").selectOption("KH");
+  await form.getByRole("button", { name: "Add a material" }).click();
+  await form.getByLabel("Material 1", { exact: true }).selectOption("acacia");
+  await form.getByLabel("Country of material 1").selectOption("KH");
+  await form.getByLabel("Form of material 1 (optional)").selectOption("veneer");
+  await form.getByRole("button", { name: "Add supplier" }).click();
+
+  await expect(page.locator(".tm-panel h2")).toHaveText("Kampot Timber.");
+  expect(writes[0].body.sourcing).toEqual([
+    { material: "acacia", country: "KH", form: "veneer", basis: null },
+  ]);
+  await expect(page.locator(".tm-sourcing")).toContainText("Acacia from Cambodia as veneer sheets");
+});
+
 test("editors edit a site and viewers see no edit controls", async ({
   page,
 }) => {
@@ -690,6 +772,9 @@ test("editors upload a supplier certificate and confirm what AI read", async ({
     "2026-12-15",
   );
   await form.getByLabel("Issued by (optional)").fill("SGS Vietnam");
+  // Materials it names are offered for the supplier's sourcing; one without a country can't be.
+  await expect(form.getByLabel(/Acacia from Vietnam as logs/)).toBeChecked();
+  await expect(form.getByLabel(/Eucalyptus/)).toBeDisabled();
   await form.getByRole("button", { name: "Confirm certificate" }).click();
   await expect(
     page.getByText(/expires 2026-12-15 · from an uploaded certificate/),
@@ -706,6 +791,7 @@ test("editors upload a supplier certificate and confirm what AI read", async ({
         documentNumber: "SGS-COC-001234",
         issuer: "SGS Vietnam",
         expiresOn: "2026-12-15",
+        sourcing: [{ material: "acacia", country: "VN", form: "roundwood" }],
       },
     },
   ]);

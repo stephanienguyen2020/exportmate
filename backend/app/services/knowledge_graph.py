@@ -1,7 +1,9 @@
 """The knowledge graph walk: from what a news article names to the open orders it may hit.
 
 An article names materials ("acacia logs"), HS codes, the countries goods come from and the
-markets a measure covers (`GraphMentions`). An open order is reached in one of two ways:
+markets a measure covers (`GraphMentions`). A material word is a species ("acacia"), a broad
+word standing for several ("timber", "hardwood"; a commodity's `genericTerms`), or a product of
+the chain ("plywood", "logs"), which counts like an HS code the article names. An open order is reached in one of two ways:
 
 - Through its supplier: the supplier buys a named material, or buys from a named country (both,
   when the article names both). The path follows the material chain (graph_edges) from the form
@@ -25,6 +27,7 @@ from app.database.models import GraphEdge, GraphNode, GraphNodeKind, Order, Supp
 from app.database.models import SupplierSourcing as Sourcing
 from app.database.queries import knowledge_graph as graph_queries
 from app.database.queries import trade_map as map_queries
+from app.services.graph_words import broad_materials, named_nodes
 from app.services.trade_map import supplier_name_key
 
 MAX_LINKS = 4  # the longest chain followed, e.g. logs → veneer → plywood → furniture
@@ -59,6 +62,11 @@ class GraphMatch:
     path: list[GraphPathStep]
     reason: str
 
+    @property
+    def via(self) -> str:
+        """ "supplier" when the path goes through a supplier's sourcing, else "hs"."""
+        return "supplier" if any(step.kind == "supplier" for step in self.path) else "hs"
+
 
 def _digits(code: object) -> str:
     return re.sub(r"\D", "", str(code or ""))
@@ -70,18 +78,6 @@ def hs_heading(hs_code: object) -> str:
     return digits[:4] if len(digits) >= 4 else ""
 
 
-def named_materials(words: tuple[str, ...], materials: list[GraphNode]) -> list[GraphNode]:
-    """Material nodes one of whose names appears as whole words in what the article named."""
-    texts = [w.lower() for w in words if w.strip()]
-    return [
-        node
-        for node in materials
-        if any(
-            re.search(rf"\b{re.escape(alias)}\b", text) for alias in node.aliases for text in texts
-        )
-    ]
-
-
 def product_of_hs_code(hs_code: object, products: list[GraphNode]) -> GraphNode | None:
     """The chain step an HS code belongs to: the product with the longest matching prefix."""
     digits = _digits(hs_code)
@@ -91,6 +87,11 @@ def product_of_hs_code(hs_code: object, products: list[GraphNode]) -> GraphNode 
             if digits.startswith(prefix) and (best is None or len(prefix) > best[0]):
                 best = (len(prefix), node)
     return best[1] if best else None
+
+
+def chain_cost(chain: list[GraphEdge]) -> tuple[int, int]:
+    """Shorter chains first; between equally short ones, fewer less common links."""
+    return (len(chain), sum(1 for edge in chain if edge.secondary))
 
 
 def _hs_label(node: GraphNode) -> str:
@@ -107,6 +108,7 @@ class GraphWalker:
         self.nodes = {n.key: n for n in nodes}
         self.products = [n for n in nodes if n.kind == GraphNodeKind.product]
         self.materials = [n for n in nodes if n.kind == GraphNodeKind.material]
+        self.commodities = [n for n in nodes if n.kind == GraphNodeKind.commodity]
         self.sources = {s.key: s for s in graph_queries.list_graph_sources(db)}
         self.sourcing = graph_queries.list_company_sourcing(db, company_id)
         countries = map_queries.list_countries(db)
@@ -117,7 +119,13 @@ class GraphWalker:
     def find_matches(
         self, mentions: GraphMentions, open_orders: list[tuple[Order, str | None]]
     ) -> list[GraphMatch]:
-        materials = {n.key for n in named_materials(mentions.materials, self.materials)}
+        # A named species wins; otherwise a broad word ("timber") stands for its materials.
+        species = named_nodes(mentions.materials, self.materials)
+        materials = {
+            n.key
+            for n in species
+            or broad_materials(mentions.materials, self.commodities, self.materials)
+        }
         origins = {c.upper() for c in mentions.origin_countries}
         markets = self.known_markets(mentions.markets)
         headings = {hs_heading(c) for c in mentions.hs_codes} - {""}
@@ -125,7 +133,7 @@ class GraphWalker:
             node.key
             for code in mentions.hs_codes
             if len(_digits(code)) >= 4 and (node := product_of_hs_code(code, self.products))
-        }
+        } | {node.key for node in named_nodes(mentions.materials, self.products)}
         buying = [
             (sourcing, supplier)
             for sourcing, supplier in self.sourcing
@@ -179,8 +187,11 @@ class GraphWalker:
             )
         }
         chains: dict[tuple[str, str], list[GraphEdge]] = {}
-        for row in rows:  # shortest first
-            chains.setdefault((row.start_key, row.node_key), [edges[i] for i in row.edge_ids])
+        for row in rows:
+            chain = [edges[i] for i in row.edge_ids]
+            key = (row.start_key, row.node_key)
+            if key not in chains or chain_cost(chain) < chain_cost(chains[key]):
+                chains[key] = chain
         return chains
 
     def _through_supplier(
@@ -201,12 +212,29 @@ class GraphWalker:
             if supplier.name_key != supplier_name_key(order.supplier):
                 continue
             chain = (
-                chains.get((sourcing.form_key, order_product.key))
+                self._chain_through(sourcing.form_key, order_product.key, named_products, chains)
                 if sourcing.form_key and order_product
                 else None
             )
             return self._supplier_match(order, market, sourcing, supplier, chain, mentions)
         return None
+
+    @staticmethod
+    def _chain_through(
+        start: str,
+        end: str,
+        named_products: set[str],
+        chains: dict[tuple[str, str], list[GraphEdge]],
+    ) -> list[GraphEdge] | None:
+        """The links from what the supplier buys to the order's product. When the article names
+        products, the shortest way through one of them ("plywood": logs → veneer → plywood →
+        furniture, not logs → veneer → furniture); otherwise the shortest way."""
+        through = [
+            chains[(start, named)] + chains[(named, end)]
+            for named in named_products
+            if (start, named) in chains and (named, end) in chains
+        ]
+        return min(through, key=chain_cost) if through else chains.get((start, end))
 
     def _supplier_match(
         self,

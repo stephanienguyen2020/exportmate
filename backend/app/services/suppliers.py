@@ -1,4 +1,5 @@
-"""A company's suppliers and the documents each one has on file, entered in the trade map.
+"""A company's suppliers, the documents each one has on file and what it buys (sourcing),
+entered in the trade map.
 
 Orders match a supplier by its name key (trimmed, single-spaced, lower-case), so renaming a
 supplier moves which orders it is checked against. Deleting one leaves its orders in place,
@@ -29,6 +30,7 @@ from app.schemas.trade_map import (
     SupplierUpdate,
 )
 from app.services import analysis as analysis_service
+from app.services import supplier_sourcing as sourcing_service
 from app.services.trade_map import supplier_documents_out, supplier_name_key
 
 log = logging.getLogger(__name__)
@@ -83,6 +85,7 @@ def _supplier_out(db: Session, supplier: Supplier) -> SupplierOut:
         contact_name=supplier.contact_name,
         contact_email=supplier.contact_email,
         documents=supplier_documents_out(documents, kinds),
+        sourcing=sourcing_service.sourcing_by_supplier(db, [supplier.id]).get(supplier.id, []),
     )
 
 
@@ -173,6 +176,7 @@ def create_supplier(db: Session, ctx: CompanyContext, payload: SupplierIn) -> Su
     )
     _flush_name(db, lambda: map_queries.add_supplier(db, supplier))
     _save_documents(db, supplier.id, payload.documents)
+    sourcing_service.save_sourcing(db, supplier.id, payload.sourcing)
     _record_change(db, ctx, "supplier.created", supplier)
     analysed = _analyse_orders_naming(db, ctx, {key})
     return _supplier_out(db, supplier).model_copy(update={"analysed_order_ids": analysed})
@@ -200,6 +204,8 @@ def update_supplier(
     if "documents" in sent:
         _check_document_kinds(db, payload.documents)
         _save_documents(db, supplier.id, payload.documents)
+    if "sourcing" in sent:
+        sourcing_service.save_sourcing(db, supplier.id, payload.sourcing)
     if "place" in sent:
         supplier.place = payload.place
     if "supplies" in sent:
@@ -213,7 +219,7 @@ def update_supplier(
         supplier.longitude = payload.location.longitude if payload.location else None
     _flush_name(db, db.flush)
     _record_change(db, ctx, "supplier.updated", supplier)
-    # A new place, contact or location changes nothing an analysis reads.
+    # A new place, contact, location or sourcing changes nothing an analysis reads.
     analysed = _analyse_orders_naming(db, ctx, keys) if len(keys) > 1 or "documents" in sent else []
     return _supplier_out(db, supplier).model_copy(update={"analysed_order_ids": analysed})
 

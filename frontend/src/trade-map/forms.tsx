@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Check, Loader2, Trash2 } from "lucide-react";
+import { Check, Loader2, Plus, Trash2 } from "lucide-react";
 import {
   api,
   type MapSite,
@@ -209,11 +209,101 @@ type DocumentDraft = {
 // those documents first and says what the checklist accepts.
 export type NeededDocuments = { orderId: string; checks: RequirementCheck[] };
 
+type SourcingDraft = { material: string; country: string; form: string; basis: string | null };
+
+/** What the supplier buys and from where: news about that material or country reaches its
+ * orders through the knowledge graph. */
+function SourcingFields({
+  rows,
+  materials,
+  countries,
+  onChange,
+}: {
+  rows: SourcingDraft[];
+  materials: NonNullable<TradeMap["materials"]>;
+  countries: TradeMap["countries"];
+  onChange: (rows: SourcingDraft[]) => void;
+}) {
+  const edit = (i: number, change: Partial<SourcingDraft>) =>
+    onChange(rows.map((row, j) => (j === i ? { ...row, ...change } : row)));
+  return (
+    <fieldset className="tm-doc-fields">
+      <legend>Materials it buys</legend>
+      <small>
+        The material, the country it comes from and, if you know it, the form
+        it's bought in. News about that material or country is matched to this
+        supplier's orders.
+      </small>
+      {rows.map((row, i) => {
+        const material = materials.find((m) => m.key === row.material);
+        return (
+          <div className="tm-sourcing-row" key={i}>
+            <select
+              aria-label={`Material ${i + 1}`}
+              required
+              value={row.material}
+              onChange={(e) => edit(i, { material: e.target.value, form: "", basis: null })}
+            >
+              <option value="">Material…</option>
+              {materials.map((m) => (
+                <option key={m.key} value={m.key}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+            <select
+              aria-label={`Country of material ${i + 1}`}
+              required
+              value={row.country}
+              onChange={(e) => edit(i, { country: e.target.value, basis: null })}
+            >
+              <option value="">From…</option>
+              {countries.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+            <select
+              aria-label={`Form of material ${i + 1} (optional)`}
+              value={row.form}
+              onChange={(e) => edit(i, { form: e.target.value })}
+            >
+              <option value="">Form (optional)</option>
+              {(material?.forms ?? []).map((f) => (
+                <option key={f.key} value={f.key}>
+                  {f.name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="tm-icon-button"
+              aria-label={`Remove material ${i + 1}`}
+              onClick={() => onChange(rows.filter((_, j) => j !== i))}
+            >
+              <Trash2 size={13} />
+            </button>
+          </div>
+        );
+      })}
+      <button
+        type="button"
+        className="news-more"
+        onClick={() => onChange([...rows, { material: "", country: "", form: "", basis: null }])}
+      >
+        <Plus size={12} /> Add a material
+      </button>
+    </fieldset>
+  );
+}
+
 export function SupplierForm({
   group,
   name: suggestedName,
   documentKinds,
   countries,
+  materials,
   pin,
   needed,
   mapless,
@@ -226,6 +316,7 @@ export function SupplierForm({
   name?: string;
   documentKinds: TradeMap["documentKinds"];
   countries: TradeMap["countries"];
+  materials?: TradeMap["materials"];
   pin: Pin | null;
   needed?: NeededDocuments;
   mapless?: boolean;
@@ -269,6 +360,14 @@ export function SupplierForm({
           ];
         }),
       ),
+  );
+  const [sourcing, setSourcing] = useState<SourcingDraft[]>(() =>
+    (record?.sourcing ?? []).map((s) => ({
+      material: s.material,
+      country: s.country,
+      form: s.form ?? "",
+      basis: s.basis,
+    })),
   );
   const [locationValid, setLocationValid] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -316,6 +415,17 @@ export function SupplierForm({
           issuer: documents[kind].issuer.trim() || null,
           expiresOn: documents[kind].expiresOn || null,
         })),
+      // Sent only when the form could offer materials, so an older map never clears them.
+      ...(materials?.length
+        ? {
+            sourcing: sourcing.map((s) => ({
+              material: s.material,
+              country: s.country,
+              form: s.form || null,
+              basis: s.basis,
+            })),
+          }
+        : {}),
     };
     run(async () => {
       const saved = record
@@ -393,6 +503,14 @@ export function SupplierForm({
         onChange={(e) => setContactEmail(e.target.value)}
         placeholder="sales@supplier.com"
       />
+      {materials && materials.length > 0 && (
+        <SourcingFields
+          rows={sourcing}
+          materials={materials}
+          countries={countries}
+          onChange={setSourcing}
+        />
+      )}
       <fieldset className="tm-doc-fields">
         <legend>Documents on file</legend>
         <small>

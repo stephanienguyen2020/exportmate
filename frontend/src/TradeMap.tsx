@@ -439,6 +439,7 @@ function TradeMapView({
         name={editing.name}
         documentKinds={data.documentKinds}
         countries={data.countries}
+        materials={data.materials}
         pin={pin}
         onPin={setPin}
         onSaved={async (name, saved) => {
@@ -509,6 +510,7 @@ function TradeMapView({
           contactName: null,
           contactEmail: null,
           documents: null,
+          sourcing: [],
           rows: [],
         }
       }
