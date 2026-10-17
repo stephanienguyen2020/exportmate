@@ -482,7 +482,7 @@ Only `name` (1–300) is required. `place` ≤200, `supplies` ≤1000 (blank is 
 
 `PATCH /suppliers/{id}` changes only the fields sent; `null` clears `place`, `country`, `location`, `supplies`. `documents` and `sourcing` each replace the whole list (send `[]` to clear it). `name`, `documents` and `sourcing` can't be `null`. Same errors as `POST`. Sending `documents`, or a `name` with another key, analyses again the orders that matched before and after (`analysedOrderIds`); a new place, contact or location runs nothing.
 
-`DELETE /suppliers/{id}` → `{"deleted": true, "analysedOrderIds": [...]}`. Its documents go with it; its orders stay, named on the order without a record (supplier checks become `unknown`), and are analysed again, so their next step is to add the supplier.
+`DELETE /suppliers/{id}` → `{"deleted": true, "analysedOrderIds": [...]}`. Its documents go with it, and the certificate files uploaded for it are deleted from Cloud Storage (kept 30 days as noncurrent versions); its orders stay, named on the order without a record (supplier checks become `unknown`), and are analysed again, so their next step is to add the supplier.
 
 `POST /sites` → `201`:
 ```json

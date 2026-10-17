@@ -1,0 +1,34 @@
+{
+  "displayName": "ExportMate backend: database disk over 80%",
+  "documentation": {
+    "mimeType": "text/markdown",
+    "content": "Cloud SQL's disk is over 80% full. Uploaded CSVs are kept in Postgres (`order_imports.content`); `python -m app.cleanup_imports --older-than-days 30` removes uploads never committed. Storage auto-resize is on, but it only grows."
+  },
+  "combiner": "OR",
+  "conditions": [
+    {
+      "displayName": "Disk utilization above 0.8 for 10 minutes",
+      "conditionThreshold": {
+        "filter": "metric.type=\"cloudsql.googleapis.com/database/disk/utilization\" AND resource.type=\"cloudsql_database\"",
+        "aggregations": [
+          {
+            "alignmentPeriod": "300s",
+            "perSeriesAligner": "ALIGN_MAX"
+          }
+        ],
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 0.8,
+        "duration": "600s",
+        "trigger": {
+          "count": 1
+        }
+      }
+    }
+  ],
+  "alertStrategy": {
+    "autoClose": "86400s"
+  },
+  "notificationChannels": [
+    "${CHANNEL}"
+  ]
+}

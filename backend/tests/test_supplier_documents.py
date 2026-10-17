@@ -234,3 +234,13 @@ def test_materials_a_document_names_are_suggested_for_the_suppliers_sourcing(
     added = next(s for s in sourcing if s["country"] == "LA")
     assert added["basis"].startswith("From ") and added["basis"].endswith("(geo.pdf)")
     assert next(s for s in sourcing if s["country"] == "VN")["basis"] == "species document"
+
+
+def test_deleting_a_supplier_deletes_its_uploaded_files(client, lan, fake_gemini, file_storage):
+    headers, supplier_id = lan
+    fake_gemini.answers["supplier_document_reading"] = read_as()
+    assert upload(client, headers, supplier_id).status_code == 201
+    assert supplier_files(file_storage)
+    response = client.delete(f"/api/v1/suppliers/{supplier_id}", headers=headers)
+    assert response.status_code == 200
+    assert supplier_files(file_storage) == []

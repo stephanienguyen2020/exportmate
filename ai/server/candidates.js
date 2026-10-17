@@ -38,6 +38,19 @@ export function collectCandidates(fetched, srcs, { at, maxAgeDays, oldReaders = 
   return { candidates, tooOld: [...skipped].filter((id) => !candidates.has(id)).length };
 }
 
+/**
+ * What a company's scan reads: this scan's new articles it can see (`visible`, access.js) and,
+ * when `backlog` is given (its first scan), up to `max` stored ones it can see from that list
+ * (newest first). The cap counts only articles the company can see, so another company's own
+ * busy feed can't fill it and cut the read-back short.
+ */
+export function companyReading(fresh, visible, backlog, max) {
+  const reading = fresh.filter(visible);
+  if (!backlog) return reading;
+  const freshIds = new Set(fresh.map((a) => a.id));
+  return [...reading, ...backlog.filter((a) => !freshIds.has(a.id) && visible(a)).slice(0, max)];
+}
+
 /** A Gemini error as a sentence: the API's message, not the JSON it arrives wrapped in. */
 export function errorText(e) {
   const text = String(e?.message || e);

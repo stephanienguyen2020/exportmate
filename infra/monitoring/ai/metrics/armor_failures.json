@@ -1,0 +1,9 @@
+{
+  "name": "exportmate_ai/armor_failures",
+  "description": "News scans where Model Armor could not screen some articles (they wait for the next scan).",
+  "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"${SERVICE}\" AND jsonPayload.message=\"scan.armor_failed\"",
+  "metricDescriptor": {
+    "metricKind": "DELTA",
+    "valueType": "INT64"
+  }
+}
