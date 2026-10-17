@@ -12,6 +12,7 @@
 import { PROJECT, db, inventory, list } from "../db.js";
 import { BATCH, MODEL, SCAN_POLICY_VERSION, assess } from "../scan.js";
 import { decide } from "../relevance.js";
+import { cleanMentions } from "../mentions.js";
 import { scanCases } from "./scan-golden.js";
 import { inBatches, mergeRepeats, scoreScanCases, summarizeScanRun } from "./scan-score.js";
 import { compareRuns } from "./score.js";
@@ -52,6 +53,7 @@ async function runOnce() {
         otherCommodity: d.otherCommodity,
         headline: r.headline ?? null,
         why: r.why ?? null,
+        mentions: cleanMentions(r.mentions),
       });
     });
   }
@@ -68,7 +70,8 @@ for (const s of scored) {
   console.log(
     `${s.pass ? "PASS" : "FAIL"} ${s.id.padEnd(30)} ${s.outcome.relevant ? `alert: ${s.outcome.severity}/${s.outcome.direction} ${s.outcome.affected.join(" ")}` : "no alert"}` +
       (repeat > 1 ? ` (${s.passes}/${s.runs}${s.stable ? "" : ", unstable"})` : "") +
-      (failed.length ? `\n     ${failed.map((x) => `${x.name}: ${x.detail}`).join("\n     ")}` : ""),
+      (failed.length ? `\n     ${failed.map((x) => `${x.name}: ${x.detail}`).join("\n     ")}` : "") +
+      (s.mentions?.missing.length ? `\n     mentions missed: ${s.mentions.missing.join(", ")}` : ""),
   );
 }
 
@@ -76,7 +79,7 @@ const pct = (x) => (x == null ? "n/a" : `${Math.round(x * 100)}%`);
 console.log(`\n${scored.filter((s) => s.pass).length}/${scored.length} passed${repeat > 1 ? ` every run, ${scored.filter((s) => s.stable).length}/${scored.length} stable` : ""}`);
 summaries.forEach((m, i) =>
   console.log(
-    `${repeat > 1 ? `run ${i + 1}: ` : ""}relevance precision ${pct(m.relevance.precision)} recall ${pct(m.relevance.recall)} (fp ${m.relevance.fp}, fn ${m.relevance.fn}) · SKUs precision ${pct(m.skus.precision)} recall ${pct(m.skus.recall)} · severity ${pct(m.severityAgreement)} · direction ${pct(m.directionAgreement)} · dropped by code: ${m.overridden.otherCommodity} other commodity, ${m.overridden.noSkuInStock} no SKU${m.errors ? ` · ${m.errors} errors` : ""}`,
+    `${repeat > 1 ? `run ${i + 1}: ` : ""}relevance precision ${pct(m.relevance.precision)} recall ${pct(m.relevance.recall)} (fp ${m.relevance.fp}, fn ${m.relevance.fn}) · SKUs precision ${pct(m.skus.precision)} recall ${pct(m.skus.recall)} · severity ${pct(m.severityAgreement)} · direction ${pct(m.directionAgreement)} · mentions recall ${pct(m.mentions.recall)} (extra origins ${m.mentions.extraOrigins}) · dropped by code: ${m.overridden.otherCommodity} other commodity, ${m.overridden.noSkuInStock} no SKU${m.errors ? ` · ${m.errors} errors` : ""}`,
   ),
 );
 

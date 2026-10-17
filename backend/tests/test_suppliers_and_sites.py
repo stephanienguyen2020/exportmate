@@ -293,3 +293,77 @@ def test_new_site_key():
     assert new_site_key("Kho Quy Nhơn", {"kho-quy-nh-n"}) == "kho-quy-nh-n-2"
     assert new_site_key("工厂", set()) == "site"
     assert len(new_site_key("x" * 300, set())) <= 50
+
+
+def test_supplier_sourcing_is_saved_checked_and_shown_on_the_map(client, reference):
+    headers = onboard(client, "lan@example.com")
+    sourcing = [
+        {"material": "acacia", "country": "vn", "form": "roundwood"},
+        {"material": "okoume", "country": "GA", "form": "veneer", "basis": "Origin certificate"},
+    ]
+    created = client.post(
+        "/api/v1/suppliers", headers=headers, json={**SUPPLIER, "sourcing": sourcing}
+    )
+    assert created.status_code == 201, created.text
+    supplier = created.json()["data"]
+    assert supplier["sourcing"] == [
+        {
+            "material": "acacia",
+            "materialName": "Acacia",
+            "country": "VN",
+            "form": "roundwood",
+            "formName": "Logs (wood in the rough)",
+            "basis": "Entered on the trade map",
+        },
+        {
+            "material": "okoume",
+            "materialName": "Okoume",
+            "country": "GA",
+            "form": "veneer",
+            "formName": "Veneer sheets",
+            "basis": "Origin certificate",
+        },
+    ]
+    data = get_map(client, headers)
+    on_map = next(s for s in data["suppliers"] if s["name"] == "Dong Nai Veneer")
+    assert [s["material"] for s in on_map["sourcing"]] == ["acacia", "okoume"]
+    # The form offers every material with the chain steps it can be bought as.
+    acacia = next(m for m in data["materials"] if m["key"] == "acacia")
+    assert {"key": "plywood", "name": "Plywood and veneered panels", "hsCodes": ["4412"]} in acacia[
+        "forms"
+    ]
+
+    # Sending sourcing replaces the list; leaving it out keeps it.
+    url = f"/api/v1/suppliers/{supplier['id']}"
+    kept = client.patch(url, headers=headers, json={"place": "Bien Hoa"})
+    assert len(kept.json()["data"]["sourcing"]) == 2
+    replaced = client.patch(url, headers=headers, json={"sourcing": [sourcing[0]]})
+    assert [s["material"] for s in replaced.json()["data"]["sourcing"]] == ["acacia"]
+    cleared = client.patch(url, headers=headers, json={"sourcing": []})
+    assert cleared.json()["data"]["sourcing"] == []
+
+
+@pytest.mark.parametrize(
+    ("sourcing", "message"),
+    [
+        ([{"material": "unobtainium", "country": "VN"}], "Unknown material"),
+        ([{"material": "acacia", "country": "ZZ"}], "Not a country on the map"),
+        ([{"material": "acacia", "country": "VN", "form": "cocoa-butter"}], "can't be bought"),
+    ],
+)
+def test_invalid_sourcing_is_rejected(client, reference, sourcing, message):
+    headers = onboard(client, "lan@example.com")
+    response = client.post(
+        "/api/v1/suppliers", headers=headers, json={**SUPPLIER, "sourcing": sourcing}
+    )
+    assert response.status_code == 422, response.text
+    assert message in response.json()["error"]["fieldErrors"]["sourcing"]
+
+
+def test_sourcing_lists_each_material_and_country_once(client, reference):
+    headers = onboard(client, "lan@example.com")
+    twice = [{"material": "acacia", "country": "VN"}, {"material": "acacia", "country": "vn"}]
+    response = client.post(
+        "/api/v1/suppliers", headers=headers, json={**SUPPLIER, "sourcing": twice}
+    )
+    assert response.status_code == 422

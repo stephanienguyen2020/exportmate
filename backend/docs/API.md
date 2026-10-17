@@ -113,6 +113,7 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
 | `POST /report-drafts/{id}/email` | editor (author) | Report editor: "Email report" |
 | **News watch and orders** | | |
 | `GET /news-matches` | viewer | News watch, Alerts tab: "Orders this may affect" on each alert, and the "Orders" filter |
+| `GET /news-matches/accuracy` | viewer | Not used by the frontend yet (how often each way of suggesting, and each chain link, is confirmed) |
 | `PUT /news-matches/{impactId}/orders/{orderId}` | editor | News watch alert: "Affects this order" / "Not relevant", "Link order" |
 | `DELETE /news-matches/{impactId}/orders/{orderId}` | editor | News watch alert: "Undo" |
 | **Supplier messages and report actions** | | |
@@ -398,6 +399,8 @@ Everything the map draws, in one call when the page opens:
 | `sites[]` | Factories, ports, warehouses. `isRouteOrigin` marks the company's route start |
 | `observations[]` | Satellite samples (`isSample: true`) with a GeoJSON `extent` and `nearby` suppliers/sites within `checkRadiusKm` (default 25). Order statuses never change because of them |
 | `documentKinds`, `homeCountryIds`, `checkRadiusKm` | Labels, the countries to highlight, the flood check radius |
+| `suppliers[].sourcing` | What a supplier buys: `material` (key, e.g. `acacia`), `materialName`, `country`, `form` (chain step, e.g. `roundwood`) and `formName`, `basis` (how we know). `null` for a supplier only named on orders. The knowledge graph walks from news about a material or country to these suppliers' orders |
+| `materials` | What sourcing can name: each material's `key`, `name`, `industry` and the chain steps (`forms[]`: `key`, `name`, `hsCodes`) it can be bought as |
 | `countries` | `code` (alpha-2), `numericCode` (world-atlas id), `name`: the countries a supplier or site can be in. Includes sourcing countries outside any market (Laos, Cambodia, Thailand, …) |
 | `suppliers[].country`, `sites[].country` | An alpha-2 code from `countries`, or `null` |
 | `sites[].id`, `sites[].key` | `id` is for `PATCH`/`DELETE /sites/{id}`; `key` is made from the name, never changes, and is what observations' `nearby[].ref` uses |
@@ -475,8 +478,9 @@ Editors enter them in the map's side panel, or a supplier from an order's analys
 Only `name` (1–300) is required. `place` ≤200, `supplies` ≤1000 (blank is stored as `null`), `country` an alpha-2 code from `countries` (`UK` is read as `GB`), `location` −90..90 / −180..180, `contactName` ≤200 and `contactEmail` (one address; supplier messages are pre-filled with it), up to 20 `documents`, one per `kind` from `documentKinds` (`detail` 1–500, up to 10 `standards`, optional `documentNumber` ≤100, `issuer` ≤200, `expiresOn` `YYYY-MM-DD`). A typed document and one confirmed from an upload (`POST /supplier-documents/{id}/confirm`) are the same record; a kind kept in the list keeps its upload link (`fromUpload`). Returns the supplier with `id`, labelled `documents` and `analysedOrderIds`: the orders that name it (by the name key below) were analysed again, as `POST /runs` would, so their statuses and next steps follow the new record. Empty when no order names it, or when the run failed (the supplier is saved either way and the orders wait for "Analyse orders").
 - `409 supplier_exists`: the company has a supplier with the same name, ignoring case and spacing. Orders match suppliers on that key, so a renamed supplier stops matching orders written with the old name.
 - `422 invalid_input` with `fieldErrors.country` / `fieldErrors.documents` for an unknown country or document kind.
+- `sourcing` (optional, ≤20): `[{"material": "acacia", "country": "VN", "form": "roundwood", "basis": null}]`, keys from the map's `materials`; one line per material and country; `basis` defaults to "Entered on the trade map". `422` with `fieldErrors.sourcing` for an unknown material, a country not on the map, or a form outside the material's chain. Saving sourcing analyses nothing again (analysis doesn't read it).
 
-`PATCH /suppliers/{id}` changes only the fields sent; `null` clears `place`, `country`, `location`, `supplies`. `documents` replaces the whole list (send `[]` to clear it). `name` and `documents` can't be `null`. Same errors as `POST`. Sending `documents`, or a `name` with another key, analyses again the orders that matched before and after (`analysedOrderIds`); a new place, contact or location runs nothing.
+`PATCH /suppliers/{id}` changes only the fields sent; `null` clears `place`, `country`, `location`, `supplies`. `documents` and `sourcing` each replace the whole list (send `[]` to clear it). `name`, `documents` and `sourcing` can't be `null`. Same errors as `POST`. Sending `documents`, or a `name` with another key, analyses again the orders that matched before and after (`analysedOrderIds`); a new place, contact or location runs nothing.
 
 `DELETE /suppliers/{id}` → `{"deleted": true, "analysedOrderIds": [...]}`. Its documents go with it; its orders stay, named on the order without a record (supplier checks become `unknown`), and are analysed again, so their next step is to add the supplier.
 
@@ -502,12 +506,14 @@ A supplier's certificate uploaded as a file: AI reads it, a person confirms the 
  "status": "draft", "createdAt": "…", "confirmedAt": null,
  "extracted": {"kind": "geolocation", "documentNumber": "GEO-2026-118", "issuer": "…",
                "issuedOn": "2026-09-01", "expiresOn": "2027-10-14", "standards": [],
-               "detail": "Plot coordinates for the 2026 acacia harvest, 4 plots", "notes": null}}
+               "detail": "Plot coordinates for the 2026 acacia harvest, 4 plots", "notes": null,
+               "sourcing": [{"material": "acacia", "materialName": "Acacia", "country": "VN", "form": "roundwood",
+                             "formName": "Logs (wood in the rough)", "readAs": "Acacia mangium, logs, VN"}]}}
 ```
-A `kind` that isn't a known document kind and dates that aren't `YYYY-MM-DD` come back `null`. Nothing is saved when the AI step fails (`503`). `404` for another company's supplier; `422 invalid_file_type` / `file_too_large` / `empty_file` / `invalid_file`.
+`sourcing`: materials the document names that the knowledge graph knows (species and broad words are matched to its materials, the form to a chain step), suggested for the supplier's sourcing; `country` is `null` when the document doesn't say or it isn't on the map. Others are dropped. A `kind` that isn't a known document kind and dates that aren't `YYYY-MM-DD` come back `null`. Nothing is saved when the AI step fails (`503`). `404` for another company's supplier; `422 invalid_file_type` / `file_too_large` / `empty_file` / `invalid_file`.
 
 ### `POST /supplier-documents/{id}/confirm` (editor)
-`{id}` is the upload. Body: the fields as the person checked them: `kind`, `detail`, `standards`, `documentNumber`, `issuer`, `expiresOn`. Writes the supplier's document of that kind (replacing an older one) and returns it with its `uploadId`. `409 already_confirmed`, `422` for an unknown kind.
+`{id}` is the upload. Body: the fields as the person checked them: `kind`, `detail`, `standards`, `documentNumber`, `issuer`, `expiresOn`, and `sourcing` (the suggested materials the person kept, as in `POST /suppliers`): added to the supplier's sourcing with `basis` "From <document kind> (<file name>)", keeping lines it already has. Writes the supplier's document of that kind (replacing an older one) and returns it with its `uploadId`. `409 already_confirmed`, `422` for an unknown kind.
 
 ---
 
@@ -722,6 +728,15 @@ News watch (the AI service) matches each article to the company's goods (what it
             {"kind": "order", "label": "PO-2291 Acacia plywood · 18 mm", "link": "same HS heading", "sourceTitle": null, "sourceUrl": null, "quote": null}]}]}}
 ```
 `path` is how the graph reached the order, in steps (`mention`, `supplier`, `product`, `order`); a supplier path reads e.g. *acacia logs, VN → Binh Phu Wood ("buys acacia from Vietnam (species document)") → Logs (HS 4403) → Veneer sheets (HS 4408, "used to make", with the FAO quote and link) → Plywood (HS 4412) → PO-2291*. Empty for an order a person linked. One entry per alert and order: every current suggestion (with its verdict, or `review: null` while it awaits one), plus orders a person linked or reviewed that are no longer suggested (shipped, HS code changed). Only alerts News watch returns now are listed. `newsAvailable: false` and no matches when the AI service can't be reached.
+
+### `GET /news-matches/accuracy` (viewer)
+```json
+{"data": {"byWay": [{"via": "supplier", "confirmed": 1, "rejected": 1}, {"via": "hs", "confirmed": 4, "rejected": 3},
+                     {"via": "linked", "confirmed": 1, "rejected": 0}],
+          "byLink": [{"fromLabel": "Sawn wood (lumber) (HS 4407)", "toLabel": "Wooden furniture … (HS 9403.30, 9403.40)",
+                      "link": "used to make", "confirmed": 0, "rejected": 1}]}}
+```
+The company's verdicts by how each suggestion was found (`supplier`: through a supplier's sourcing and the material chain; `hs`: same HS heading; `linked`: a person added the order), and by each chain link in the supplier paths people judged, most rejected first. A review keeps the way and path it was suggested with (`news_order_reviews.via`, `.path`).
 
 ### `PUT /news-matches/{impactId}/orders/{orderId}` (editor)
 `{"verdict": "relevant" | "not_relevant", "note": "…"}` (note optional, ≤500). `orderId` is the order's own ID. Works for any order of the company, suggested or not: an order that wasn't suggested is stored with `suggested: false`. A new verdict replaces the last one, whoever gave it. Returns the match. Audited as `news.reviewed`. `404` for an alert News watch doesn't show this company or an order that isn't the company's; `503` if News watch can't be reached.

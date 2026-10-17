@@ -34,6 +34,26 @@ function droppedBecause(o) {
  * Scores each case from `outcomes` (case id -> { relevant, modelRelevant, affected: [sku],
  * severity, direction, duplicate, otherCommodity, error }). Returns [{ id, category, pass, checks, outcome }].
  */
+// Markets are compared as our codes: "GB" is the UK market.
+const marketCode = (m) => (m === "GB" ? "UK" : m);
+
+/** What an article's expected mentions the scan missed, and origins it named beyond them. */
+export function scoreMentions(expected, named = {}) {
+  const materials = (named.materials || []).map((m) => m.toLowerCase());
+  const headings = (named.hsCodes || []).map((c) => c.replace(/\D/g, "").slice(0, 4));
+  const origins = named.originCountries || [];
+  const markets = (named.markets || []).map(marketCode);
+  const missing = [
+    ...(expected.materials || []).filter((w) => !materials.some((m) => m.includes(w))).map((w) => `material ${w}`),
+    ...(expected.origins || []).filter((c) => !origins.includes(c)).map((c) => `origin ${c}`),
+    ...(expected.markets || []).filter((c) => !markets.includes(c)).map((c) => `market ${c}`),
+    ...(expected.headings || []).filter((h) => !headings.includes(h)).map((h) => `HS ${h}`),
+  ];
+  const total = ["materials", "origins", "markets", "headings"].reduce((n, k) => n + (expected[k] || []).length, 0);
+  const extraOrigins = expected.origins ? origins.filter((c) => !expected.origins.includes(c)) : [];
+  return { total, found: total - missing.length, missing, extraOrigins };
+}
+
 export function scoreScanCases(cases, outcomes) {
   return cases.map((c) => {
     const e = c.expect;
@@ -59,7 +79,8 @@ export function scoreScanCases(cases, outcomes) {
       if (e.severity) check("Severity", e.severity.includes(o.severity), `${o.severity} (expected ${e.severity.join(" or ")})`);
       if (e.direction) check("Direction", e.direction.includes(o.direction), `${o.direction} (expected ${e.direction.join(" or ")})`);
     }
-    return { id: c.id, category: c.category, pass: checks.every((x) => x.ok), checks, outcome: o };
+    const mentions = e.mentions && o.relevant ? scoreMentions(e.mentions, o.mentions) : null;
+    return { id: c.id, category: c.category, pass: checks.every((x) => x.ok), checks, outcome: o, mentions };
   });
 }
 
@@ -107,6 +128,8 @@ export function summarizeScanRun(cases, scored) {
         if (c.expect[k].includes(o[k])) agree[k][0]++;
       }
   }
+  const mentioned = scored.map((s) => s.mentions).filter(Boolean);
+  const mentionTotal = mentioned.reduce((n, m) => n + m.total, 0);
   const outcomes = [...byId.values()];
   return {
     cases: scored.length,
@@ -116,6 +139,11 @@ export function summarizeScanRun(cases, scored) {
     skus: { precision: rate(namedAllowed, named), recall: rate(requiredNamed, required) },
     severityAgreement: rate(...agree.severity),
     directionAgreement: rate(...agree.direction),
+    // What articles name, for the knowledge graph: over alerts that should exist and do.
+    mentions: {
+      recall: rate(mentioned.reduce((n, m) => n + m.found, 0), mentionTotal),
+      extraOrigins: mentioned.reduce((n, m) => n + m.extraOrigins.length, 0),
+    },
     overridden: {
       otherCommodity: outcomes.filter((o) => o?.modelRelevant && o.otherCommodity).length,
       noSkuInStock: outcomes.filter((o) => o?.modelRelevant && !o.relevant && !o.otherCommodity && !o.duplicate).length,

@@ -9,6 +9,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database.models.base import Base, id_column, pg_enum
@@ -36,6 +37,11 @@ class NewsOrderReview(Base):
     # False when a reviewer linked an order ExportMate didn't suggest.
     suggested: Mapped[bool] = mapped_column(Boolean, nullable=False)
     reason: Mapped[str] = mapped_column(String(500), nullable=False)
+    # How the knowledge graph found it: "supplier" (through a supplier's sourcing and the
+    # material chain) or "hs" (same HS heading); None for a linked order. With the path's
+    # steps, verdicts show which ways and which links people confirm or reject.
+    via: Mapped[str | None] = mapped_column(String(20))
+    path: Mapped[list | None] = mapped_column(JSONB)
     headline: Mapped[str] = mapped_column(String(500), nullable=False)
     url: Mapped[str | None] = mapped_column(String(2000))
     reviewed_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)

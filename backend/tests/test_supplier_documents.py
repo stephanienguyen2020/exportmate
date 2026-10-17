@@ -182,3 +182,55 @@ def test_editing_a_supplier_keeps_typed_and_uploaded_document_fields(client, lan
         expires,
         True,
     )
+
+
+def test_materials_a_document_names_are_suggested_for_the_suppliers_sourcing(
+    client, lan, fake_gemini
+):
+    headers, supplier_id = lan
+    fake_gemini.answers["supplier_document_reading"] = read_as(
+        materials=[
+            {"name": "Acacia mangium", "country": "la", "form": "logs"},
+            {"name": "Eucalyptus", "country": "VN", "form": None},
+            {"name": "Cocoa beans", "country": "CI", "form": None},  # not in the graph
+            {"name": "Acacia mangium", "country": "LA", "form": "sawn timber"},  # repeat
+        ]
+    )
+    draft = upload(client, headers, supplier_id).json()["data"]
+    assert draft["extracted"]["sourcing"] == [
+        {
+            "material": "acacia",
+            "materialName": "Acacia",
+            "country": "LA",
+            "form": "roundwood",
+            "formName": "Logs (wood in the rough)",
+            "readAs": "Acacia mangium, logs, la",
+        },
+        {
+            "material": "eucalyptus",
+            "materialName": "Eucalyptus",
+            "country": "VN",
+            "form": None,
+            "formName": None,
+            "readAs": "Eucalyptus, VN",
+        },
+    ]
+    assert "materials:" in fake_gemini.calls[0]["prompt"]
+
+    # The person accepts the acacia from Laos only; what the supplier already had stays.
+    confirmed = client.post(
+        f"/api/v1/supplier-documents/{draft['id']}/confirm",
+        headers=headers,
+        json={
+            "kind": "geolocation",
+            "detail": draft["extracted"]["detail"],
+            "sourcing": [{"material": "acacia", "country": "LA", "form": "roundwood"}],
+        },
+    )
+    assert confirmed.status_code == 200, confirmed.text
+    suppliers = client.get("/api/v1/trade-map", headers=headers).json()["data"]["suppliers"]
+    sourcing = next(s for s in suppliers if s["id"] == supplier_id)["sourcing"]
+    assert [(s["material"], s["country"]) for s in sourcing] == [("acacia", "LA"), ("acacia", "VN")]
+    added = next(s for s in sourcing if s["country"] == "LA")
+    assert added["basis"].startswith("From ") and added["basis"].endswith("(geo.pdf)")
+    assert next(s for s in sourcing if s["country"] == "VN")["basis"] == "species document"

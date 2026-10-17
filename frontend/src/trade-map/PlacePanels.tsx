@@ -27,6 +27,15 @@ import {
 } from "./model";
 import { FloodCallout, OrderLine, PanelHead } from "./panels";
 
+const regionNames = new Intl.DisplayNames(["en"], { type: "region" });
+const countryName = (code: string) => {
+  try {
+    return regionNames.of(code) ?? code;
+  } catch {
+    return code;
+  }
+};
+
 export function SupplierPanel({
   group,
   documentKinds,
@@ -113,6 +122,27 @@ export function SupplierPanel({
           </div>
         )}
       </section>
+      {group.id && (
+        <section className="tm-section">
+          <h3>Materials it buys</h3>
+          {group.sourcing.length ? (
+            <ul className="tm-sourcing">
+              {group.sourcing.map((s) => (
+                <li key={s.material + s.country}>
+                  <b>{s.materialName}</b> from {countryName(s.country)}
+                  {s.formName && <> as {s.formName.toLowerCase()}</>}
+                  <small>{s.basis}</small>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="tm-muted">
+              Not recorded. News about a material or a country reaches this
+              supplier's orders only once you add what it buys and from where.
+            </p>
+          )}
+        </section>
+      )}
       <section className="tm-section">
         <h3>Documents on file</h3>
         {!group.documents ? (
@@ -182,6 +212,8 @@ function CertificateUpload({
     issuer: "",
     expiresOn: "",
   });
+  // Suggested materials the person keeps ticked are added to the supplier's sourcing.
+  const [accepted, setAccepted] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
@@ -197,6 +229,13 @@ function CertificateUpload({
       const result = await api.uploadSupplierDocument(supplierId, file);
       const read = result.extracted;
       setUpload(result);
+      setAccepted(
+        new Set(
+          (read.sourcing ?? [])
+            .filter((s) => s.country)
+            .map((s) => s.material + "/" + s.country),
+        ),
+      );
       setFields({
         kind: read.kind ?? "",
         detail: read.detail,
@@ -227,6 +266,9 @@ function CertificateUpload({
         documentNumber: fields.number.trim() || null,
         issuer: fields.issuer.trim() || null,
         expiresOn: fields.expiresOn || null,
+        sourcing: (upload.extracted.sourcing ?? [])
+          .filter((s) => s.country && accepted.has(s.material + "/" + s.country))
+          .map((s) => ({ material: s.material, country: s.country!, form: s.form })),
       });
       setUpload(null);
       await onConfirmed();
@@ -330,6 +372,45 @@ function CertificateUpload({
         placeholder="Comma-separated, e.g. ISO 9001, GOTS 7.0"
         onChange={(e) => set({ standards: e.target.value })}
       />
+      {(read.sourcing ?? []).length > 0 && (
+        <fieldset className="tm-doc-fields">
+          <legend>Materials it names</legend>
+          <small>
+            Ticked ones are added to what {supplierName} buys, so news about
+            them reaches its orders.
+          </small>
+          {read.sourcing!.map((s) => {
+            const key = s.material + "/" + s.country;
+            return (
+              <label className="tm-check" key={key}>
+                <input
+                  type="checkbox"
+                  disabled={!s.country}
+                  checked={!!s.country && accepted.has(key)}
+                  onChange={(e) =>
+                    setAccepted((all) => {
+                      const next = new Set(all);
+                      if (e.target.checked) next.add(key);
+                      else next.delete(key);
+                      return next;
+                    })
+                  }
+                />
+                <span>
+                  {s.materialName}
+                  {s.country ? ` from ${countryName(s.country)}` : ""}
+                  {s.formName ? ` as ${s.formName.toLowerCase()}` : ""}
+                  <small>
+                    {s.country
+                      ? `Read as “${s.readAs}”`
+                      : `Read as “${s.readAs}”; no country, so add it on the supplier form`}
+                  </small>
+                </span>
+              </label>
+            );
+          })}
+        </fieldset>
+      )}
       <FormActions
         busy={busy}
         saveLabel="Confirm certificate"

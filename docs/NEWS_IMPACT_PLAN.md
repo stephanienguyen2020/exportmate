@@ -99,6 +99,22 @@ Backend:    alert arrives → walk the graph → orders reached + the path
             → suggestions on News watch → editor confirms / rejects
 ```
 
+### How the chain grows, and who controls it
+- **Data in:** the shared chain (products, links) is built offline from official sources and loaded by the reference seed; supplier sourcing and orders are each company's own; what an article names comes from the scan.
+- **Later, an offline building pipeline** (knowledge graph construction) for new industries and for re-checking existing links. Not built. A script like `build_eudr_products.py`, with a writer and a reviewer (the generator–critic pattern, as the assistant's auditor):
+
+  | Step | Who | What |
+  | --- | --- | --- |
+  | 1. Sources | Code (later optionally an agent with search, for a brand-new industry) | Download the official texts: EUDR Annex I, HS chapter notes, FAO/ICO definitions |
+  | 2. Write | LLM, writer role (Gemini, fixed JSON schema) | Propose links "A is used to make B" by HS code, each with the exact quote and a confidence |
+  | 3. Check | Code | The quote is in the source text, both HS codes exist in `hs_headings`, no duplicates or loops |
+  | 4. Review | LLM, reviewer role (a second call with its own prompt) | A verdict and reason per link; this fills `aiCheck` automatically (`by`: the model) instead of by hand. Doubtful links go back to the writer once |
+  | 5. Our check | Us | Only links the reviewer or code flagged |
+  | 6. Release | Code | Write the industry into `material_chain.json`; the reference seed loads it |
+
+  Plain calls rather than agents: the steps are fixed, so two calls with schemas are cheaper, repeatable and testable. The reviewer becomes an agent with search only if it often can't decide from the given text. Shared instructions (how to read HS chapter notes, what counts as "made from") can be one prompt section, or a skill, used by both roles.
+- **No per-company switch for each link.** A company never sees most links: its own suppliers' sourcing and its orders already decide which part of the graph is walked. Quality of the shared links is ours to keep (each link records who checked it, `aiCheck`). Companies give feedback by rejecting suggestions; links that keep appearing in rejected paths lose weight automatically (for that company, or for everyone), and a less common route is marked `secondary`. Coarse choices only, such as which industries a company cares about.
+
 ### Where an LLM is used
 Only at the edges. Gemini turns article text into graph inputs (countries, materials, HS codes; code keeps only known ones), and AI can suggest supplier sourcing from documents or draft a new industry's chain for a person to review. The walk from article to orders is SQL in code: same input, same answer, every path citable. The explanation is the path in a template, not generated text.
 
@@ -147,7 +163,7 @@ article ─► graph: which orders it hits, and how          (phase 1)
 3. **Phase 2:** once there are a few hundred labels plus public data; run next to Gemini before switching.
 
 ## 5. Open questions
-- Who keeps the material chain up to date for each industry (seeded per industry like the checklists, or AI-suggested and reviewed).
+- When to build the offline pipeline for new industries, and the confidence a link needs before it makes suggestions.
 - Whether suppliers' sourcing countries come from the user or from their documents (certificates of origin, legality documents name them).
 - Global Trade Alert's licence for training a model in a commercial product.
 - Both mostly change the AI service's news scan (`ai/server`): agree with its owner on the extraction schema and where the model runs.
