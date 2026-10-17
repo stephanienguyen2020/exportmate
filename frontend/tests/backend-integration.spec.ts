@@ -1357,6 +1357,65 @@ test("owners switch off the age rule for their company with their token", async 
   await expect(rule).not.toBeChecked();
 });
 
+// A scan runs inside its request. The website's proxy gives up on it after 120 s with a 502
+// (as on 17 October 2026, for a scan that took 274 s) while the scan carries on in the AI service.
+async function scanFixture(page: Page, { starts }: { starts: boolean }) {
+  let latest: Record<string, unknown> = {
+    id: "scan-1",
+    status: "done",
+    startedAt: "2026-10-16T04:40:00.000Z",
+    finishedAt: "2026-10-16T04:42:00.000Z",
+    sources: [{ id: "source-1", ok: true }],
+    articlesAnalysed: 11,
+    impactsFound: 1,
+  };
+  const polls = { after: 0 };
+  await page.route("**/api/impacts**", async (route) => {
+    if (latest.id === "scan-2" && ++polls.after > 1) {
+      latest = {
+        ...latest,
+        status: "done",
+        finishedAt: new Date().toISOString(),
+        sources: [{ id: "source-1", ok: true }],
+        articlesAnalysed: 48,
+        impactsFound: 2,
+      };
+    }
+    await route.fulfill({ json: { impacts: [], scan: latest } });
+  });
+  await page.route("**/api/scan", async (route) => {
+    if (starts) latest = { id: "scan-2", status: "running", startedAt: new Date().toISOString() };
+    await route.fulfill({ status: 502, contentType: "text/html", body: "<html>Bad gateway</html>" });
+  });
+  return polls;
+}
+
+test("Scan now follows a scan that outlasts the website's proxy", async ({ page }) => {
+  test.setTimeout(60_000);
+  await fixture(page);
+  const polls = await scanFixture(page, { starts: true });
+  await login(page);
+  await expect(page.getByText("CONNECTED WORKSPACE")).toBeVisible();
+  await page.goto("/#/workspace/news");
+  await page.getByRole("button", { name: "Scan now" }).click();
+  const bar = page.locator(".news-scanbar");
+  await expect(bar.getByRole("button", { name: "Scanning… a few minutes" })).toBeVisible();
+  await expect(bar.getByRole("status")).toHaveText("2 new alerts from 48 new articles.", { timeout: 20_000 });
+  await expect(bar.getByText("48", { exact: true })).toBeVisible();
+  expect(polls.after).toBeGreaterThanOrEqual(2);
+});
+
+test("Scan now keeps the proxy's error when no scan started", async ({ page }) => {
+  test.setTimeout(60_000);
+  await fixture(page);
+  await scanFixture(page, { starts: false });
+  await login(page);
+  await expect(page.getByText("CONNECTED WORKSPACE")).toBeVisible();
+  await page.goto("/#/workspace/news");
+  await page.getByRole("button", { name: "Scan now" }).click();
+  await expect(page.locator(".news-scanbar").getByRole("status")).toHaveText("Request failed (502)", { timeout: 20_000 });
+});
+
 test("viewers and the sample demo can't change news sources", async ({
   page,
 }) => {

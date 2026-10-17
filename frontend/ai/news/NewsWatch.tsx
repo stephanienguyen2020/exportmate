@@ -87,6 +87,15 @@ type Source = {
 const API = (import.meta.env.VITE_CHAT_API_URL || "/api/chat").replace(/\/chat$/, "");
 const SEVERITY = { high: 0, medium: 1, low: 2 };
 
+class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
+}
+
 // Every call carries the company token in a signed-in workspace (none in the demo), so the
 // AI service can tell who is asking.
 async function api<T>(path: string, init?: Omit<RequestInit, "headers">): Promise<T> {
@@ -95,9 +104,16 @@ async function api<T>(path: string, init?: Omit<RequestInit, "headers">): Promis
     headers: { ...(init?.body ? { "Content-Type": "application/json" } : {}), ...(await companyAuth()) },
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  if (!res.ok) throw new ApiError(data.error || `Request failed (${res.status})`, res.status);
   return data as T;
 }
+
+// A scan runs inside its POST and can outlast the website's proxy (Vercel gives up on the AI
+// service after 120 s with a 502 or 504) while it carries on in the AI service. "Scan now" then
+// follows the scan record until it ends, for as long as Cloud Run lets a request run.
+const SCAN_POLL_MS = 10_000;
+const SCAN_FOLLOW_MS = 10 * 60_000;
+const proxyGaveUp = (e: unknown) => e instanceof ApiError && (e.status === 502 || e.status === 504);
 
 const usd = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
@@ -114,14 +130,19 @@ export function useImpacts() {
   const [impacts, setImpacts] = useState<Impact[] | null>(null);
   const [scan, setScan] = useState<Scan | null>(null);
   const [error, setError] = useState("");
+  // Resolves to the latest scan (undefined when the request failed).
   const load = () =>
     api<{ impacts: Impact[]; scan: Scan | null }>("/impacts")
       .then((d) => {
         setImpacts(d.impacts.sort(bySeverity));
         setScan(d.scan);
         setError("");
+        return d.scan;
       })
-      .catch((e) => setError(e.message));
+      .catch((e) => {
+        setError(e.message);
+        return undefined;
+      });
   useEffect(() => {
     load();
   }, []);
@@ -362,7 +383,7 @@ function ScanBar({
       <div className="news-scanbar-action">
         <button className="btn" onClick={onScan} disabled={scanning || Boolean(locked)}>
           {scanning ? <Loader2 size={15} className="spin" /> : <RefreshCw size={15} />}
-          {scanning ? "Scanning… about a minute" : "Scan now"}
+          {scanning ? "Scanning… a few minutes" : "Scan now"}
         </button>
         {locked && !message && <small>{locked}</small>}
         {message && <small role="status">{message}</small>}
@@ -811,16 +832,33 @@ export default function NewsWatchPage({
     if (scanLocked) return;
     setScanning(true);
     setMessage("");
+    const before = scan?.id;
     try {
       const d = await api<{ scan: Scan }>("/scan", { method: "POST" });
       setScan(d.scan);
       setMessage(scanMessage(d.scan));
       await load();
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Scan failed.");
+      const followed = proxyGaveUp(e) ? await followScan(before) : null;
+      if (followed) setMessage(followed === "running" ? "The scan is still running; its alerts appear here when it ends." : scanMessage(followed));
+      else setMessage(e instanceof Error ? e.message : "Scan failed.");
     } finally {
       setScanning(false);
     }
+  };
+  // The scan this click started (a record newer than `before`), once it ends; "running" if it
+  // outlasts SCAN_FOLLOW_MS; null if no scan started, so the request's own error stands.
+  const followScan = async (before?: string): Promise<Scan | "running" | null> => {
+    let seen = false;
+    for (let waited = 0; waited < SCAN_FOLLOW_MS; waited += SCAN_POLL_MS) {
+      const latest = await load();
+      if (latest && latest.id !== before) {
+        if (latest.status !== "running") return latest;
+        seen = true;
+      } else if (!seen && waited > 0) return null;
+      await new Promise((r) => setTimeout(r, SCAN_POLL_MS));
+    }
+    return "running";
   };
   const now = Date.now();
   const shown = (impacts || []).filter((i) => matches(i, filters, now, matchCounts(byAlert.get(i.id))));
