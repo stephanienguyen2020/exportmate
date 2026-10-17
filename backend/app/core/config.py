@@ -55,9 +55,14 @@ class Settings(BaseSettings):
     # from Terraform's gemini_model, the model the AI service's news scan uses.
     gemini_model: str = "gemini-3.5-flash"
     gemini_location: str = "global"
+    # How long the model reasons first. Each answer is a fixed JSON shape that code checks, so
+    # LOW is enough; the model's default took 29 s for a what-if note. 2.x models refuse a level
+    # and get none.
+    gemini_thinking_level: str = "LOW"
     # Per attempt. A call that stalls (Gemini sometimes hangs until its deadline) or fails with
-    # a transient error is tried again, up to gemini_attempts in all.
-    gemini_timeout_seconds: int = 45
+    # a transient error is tried again, up to gemini_attempts in all. Together they stay inside
+    # the website proxy's wait for the backend (frontend/api/backend.ts, 55 s).
+    gemini_timeout_seconds: int = 25
     gemini_attempts: int = 2
     # Embeddings for HS heading and document search; same model as ai/server's vector index.
     embedding_model: str = "gemini-embedding-001"

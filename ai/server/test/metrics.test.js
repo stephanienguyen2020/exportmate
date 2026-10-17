@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { summarizeAudits } from "../metrics.js";
+import { summarizeAudits, summarizeScans } from "../metrics.js";
 
 test("summarises outcomes, latency, tools and guard activity", () => {
   const audits = [
@@ -56,4 +56,42 @@ test("reports routing and cache hits, counting a cached answer's steps once", ()
   assert.equal(s.cacheHitRate, 0.25);
   assert.equal(s.tools.query_inventory.calls, 3);
   assert.equal(s.revisionRate, 0.333);
+});
+
+test("summarises news scans: outcomes, articles, alerts, index failures, failing feeds, stuck scans", () => {
+  const now = Date.parse("2026-10-16T05:00:00Z");
+  const s = summarizeScans(
+    [
+      {
+        startedAt: "2026-10-16T00:00:00Z",
+        finishedAt: "2026-10-16T00:02:00Z",
+        status: "done",
+        trigger: "schedule",
+        articlesFetched: 50,
+        articlesAnalysed: 20,
+        articlesFailed: 2,
+        companyArticlesFailed: 1,
+        articlesWithheld: 1,
+        impactsFound: 2,
+        companyImpacts: { c1: 3 },
+        indexed: 22,
+        sources: [{ name: "A", ok: true }, { name: "B", ok: false }],
+      },
+      { startedAt: "2026-10-16T01:00:00Z", finishedAt: "2026-10-16T01:04:00Z", status: "done", trigger: "manual", articlesAnalysed: 5, indexed: null, indexError: "403", sources: [{ name: "B", ok: false }] },
+      { startedAt: "2026-10-16T04:00:00Z", status: "running", trigger: "manual" },
+    ],
+    now,
+  );
+  assert.equal(s.scans, 3);
+  assert.deepEqual(s.status, { done: 2, running: 1 });
+  assert.deepEqual(s.triggers, { schedule: 1, manual: 2 });
+  assert.equal(s.stuck, 1);
+  assert.deepEqual(s.articles, { fetched: 50, analysed: 25, failed: 3, withheld: 1, unscreened: 0 });
+  assert.equal(s.alerts, 5);
+  assert.equal(s.indexed, 22);
+  assert.equal(s.indexFailures, 1);
+  assert.deepEqual(s.durationMs, { p50: 240_000, max: 240_000 });
+  assert.deepEqual(s.failingFeeds, { B: { reads: 2, failed: 2 } });
+  assert.deepEqual(s.last, { startedAt: "2026-10-16T04:00:00Z", status: "running", trigger: "manual" });
+  assert.equal(summarizeScans([]).last, null);
 });

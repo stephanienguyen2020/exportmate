@@ -1,0 +1,25 @@
+{
+  "displayName": "ExportMate website and backend",
+  "monitoredResource": {
+    "type": "uptime_url",
+    "labels": {
+      "project_id": "${PROJECT_ID}",
+      "host": "${HOST}"
+    }
+  },
+  "httpCheck": {
+    "path": "/api/v1/health",
+    "port": 443,
+    "useSsl": true,
+    "validateSsl": true,
+    "requestMethod": "GET"
+  },
+  "contentMatchers": [
+    {
+      "content": "\"status\":\"ok\"",
+      "matcher": "CONTAINS_STRING"
+    }
+  ],
+  "period": "300s",
+  "timeout": "30s"
+}

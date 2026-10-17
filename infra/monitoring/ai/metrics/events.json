@@ -1,0 +1,23 @@
+{
+  "name": "exportmate_ai/events",
+  "description": "Every named log event of the AI service (chat.completed, scan.completed, source.added, scan.index_failed, ...) by severity: activity and errors per feature.",
+  "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"${SERVICE}\" AND jsonPayload.message:*",
+  "metricDescriptor": {
+    "metricKind": "DELTA",
+    "valueType": "INT64",
+    "labels": [
+      {
+        "key": "event",
+        "valueType": "STRING"
+      },
+      {
+        "key": "severity",
+        "valueType": "STRING"
+      }
+    ]
+  },
+  "labelExtractors": {
+    "event": "EXTRACT(jsonPayload.message)",
+    "severity": "EXTRACT(severity)"
+  }
+}

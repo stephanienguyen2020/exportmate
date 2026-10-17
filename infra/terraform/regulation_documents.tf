@@ -11,6 +11,17 @@ resource "google_storage_bucket" "regulation_documents" {
     enabled = true
   }
 
+  # A deleted file (a removed supplier's certificates, a failed save) stays recoverable as a
+  # noncurrent version for 30 days, then goes. Saved files are never overwritten.
+  lifecycle_rule {
+    condition {
+      days_since_noncurrent_time = 30
+    }
+    action {
+      type = "Delete"
+    }
+  }
+
   depends_on = [google_project_service.apis]
 }
 
