@@ -12,6 +12,9 @@
 //   relevant    whether the scan should raise an alert
 //   skus        SKUs the alert must name             allowed    SKUs it may also name
 //   severity    acceptable severities                direction  acceptable directions
+//   mentions    what the article names, for the knowledge graph: materials (words to find),
+//               origins and markets (codes), headings (HS, 4 digits). Scored on its own
+//               (mention recall, extra origins), not part of a case's pass.
 // Cases sharing an `event` report the same news: exactly one of them should be kept.
 export function scanCases(items, { today = new Date() } = {}) {
   const day = (offset) => new Date(today.getTime() + offset * 86_400_000).toISOString().slice(0, 10);
@@ -36,7 +39,7 @@ export function scanCases(items, { today = new Date() } = {}) {
         "EU confirms deforestation regulation start date; plot geolocation required for timber and furniture",
         `Operators placing wood products, plywood and wooden furniture on the EU market must file due diligence statements with plot geolocation from ${day(75)}. Goods without geolocation will be refused at customs.`,
       ),
-      expect: { relevant: true, skus: euNoGeo, allowed: skus(sells("EU")), severity: ["high", "medium"], direction: ["risk"] },
+      expect: { relevant: true, skus: euNoGeo, allowed: skus(sells("EU")), severity: ["high", "medium"], direction: ["risk"], mentions: { markets: ["EU"] } },
     },
     {
       id: "eudr-date-repeat",
@@ -55,7 +58,7 @@ export function scanCases(items, { today = new Date() } = {}) {
         "US sets preliminary anti-dumping duties on hardwood and decorative plywood from Vietnam",
         `The Commerce Department announced preliminary duties of 12% to 110% on hardwood and decorative plywood (HS 4412) imported from Vietnam. Cash deposits will be collected from ${day(30)}.`,
       ),
-      expect: { relevant: true, skus: usPlywood, allowed: [...usPlywood, ...skus((i) => /plywood/i.test(i.material) && sells("US")(i))], severity: ["high"], direction: ["risk"] },
+      expect: { relevant: true, skus: usPlywood, allowed: [...usPlywood, ...skus((i) => /plywood/i.test(i.material) && sells("US")(i))], severity: ["high"], direction: ["risk"], mentions: { origins: ["VN"], markets: ["US"], headings: ["4412"] } },
     },
     {
       id: "copper-232",
@@ -73,7 +76,7 @@ export function scanCases(items, { today = new Date() } = {}) {
         "US raises Section 232 tariff on kitchen cabinets and vanities to 50%",
         `Imports of wooden kitchen cabinets and bathroom vanities will face a 50% tariff from ${day(60)}, up from 25%. No exemptions were announced for Vietnam.`,
       ),
-      expect: { relevant: true, skus: usCabinets, allowed: usCabinets, severity: ["high"], direction: ["risk"] },
+      expect: { relevant: true, skus: usCabinets, allowed: usCabinets, severity: ["high"], direction: ["risk"], mentions: { markets: ["US"] } },
     },
     {
       id: "cocoa-eudr",
@@ -91,7 +94,7 @@ export function scanCases(items, { today = new Date() } = {}) {
         "Japan tightens sustainability proof for imported wood pellets used in biomass power",
         `Power plants claiming feed-in tariff support must show third-party sustainability certification for every pellet shipment from ${day(170)}.`,
       ),
-      expect: { relevant: true, skus: skus((i) => i.category === "Wood pellets" && sells("JP")(i)), allowed: skus((i) => i.category === "Wood pellets" && sells("JP")(i)), severity: ["medium", "low"] },
+      expect: { relevant: true, skus: skus((i) => i.category === "Wood pellets" && sells("JP")(i)), allowed: skus((i) => i.category === "Wood pellets" && sells("JP")(i)), severity: ["medium", "low"], mentions: { markets: ["JP"], headings: ["4401"] } },
     },
     {
       id: "vnd-exchange-rate",
@@ -109,7 +112,7 @@ export function scanCases(items, { today = new Date() } = {}) {
         "South Korea raises renewable credit weighting for imported wood pellets",
         "Utilities will earn more renewable energy certificates per tonne of certified wood pellets burned, which traders expect to lift Korean demand next year.",
       ),
-      expect: { relevant: true, skus: skus((i) => i.category === "Wood pellets" && sells("KR")(i)), allowed: skus((i) => i.category === "Wood pellets" && sells("KR")(i)), direction: ["opportunity"] },
+      expect: { relevant: true, skus: skus((i) => i.category === "Wood pellets" && sells("KR")(i)), allowed: skus((i) => i.category === "Wood pellets" && sells("KR")(i)), direction: ["opportunity"], mentions: { markets: ["KR"], headings: ["4401"] } },
     },
     {
       id: "bunker-fuel",
@@ -127,7 +130,7 @@ export function scanCases(items, { today = new Date() } = {}) {
         "US and EU widen sanctions to Russian birch veneer routed through third countries",
         "Products made with Russian-origin birch veneer or birch plywood will be barred even when finished in another country, including Vietnam.",
       ),
-      expect: { relevant: true, skus: fromRussia, allowed: fromRussia, severity: ["high", "medium"], direction: ["risk"] },
+      expect: { relevant: true, skus: fromRussia, allowed: fromRussia, severity: ["high", "medium"], direction: ["risk"], mentions: { materials: ["birch"], origins: ["RU"], markets: ["US", "EU"] } },
     },
     {
       id: "rubber-tyres",
@@ -145,7 +148,7 @@ export function scanCases(items, { today = new Date() } = {}) {
         "Cameroon suspends sawn sapele exports pending legality audit",
         "The forestry ministry halted export permits for sawn sapele for at least three months while it audits concession records.",
       ),
-      expect: { relevant: true, skus: skus((i) => i.materialOrigin === "Cameroon"), allowed: skus((i) => i.materialOrigin === "Cameroon"), severity: ["high", "medium"], direction: ["risk"] },
+      expect: { relevant: true, skus: skus((i) => i.materialOrigin === "Cameroon"), allowed: skus((i) => i.materialOrigin === "Cameroon"), severity: ["high", "medium"], direction: ["risk"], mentions: { materials: ["sapele"], origins: ["CM"], headings: ["4407"] } },
     },
     {
       id: "shrimp-antidumping",
@@ -182,7 +185,7 @@ export function scanCases(items, { today = new Date() } = {}) {
         "UK adds extra due-diligence checks for timber products from Laos",
         "Importers must provide concession-level legality evidence for any wood product containing Laotian timber, including outdoor furniture.",
       ),
-      expect: { relevant: true, skus: skus((i) => i.materialOrigin === "Laos" && sells("UK")(i)), allowed: skus(sells("UK")), direction: ["risk"] },
+      expect: { relevant: true, skus: skus((i) => i.materialOrigin === "Laos" && sells("UK")(i)), allowed: skus(sells("UK")), direction: ["risk"], mentions: { origins: ["LA"], markets: ["UK"] } },
     },
     {
       id: "industrial-land",
@@ -205,6 +208,7 @@ export function scanCases(items, { today = new Date() } = {}) {
         skus: skus((i) => i.category === "Imported sawn timber" && i.materialOrigin === "United States"),
         allowed: skus((i) => i.materialOrigin === "United States"),
         direction: ["opportunity", "watch"],
+        mentions: { materials: ["oak", "ash"], origins: ["US"] },
       },
     },
   ];

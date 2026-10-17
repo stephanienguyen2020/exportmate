@@ -6,12 +6,18 @@ from sqlalchemy.orm import Session
 from app.core.auth import EditorContext, ViewerContext
 from app.database.session import get_db
 from app.schemas.common import SuccessResponse, success_response
-from app.schemas.news import NewsMatchesOut, NewsOrderMatchOut, NewsReviewIn
+from app.schemas.news import (
+    NewsMatchAccuracyOut,
+    NewsMatchesOut,
+    NewsOrderMatchOut,
+    NewsReviewIn,
+)
 from app.services import news_matches as news_service
 
 router = APIRouter(prefix="/news-matches", tags=["news"])
 Db = Annotated[Session, Depends(get_db)]
-ImpactId = Annotated[str, Path(pattern=r"^[\w-]{1,128}$")]
+# A company's own alerts are keyed "<articleId>~<companyId>" (ai/server/scan.js).
+ImpactId = Annotated[str, Path(pattern=r"^[\w~-]{1,128}$")]
 
 
 @router.get("", response_model=SuccessResponse[NewsMatchesOut])
@@ -22,6 +28,13 @@ def list_news_matches(
     a stock item it names) and the orders people linked, with each verdict. Reads News watch
     with the caller's token."""
     return success_response(news_service.build_news_matches(db, ctx, authorization))
+
+
+@router.get("/accuracy", response_model=SuccessResponse[NewsMatchAccuracyOut])
+def news_match_accuracy(ctx: ViewerContext, db: Db):
+    """How often people confirm or reject suggestions, by the way the knowledge graph
+    found them, and the chain links in the paths they judged."""
+    return success_response(news_service.news_match_accuracy(db, ctx))
 
 
 @router.put("/{impact_id}/orders/{order_id}", response_model=SuccessResponse[NewsOrderMatchOut])

@@ -72,7 +72,11 @@ class GraphEdge(Base):
     source_key: Mapped[str] = mapped_column(ForeignKey("graph_sources.key"), nullable=False)
     quote: Mapped[str | None] = mapped_column(Text)  # the source's words, when it says so
     basis: Mapped[str | None] = mapped_column(Text)  # otherwise why, from the source
-    reviewed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # A less common route (veneer is mostly a furniture surface): used only when no equally
+    # short path avoids it.
+    secondary: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
     __table_args__ = (UniqueConstraint("from_key", "to_key", "relation"),)
 
 

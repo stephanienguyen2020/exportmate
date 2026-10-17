@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { generateInventory } from "../seed/inventory.js";
 import { decide } from "../relevance.js";
 import { scanCases } from "../eval/scan-golden.js";
-import { inBatches, mergeRepeats, scoreScanCases, summarizeScanRun } from "../eval/scan-score.js";
+import { inBatches, mergeRepeats, scoreMentions, scoreScanCases, summarizeScanRun } from "../eval/scan-score.js";
 
 const items = generateInventory();
 const bySku = new Map(items.map((i) => [i.sku, i]));
@@ -101,4 +101,23 @@ test("repeated runs pass a case only if every run passed, and flag unstable verd
   const s = merged.find((x) => x.id === "upholstered-tariff-talk");
   assert.deepEqual([s.pass, s.passes, s.runs, s.stable], [false, 2, 3, false]);
   assert.ok(merged.find((x) => x.id === "vn-gdp").stable);
+});
+
+test("mentions are scored on their own: what the article names, for the knowledge graph", () => {
+  const expected = byId("russia-birch-sanctions").expect.mentions;
+  assert.deepEqual(expected, { materials: ["birch"], origins: ["RU"], markets: ["US", "EU"] });
+  const all = scoreMentions(expected, { materials: ["birch veneer"], hsCodes: ["4408"], originCountries: ["RU"], markets: ["US", "EU"] });
+  assert.deepEqual(all, { total: 4, found: 4, missing: [], extraOrigins: [] });
+  const some = scoreMentions(expected, { materials: ["veneer"], originCountries: ["RU", "VN"], markets: ["EU"] });
+  assert.deepEqual(some.missing, ["material birch", "market US"]);
+  assert.deepEqual(some.extraOrigins, ["VN"]);
+  // "GB" counts as the UK market; HS codes compare by heading.
+  assert.equal(scoreMentions({ markets: ["UK"], headings: ["4401"] }, { markets: ["GB"], hsCodes: ["4401.31"] }).found, 2);
+
+  // In a run: a relevant alert carries its mention score, outside pass/fail.
+  const outcomes = new Map([["russia-birch-sanctions", { relevant: true, affected: ["HWP-101", "CAB-102"], severity: "high", direction: "risk", mentions: { materials: [], hsCodes: [], originCountries: ["RU"], markets: [] } }]]);
+  const [scored] = scoreScanCases([byId("russia-birch-sanctions")], outcomes);
+  assert.equal(scored.pass, true);
+  assert.deepEqual(scored.mentions.missing, ["material birch", "market US", "market EU"]);
+  assert.equal(summarizeScanRun([byId("russia-birch-sanctions")], [scored]).mentions.recall, 0.25);
 });
