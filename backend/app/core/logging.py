@@ -80,6 +80,10 @@ def configure_logging(level: str, log_format: str) -> None:
     root.setLevel(level)
     # The request middleware logs each request with its timing; skip uvicorn's duplicate line.
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    # Libraries that log routine work at INFO: font subsetting for every report PDF, and each
+    # HTTP call to Gemini (core/gemini.py logs gemini.completed / gemini.failed instead).
+    for name in ("fontTools", "httpx", "google_genai"):
+        logging.getLogger(name).setLevel(logging.WARNING)
     for name in ("uvicorn", "uvicorn.error"):
         logging.getLogger(name).handlers = []
         logging.getLogger(name).propagate = True

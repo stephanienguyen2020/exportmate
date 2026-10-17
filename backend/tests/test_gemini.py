@@ -59,3 +59,29 @@ def test_stalled_and_transient_calls_are_tried_again(monkeypatch):
     assert options.timeout == 30_000  # each attempt
     assert options.retry_options.attempts == 3
     assert {499, 503, 504} <= set(options.retry_options.http_status_codes)
+
+
+@pytest.mark.parametrize(
+    ("model", "level"), [("gemini-3.5-flash", "LOW"), ("gemini-2.5-flash", None)]
+)
+def test_answers_are_asked_for_at_the_set_thinking_level(monkeypatch, model, level):
+    seen = {}
+
+    def generate_content(model, contents, config):
+        seen["config"] = config
+        return SimpleNamespace(text='{"text": "hello"}')
+
+    monkeypatch.setattr(
+        gemini,
+        "_client",
+        lambda: SimpleNamespace(models=SimpleNamespace(generate_content=generate_content)),
+    )
+    monkeypatch.setenv("GEMINI_MODEL", model)
+    get_settings.cache_clear()
+    try:
+        assert generate_json("test_task", "Say hello.", Answer).text == "hello"
+    finally:
+        monkeypatch.undo()
+        get_settings.cache_clear()
+    thinking = seen["config"].thinking_config
+    assert (thinking.thinking_level.value if thinking else None) == level

@@ -3,7 +3,7 @@ import logging
 
 from conftest import auth_header, onboard
 
-from app.core.logging import JsonFormatter
+from app.core.logging import JsonFormatter, configure_logging
 
 
 def test_request_log_line_has_request_id_and_status(client, caplog):
@@ -16,6 +16,8 @@ def test_request_log_line_has_request_id_and_status(client, caplog):
     assert done[-1].request_id == "req-123"
     assert (done[-1].method, done[-1].path, done[-1].status) == ("GET", "/api/v1/me", 200)
     assert done[-1].duration_ms >= 0
+    # Signed in but not yet in a company: still tied to the user.
+    assert done[-1].user_id
 
 
 def test_rejected_token_is_logged_without_the_token(client, caplog):
@@ -33,6 +35,13 @@ def test_company_requests_are_tied_to_the_company(client, caplog):
     client.get("/api/v1/orders", headers=headers)
     done = [r for r in caplog.records if r.getMessage() == "request.completed"][-1]
     assert done.company_id and done.user_id
+
+
+def test_chatty_libraries_log_only_warnings():
+    configure_logging("INFO", "text")
+    for name in ("fontTools.subset", "httpx", "google_genai.models"):
+        assert not logging.getLogger(name).isEnabledFor(logging.INFO)
+    assert logging.getLogger("app.services.reports").isEnabledFor(logging.INFO)
 
 
 def test_json_lines_carry_severity_request_id_and_fields():

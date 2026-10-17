@@ -1,0 +1,38 @@
+{
+  "displayName": "ExportMate backend: errors logged",
+  "documentation": {
+    "mimeType": "text/markdown",
+    "content": "The backend logged an ERROR event (the incident names it). Each event name is in the code: grep for it.\n\nLogs Explorer, project ${PROJECT_ID}: `resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"${SERVICE}\" AND severity>=ERROR`"
+  },
+  "combiner": "OR",
+  "conditions": [
+    {
+      "displayName": "ERROR events in 5 minutes",
+      "conditionThreshold": {
+        "filter": "metric.type=\"logging.googleapis.com/user/exportmate_backend/events\" AND resource.type=\"cloud_run_revision\" AND metric.label.severity=\"ERROR\"",
+        "aggregations": [
+          {
+            "alignmentPeriod": "300s",
+            "perSeriesAligner": "ALIGN_SUM",
+            "crossSeriesReducer": "REDUCE_SUM",
+            "groupByFields": [
+              "metric.label.event"
+            ]
+          }
+        ],
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 0,
+        "duration": "0s",
+        "trigger": {
+          "count": 1
+        }
+      }
+    }
+  ],
+  "alertStrategy": {
+    "autoClose": "86400s"
+  },
+  "notificationChannels": [
+    "${CHANNEL}"
+  ]
+}
