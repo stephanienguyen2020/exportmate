@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { articleId, collectCandidates, errorText } from "../candidates.js";
+import { articleId, collectCandidates, companyReading, errorText } from "../candidates.js";
 
 const at = Date.parse("2026-10-15T00:00:00Z");
 const daysAgo = (n) => new Date(at - n * 86_400_000).toISOString();
@@ -54,6 +54,22 @@ test("an article carried by several sources keeps each of them and their owners"
   const [only] = candidates.values();
   assert.deepEqual(only.sourceIds, ["shared", "a-feed"]);
   assert.deepEqual(only.sourceCompanyIds, [null, "A"]);
+});
+
+test("a first scan's read-back fills its cap with articles the company can see", () => {
+  // Another company's busy feed is newest; B can't see it, so it mustn't use B's places.
+  const backlog = [
+    ...Array.from({ length: 5 }, (_, n) => ({ id: `a${n}`, sourceIds: ["a-feed"] })),
+    { id: "s1", sourceIds: ["shared"] },
+    { id: "s2", sourceIds: ["shared"] },
+    { id: "s3", sourceIds: ["shared"] },
+  ];
+  const fresh = [{ id: "new", sourceIds: ["shared"] }, { id: "a-new", sourceIds: ["a-feed"] }, { id: "s1", sourceIds: ["shared"] }];
+  const forB = (a) => !a.sourceIds.includes("a-feed");
+  const ids = (list) => list.map((a) => a.id);
+  assert.deepEqual(ids(companyReading(fresh, forB, backlog, 2)), ["new", "s1", "s2", "s3"]);
+  // Later scans read only the new articles it can see.
+  assert.deepEqual(ids(companyReading(fresh, forB, null, 2)), ["new", "s1"]);
 });
 
 test("Gemini errors read as their message", () => {
