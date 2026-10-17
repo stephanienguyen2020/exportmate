@@ -666,6 +666,17 @@ async function fixture(
         return;
       }
       data = [solutionCase()];
+    } else if (path === "/reports/report-1/solutions/manual") {
+      solutions.unshift(
+        solution("sol-team", {
+          model: null,
+          summary: body.summary,
+          steps: body.steps,
+          supersedesId: "sol-old",
+        }),
+      );
+      await route.fulfill({ status: 201, json: { data: solutionCase(), meta } });
+      return;
     } else if (path === "/reports/report-2/solutions") data = [];
     else if (path === "/solutions")
       data = [
@@ -2035,6 +2046,46 @@ test("problems get AI solutions; expired ones are for reference and get analysed
     verdict: "adopted",
     note: null,
   });
+});
+
+test("people write their own solution, without AI, saved under their name", async ({
+  page,
+}) => {
+  const requests = await fixture(page);
+  await login(page);
+  await expect(page.getByText("CONNECTED WORKSPACE")).toBeVisible();
+  await page.goto("/#/workspace/orders/SERVER-1");
+  const panel = page.getByRole("region", { name: "Suggested solutions" });
+  const problem = panel.getByRole("article", { name: "Plot-level geolocation" });
+  const form = problem.getByRole("form", { name: "Write your own solution" });
+  await problem.getByRole("button", { name: "Write your own" }).click();
+  await form.getByRole("button", { name: "Cancel" }).click();
+  await expect(form).toHaveCount(0);
+
+  await problem.getByRole("button", { name: "Write your own" }).click();
+  await expect(form.getByRole("button", { name: "Save solution" })).toBeDisabled();
+  await form.getByLabel("What to do").fill("Ask our broker to file the plots in TRACES.");
+  await form
+    .getByLabel("Steps, one per line (optional)")
+    .fill("Send the broker the GeoJSON file.\n\n  Check the TRACES reference.  ");
+  await form.getByRole("button", { name: "Save solution" }).click();
+  await expect(form).toHaveCount(0);
+  const card = problem.locator(".sol-card.default");
+  await expect(card.getByText("Ask our broker to file the plots in TRACES.")).toBeVisible();
+  await expect(card.getByText("Check the TRACES reference.")).toBeVisible();
+  await expect(card.getByText("Team suggestion", { exact: true })).toBeVisible();
+  await expect(card.getByText(/written by Test Owner/)).toBeVisible();
+  // Saved like any solution: it can be used for the order.
+  await expect(card.getByRole("button", { name: "Use for SERVER-1" })).toBeVisible();
+  expect(requests.find((r) => r.path === "/reports/report-1/solutions/manual")?.body).toEqual({
+    requirementKey: "eudr-geolocation",
+    summary: "Ask our broker to file the plots in TRACES.",
+    steps: ["Send the broker the GeoJSON file.", "Check the TRACES reference."],
+  });
+  // No AI was asked.
+  expect(
+    requests.filter((r) => r.path === "/reports/report-1/solutions" && r.method === "POST"),
+  ).toHaveLength(0);
 });
 
 test("the knowledge base lists every saved solution by problem, with filters", async ({

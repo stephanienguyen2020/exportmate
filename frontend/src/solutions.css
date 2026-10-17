@@ -86,15 +86,25 @@
   color: var(--muted);
   margin-top: 4px;
 }
-.sol-notes form {
+.sol-notes form,
+.sol-write {
   display: grid;
   gap: 6px;
 }
-.sol-notes label {
+.sol-write {
+  font-size: 12px;
+  border: 1px solid var(--line);
+  padding: 12px;
+  margin-top: 10px;
+  min-width: 0;
+}
+.sol-notes label,
+.sol-write label {
   font-size: 11px;
   color: #7d8c70;
 }
-.sol-notes textarea {
+.sol-notes textarea,
+.sol-write textarea {
   border: 1px solid #d1d8c9;
   padding: 9px 11px;
   background: #fafbf5;

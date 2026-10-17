@@ -159,11 +159,12 @@ News watch alerts also appear in the **News alerts** section of a company report
 On an order's page (signed-in workspace, after an analysis), **Suggested solutions** lists each document the analysis found missing or wrong.
 
 - **Suggest a solution.** Owners and editors ask AI for a summary and steps. It works only from the report's facts, the regulation text the check cites, and your team's notes on earlier solutions to the same problem. A suggestion that states a number or link it wasn't given is thrown away ("didn't pass its checks"): try again.
+- **Write your own.** Owners and editors can skip the AI: "Write your own" opens a box for what to do and the steps, one per line. It's saved as a "Team suggestion" under your name, without the AI's checks (you may know dates, prices and links the report doesn't), and is cited, offered, used and expired like an AI one. It works when AI isn't set up.
 - **Saved for later orders.** A solution is offered for every later order with the same problem (same market, requirement and kind of gap). Solutions written for the same order, adopted ones, and ones written for the same HS heading or supplier come first.
 - **Notes.** Anyone who can edit adds how they actually handle it ("we ask for the GeoJSON file"). Notes stay for good, show with the solution, and the AI reads them the next time it writes a solution to that problem.
 - **Use, adopt, reject.** "Use for <order>" records which solution the order follows. "Adopt" makes it the first one offered for this problem; "Reject" means it is never offered as the answer.
 - **Expiry.** A solution is valid for 90 days, or until the day before the requirement's stated change, and expires at once if the requirement starts citing another version of its regulation or leaves the checklist. Expired solutions stay visible under "Expired solutions, for reference only", with the reason and their notes, but they are never the default and can't be used or adopted. "Analyse again" writes a new one, which reads the expired one and its notes and links back to it.
-- **Audit.** Every suggestion (with its full text and model), use, note and review is in the owner's activity log under "solution".
+- **Audit.** Every suggestion (with its full text and model), solution a person wrote (with its full text and author), use, note and review is in the owner's activity log under "solution".
 
 Viewers can read solutions and notes but not change them. The browser-only demo doesn't have this feature.
 

@@ -2,8 +2,9 @@
 
 A problem is a gap in a report (a document missing or wrong) for one market requirement. AI
 drafts the steps from the report's facts, the requirement's cited text and the notes people left
-on earlier solutions to the same problem. People add notes (how they handle it), adopt or reject
-a solution, and record which one they used for which order. Every change is in the audit log.
+on earlier solutions to the same problem, or a person writes them (no AI, so none of its checks;
+`model` is then null). People add notes (how they handle it), adopt or reject a solution, and
+record which one they used for which order. Every change is in the audit log.
 
 A solution is offered for every later gap with the same market, requirement and problem until it
 expires: past `valid_until`, or once the requirement cites another regulation version or leaves
@@ -23,7 +24,7 @@ from app.database.models.base import Base, created_column, id_column, pg_enum
 
 
 class SolutionStatus(str, enum.Enum):
-    suggested = "suggested"  # AI drafted it; nobody has judged it yet
+    suggested = "suggested"  # AI or a person wrote it; nobody has judged it yet
     adopted = "adopted"  # a person said this is how the company handles it
     rejected = "rejected"  # a person said not to follow it; never the default
 
@@ -54,7 +55,7 @@ class Solution(Base):
     document_version: Mapped[int] = mapped_column(Integer, nullable=False)
     source_quote: Mapped[str] = mapped_column(Text, nullable=False)
     valid_until: Mapped[date] = mapped_column(Date, nullable=False)  # last day it may be used
-    model: Mapped[str] = mapped_column(String(100), nullable=False)  # the Gemini model
+    model: Mapped[str | None] = mapped_column(String(100))  # the Gemini model; null: a person
     # The expired solution this one was analysed again from.
     supersedes_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("solutions.id", ondelete="SET NULL")
