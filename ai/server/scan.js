@@ -13,8 +13,8 @@ import { armor } from "./armor.js";
 import { cleanMentions } from "./mentions.js";
 import { version } from "./policy.js";
 import { log } from "./log.js";
-import { MAX_AGE_DAYS, itemVisible } from "./access.js";
-import { collectCandidates, errorText } from "./candidates.js";
+import { MAX_AGE_DAYS, isShared, itemVisible } from "./access.js";
+import { collectCandidates, companyReading, errorText } from "./candidates.js";
 import { decide } from "./relevance.js";
 import { STOCK_PROFILE } from "./seed/inventory.js";
 import { GEMINI_LOCATION, SCAN_MODEL, SCAN_THINKING, thinkingConfig } from "./models.js";
@@ -26,9 +26,13 @@ export const MODEL = SCAN_MODEL;
 const LOCATION = GEMINI_LOCATION;
 const MAX_NEW_ARTICLES = 80;
 export const BATCH = 16;
-// A company's first scan after its goods are known also reads back over this much stored news.
+// Batches sent to Gemini at once, so a first scan's read-back doesn't make "Scan now" wait for
+// each batch in turn.
+const PARALLEL_BATCHES = 4;
+// A company's first scan after its goods are known also reads back over this much stored news
+// (the articles it can see). The cap fits about two weeks of the default sources.
 const BACKFILL_DAYS = 14;
-const MAX_BACKFILL_ARTICLES = 48;
+const MAX_BACKFILL_ARTICLES = 160;
 // Companies whose goods one scan reads news for, most recently refreshed first.
 const MAX_COMPANIES = 100;
 
@@ -149,14 +153,16 @@ ${RULES}`;
   return JSON.parse(res.text || "{}").assessments ?? [];
 }
 
-// Gemini's verdict on each article in `list` against `items`, BATCH articles per call. A batch
-// that fails is logged and skipped; `onVerdict(article, assessment, index in its batch)`.
-// Returns how many articles went unassessed and the first error, as a sentence.
+// Gemini's verdict on each article in `list` against `items`, BATCH articles per call and up to
+// PARALLEL_BATCHES calls at once. A batch that fails is logged and skipped;
+// `onVerdict(article, assessment, index in its batch)`. Returns how many articles went
+// unassessed and the first error, as a sentence.
 async function assessAll(list, items, profile, scanId, onVerdict) {
   let failed = 0;
   let error = null;
-  for (let i = 0; i < list.length; i += BATCH) {
-    const batch = list.slice(i, i + BATCH);
+  const batches = [];
+  for (let i = 0; i < list.length; i += BATCH) batches.push(list.slice(i, i + BATCH));
+  const assessBatch = async (batch) => {
     let results;
     try {
       results = await assess(batch, items, profile);
@@ -164,11 +170,12 @@ async function assessAll(list, items, profile, scanId, onVerdict) {
       failed += batch.length;
       error ??= errorText(e);
       log("ERROR", "scan.batch_failed", { scanId, articles: batch.length, companyId: profile.companyId, error: String(e?.message || e) });
-      continue;
+      return;
     }
     const byIndex = new Map(results.map((r) => [r.index, r]));
     batch.forEach((a, n) => byIndex.has(n) && onVerdict(a, byIndex.get(n), n));
-  }
+  };
+  for (let i = 0; i < batches.length; i += PARALLEL_BATCHES) await Promise.all(batches.slice(i, i + PARALLEL_BATCHES).map(assessBatch));
   return { failed, error };
 }
 
@@ -221,7 +228,6 @@ async function scanCompanies(scanId, fresh) {
   const [allSources, settings] = await Promise.all([list(sources), list(companySources)]);
   const sourcesById = new Map(allSources.map((s) => [s.id, s]));
   const settingsOf = new Map(settings.map((c) => [c.id, c]));
-  const freshIds = new Set(fresh.map((a) => a.id));
   let backlog = null;
   const found = [];
   let failed = 0;
@@ -229,12 +235,9 @@ async function scanCompanies(scanId, fresh) {
   for (const goods of lists) {
     const own = settingsOf.get(goods.id);
     const access = { companyId: goods.id, disabled: own?.disabled || [], ...(own?.skipOld === false ? { skipOld: false } : {}) };
-    let reading = fresh;
-    if (!goods.backfilledAt) {
-      backlog ??= await recentArticles();
-      reading = [...fresh, ...backlog.filter((a) => !freshIds.has(a.id)).slice(0, MAX_BACKFILL_ARTICLES)];
-    }
-    reading = reading.filter((a) => itemVisible(a, sourcesById, access));
+    if (!goods.backfilledAt) backlog ??= await recentArticles();
+    const visible = (a) => itemVisible(a, sourcesById, access);
+    const reading = companyReading(fresh, visible, goods.backfilledAt ? null : backlog, MAX_BACKFILL_ARTICLES);
     const profile = { ...goods.profile, companyId: goods.id };
     const bySku = new Map(goods.items.map((i) => [i.sku, i]));
     const result = await assessAll(reading, goods.items, profile, scanId, (a, r, n) => {
@@ -265,9 +268,11 @@ export async function runScan({ trigger = "manual", maxAgeDays = MAX_AGE_DAYS } 
 
     // 1. Fetch every enabled source in parallel, and keep the articles the age rule allows.
     const fetched = await Promise.allSettled(srcs.map((s) => fetchFeed(s.url)));
+    // Each with its owner (null when shared), so a caller is only shown the sources it can see.
     const sourceStatus = fetched.map((r, n) => {
       const ok = r.status === "fulfilled";
-      return { id: srcs[n].id, name: srcs[n].name, ok, count: ok ? r.value.length : 0, error: ok ? null : String(r.reason?.message || r.reason) };
+      const s = srcs[n];
+      return { id: s.id, name: s.name, companyId: isShared(s) ? null : s.companyId, ok, count: ok ? r.value.length : 0, error: ok ? null : String(r.reason?.message || r.reason) };
     });
     const { candidates, tooOld } = collectCandidates(fetched, srcs, { at: Date.parse(startedAt), maxAgeDays, oldReaders });
 

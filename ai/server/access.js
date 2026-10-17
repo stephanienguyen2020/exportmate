@@ -105,6 +105,10 @@ export const visibleItems = (items, sources, access, maxAgeDays = MAX_AGE_DAYS) 
 export function presentScan(scan, access) {
   if (!scan) return scan;
   const { companyImpacts, ...shown } = scan;
+  // Another company's own sources are neither named nor counted. Each carries its owner
+  // (null when shared); scans recorded before that show every source.
+  if (Array.isArray(shown.sources))
+    shown.sources = shown.sources.filter((s) => sourceVisible(s, access)).map(({ companyId, ...s }) => s);
   return access.companyId ? { ...shown, impactsFound: companyImpacts?.[access.companyId] ?? 0 } : shown;
 }
 

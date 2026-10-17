@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ANONYMOUS, ageDays, auditVisible, presentSources, publicAudit, scanRules, skipsOld, visibleItems } from "../access.js";
+import { ANONYMOUS, ageDays, auditVisible, presentScan, presentSources, publicAudit, scanRules, skipsOld, visibleItems } from "../access.js";
 
 const sources = [
   { id: "builtin", name: "Timber news", builtIn: true, enabled: true },
@@ -97,4 +97,25 @@ test("an article's age is whole days before the scan, null when undated", () => 
   assert.equal(ageDays("2025-10-14T12:00:00Z", at), 366);
   assert.equal(ageDays(null, at), null);
   assert.equal(ageDays("not a date", at), null);
+});
+
+test("a scan shows each caller its own alert count and only the sources it can see", () => {
+  const scan = {
+    impactsFound: 3,
+    companyImpacts: { A: 2 },
+    sources: [
+      { id: "builtin", name: "Timber news", companyId: null, ok: true, count: 9 },
+      { id: "a-feed", name: "A's feed", companyId: "A", ok: true, count: 20 },
+    ],
+  };
+  const forA = presentScan(scan, companyA);
+  assert.equal(forA.impactsFound, 2);
+  assert.equal(forA.companyImpacts, undefined);
+  assert.deepEqual(forA.sources.map((s) => s.id), ["builtin", "a-feed"]);
+  assert.ok(forA.sources.every((s) => !("companyId" in s)));
+  assert.deepEqual(presentScan(scan, { companyId: "B", disabled: [] }).sources.map((s) => s.id), ["builtin"]);
+  const demo = presentScan(scan, ANONYMOUS);
+  assert.equal(demo.impactsFound, 3);
+  assert.deepEqual(demo.sources.map((s) => s.id), ["builtin"]);
+  assert.equal(scan.sources.length, 2, "the stored record is unchanged");
 });
