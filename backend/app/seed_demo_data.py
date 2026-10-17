@@ -1,5 +1,6 @@
 """Load a demo company (with its About company profile), its orders, playbook rules and
-trade-map data (suppliers with their documents, and the company's sites) for one user.
+trade-map data (suppliers with their documents and sourcing, and the company's sites) for one
+user.
 
 Usage:  uv run python -m app.seed_demo_data --email lan@example.com
         uv run python -m app.seed_demo_data --company us-furniture --email minh@example.com
@@ -29,9 +30,11 @@ from app.core.errors import AppError
 from app.core.logging import configure_logging
 from app.database.models import Order, OrderStatus
 from app.database.queries import analysis as analysis_queries
+from app.database.queries import knowledge_graph as graph_queries
 from app.database.queries import orders as order_queries
 from app.database.queries import trade_map as map_queries
 from app.database.session import open_session
+from app.knowledge_graph import load_graph_file
 from app.schemas.account import CompanyUpdate, OnboardingIn
 from app.schemas.playbook import RuleIn
 from app.seed_data import load_seed_file
@@ -165,8 +168,11 @@ def load_demo_company_seed(company_key: str) -> DemoCompanySeed:
 def seed_company_map_data(
     db: Session, company_id: uuid.UUID, seed_file: str = DEMO_SEED_FILE
 ) -> tuple[int, int]:
-    """Suppliers (with their documents) and sites from a seed file in seed_data/."""
+    """Suppliers (with their documents and sourcing) and sites from a seed file in seed_data/."""
     data = load_seed_file(seed_file)
+    industry_of_material = {
+        m["key"]: m["industry"] for m in load_graph_file("material_chain.json")["materials"]
+    }
     for supplier in data["suppliers"]:
         supplier_id = map_queries.upsert_supplier(
             db,
@@ -182,6 +188,22 @@ def seed_company_map_data(
                 "contact_name": supplier.get("contactName"),
                 "contact_email": supplier.get("contactEmail"),
             },
+        )
+        graph_queries.replace_supplier_sourcing(
+            db,
+            supplier_id,
+            [
+                {
+                    "supplier_id": supplier_id,
+                    "material_key": f"material.{s['material']}",
+                    "country_alpha2": s["country"],
+                    "form_key": f"{industry_of_material[s['material']]}.{s['form']}"
+                    if s.get("form")
+                    else None,
+                    "basis": s["basis"],
+                }
+                for s in supplier.get("sourcing", [])
+            ],
         )
         # One call per document: a multi-row upsert needs the same columns in every row, and
         # issuer, number and expiry are only written when the seed file gives them.

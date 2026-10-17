@@ -47,6 +47,13 @@ test('upstream failures return a readable error without internal details', async
   assert.equal(response.status, 502);
   assert.doesNotMatch(JSON.stringify(await response.json()), /private connection/);
 });
+test('a backend that answers too late gets a 504 that says so', async () => {
+  process.env.BACKEND_URL = 'https://backend.example';
+  globalThis.fetch = async () => { throw new DOMException('The operation was aborted due to timeout', 'TimeoutError'); };
+  const response = await originalFetch(origin + '/api/backend?path=trade-map/scenarios/suggest', { method: 'POST' });
+  assert.equal(response.status, 504);
+  assert.match((await response.json()).error.message, /took too long/);
+});
 test('document downloads preserve original bytes and attachment security headers', async () => {
   process.env.BACKEND_URL = 'https://backend.example';
   const bytes = Buffer.from([0x25, 0x50, 0x44, 0x46, 0xff, 0x00]);

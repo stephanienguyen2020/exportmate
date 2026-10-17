@@ -478,7 +478,7 @@ Only `name` (1–300) is required. `place` ≤200, `supplies` ≤1000 (blank is 
 
 `PATCH /suppliers/{id}` changes only the fields sent; `null` clears `place`, `country`, `location`, `supplies`. `documents` replaces the whole list (send `[]` to clear it). `name` and `documents` can't be `null`. Same errors as `POST`. Sending `documents`, or a `name` with another key, analyses again the orders that matched before and after (`analysedOrderIds`); a new place, contact or location runs nothing.
 
-`DELETE /suppliers/{id}` → `{"deleted": true, "analysedOrderIds": [...]}`. Its documents go with it; its orders stay, named on the order without a record (supplier checks become `unknown`), and are analysed again, so their next step is to add the supplier.
+`DELETE /suppliers/{id}` → `{"deleted": true, "analysedOrderIds": [...]}`. Its documents go with it, and the certificate files uploaded for it are deleted from Cloud Storage (kept 30 days as noncurrent versions); its orders stay, named on the order without a record (supplier checks become `unknown`), and are analysed again, so their next step is to add the supplier.
 
 `POST /sites` → `201`:
 ```json
@@ -707,7 +707,9 @@ The PDF of the saved content, `inline` for the preview; `?download=true` makes i
 
 ## News watch and orders
 
-News watch (the AI service) matches each article to the company's goods (what its profile names and its orders ship), not straight to orders. The backend suggests which of the company's orders an alert may affect, and people decide (`news_order_reviews`, `services/news_matches.py`). An order is suggested when it hasn't shipped, shares an HS heading (first four digits) with an item the alert names (stock from the AI service's `GET /api/inventory`), and ships to one of that item's markets (`EU`, `US`…; items with no export market, such as raw material, match on the heading alone). A suggestion is a guess until an owner or editor confirms or rejects it, and only confirmed links reach reports. Alerts and stock are read with the caller's token. A review keeps a copy of the alert's headline and link, so it outlives the alert.
+News watch (the AI service) matches each article to the company's goods (what its profile names and its orders ship), not straight to orders. The backend suggests which of the company's orders an alert may affect, and people decide (`news_order_reviews`, `services/news_matches.py`). Suggestions come from walking the knowledge graph (`services/knowledge_graph.py`, data in `app/knowledge_graph/`), only for orders that haven't shipped:
+- **From what the article names** (the alert's `mentions`: `materials`, `hsCodes`, `originCountries`, `markets`): an order whose supplier buys a named material and/or from a named country (`supplier_sourcing`). The path follows the material chain from the form the supplier buys to the order's product; when the article names a product of the chain (logs, 4403), the order's product must be made from it. Named markets limit the orders to those shipping there.
+- **From each item the alert names** (from the AI service's `GET /api/inventory`): an order with the item's HS heading (first four digits) shipping to one of the item's markets (`EU`, `US`…; items with no export market, such as raw material, match on the heading alone). A suggestion is a guess until an owner or editor confirms or rejects it, and only confirmed links reach reports. Alerts and stock are read with the caller's token. A review keeps a copy of the alert's headline and link, so it outlives the alert.
 
 ### `GET /news-matches` (viewer)
 ```json
@@ -715,9 +717,11 @@ News watch (the AI service) matches each article to the company's goods (what it
   {"impactId": "a1b2…", "orderId": "PO-2291", "product": "Acacia plywood · 18 mm", "destination": "Rotterdam, NL",
    "market": "EU", "shipDate": "2026-10-27", "suggested": true,
    "reason": "HS 4412 and ships to EU, like PLY-001 Acacia plywood 18 mm named in this alert.",
-   "review": {"verdict": "relevant", "note": "Our EU lots.", "reviewedBy": {"id": "…", "name": "Lan"}, "reviewedAt": "…"}}]}}
+   "review": {"verdict": "relevant", "note": "Our EU lots.", "reviewedBy": {"id": "…", "name": "Lan"}, "reviewedAt": "…"},
+   "path": [{"kind": "mention", "label": "HS 4412", "link": null, "sourceTitle": null, "sourceUrl": null, "quote": null},
+            {"kind": "order", "label": "PO-2291 Acacia plywood · 18 mm", "link": "same HS heading", "sourceTitle": null, "sourceUrl": null, "quote": null}]}]}}
 ```
-One entry per alert and order: every current suggestion (with its verdict, or `review: null` while it awaits one), plus orders a person linked or reviewed that are no longer suggested (shipped, HS code changed). Only alerts News watch returns now are listed. `newsAvailable: false` and no matches when the AI service can't be reached.
+`path` is how the graph reached the order, in steps (`mention`, `supplier`, `product`, `order`); a supplier path reads e.g. *acacia logs, VN → Binh Phu Wood ("buys acacia from Vietnam (species document)") → Logs (HS 4403) → Veneer sheets (HS 4408, "used to make", with the FAO quote and link) → Plywood (HS 4412) → PO-2291*. Empty for an order a person linked. One entry per alert and order: every current suggestion (with its verdict, or `review: null` while it awaits one), plus orders a person linked or reviewed that are no longer suggested (shipped, HS code changed). Only alerts News watch returns now are listed. `newsAvailable: false` and no matches when the AI service can't be reached.
 
 ### `PUT /news-matches/{impactId}/orders/{orderId}` (editor)
 `{"verdict": "relevant" | "not_relevant", "note": "…"}` (note optional, ≤500). `orderId` is the order's own ID. Works for any order of the company, suggested or not: an order that wasn't suggested is stored with `suggested: false`. A new verdict replaces the last one, whoever gave it. Returns the match. Audited as `news.reviewed`. `404` for an alert News watch doesn't show this company or an order that isn't the company's; `503` if News watch can't be reached.

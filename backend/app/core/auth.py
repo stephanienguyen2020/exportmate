@@ -119,10 +119,15 @@ def current_claims(authorization: Annotated[str | None, Header()] = None) -> Tok
 
 
 def current_user(
+    request: Request,
     claims: Annotated[TokenClaims, Depends(current_claims)],
     db: Annotated[Session, Depends(get_db)],
 ) -> User:
-    return accounts.get_or_create_user(db, uid=claims.uid, email=claims.email, name=claims.name)
+    user = accounts.get_or_create_user(db, uid=claims.uid, email=claims.email, name=claims.name)
+    # The request log line in main.py reads these, so each request is tied to who made it,
+    # including those before a company exists (/me, onboarding, invites).
+    request.state.user_id = str(user.id)
+    return user
 
 
 def current_context(
@@ -130,8 +135,6 @@ def current_context(
     user: Annotated[User, Depends(current_user)],
     db: Annotated[Session, Depends(get_db)],
 ) -> CompanyContext:
-    # The request log line in main.py reads these, so each request is tied to who made it.
-    request.state.user_id = str(user.id)
     found = accounts.find_user_company_membership(db, user.id)
     if not found:
         raise AppError(403, "onboarding_required", "Finish onboarding to create your company.")
