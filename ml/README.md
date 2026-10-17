@@ -58,8 +58,7 @@ everything else Any or empty → Export → GTA entries → CSV.
 | Our scan golden set | `ai/server/eval/scan-golden.js` | In repo | 19 labelled articles (8 with severity): test set only | Have |
 
 Sources for the knowledge graph (phase 1: HS codes and the material chain) are in
-`docs/NEWS_IMPACT_PLAN.md`, "Where the material chain comes from"; the graph's data is in
-`backend/app/knowledge_graph/`.
+`backend/app/knowledge_graph/README.md`, section 3, with the graph's data.
 
 Kaggle: no dataset fits; downloading needs your own account token.
 

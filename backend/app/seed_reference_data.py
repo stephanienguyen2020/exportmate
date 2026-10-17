@@ -190,6 +190,7 @@ def seed_knowledge_graph(db: Session) -> dict[str, int]:
                 "quote": link.get("quote"),
                 "basis": link.get("basis"),
                 "secondary": link.get("secondary", False),
+                "ai_check": link.get("aiCheck"),
             }
             for link in industry["links"]
         ]

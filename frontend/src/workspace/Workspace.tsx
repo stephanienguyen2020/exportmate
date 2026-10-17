@@ -45,6 +45,7 @@ const CompanySettings = lazy(() => import("../CompanySettings"));
 const TradeMapPage = lazy(() => import("../TradeMap"));
 const ReportsPage = lazy(() => import("../Reports"));
 const KnowledgeBasePage = lazy(() => import("../KnowledgeBase"));
+const MaterialChainPage = lazy(() => import("../MaterialChain"));
 
 // The pages of the "Rules & news" tab. Each keeps its own route, so deep links still work.
 const ruleTabs: [string, string][] = [
@@ -53,6 +54,7 @@ const ruleTabs: [string, string][] = [
   ["regulations", "Regulations"],
   ["playbook", "Playbook"],
   ["knowledge", "Knowledge base"],
+  ["chain", "Material chain"],
 ];
 // Sidebar order. Each page is a route below; "Rules & news" opens the first of its tabs.
 const nav: [path: string, label: string, icon: typeof Globe2][] = [
@@ -202,6 +204,11 @@ const routes: Record<string, Page> = {
   knowledge: exact(({ ws, notify }) => (
     <Suspense fallback={<Loading>Loading knowledge base…</Loading>}>
       <KnowledgeBasePage live={ws.live} editable={ws.editable} notify={notify} />
+    </Suspense>
+  )),
+  chain: exact(({ ws }) => (
+    <Suspense fallback={<Loading>Loading the material chain…</Loading>}>
+      <MaterialChainPage live={ws.live} />
     </Suspense>
   )),
   data: exact(({ ws, notify }) => <DataRoom ws={ws} notify={notify} />),

@@ -114,6 +114,7 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
 | **News watch and orders** | | |
 | `GET /news-matches` | viewer | News watch, Alerts tab: "Orders this may affect" on each alert, and the "Orders" filter |
 | `GET /news-matches/accuracy` | viewer | Not used by the frontend yet (how often each way of suggesting, and each chain link, is confirmed) |
+| `GET /knowledge-graph/chain` | viewer | Rules & news › Material chain |
 | `PUT /news-matches/{impactId}/orders/{orderId}` | editor | News watch alert: "Affects this order" / "Not relevant", "Link order" |
 | `DELETE /news-matches/{impactId}/orders/{orderId}` | editor | News watch alert: "Undo" |
 | **Supplier messages and report actions** | | |
@@ -737,6 +738,22 @@ News watch (the AI service) matches each article to the company's goods (what it
                       "link": "used to make", "confirmed": 0, "rejected": 1}]}}
 ```
 The company's verdicts by how each suggestion was found (`supplier`: through a supplier's sourcing and the material chain; `hs`: same HS heading; `linked`: a person added the order), and by each chain link in the supplier paths people judged, most rejected first. A review keeps the way and path it was suggested with (`news_order_reviews.via`, `.path`).
+
+Each `byLink` row also has `fromKey` / `toKey` (graph nodes; `null` for paths stored before steps had keys) and `doubt`.
+
+### `GET /knowledge-graph/chain` (viewer)
+```json
+{"data": {"industries": [{"key": "wood", "name": "Wood",
+   "products": [{"key": "wood.roundwood", "name": "Logs (wood in the rough)", "hsCodes": ["4403"], "stage": "raw"}],
+   "links": [{"fromKey": "wood.roundwood", "fromName": "Logs (wood in the rough)", "toKey": "wood.veneer", "toName": "Veneer sheets",
+              "relation": "used_to_make", "secondary": false, "sourceTitle": "FAO …", "sourceUrl": "https://fao.org/…",
+              "quote": "… sawlogs and veneer logs …", "basis": null,
+              "aiCheck": {"verdict": "agree", "note": "…", "by": "Claude", "on": "2026-10-16"},
+              "company": {"confirmed": 3, "rejected": 0}, "everyone": {"confirmed": 5, "rejected": 1}, "doubt": null}]}],
+ "materials": [{"key": "acacia", "name": "Acacia", "industry": "wood", "scientificNames": ["Acacia mangium"], "woodType": "non-coniferous"}],
+ "byWay": [{"via": "supplier", "confirmed": 3, "rejected": 2}]}}
+```
+The shared material chain the knowledge graph walks, products from raw to finished, each link with its source, who checked it (`aiCheck`) and the verdicts on suggestions through it: this company's (`company`) and every company's (`everyone`). `doubt` is set when people keep rejecting a link (at this company: ≥2 rejections and more rejected than confirmed; across companies: ≥5): the walk then takes an equally short path without it when there is one, and marks the steps it still needs (`path[].doubt` in `GET /news-matches`), listing those suggestions last.
 
 ### `PUT /news-matches/{impactId}/orders/{orderId}` (editor)
 `{"verdict": "relevant" | "not_relevant", "note": "…"}` (note optional, ≤500). `orderId` is the order's own ID. Works for any order of the company, suggested or not: an order that wasn't suggested is stored with `suggested: false`. A new verdict replaces the last one, whoever gave it. Returns the match. Audited as `news.reviewed`. `404` for an alert News watch doesn't show this company or an order that isn't the company's; `503` if News watch can't be reached.

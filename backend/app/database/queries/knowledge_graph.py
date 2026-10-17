@@ -39,6 +39,10 @@ def list_graph_edges(db: Session, edge_ids: set[uuid.UUID]) -> list[GraphEdge]:
     return list(db.scalars(select(GraphEdge).where(GraphEdge.id.in_(edge_ids))))
 
 
+def list_all_graph_edges(db: Session) -> list[GraphEdge]:
+    return list(db.scalars(select(GraphEdge).order_by(GraphEdge.from_key, GraphEdge.to_key)))
+
+
 def list_graph_sources(db: Session) -> list[GraphSource]:
     return list(db.scalars(select(GraphSource)))
 

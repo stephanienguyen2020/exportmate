@@ -27,6 +27,7 @@ from app.database.models import GraphEdge, GraphNode, GraphNodeKind, Order, Supp
 from app.database.models import SupplierSourcing as Sourcing
 from app.database.queries import knowledge_graph as graph_queries
 from app.database.queries import trade_map as map_queries
+from app.services import graph_feedback
 from app.services.graph_words import broad_materials, named_nodes
 from app.services.trade_map import supplier_name_key
 
@@ -53,6 +54,8 @@ class GraphPathStep:
     source_title: str | None = None
     source_url: str | None = None
     quote: str | None = None
+    key: str | None = None  # the node, for a product step (verdicts count per link)
+    doubt: str | None = None  # people often rejected the link to this step
 
 
 @dataclass(frozen=True)
@@ -66,6 +69,10 @@ class GraphMatch:
     def via(self) -> str:
         """ "supplier" when the path goes through a supplier's sourcing, else "hs"."""
         return "supplier" if any(step.kind == "supplier" for step in self.path) else "hs"
+
+    @property
+    def doubted(self) -> bool:
+        return any(step.doubt for step in self.path)
 
 
 def _digits(code: object) -> str:
@@ -89,9 +96,16 @@ def product_of_hs_code(hs_code: object, products: list[GraphNode]) -> GraphNode 
     return best[1] if best else None
 
 
-def chain_cost(chain: list[GraphEdge]) -> tuple[int, int]:
-    """Shorter chains first; between equally short ones, fewer less common links."""
-    return (len(chain), sum(1 for edge in chain if edge.secondary))
+def chain_cost(
+    chain: list[GraphEdge], doubted: frozenset[tuple[str, str]] = frozenset()
+) -> tuple[int, int, int]:
+    """Shorter chains first; between equally short ones, fewer links people keep rejecting,
+    then fewer less common links."""
+    return (
+        len(chain),
+        sum(1 for edge in chain if (edge.from_key, edge.to_key) in doubted),
+        sum(1 for edge in chain if edge.secondary),
+    )
 
 
 def _hs_label(node: GraphNode) -> str:
@@ -115,6 +129,8 @@ class GraphWalker:
         self.country_names = {c.alpha2: c.name for c in countries}
         self.market_codes = {m.code for m in map_queries.list_markets(db)}
         self.market_of_country = {c.alpha2: c.market_code for c in countries if c.market_code}
+        self.feedback = graph_feedback.link_feedback(db, company_id)
+        self.doubted = frozenset(link for link, f in self.feedback.items() if f.doubt)
 
     def find_matches(
         self, mentions: GraphMentions, open_orders: list[tuple[Order, str | None]]
@@ -165,7 +181,8 @@ class GraphWalker:
                 )
             if match:
                 matches.append(match)
-        return matches
+        # Suggestions through links people keep rejecting come last.
+        return sorted(matches, key=lambda m: m.doubted)
 
     def known_markets(self, codes: tuple[str, ...]) -> set[str]:
         """Our market codes for what the article named: a country counts as its market ("GB" is
@@ -190,7 +207,9 @@ class GraphWalker:
         for row in rows:
             chain = [edges[i] for i in row.edge_ids]
             key = (row.start_key, row.node_key)
-            if key not in chains or chain_cost(chain) < chain_cost(chains[key]):
+            if key not in chains or chain_cost(chain, self.doubted) < chain_cost(
+                chains[key], self.doubted
+            ):
                 chains[key] = chain
         return chains
 
@@ -219,8 +238,8 @@ class GraphWalker:
             return self._supplier_match(order, market, sourcing, supplier, chain, mentions)
         return None
 
-    @staticmethod
     def _chain_through(
+        self,
         start: str,
         end: str,
         named_products: set[str],
@@ -234,7 +253,9 @@ class GraphWalker:
             for named in named_products
             if (start, named) in chains and (named, end) in chains
         ]
-        return min(through, key=chain_cost) if through else chains.get((start, end))
+        if not through:
+            return chains.get((start, end))
+        return min(through, key=lambda chain: chain_cost(chain, self.doubted))
 
     def _supplier_match(
         self,
@@ -258,9 +279,10 @@ class GraphWalker:
             ),
         ]
         if form and chain is not None:
-            path.append(GraphPathStep("product", _hs_label(form), "bought as"))
+            path.append(GraphPathStep("product", _hs_label(form), "bought as", key=form.key))
             for edge in chain:
                 source = self.sources.get(edge.source_key)
+                feedback = self.feedback.get((edge.from_key, edge.to_key))
                 path.append(
                     GraphPathStep(
                         "product",
@@ -269,6 +291,8 @@ class GraphWalker:
                         source.title if source else None,
                         source.url if source else None,
                         edge.quote or edge.basis,
+                        key=edge.to_key,
+                        doubt=feedback.doubt if feedback else None,
                     )
                 )
         path.append(
@@ -279,4 +303,6 @@ class GraphWalker:
         steps = " → ".join(s.label for s in path if s.kind == "product")
         reason = f"{supplier.name} buys {material.lower()} from {country}"
         reason += f"; {steps}, this order's product." if steps else " and supplies this order."
+        if any(step.doubt for step in path):
+            reason += " People have often rejected a link on this path."
         return GraphMatch(order=order, market=market, path=path, reason=reason[:500])

@@ -28,6 +28,8 @@ class NewsPathStepOut(CamelCaseModel):
     source_title: str | None
     source_url: str | None
     quote: str | None
+    key: str | None = None  # the graph node, for a product step
+    doubt: str | None = None  # people often rejected the link to this step
 
 
 class NewsOrderMatchOut(CamelCaseModel):
@@ -67,6 +69,9 @@ class AccuracyByLinkOut(VerdictCountsOut):
 
     from_label: str
     to_label: str
+    from_key: str | None = None  # graph nodes; None for paths stored before keys
+    to_key: str | None = None
+    doubt: str | None = None
     link: str  # "used to make", "leaves"
 
 
