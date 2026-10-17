@@ -26,6 +26,7 @@
       "country": "VN",
       "at": [106.79, 11.06],
       "supplies": "Rubberwood dining tables, chairs, bed frames and case goods",
+      "sourcing": [{ "material": "rubberwood", "country": "VN", "form": "roundwood", "basis": "species document" }],
       "documents": [
         { "kind": "legality", "detail": "VNTLAS legality dossier" },
         { "kind": "species", "detail": "Hevea brasiliensis · Vietnam" },
@@ -44,6 +45,7 @@
       "country": "VN",
       "at": [109.05, 14.0],
       "supplies": "FSC acacia outdoor chairs and loungers",
+      "sourcing": [{ "material": "acacia", "country": "VN", "form": "roundwood", "basis": "species document" }],
       "documents": [
         { "kind": "legality", "detail": "VNTLAS legality dossier" },
         { "kind": "species", "detail": "Acacia mangium × auriculiformis · Vietnam" },
@@ -56,6 +58,7 @@
       "country": "VN",
       "at": [106.84, 10.96],
       "supplies": "Upholstered dining chairs and sofa frames",
+      "sourcing": [],
       "documents": [{ "kind": "legality", "detail": "VNTLAS legality dossier" }]
     },
     {
@@ -64,6 +67,7 @@
       "country": "VN",
       "at": [106.42, 10.88],
       "supplies": "Kitchen cabinet carcasses and doors (MDF and plywood)",
+      "sourcing": [{ "material": "acacia", "country": "VN", "form": "roundwood", "basis": "species document" }, { "material": "eucalyptus", "country": "VN", "form": "roundwood", "basis": "species document" }],
       "documents": [
         { "kind": "legality", "detail": "VNTLAS legality dossier" },
         { "kind": "species", "detail": "Acacia mangium, Eucalyptus urophylla · Vietnam" },
@@ -80,6 +84,7 @@
       "country": "VN",
       "at": [108.0, 14.35],
       "supplies": "Hardwood plywood, okoume face on acacia core",
+      "sourcing": [{ "material": "acacia", "country": "VN", "form": "roundwood", "basis": "species document" }, { "material": "okoume", "country": "GA", "form": "veneer", "basis": "species document" }],
       "documents": [
         { "kind": "legality", "detail": "VNTLAS legality dossier" },
         {

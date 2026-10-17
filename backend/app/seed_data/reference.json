@@ -462,6 +462,16 @@
       "name": "Cambodia"
     },
     {
+      "alpha2": "RU",
+      "numeric": "643",
+      "name": "Russia"
+    },
+    {
+      "alpha2": "GA",
+      "numeric": "266",
+      "name": "Gabon"
+    },
+    {
       "alpha2": "TH",
       "numeric": "764",
       "name": "Thailand"

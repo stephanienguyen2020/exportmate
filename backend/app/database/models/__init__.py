@@ -15,6 +15,14 @@ from app.database.models.hs_code import (
     HsHeading,
     HsSuggestionStatus,
 )
+from app.database.models.knowledge_graph import (
+    GraphEdge,
+    GraphNode,
+    GraphNodeKind,
+    GraphRelation,
+    GraphSource,
+    SupplierSourcing,
+)
 from app.database.models.news import NewsOrderReview, NewsVerdict
 from app.database.models.order import (
     Import,
@@ -70,6 +78,11 @@ __all__ = [
     "CostDefault",
     "Country",
     "DocumentKind",
+    "GraphEdge",
+    "GraphNode",
+    "GraphNodeKind",
+    "GraphRelation",
+    "GraphSource",
     "HsCodeSuggestion",
     "HsHeading",
     "HsSuggestionStatus",
@@ -115,5 +128,6 @@ __all__ = [
     "SupplierDocumentUploadStatus",
     "SupplierMessage",
     "SupplierMessageStatus",
+    "SupplierSourcing",
     "User",
 ]

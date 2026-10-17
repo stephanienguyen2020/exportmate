@@ -713,6 +713,16 @@ type Envelope<T> = {
 export type NewsVerdict = "relevant" | "not_relevant";
 // An order a News watch alert may affect: suggested (same HS heading and market as a stock
 // item the alert names), linked by a person, or both, with the person's verdict once given.
+/** One step of the knowledge graph path from an alert to an order (backend services/knowledge_graph.py). */
+export type NewsPathStep = {
+  kind: "mention" | "supplier" | "product" | "order";
+  label: string;
+  link: string | null;
+  sourceTitle: string | null;
+  sourceUrl: string | null;
+  quote: string | null;
+};
+
 export type NewsMatch = {
   impactId: string;
   orderId: string;
@@ -728,6 +738,8 @@ export type NewsMatch = {
     reviewedBy: { id: string; name: string };
     reviewedAt: string;
   } | null;
+  /** How the knowledge graph reached the order; absent in the demo, empty for a linked order. */
+  path?: NewsPathStep[];
 };
 export type Role = "owner" | "editor" | "viewer";
 // GET /company/members: everyone in the company. Owners change roles and remove people.
