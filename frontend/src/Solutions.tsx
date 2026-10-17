@@ -1,7 +1,8 @@
 // Suggested solutions on an order's analysis report: for each missing or wrong document, the
-// company's saved solution to the same problem (AI-written, with its people's notes), or a
-// button to ask AI for one. Expired solutions are listed for reference, never as the answer:
-// they can't be used or adopted, only analysed again. Every change is in the activity log.
+// company's saved solution to the same problem (written by AI or a person, with its people's
+// notes), a button to ask AI for one and a box to write one yourself. Expired solutions are
+// listed for reference, never as the answer: they can't be used or adopted, only analysed
+// again. Every change is in the activity log.
 import { useEffect, useRef, useState } from "react";
 import {
   Check,
@@ -9,6 +10,7 @@ import {
   History,
   Loader2,
   MessageSquarePlus,
+  PenLine,
   RefreshCw,
   Sparkles,
   X,
@@ -37,6 +39,13 @@ const STATUS_LABEL: Record<Solution["status"], string> = {
   adopted: "Adopted",
   rejected: "Rejected",
 };
+// A solution with no model was written by a person.
+const statusLabel = (solution: Solution) =>
+  solution.expired
+    ? "Expired"
+    : solution.status === "suggested" && !solution.model
+      ? "Team suggestion"
+      : STATUS_LABEL[solution.status];
 
 // One action at a time; errors go to the caller's toast.
 function useAction(notify: Notify) {
@@ -115,8 +124,8 @@ export default function Solutions({
       </div>
       <p>
         AI suggests steps for each problem from the cited text and your team's
-        notes. Solutions are saved and offered for later orders with the same
-        problem until they expire. An expired one is shown for reference only:
+        notes, or you write your own. Solutions are saved and offered for later
+        orders with the same problem until they expire. An expired one is shown for reference only:
         analyse it again before relying on it.
       </p>
       {error && <p role="alert">{error}</p>}
@@ -162,10 +171,19 @@ function SolutionCaseView({
   onReviewed: () => Promise<void>;
 }) {
   const { busy, act } = useAction(notify);
+  const [writing, setWriting] = useState(false);
   const suggest = () =>
     act("suggest", async () => {
       onCase(await api.suggestSolution(reportId, item.requirementKey));
       notify("AI suggested a solution. It's saved for later orders too.");
+    });
+  const write = (summary: string, steps: string[]) =>
+    act("write", async () => {
+      onCase(
+        await api.writeSolution(reportId, item.requirementKey, summary, steps),
+      );
+      setWriting(false);
+      notify("Your solution is saved for later orders too, under your name.");
     });
   const card = (solution: Solution, isDefault: boolean) => (
     <SolutionCard
@@ -224,7 +242,25 @@ function SolutionCaseView({
                 ? "Analyse again"
                 : "Suggest a solution"}
           </button>
+          {!writing && (
+            <button
+              className="btn secondary"
+              disabled={!!busy}
+              onClick={() => setWriting(true)}
+            >
+              <PenLine size={15} />
+              Write your own
+            </button>
+          )}
         </div>
+      )}
+      {editable && writing && (
+        <WriteSolution
+          id={`sol-write-${item.requirementKey}`}
+          busy={busy === "write"}
+          onSave={write}
+          onCancel={() => setWriting(false)}
+        />
       )}
       {item.others.length > 0 && (
         <details className="an-details">
@@ -242,6 +278,77 @@ function SolutionCaseView({
         </details>
       )}
     </article>
+  );
+}
+
+// A person's own solution to one problem: saved like an AI one, without AI or its checks.
+function WriteSolution({
+  id,
+  busy,
+  onSave,
+  onCancel,
+}: {
+  id: string;
+  busy: boolean;
+  onSave: (summary: string, steps: string[]) => void;
+  onCancel: () => void;
+}) {
+  const [summary, setSummary] = useState("");
+  const [steps, setSteps] = useState("");
+  return (
+    <form
+      className="sol-write"
+      aria-label="Write your own solution"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!summary.trim()) return;
+        onSave(
+          summary.trim(),
+          steps
+            .split("\n")
+            .map((step) => step.trim())
+            .filter(Boolean),
+        );
+      }}
+    >
+      <label htmlFor={id + "-summary"}>What to do</label>
+      <textarea
+        id={id + "-summary"}
+        rows={2}
+        value={summary}
+        placeholder="E.g. Ask the supplier for the certificate before booking the shipment."
+        onChange={(e) => setSummary(e.target.value)}
+      />
+      <label htmlFor={id + "-steps"}>Steps, one per line (optional)</label>
+      <textarea
+        id={id + "-steps"}
+        rows={4}
+        value={steps}
+        onChange={(e) => setSteps(e.target.value)}
+      />
+      <p className="fine-print">
+        Saved under your name without AI or its checks, and offered for later
+        orders with the same problem. It's in the activity log.
+      </p>
+      <div className="an-actions">
+        <button
+          className="btn"
+          type="submit"
+          disabled={busy || !summary.trim()}
+        >
+          {busy ? <Loader2 size={15} className="spin" /> : <Check size={15} />}
+          Save solution
+        </button>
+        <button
+          className="btn secondary"
+          type="button"
+          disabled={busy}
+          onClick={onCancel}
+        >
+          Cancel
+        </button>
+      </div>
+    </form>
   );
 }
 
@@ -296,7 +403,7 @@ export function SolutionCard({
           className={`status ${solution.expired || solution.status === "rejected" ? "red" : solution.status === "adopted" ? "green" : "amber"}`}
         >
           <i />
-          {solution.expired ? "Expired" : STATUS_LABEL[solution.status]}
+          {statusLabel(solution)}
         </span>
         {inUse && orderId && (
           <span className="status green">
@@ -306,7 +413,8 @@ export function SolutionCard({
         )}
         <span>
           Written for {solution.writtenFor || "an earlier order"} ·{" "}
-          {day(solution.createdAt)} · asked by {solution.createdBy.name}
+          {day(solution.createdAt)} ·{" "}
+          {solution.model ? "asked by" : "written by"} {solution.createdBy.name}
           {solution.reviewedBy &&
             ` · ${solution.status} by ${solution.reviewedBy.name}`}
           {solution.usedFor > 0 &&

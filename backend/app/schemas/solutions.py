@@ -20,6 +20,15 @@ class SolutionSuggestIn(CamelCaseModel):
     requirement_key: str = Field(min_length=1, max_length=40)
 
 
+class SolutionWriteIn(CamelCaseModel):
+    """A solution a person writes. No AI, so none of its checks: the service only tidies it and
+    applies the same limits as the AI's answer."""
+
+    requirement_key: str = Field(min_length=1, max_length=40)
+    summary: str
+    steps: list[str] = Field(default_factory=list)
+
+
 class SolutionUseIn(CamelCaseModel):
     report_id: uuid.UUID
 
@@ -64,7 +73,7 @@ class SolutionOut(CamelCaseModel):
     expired: bool
     # Why it can't be used any more: past its date, or the requirement changed.
     expired_reason: str | None
-    model: str
+    model: str | None  # the Gemini model; None when a person wrote it
     created_by: PersonOut
     created_at: datetime
     reviewed_by: PersonOut | None
