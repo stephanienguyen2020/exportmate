@@ -63,6 +63,14 @@ def suggest(client, headers, report_id, key="geolocation"):
     )
 
 
+def write(client, headers, report_id, summary, steps=(), key="geolocation"):
+    return client.post(
+        f"/api/v1/reports/{report_id}/solutions/manual",
+        headers=headers,
+        json={"requirementKey": key, "summary": summary, "steps": list(steps)},
+    )
+
+
 def set_solution(solution_id: str, **values) -> None:
     with open_session() as db:
         db.execute(update(Solution).where(Solution.id == solution_id).values(**values))
@@ -261,3 +269,70 @@ def test_the_knowledge_base_lists_every_solution_by_problem(client, lan):
 
     other = onboard(client, "mai@example.com", company="Other Co")
     assert client.get("/api/v1/solutions", headers=other).json()["data"] == []
+
+
+def test_a_person_writes_a_solution_without_ai_and_it_is_audited(client, lan, fake_gemini):
+    report_id = analyse(client, lan)["PO-1"]
+    calls = len(fake_gemini.calls)
+    # A number and a link the report never gave: no AI wrote it, so no AI check applies.
+    response = write(
+        client,
+        lan,
+        report_id,
+        "  Ask Binh Phu Wood for the   GeoJSON file 21 days before shipping. ",
+        [
+            "1. Binh Phu Wood: upload it to https://example.com/plots.",
+            "",
+            "Step 2: 1.5 days to check it against the order.",
+        ],
+    )
+    assert response.status_code == 201, response.text
+    assert len(fake_gemini.calls) == calls
+    solution = response.json()["data"]["default"]
+    assert (solution["model"], solution["status"], solution["writtenFor"]) == (
+        None,
+        "suggested",
+        "PO-1",
+    )
+    assert solution["summary"] == "Ask Binh Phu Wood for the GeoJSON file 21 days before shipping."
+    assert solution["steps"] == [
+        "Binh Phu Wood: upload it to https://example.com/plots.",
+        "1.5 days to check it against the order.",
+    ]
+    assert solution["basis"]["quote"].startswith("Article 9(1)(d)")
+    assert solution["validUntil"] == (TODAY + timedelta(days=90)).isoformat()
+
+    # Saved like an AI one: an expired solution is linked, and later orders are offered it.
+    set_solution(solution["id"], valid_until=TODAY - timedelta(days=1))
+    again = write(client, lan, report_id, "Ask for the GeoJSON file.").json()["data"]
+    assert again["default"]["supersedesId"] == solution["id"]
+    assert again["default"]["steps"] == []
+    import_orders(client, lan, LATER_ORDER)
+    later = analyse(client, lan)["PO-3"]
+    assert cases(client, lan, later)["geolocation"]["default"]["id"] == again["default"]["id"]
+
+    for summary, steps, field in [
+        ("  ", [], "summary"),
+        ("x" * 501, [], "summary"),
+        ("Fine.", [f"Step {i}" for i in range(9)], "steps"),
+        ("Fine.", ["x" * 501], "steps"),
+    ]:
+        refused = write(client, lan, report_id, summary, steps)
+        assert refused.status_code == 422, refused.text
+        assert field in refused.json()["error"]["fieldErrors"]
+    assert write(client, lan, report_id, "Fine.", key="nope").status_code == 422
+    viewer = add_member(client, "lan@example.com", "view@example.com", Role.viewer)
+    assert write(client, viewer, report_id, "Fine.").status_code == 403
+    other = onboard(client, "mai@example.com", company="Other Co")
+    assert write(client, other, report_id, "Fine.").status_code == 404
+
+    events = client.get("/api/v1/audit-events?objectType=solution", headers=lan).json()["data"]
+    written = [e for e in events if e["action"] == "solution.written"]
+    assert len(written) == 2 and len(events) == 2  # refused ones leave no trace
+    first = written[-1]
+    assert first["objectId"] == solution["id"]
+    assert first["user"]["email"] == "lan@example.com"
+    assert first["data"]["orderId"] == "PO-1" and first["data"]["requirementKey"] == "geolocation"
+    assert first["data"]["summary"] == solution["summary"]
+    assert first["data"]["steps"] == solution["steps"] and "model" not in first["data"]
+    assert written[0]["data"]["supersedes"] == solution["id"]

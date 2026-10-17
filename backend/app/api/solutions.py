@@ -17,6 +17,7 @@ from app.schemas.solutions import (
     SolutionReviewIn,
     SolutionSuggestIn,
     SolutionUseIn,
+    SolutionWriteIn,
 )
 from app.services import solutions as solution_service
 
@@ -51,6 +52,21 @@ def suggest_solution(report_id: uuid.UUID, payload: SolutionSuggestIn, ctx: Edit
     suggest_limiter.check(str(ctx.user.id), get_settings().solution_suggestions_per_hour)
     return success_response(
         solution_service.suggest_solution(db, ctx, report_id, payload.requirement_key)
+    )
+
+
+@router.post(
+    "/reports/{report_id}/solutions/manual",
+    response_model=SuccessResponse[SolutionCaseOut],
+    status_code=201,
+)
+def write_solution(report_id: uuid.UUID, payload: SolutionWriteIn, ctx: EditorContext, db: Db):
+    """A person writes a solution to one problem: no AI, so none of its checks, and no AI rate
+    limit. Saved, offered and expired like an AI one; audited as `solution.written`."""
+    return success_response(
+        solution_service.write_solution(
+            db, ctx, report_id, payload.requirement_key, payload.summary, payload.steps
+        )
     )
 
 

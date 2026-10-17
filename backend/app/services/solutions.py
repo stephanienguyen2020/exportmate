@@ -8,12 +8,15 @@ status, written for any earlier order.
    text and the company's own notes on earlier solutions to the same problem (expired ones too,
    marked as outdated). Code checks the answer before saving: every number in it appears in the
    facts it was given, and it links only to the cited text.
-2. Notes: anyone who edits can add a note on how they handle it. Notes are never edited or
+2. Write: a person writes the summary and steps instead, for any problem in the report. No AI is
+   called and none of its checks apply (people know facts the report doesn't); the text is only
+   tidied and held to the same limits. The audit log names who wrote it.
+3. Notes: anyone who edits can add a note on how they handle it. Notes are never edited or
    removed, and the AI reads them next time.
-3. Review: a person adopts a solution (offered first from then on) or rejects it (never the
+4. Review: a person adopts a solution (offered first from then on) or rejects it (never the
    default).
-4. Use: a person records which solution they followed for an order's problem.
-5. Knowledge base: every saved solution, grouped by problem, for browsing outside an order.
+5. Use: a person records which solution they followed for an order's problem.
+6. Knowledge base: every saved solution, grouped by problem, for browsing outside an order.
 
 A solution expires on `valid_until` (SOLUTION_VALID_DAYS after it was written, or the day before
 the requirement's stated change), when the requirement cites another regulation version, or
@@ -68,10 +71,23 @@ from app.services.trade_map import supplier_name_key
 log = logging.getLogger(__name__)
 _URL = re.compile(r"https?://[^\s<>()\"']+")
 _NUMBER = re.compile(r"\d+(?:[.,]\d+)*")
-_STEP_NUMBER = re.compile(r"^(?:step\s*)?\d+[.):]\s*", re.IGNORECASE)  # "1. " the AI may add
+# "1. " the AI (or a person) may add; not the "1." of "1.5 kg"
+_STEP_NUMBER = re.compile(r"^(?:step\s*)?\d+[.):](?!\d)\s*", re.IGNORECASE)
 MAX_STEPS = 8
+MAX_TEXT = 500  # characters in the summary and in each step
 NOTES_FOR_AI = 10  # newest notes on earlier solutions to the same problem
 EXPIRED_FOR_AI = 3
+
+
+@dataclass
+class Case:
+    """One problem in one report, with the requirement in force the report checked."""
+
+    report: AnalysisReport
+    content: ReportContentOut
+    order: Order
+    gap: RequirementCheckOut
+    requirement: MarketRequirement
 
 
 @dataclass
@@ -455,8 +471,8 @@ def _numbers(text: str) -> set[str]:
 
 def check_draft(answer: SolutionDraft, prompt: str, cited: set[str]) -> tuple[str, list[str]]:
     """The cleaned answer, or AppError 503 if it states a number or a link it wasn't given."""
-    summary = " ".join(answer.summary.split())[:500]
-    steps = [_STEP_NUMBER.sub("", " ".join(s.split()))[:500] for s in answer.steps]
+    summary = " ".join(answer.summary.split())[:MAX_TEXT]
+    steps = [_STEP_NUMBER.sub("", " ".join(s.split()))[:MAX_TEXT] for s in answer.steps]
     steps = [s for s in steps if s][:MAX_STEPS]
     text = " ".join([summary, *steps])
     if not summary or not steps:
@@ -471,47 +487,51 @@ def check_draft(answer: SolutionDraft, prompt: str, cited: set[str]) -> tuple[st
     raise AppError(503, "ai_unavailable", "The suggestion didn't pass its checks. Try again.")
 
 
-def suggest_solution(
+def _load_case(
     db: Session, ctx: CompanyContext, report_id: uuid.UUID, requirement_key: str
-) -> SolutionCaseOut:
-    """AI writes a new solution to one problem in the report, from the company's notes on
-    earlier ones. Replaces nothing: earlier solutions stay, and an expired one is linked."""
+) -> Case:
     report, content, order = _load_report(db, ctx, report_id)
     gap = _gap(content, requirement_key)
-    requirement = _requirement_for(db, ctx, content.market, gap)
-    problem = _problem(content.market, gap)
-    library = _load_library(db, ctx.company_id, [problem])
-    today = _today()
+    return Case(report, content, order, gap, _requirement_for(db, ctx, content.market, gap))
+
+
+def _earlier(
+    db: Session, ctx: CompanyContext, case: Case, today: date
+) -> tuple[Library, list[tuple[Solution, str]]]:
+    """The saved solutions to the case's problem, and the expired ones with why."""
+    library = _load_library(db, ctx.company_id, [_problem(case.content.market, case.gap)])
     expired = [
         (s, reason) for s in library.solutions if (reason := expired_reason(s, library, today))
     ]
-    notes = [n for s in library.solutions for n in library.notes.get(s.id, [])]
-    notes.sort(key=lambda n: n.created_at, reverse=True)
-    lead_days = cost_service.get_cost_settings(db, ctx.company_id)["supplier_lead_days"].value
-    prompt = _prompt(
-        order,
-        content,
-        gap,
-        requirement,
-        lead_days,
-        [n.text for n in notes[:NOTES_FOR_AI]],
-        expired[:EXPIRED_FOR_AI],
-    )
-    answer = gemini.generate_json("solution_suggestion", prompt, SolutionDraft)
-    summary, steps = check_draft(
-        answer, prompt, {gap.source.source_url} if gap.source.source_url else set()
-    )
-    model = get_settings().gemini_model
+    return library, expired
+
+
+def _add_solution(
+    db: Session,
+    ctx: CompanyContext,
+    case: Case,
+    summary: str,
+    steps: list[str],
+    *,
+    model: str | None,
+    supersedes_id: uuid.UUID | None,
+    action: str,
+    audit_data: dict,
+    today: date,
+) -> Solution:
+    """Save a new solution to the case's problem and audit it as `action`. Replaces nothing:
+    earlier solutions stay, and an expired one is linked."""
+    order, gap, requirement = case.order, case.gap, case.requirement
     solution = solution_queries.add_solution(
         db,
         Solution(
             company_id=ctx.company_id,
-            market_code=content.market,
+            market_code=case.content.market,
             requirement_key=gap.requirement_key,
             problem_status=gap.status,
             hs_heading=(order.hs_code or "").replace(".", "")[:4] or None,
             supplier_name_key=supplier_name_key(order.supplier),
-            report_id=report.id,
+            report_id=case.report.id,
             order_external_id=order.external_id,
             summary=summary,
             steps=steps,
@@ -520,7 +540,7 @@ def suggest_solution(
             source_quote=requirement.source_quote,
             valid_until=_valid_until(requirement, today),
             model=model,
-            supersedes_id=expired[0][0].id if expired else None,
+            supersedes_id=supersedes_id,
             status=SolutionStatus.suggested,
             created_by=ctx.user.id,
         ),
@@ -529,32 +549,133 @@ def suggest_solution(
         db,
         company_id=ctx.company_id,
         user_id=ctx.user.id,
-        action="solution.suggested",
+        action=action,
         object_type="solution",
         object_id=str(solution.id),
         data={
             "orderId": order.external_id,
-            "reportId": str(report.id),
-            "market": content.market,
+            "reportId": str(case.report.id),
+            "market": case.content.market,
             "requirementKey": gap.requirement_key,
             "problemStatus": gap.status,
-            "model": model,
             "validUntil": solution.valid_until.isoformat(),
             "regulationDocumentId": str(requirement.regulation_document_id),
-            "supersedes": str(solution.supersedes_id) if solution.supersedes_id else None,
-            "notesGiven": min(len(notes), NOTES_FOR_AI),
-            "expiredGiven": min(len(expired), EXPIRED_FOR_AI),
+            "supersedes": str(supersedes_id) if supersedes_id else None,
+            **audit_data,
             "steps": steps,
             "summary": summary,
         },
     )
     db.commit()
     log.info(
-        "solution.suggested",
+        action,
         extra={"company_id": str(ctx.company_id), "solution_id": str(solution.id)},
     )
-    (case,) = _cases(db, ctx, report, content, order, gap.requirement_key)
-    return case
+    return solution
+
+
+def suggest_solution(
+    db: Session, ctx: CompanyContext, report_id: uuid.UUID, requirement_key: str
+) -> SolutionCaseOut:
+    """AI writes a new solution to one problem in the report, from the company's notes on
+    earlier ones."""
+    case = _load_case(db, ctx, report_id, requirement_key)
+    today = _today()
+    library, expired = _earlier(db, ctx, case, today)
+    notes = [n for s in library.solutions for n in library.notes.get(s.id, [])]
+    notes.sort(key=lambda n: n.created_at, reverse=True)
+    lead_days = cost_service.get_cost_settings(db, ctx.company_id)["supplier_lead_days"].value
+    prompt = _prompt(
+        case.order,
+        case.content,
+        case.gap,
+        case.requirement,
+        lead_days,
+        [n.text for n in notes[:NOTES_FOR_AI]],
+        expired[:EXPIRED_FOR_AI],
+    )
+    answer = gemini.generate_json("solution_suggestion", prompt, SolutionDraft)
+    source_url = case.gap.source.source_url
+    summary, steps = check_draft(answer, prompt, {source_url} if source_url else set())
+    model = get_settings().gemini_model
+    _add_solution(
+        db,
+        ctx,
+        case,
+        summary,
+        steps,
+        model=model,
+        supersedes_id=expired[0][0].id if expired else None,
+        action="solution.suggested",
+        audit_data={
+            "model": model,
+            "notesGiven": min(len(notes), NOTES_FOR_AI),
+            "expiredGiven": min(len(expired), EXPIRED_FOR_AI),
+        },
+        today=today,
+    )
+    (out,) = _cases(db, ctx, case.report, case.content, case.order, case.gap.requirement_key)
+    return out
+
+
+def tidy_written(summary: str, steps: list[str]) -> tuple[str, list[str]]:
+    """A person's summary and steps, tidied as the AI's are (spaces, "1. ", empty steps) and
+    held to the same limits, but never shortened or checked against the report's facts."""
+    summary = " ".join(summary.split())
+    steps = [_STEP_NUMBER.sub("", " ".join(step.split())) for step in steps]
+    steps = [step for step in steps if step]
+    if not summary:
+        raise AppError(422, "validation_error", "Write what to do first.", {"summary": "Empty"})
+    if len(summary) > MAX_TEXT:
+        raise AppError(
+            422,
+            "validation_error",
+            f"Keep the summary to {MAX_TEXT} characters.",
+            {"summary": "Too long"},
+        )
+    if len(steps) > MAX_STEPS:
+        raise AppError(
+            422, "validation_error", f"Write at most {MAX_STEPS} steps.", {"steps": "Too many"}
+        )
+    if any(len(step) > MAX_TEXT for step in steps):
+        raise AppError(
+            422,
+            "validation_error",
+            f"Keep each step to {MAX_TEXT} characters.",
+            {"steps": "Too long"},
+        )
+    return summary, steps
+
+
+def write_solution(
+    db: Session,
+    ctx: CompanyContext,
+    report_id: uuid.UUID,
+    requirement_key: str,
+    summary: str,
+    steps: list[str],
+) -> SolutionCaseOut:
+    """A person writes a solution to one problem in the report. No AI is called, so it works
+    without one and none of the AI's checks apply; it is saved, offered and expires like any
+    other, and the audit log names who wrote it."""
+    summary, steps = tidy_written(summary, steps)
+    case = _load_case(db, ctx, report_id, requirement_key)
+    today = _today()
+    _, expired = _earlier(db, ctx, case, today)
+    _add_solution(
+        db,
+        ctx,
+        case,
+        summary,
+        steps,
+        model=None,
+        supersedes_id=expired[0][0].id if expired else None,
+        action="solution.written",
+        audit_data={},
+        today=today,
+    )
+    (out,) = _cases(db, ctx, case.report, case.content, case.order, case.gap.requirement_key)
+    return out
 
 
 def _load_solution(
