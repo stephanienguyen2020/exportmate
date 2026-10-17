@@ -35,11 +35,18 @@ npm test          # harness unit tests (no GCP needed)
 npm run eval      # golden-set eval against live Gemini + Firestore (--only=<ids>, --judge, --tier=, --engine = the deployed agents); exits 1 on regressions
 npm run eval:vertex  # the same, then an evaluation run on Agent Platform › Evaluation (platform/evaluate.py, needs uv)
 npm run eval:scan # news-scan relevance on labeled articles against live Gemini (--only=<ids>, --repeat=N); exits 1 on regressions
-npm run ops       # health summary of recent chat audits (--days=1, --json)
+npm run ops       # health summary of recent chat audits and news scans (--days=1, --json)
 PROJECT_ID=skilful-scarab-511320-q9 ./deploy.sh   # Cloud Build image -> Cloud Run service + job + Agent Runtime (GATEWAY=…, AGENTS=0 to skip)
 uv run --project platform python platform/runtime.py show|create|deploy|delete   # the Agent Runtime instance (Sessions, Memory Bank, container, Agent Identity)
 PROJECT_ID=… RUNTIME=… ../../infra/agent-platform/govern.sh   # owner: Agent Identity roles, Agent Registry, egress IAM, Agent Gateway + Model Armor (ENFORCE=1 to block)
 gcloud run jobs execute exportmate-ai-task --region asia-southeast1 --wait --args="node eval/run.js"   # any npm script's command, on GCP
+```
+
+Monitoring (`infra/monitoring/`, per service, safe to re-run): log-based metrics, an email channel, an uptime check, alert policies and a dashboard from the JSON files in `ai/` and `backend/`:
+
+```sh
+PROJECT_ID=exportmate-app PART=ai SERVICE=exportmate-ai ALERT_EMAIL=… infra/monitoring/apply.sh
+PROJECT_ID=skilful-scarab-511320-q9 PART=backend SERVICE=exportmate-backend WEBSITE_HOST=exportmate.vercel.app ALERT_EMAIL=… infra/monitoring/apply.sh
 ```
 
 CI (`.github/workflows/ci.yml`, on pushes to main and on PRs) runs the frontend build and `npm test`, backend ruff + `alembic check` + pytest against Postgres, and a parse check plus the unit tests of `ai/server` (the golden-set eval needs GCP and runs by hand). Beyond that, verification is manual headless-Chrome checks at multiple widths; `frontend/docs/VALIDATION.md` records the flows that have been exercised.
@@ -115,6 +122,6 @@ Locally `AUTH_MODE=dev` accepts `Authorization: Bearer dev:<email>` instead of a
 
 ## Docs
 
-`docs/AI_GUIDE.md` explains how to use the assistant and News watch and how they work (update it with user-visible AI changes). `docs/AGENT_HARNESS.md` maps the AI service's harness (policy, tools, guard, auditor, eval, ops, governance) to code and lists what is not done. Frontend and site planning docs are in `frontend/docs/` (`FRONTEND_PLAN.md`, `ACCOUNT_AND_SITE_PLAN.md`, `LANDING_DESIGN.md`, `VALIDATION.md`, `FIXES.md`); backend docs are in `backend/docs/`. Plans describe intended designs; much of `backend/docs/BACKEND_PLAN.md` (real auth, durable server storage, notification delivery, document extraction) is not implemented. All legal/regulatory content is illustrative; inventory is synthetic, news is real.
+`docs/architecture.svg` is the deployed architecture as tested on 16 Oct 2026 (AWS-style: one icon per service, coloured by category, grouped by project; broken paths in red); edit the nodes and edges in `docs/architecture.py` and run `python3 docs/architecture.py docs/architecture.svg`. `docs/agent-architecture.excalidraw` is the original plan, not what runs. `docs/AI_GUIDE.md` explains how to use the assistant and News watch and how they work (update it with user-visible AI changes). `docs/AGENT_HARNESS.md` maps the AI service's harness (policy, tools, guard, auditor, eval, ops, governance) to code and lists what is not done. Frontend and site planning docs are in `frontend/docs/` (`FRONTEND_PLAN.md`, `ACCOUNT_AND_SITE_PLAN.md`, `LANDING_DESIGN.md`, `VALIDATION.md`, `FIXES.md`); backend docs are in `backend/docs/`. Plans describe intended designs; much of `backend/docs/BACKEND_PLAN.md` (real auth, durable server storage, notification delivery, document extraction) is not implemented. All legal/regulatory content is illustrative; inventory is synthetic, news is real.
 
 Regulations: `frontend/src/Regulations.tsx` implements the library, version history, metadata, authenticated downloads and editor/owner uploads for the built regulation APIs. Map citations deep-link to exact document versions. The Vercel project root is `frontend/`; run Vercel CLI from the repository root. Main is protected; changes go through PRs and all three CI jobs.

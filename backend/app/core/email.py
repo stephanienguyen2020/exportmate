@@ -7,6 +7,7 @@ domain is verified); responses say `sandbox: true` so the UI never claims a deli
 import base64
 import json
 import logging
+import re
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
@@ -18,6 +19,8 @@ from app.core.errors import AppError
 RESEND_URL = "https://api.resend.com/emails"
 RESEND_TIMEOUT_SECONDS = 15
 SANDBOX_KEEP = 50
+# Resend's error messages can echo addresses; logs never carry them.
+_ADDRESS = re.compile(r"[^\s<>()@,;:\"']+@[^\s<>()@,;:\"']+")
 
 log = logging.getLogger(__name__)
 
@@ -81,12 +84,21 @@ class ResendEmailSender:
             with urllib.request.urlopen(request, timeout=RESEND_TIMEOUT_SECONDS) as response:
                 message_id = json.loads(response.read()).get("id", "")
         except urllib.error.HTTPError as error:
-            # Status and Resend's error name only: the message can echo addresses.
+            # Resend says why ("domain is not verified", ...); its addresses are masked.
             try:
-                name = json.loads(error.read()).get("name", "")
+                detail = json.loads(error.read())
             except ValueError:
-                name = ""
-            log.warning("email.rejected", extra={"status": error.code, "provider_error": name})
+                detail = {}
+            log.warning(
+                "email.rejected",
+                extra={
+                    "status": error.code,
+                    "provider_error": detail.get("name", ""),
+                    "provider_message": _ADDRESS.sub("[address]", str(detail.get("message", "")))[
+                        :300
+                    ],
+                },
+            )
             if error.code == 429:
                 raise AppError(503, "email_unavailable", "Email is busy. Try again in a minute.")
             if error.code == 422:

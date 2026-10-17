@@ -14,6 +14,8 @@ function logEvent(
   else console.info(line);
 }
 
+const UPSTREAM_TIMEOUT_MS = 55_000;
+
 // Keep the private-service routing configuration out of the browser bundle.
 // Vercel routes /api/v1/* here before the separate AI service rewrite.
 export default async function handler(
@@ -80,7 +82,9 @@ export default async function handler(
       method: req.method,
       headers,
       body: chunks.length ? Buffer.concat(chunks) : undefined,
-      signal: AbortSignal.timeout(25000),
+      // Inside the function's maxDuration (vercel.json, 60 s) and above the backend's longest
+      // step: two Gemini attempts of 25 s (backend/app/core/config.py).
+      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
       redirect: "error",
     });
     res.statusCode = response.status;
@@ -97,7 +101,8 @@ export default async function handler(
       durationMs: Date.now() - started,
     });
   } catch (error) {
-    logEvent("error", "proxy.upstream_failed", {
+    const timedOut = (error as { name?: string } | null)?.name === "TimeoutError";
+    logEvent("error", timedOut ? "proxy.upstream_timeout" : "proxy.upstream_failed", {
       requestId,
       method: req.method,
       path: `/api/v1/${path}`,
@@ -106,6 +111,7 @@ export default async function handler(
       error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
       durationMs: Date.now() - started,
     });
-    fail(502, "The company backend could not be reached. Please try again.");
+    if (timedOut) fail(504, "The company backend took too long to answer. Please try again.");
+    else fail(502, "The company backend could not be reached. Please try again.");
   }
 }

@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.core.context import CompanyContext
 from app.core.errors import AppError, not_found_error
+from app.core.file_storage import get_file_storage
 from app.database.models import Supplier, SupplierDocument
 from app.database.queries import audit as audit_queries
 from app.database.queries import orders as order_queries
@@ -134,6 +135,16 @@ def _record_change(db: Session, ctx: CompanyContext, action: str, supplier: Supp
     log.info(action, extra={"company_id": str(ctx.company_id), "supplier_id": str(supplier.id)})
 
 
+def _delete_files(paths: list[str]) -> None:
+    """After the commit, so a failure leaves a file without a row (logged), never a row without
+    its file. The bucket is versioned; its lifecycle rule removes deleted files after 30 days."""
+    for path in paths:
+        try:
+            get_file_storage().delete_file(path)
+        except Exception:
+            log.exception("supplier_document.file_delete_failed", extra={"storage_path": path})
+
+
 def _analyse_orders_naming(db: Session, ctx: CompanyContext, keys: set[str]) -> list[str]:
     """Analyse again the orders whose supplier matches one of these name keys: their checks
     read this supplier's documents. The supplier change is saved either way; if the run fails,
@@ -223,8 +234,11 @@ def delete_supplier(db: Session, ctx: CompanyContext, supplier_id: uuid.UUID) ->
     if not supplier:
         raise not_found_error("Supplier")
     key = supplier.name_key
+    # Its uploaded certificates go too: their rows are deleted with the supplier.
+    files = map_queries.list_supplier_upload_paths(db, supplier.id)
     map_queries.delete_supplier(db, supplier)
     _record_change(db, ctx, "supplier.deleted", supplier)
+    _delete_files(files)
     return SupplierDeletedOut(
         deleted=True, analysed_order_ids=_analyse_orders_naming(db, ctx, {key})
     )

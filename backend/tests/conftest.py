@@ -27,6 +27,7 @@ from app.main import create_app
 from app.services import market_requirements as requirement_service
 from app.services import regulations as regulation_service
 from app.services import supplier_documents as supplier_document_service
+from app.services import suppliers as supplier_service
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 
@@ -81,7 +82,12 @@ class InMemoryFileStorage:
 
 
 # Every module that saves or reads files in Cloud Storage.
-FILE_STORAGE_USERS = [regulation_service, requirement_service, supplier_document_service]
+FILE_STORAGE_USERS = [
+    regulation_service,
+    requirement_service,
+    supplier_document_service,
+    supplier_service,
+]
 
 
 @pytest.fixture(autouse=True)
