@@ -23,7 +23,7 @@ npx playwright test -g "news sources"   # single Playwright test; `npx playwrigh
 npm run preview
 ```
 
-AI service (`ai/server/`, needs `gcloud auth application-default login`; talks to the real Firestore of `GOOGLE_CLOUD_PROJECT`, default `exportmate-app` until the move to `skilful-scarab-511320-q9` in `infra/terraform/README.md` is finished):
+AI service (`ai/server/`, needs `gcloud auth application-default login`; talks to the real Firestore of `PROJECT_ID` or `GOOGLE_CLOUD_PROJECT`, default `skilful-scarab-511320-q9`; the website's AI service and its data moved there from `exportmate-app`, see `infra/terraform/README.md`):
 
 ```sh
 npm run dev       # node --watch on :8080; reads ai/server/.env if present (.env.example: AGENT_RUNTIME = a dev instance turns on Sessions + Memory Bank locally)
@@ -45,7 +45,7 @@ gcloud run jobs execute exportmate-ai-task --region asia-southeast1 --wait --arg
 Monitoring (`infra/monitoring/`, per service, safe to re-run): log-based metrics, an email channel, an uptime check, alert policies and a dashboard from the JSON files in `ai/` and `backend/`:
 
 ```sh
-PROJECT_ID=exportmate-app PART=ai SERVICE=exportmate-ai ALERT_EMAIL=… infra/monitoring/apply.sh
+PROJECT_ID=skilful-scarab-511320-q9 PART=ai SERVICE=exportmate-ai ALERT_EMAIL=… infra/monitoring/apply.sh
 PROJECT_ID=skilful-scarab-511320-q9 PART=backend SERVICE=exportmate-backend WEBSITE_HOST=exportmate.vercel.app ALERT_EMAIL=… infra/monitoring/apply.sh
 ```
 
