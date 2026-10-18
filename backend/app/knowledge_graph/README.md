@@ -45,6 +45,7 @@ from it with `.claude/skills/architecture-diagram/export_png.mjs`.
 | 24 | GraphRAG in the assistant: `GET /knowledge-graph/query` runs the walk for what a question names; the `query_graph` tool and a graph specialist give the agents the paths; the auditor wants each order's path cited and a critic (Gemini) checks the answer's connections against the paths | `services/graph_query.py`, `ai/server/agents/tools.js`, `ai/server/critic.js` |
 | 25 | Link weights job (nightly): every company's verdicts per link, with a weight, in `graph_link_weights`; walks read cross-company doubt and weights from it (a company's own verdicts stay live), and prefer higher-weight links between otherwise equal paths; Rules & news › Material chain shows them | `app/update_link_weights.py`, `services/graph_feedback.py`, `infra/terraform/backend_service.tf` |
 | 26 | Chain versions: each industry's chain in Postgres (`chain_versions`), the files in `data/industries/` as first published versions; a changed file (or, next, the pipeline) makes a draft; chain admins (`CHAIN_ADMIN_EMAILS`) see its changes and flags on Rules & news › Material chain and publish it (the graph is rebuilt) or reject it | `services/chain_versions.py`, `frontend/src/ChainReview.tsx` |
+| 27 | Neo4j (AuraDB Free) as the graph's read model: each commit that changes the graph is a change event (Pub/Sub, pushed to the backend), which copies it from Postgres into Neo4j; the chain walk runs as Cypher there while Neo4j holds the same chain as Postgres, else on Postgres (section 9) | `database/graph_changes.py`, `services/graph_sync.py`, `services/graph_store.py`, `database/queries/neo4j_graph.py`, `infra/terraform/graph_sync.tf` |
 
 ### Next
 
@@ -52,7 +53,7 @@ from it with `.claude/skills/architecture-diagram/export_png.mjs`.
 | --- | --- | --- |
 | 1 | Industries outside the EUDR (textiles, metals, …): find official definitions first, then add them to `data/industries.json` | Every EUDR commodity is covered |
 | 2 | Lists still behind a few links: oil palm's derivatives quote EUDR Annex I ("produced using oil palm": law, but a list), rubber's retreading and unvulcanised forms and coffee preparations quote HS headings. No better official text was found (ISO 2000 for rubber is paid; the Codex cocoa PDFs can't be fetched) | Rebuild when one turns up |
-| 3 | A graph database (Neo4j) only if the walk outgrows Postgres | Section 9 |
+| 3 | More of the walk in Cypher (supplier sourcing to orders, not only the chain), and graph algorithms (which supplier is most central to a company's risk) | Neo4j now holds suppliers and orders too |
 | 4 | Draw paths on the trade map | Demos |
 | — | Housekeeping: re-seed the sample stock in `skilful-scarab` Firestore (`npm run seed`); 3 scan-eval cases fail on its old SKUs | Not graph work |
 
@@ -300,40 +301,45 @@ across records ("which of my orders depend on wood from Laos?"); the graph can.
   critic caught a planted wrong supplier, country and step and passed the correct answer.
 - Later: the company report's news → orders section and suggested solutions take paths too.
 
-## 9. Graph database (Neo4j): how it works and when
+## 9. Graph database (Neo4j): the read model
 
 **What it is.** A graph database stores nodes and relationships as first-class records: each node
-keeps direct pointers to its relationships ("index-free adjacency"), so following a link costs
-the same however big the graph is. Queries are written as patterns in Cypher:
+keeps direct pointers to its relationships, so following a link costs the same however big the
+graph is. Queries are patterns in Cypher, and it comes with graph algorithms (shortest paths,
+centrality, communities), graph pictures and vector indexes next to the graph.
 
-```cypher
-MATCH (m:Material {key: "acacia"})<-[:BUYS {country: "LA"}]-(s:Supplier)-[:SUPPLIES]->(o:Order),
-      p = (:Product {key: "roundwood"})-[:USED_TO_MAKE*1..4]->(:Product)<-[:OF_PRODUCT]-(o)
-RETURN s.name, o.id, p
-```
+**How we use it.** As a read model on Neo4j AuraDB Free, never the source of truth: Postgres is
+where data is written, Neo4j holds a copy.
 
-It also comes with graph algorithms (shortest paths, centrality, communities), graph pictures
-(Bloom), and vector indexes next to the graph, which GraphRAG setups use.
+| Neo4j | Copied from |
+| --- | --- |
+| `(:GraphNode:Product\|Material\|Commodity {key})` | `graph_nodes` |
+| `(:Product)-[:USED_TO_MAKE\|BY_PRODUCT {id, quote, weight}]->(:Product)` | `graph_edges`, `graph_link_weights` |
+| `(:Supplier {companyId})-[:BUYS {country, form}]->(:Material)` | `suppliers`, `supplier_sourcing` |
+| `(:Supplier)-[:SUPPLIES]->(:Order {companyId})`, `(:Order)-[:IS_PRODUCT]->(:Product)` | `orders` (by supplier name, by HS code) |
+| `(:SyncState {name: "chain", fingerprint})` | which `graph_edges` rows it holds |
 
-**What we use instead, and why.** The graph is small (71 products, 85 links across 7 industries; a company has
-tens of suppliers and orders), the walk is at most 4 links, and the company data it joins
-(orders, suppliers, sourcing) already lives in Postgres with its company scoping, migrations and
-backups. One recursive SQL query answers in milliseconds, with nothing to keep in sync.
+**Keeping it in step.** After each commit, `database/graph_changes.py` notes what changed: the
+shared chain, or a company's suppliers, sourcing or orders. In Cloud Run the backend publishes
+that to the Pub/Sub topic `exportmate-graph-changes`; its push subscription calls
+`POST /api/v1/internal/graph-sync` (OIDC token of `exportmate-graph-push`, checked by the
+backend), which rewrites what changed in Neo4j from Postgres as it is then. A sync that fails
+answers 503 and Pub/Sub tries again (AuraDB Free pauses when idle). Locally, without a topic,
+the change is synced on a background thread. Each sync rewrites from Postgres, so syncs can
+repeat or come out of order; the nightly link weights job then syncs everything, which catches
+up any lost event, and `deploy.sh` does the same after the reference seed
+(`python -m app.sync_graph`).
 
-**When to switch.** Any of these:
-- Walks get deep or wide: many industries and many-to-many supplier networks (suppliers of
-  suppliers), where recursive SQL gets slow or hard to write.
-- We need graph algorithms: which supplier is most central to the company's risk, clusters of
-  suppliers sharing origins.
-- GraphRAG needs flexible pattern queries from the assistant, or graph and vector search in one
-  store.
-- People want to explore the graph visually.
+**The walk.** `services/graph_store.py` runs the chain walk as Cypher on Neo4j (simple paths
+of at most 4 links, as the recursive SQL) and trusts the answer only when Neo4j's chain
+fingerprint (md5 of the `graph_edges` IDs) is Postgres's. Otherwise (no Neo4j, never synced,
+behind a graph rebuild, or down) it walks Postgres, and after a failure leaves Neo4j alone for a
+minute. The two give the same rows: checked on all 99 nodes (291 rows) on 18 Oct 2026. The rest
+of the walk (sourcing, markets, doubt, costs) is the same Python code either way.
+`GET /knowledge-graph/query` says where it walked (`walkedOn`).
 
-**How we'd add it.** As a read model, not the source of truth: Postgres stays where data is
-written; a sync job (or change events) copies nodes, links, sourcing and orders into Neo4j
-(managed: AuraDB, on Google Cloud Marketplace), keyed per company. The walk and `query_graph`
-then run Cypher there. Before Neo4j, Apache AGE (a graph extension inside Postgres, with Cypher)
-is a smaller step to try. In the plan: now that GraphRAG is built, only when one of the triggers above shows up.
+**Not yet.** Supplier and order nodes are synced but the walk still joins them in Python; the
+next step is the whole path in one Cypher query, then graph algorithms.
 
 ## 10. Where the code is
 
@@ -341,6 +347,7 @@ is a smaller step to try. In the plan: now that GraphRAG is built, only when one
 | --- | --- |
 | Tables | `database/models/knowledge_graph.py` (incl. `graph_link_weights`), `news_order_reviews` in `database/models/news.py` |
 | SQL (incl. the recursive walk) | `database/queries/knowledge_graph.py` |
+| Neo4j (read model) | `database/queries/neo4j_graph.py` (Cypher), `database/graph_changes.py` (change events), `services/graph_events.py` (Pub/Sub or in-process), `services/graph_sync.py`, `services/graph_store.py` (Neo4j or Postgres), `api/graph_sync.py` (push), `app/sync_graph.py`, `core/neo4j.py`; `infra/terraform/graph_sync.tf` |
 | Walk, word matching, sourcing, feedback | `services/knowledge_graph.py`, `services/graph_words.py`, `services/supplier_sourcing.py`, `services/graph_feedback.py`; the nightly link weights job `app/update_link_weights.py` (Cloud Run job `exportmate-backend-link-weights`, Cloud Scheduler `exportmate-nightly-link-weights`, 01:30 Vietnam time) |
 | News watch, Material chain page | `services/news_matches.py` (`GET /news-matches`, `/news-matches/accuracy`), `services/material_chain.py` (`GET /knowledge-graph/chain`) |
 | GraphRAG | `services/graph_query.py` (`GET /knowledge-graph/query`); `ai/server/agents/tools.js` (`query_graph`), `agents/assistant.js` (`graph_specialist`), `review.js` (path check), `critic.js`, `policy.js` (`graph-paths`) |
@@ -348,4 +355,4 @@ is a smaller step to try. In the plan: now that GraphRAG is built, only when one
 | Building chains | `knowledge_graph/build_chain.py`, `knowledge_graph/__init__.py` (`load_chain`) |
 | Scan and eval | `ai/server/scan.js`, `ai/server/mentions.js`, `ai/server/eval/scan-*.js` |
 | Screens | `frontend/ai/news/NewsOrders.tsx` (path), `frontend/src/trade-map/` (sourcing), `frontend/src/MaterialChain.tsx`, `frontend/src/ChainReview.tsx` (chain admins) |
-| Tests | `tests/test_build_chain.py`, `tests/test_knowledge_graph.py`, `tests/test_chain_versions.py`, `tests/test_suppliers_and_sites.py`, `tests/test_supplier_documents.py`, `ai/server/test/mentions.test.js`, `ai/server/test/scan-eval.test.js`, `ai/server/test/graph.test.js` |
+| Tests | `tests/test_build_chain.py`, `tests/test_knowledge_graph.py`, `tests/test_chain_versions.py`, `tests/test_graph_sync.py`, `tests/test_suppliers_and_sites.py`, `tests/test_supplier_documents.py`, `ai/server/test/mentions.test.js`, `ai/server/test/scan-eval.test.js`, `ai/server/test/graph.test.js` |

@@ -105,6 +105,9 @@ class GraphQueryOut(CamelCaseModel):
     understood: GraphQueryUnderstoodOut
     orders_checked: int  # the orders walked (open ones, or every one with includeShipped)
     matches: list[GraphQueryMatchOut]
+    # Where the chain was walked: Neo4j (the read model), Postgres (no Neo4j, or it lagged or
+    # failed) or both; empty when nothing needed a chain walk.
+    walked_on: list[str] = Field(default_factory=list)
 
 
 class ChainDiffLinkOut(CamelCaseModel):

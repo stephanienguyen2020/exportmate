@@ -120,6 +120,7 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
 | `POST /knowledge-graph/chain-versions/{id}/publish` | chain admin | the same: "Publish version N" |
 | `POST /knowledge-graph/chain-versions/{id}/reject` | chain admin | the same: "Reject" |
 | `GET /knowledge-graph/query` | viewer | Not called by the website: the assistant's `query_graph` tool (AI service, with the user's token) |
+| `POST /internal/graph-sync` | Pub/Sub OIDC | Not called by the website: the push subscription of graph change events (Neo4j sync) |
 | `PUT /news-matches/{impactId}/orders/{orderId}` | editor | News watch alert: "Affects this order" / "Not relevant", "Link order" |
 | `DELETE /news-matches/{impactId}/orders/{orderId}` | editor | News watch alert: "Undo" |
 | **Supplier messages and report actions** | | |
@@ -783,9 +784,13 @@ Each industry's material chain is kept as versions (`chain_versions`): the files
  "matches": [{"orderId": "PO-1", "product": "Acacia plywood 18 mm", "supplier": "Binh Phu Wood", "destination": "Rotterdam, NL",
               "market": "EU", "shipDate": "2026-10-28", "status": "exposed", "via": "supplier",
               "reason": "Binh Phu Wood buys acacia from Vietnam; Logs … → Veneer sheets … → Plywood …, this order's product.",
-              "path": [{"kind": "mention", "label": "acacia logs, VN", "link": null, "sourceTitle": null, "sourceUrl": null, "quote": null}, "…"]}]}}
+              "path": [{"kind": "mention", "label": "acacia logs, VN", "link": null, "sourceTitle": null, "sourceUrl": null, "quote": null}, "…"]}],
+ "walkedOn": ["neo4j"]}}
 ```
-Which of the company's orders a question's material (a species, a broad word such as "timber", or a chain product such as "plywood"), origin country, HS code or market reaches, each with its cited path: the walk `GET /news-matches` uses for an article, run for what a question names (GraphRAG; the assistant's `query_graph` tool calls it with the user's token). Open orders only unless `includeShipped`. `understood` says what the graph recognised and `unknown` what it didn't (a word no node names, a malformed HS code, a country or market we don't know), so an answer can say so instead of reporting "no orders".
+Which of the company's orders a question's material (a species, a broad word such as "timber", or a chain product such as "plywood"), origin country, HS code or market reaches, each with its cited path: the walk `GET /news-matches` uses for an article, run for what a question names (GraphRAG; the assistant's `query_graph` tool calls it with the user's token). Open orders only unless `includeShipped`. `understood` says what the graph recognised and `unknown` what it didn't (a word no node names, a malformed HS code, a country or market we don't know), so an answer can say so instead of reporting "no orders". `walkedOn` says where the chain was walked: `neo4j` (the read model, while it holds the same chain as Postgres), `postgres`, or none when nothing needed a chain walk.
+
+### `POST /internal/graph-sync` (Pub/Sub push)
+A Pub/Sub push delivery (`{"message": {"data": "<base64 JSON>"}, "subscription": "…"}`) of a graph change event, `{"chain": true, "companyIds": [], "supplierIds": [], "everyCompany": false}`, published by the backend after a commit that changed the graph. Syncs what it names from Postgres into Neo4j and answers `204`. Needs an OIDC token for `GRAPH_SYNC_AUDIENCE` signed as `GRAPH_SYNC_INVOKER` (`401` / `403` otherwise; `404` when they aren't set). `503 graph_sync_failed` when Neo4j can't be written, so Pub/Sub delivers it again; an unreadable message is acknowledged and dropped.
 
 ### `PUT /news-matches/{impactId}/orders/{orderId}` (editor)
 `{"verdict": "relevant" | "not_relevant", "note": "…"}` (note optional, ≤500). `orderId` is the order's own ID. Works for any order of the company, suggested or not: an order that wasn't suggested is stored with `suggested: false`. A new verdict replaces the last one, whoever gave it. Returns the match. Audited as `news.reviewed`. `404` for an alert News watch doesn't show this company or an order that isn't the company's; `503` if News watch can't be reached.

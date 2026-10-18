@@ -1,3 +1,6 @@
+import uuid
+
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.database.models import Company
@@ -26,3 +29,7 @@ def create_company(
     db.add(company)
     db.flush()
     return company
+
+
+def list_company_ids(db: Session) -> list[uuid.UUID]:
+    return list(db.scalars(select(Company.id)))
