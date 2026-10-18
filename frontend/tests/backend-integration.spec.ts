@@ -939,6 +939,8 @@ async function login(page: Page) {
   await page.getByLabel("Email", { exact: true }).fill("owner@example.com");
   await page.getByLabel("Password", { exact: true }).fill("test-password");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  // Sign-in finishes with its own redirect; a page.goto before that would be overwritten.
+  await expect(page).toHaveURL(/#\/(workspace|onboarding)/);
 }
 
 test("loads paginated API data, preserves statuses/currency, and reads source evidence", async ({
