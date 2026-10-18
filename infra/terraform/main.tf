@@ -18,6 +18,7 @@ locals {
     "modelarmor.googleapis.com",
     "networksecurity.googleapis.com", # Agent Gateway authorization policies
     "networkservices.googleapis.com", # Agent Gateway
+    "pubsub.googleapis.com",          # graph change events (graph_sync.tf)
     "run.googleapis.com",
     "secretmanager.googleapis.com",
     "serviceusage.googleapis.com",

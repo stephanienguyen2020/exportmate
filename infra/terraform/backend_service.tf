@@ -10,7 +10,7 @@ locals {
     rewrite.destination if rewrite.source == "/api/:path*"
   ]), "/api/:path*")
 
-  backend_env = {
+  backend_env = merge({
     ENV                        = "production"
     AUTH_MODE                  = "firebase"
     FIREBASE_PROJECT_ID        = var.project_id
@@ -22,7 +22,7 @@ locals {
     GEMINI_MODEL               = var.gemini_model
     CONTACT_INBOX              = var.contact_inbox
     CHAIN_ADMIN_EMAILS         = var.chain_admin_emails
-  }
+  }, local.graph_env)
 }
 
 # Resend key for emailed order reports. Terraform makes the empty secret; add the key by hand
@@ -89,6 +89,19 @@ resource "google_cloud_run_v2_service" "backend" {
           secret_key_ref {
             secret  = google_secret_manager_secret.database_url.secret_id
             version = "latest"
+          }
+        }
+      }
+
+      dynamic "env" {
+        for_each = local.neo4j_enabled ? [data.google_secret_manager_secret.neo4j_password[0].secret_id] : []
+        content {
+          name = "NEO4J_PASSWORD"
+          value_source {
+            secret_key_ref {
+              secret  = env.value
+              version = "latest"
+            }
           }
         }
       }
@@ -183,6 +196,19 @@ resource "google_cloud_run_v2_job" "backend_task" {
           }
         }
 
+        dynamic "env" {
+          for_each = local.neo4j_enabled ? [data.google_secret_manager_secret.neo4j_password[0].secret_id] : []
+          content {
+            name = "NEO4J_PASSWORD"
+            value_source {
+              secret_key_ref {
+                secret  = env.value
+                version = "latest"
+              }
+            }
+          }
+        }
+
         volume_mounts {
           name       = "cloudsql"
           mount_path = "/cloudsql"
@@ -247,6 +273,19 @@ resource "google_cloud_run_v2_job" "backend_link_weights" {
             secret_key_ref {
               secret  = google_secret_manager_secret.database_url.secret_id
               version = "latest"
+            }
+          }
+        }
+
+        dynamic "env" {
+          for_each = local.neo4j_enabled ? [data.google_secret_manager_secret.neo4j_password[0].secret_id] : []
+          content {
+            name = "NEO4J_PASSWORD"
+            value_source {
+              secret_key_ref {
+                secret  = env.value
+                version = "latest"
+              }
             }
           }
         }

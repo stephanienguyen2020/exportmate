@@ -17,11 +17,12 @@ gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
 docker build --platform linux/amd64 -t "$IMAGE" .
 docker push "$IMAGE"
 
-echo "==> Running migrations and loading reference data (markets, checklists, ...)"
+echo "==> Running migrations, loading reference data (markets, checklists, ...), syncing Neo4j"
 # The job runs `sh -c "<args>"`. The reference seed is idempotent: it updates rows in place.
+# The graph sync copies it into Neo4j (does nothing without NEO4J_URI).
 gcloud run jobs update exportmate-backend-task \
   --project "$PROJECT_ID" --region "$REGION" --image "$IMAGE" \
-  --args="alembic upgrade head && python -m app.seed_reference_data"
+  --args="alembic upgrade head && python -m app.seed_reference_data && python -m app.sync_graph"
 gcloud run jobs execute exportmate-backend-task --project "$PROJECT_ID" --region "$REGION" --wait
 
 # The nightly link weights job runs the same image (infra/terraform/backend_service.tf).

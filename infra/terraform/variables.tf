@@ -99,3 +99,15 @@ variable "rag_service_agent_ready" {
   type        = bool
   default     = true
 }
+
+variable "neo4j_uri" {
+  description = "Neo4j AuraDB URI (neo4j+s://<id>.databases.neo4j.io), the knowledge graph's read model (graph_sync.tf). Empty: no Neo4j, the walk uses Postgres only. Its password is the Secret Manager secret neo4j-password, made by hand."
+  type        = string
+  default     = ""
+}
+
+variable "neo4j_username" {
+  description = "Neo4j user."
+  type        = string
+  default     = "neo4j"
+}

@@ -113,4 +113,5 @@ def query_graph(
         understood=_understood(walker, mentions),
         orders_checked=len(orders),
         matches=matches,
+        walked_on=sorted(walker.store.answered_by),
     )
