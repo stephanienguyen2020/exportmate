@@ -130,6 +130,7 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
 | `GET /solutions` | viewer | Rules & news › Knowledge base |
 | `GET /reports/{id}/solutions` | viewer | Order page: "Suggested solutions" |
 | `POST /reports/{id}/solutions` | editor | Order page: "Suggest a solution", "Analyse again", "Ask AI for another" |
+| `POST /reports/{id}/solutions/manual` | editor | Order page: "Write your own" › "Save solution" |
 | `POST /solutions/{id}/use` | editor | Order page solution: "Use for <order>" |
 | `POST /solutions/{id}/notes` | editor | Order page and Knowledge base solution: "Add note" |
 | `POST /solutions/{id}/review` | editor | Order page and Knowledge base solution: "Adopt for this problem", "Reject" |
@@ -796,7 +797,7 @@ Sends once: the row is locked and an optional `Idempotency-Key` header is passed
 
 ## Suggested solutions
 
-How to fix each problem an analysis report found (a document `missing` or `mismatch`), saved for later orders (`services/solutions.py`). A problem matches earlier solutions by market, requirement key and problem status, for any order. Every write is in the audit log (object type `solution`: `solution.suggested` with the full text and model, `solution.used`, `solution.note_added` with the note, `solution.adopted`, `solution.rejected`).
+How to fix each problem an analysis report found (a document `missing` or `mismatch`), saved for later orders (`services/solutions.py`). A problem matches earlier solutions by market, requirement key and problem status, for any order. Every write is in the audit log (object type `solution`: `solution.suggested` with the full text and model, `solution.written` with the full text (a person wrote it; the event's user is the author), `solution.used`, `solution.note_added` with the note, `solution.adopted`, `solution.rejected`).
 
 A solution expires the day after `validUntil` (`SOLUTION_VALID_DAYS` after it was written, default 90, or the day before the requirement's `changesOn`), when the requirement cites another regulation version, or when it leaves the checklist; `expiredReason` says which. Expired solutions are listed for reference but are never the default, and can't be used or adopted (`409 solution_expired`).
 
@@ -804,10 +805,13 @@ A solution expires the day after `validUntil` (`SOLUTION_VALID_DAYS` after it wa
 The knowledge base: every solution the company saved, grouped by problem. Each entry has `market`, `requirementKey`, `problemStatus`, `title` (the requirement's title in force, else its key), `inChecklist` (false once the requirement left the market's checklist) and `solutions` (valid before expired; adopted, then suggested, then rejected; newest first; the same shape as below). Problems whose best solution is valid and adopted come first. Empty when nothing is saved.
 
 ### `GET /reports/{id}/solutions` (viewer)
-One entry per problem: `requirementKey`, `title`, `problemStatus`, `note`, `default` (the solution chosen for this order if still valid, else the best valid one: written from this report, adopted, same HS heading, same supplier, newest; never expired or rejected), `inUse`, `others` (other valid ones, rejected last), `expired`, `needsAnalysis` (no valid solution). Each solution has `summary`, `steps`, `status` (`suggested`, `adopted`, `rejected`), `writtenFor` (order ID), `basis` (regulation, document version and quote it was written from), `validUntil`, `expired`, `expiredReason`, `model`, `createdBy`, `reviewedBy`, `supersedesId`, `usedFor` (orders it was chosen for) and `notes` (oldest first). Empty when nothing is missing.
+One entry per problem: `requirementKey`, `title`, `problemStatus`, `note`, `default` (the solution chosen for this order if still valid, else the best valid one: written from this report, adopted, same HS heading, same supplier, newest; never expired or rejected), `inUse`, `others` (other valid ones, rejected last), `expired`, `needsAnalysis` (no valid solution). Each solution has `summary`, `steps`, `status` (`suggested`, `adopted`, `rejected`), `writtenFor` (order ID), `basis` (regulation, document version and quote it was written from), `validUntil`, `expired`, `expiredReason`, `model` (null when a person wrote it), `createdBy`, `reviewedBy`, `supersedesId`, `usedFor` (orders it was chosen for) and `notes` (oldest first). Empty when nothing is missing.
 
 ### `POST /reports/{id}/solutions` (editor, rate limited, AI)
 `{"requirementKey": "geolocation"}`. Gemini writes a summary and up to 8 steps from the report's facts, the requirement's cited text, the company's notes on earlier solutions to the same problem and its expired solutions (marked outdated). Code checks every number in the answer appears in those facts and it links only to the regulation's address (`503 ai_unavailable` otherwise; nothing saved). A new solution after expired ones sets `supersedesId`. `422 not_a_problem`; `409 report_out_of_date` when the checklist changed since the report. Returns `201` with the problem's entry. `SOLUTION_SUGGESTIONS_PER_HOUR` (30).
+
+### `POST /reports/{id}/solutions/manual` (editor)
+`{"requirementKey": "geolocation", "summary": "…", "steps": ["…"]}`. A person writes the solution: no AI is called (so it works without Gemini and isn't rate limited) and none of the AI's checks apply, so numbers and links the report doesn't hold are allowed. Spaces are tidied, a leading "1. " or "Step 1:" is dropped and empty steps are removed; then the AI's limits apply: a summary is required, up to 500 characters, and at most 8 steps of up to 500 characters each (`422 validation_error`, naming `summary` or `steps`). It cites the requirement's text, expires and is offered for later orders like an AI one, with `model` null; after expired ones it sets `supersedesId`. Audited as `solution.written`. `422 not_a_problem`; `409 report_out_of_date`. Returns `201` with the problem's entry.
 
 ### `POST /solutions/{id}/use` (editor)
 `{"reportId": "…"}`: record that this solution is followed for that report's matching problem (the latest choice wins). `422 wrong_problem`, `409 solution_expired`, `409 solution_rejected`. Returns the problem's entry.

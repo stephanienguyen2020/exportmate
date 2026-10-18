@@ -16,7 +16,7 @@
     },
     {
       "source": "/api/:path*",
-      "destination": "https://exportmate-ai-288740653400.asia-southeast1.run.app/api/:path*"
+      "destination": "https://exportmate-ai-3v6cd2xhpq-as.a.run.app/api/:path*"
     }
   ]
 }

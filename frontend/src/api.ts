@@ -265,7 +265,7 @@ export type Solution = {
   validUntil: string;
   expired: boolean;
   expiredReason: string | null;
-  model: string;
+  model: string | null; // null: a person wrote it, not AI
   createdBy: { id: string; name: string };
   createdAt: string;
   reviewedBy: { id: string; name: string } | null;
@@ -1350,6 +1350,19 @@ export const api = {
     request<SolutionCase>(
       `/reports/${encodeURIComponent(reportId)}/solutions`,
       { method: "POST", body: JSON.stringify({ requirementKey }) },
+    ).then((r) => r.data),
+  writeSolution: (
+    reportId: string,
+    requirementKey: string,
+    summary: string,
+    steps: string[],
+  ) =>
+    request<SolutionCase>(
+      `/reports/${encodeURIComponent(reportId)}/solutions/manual`,
+      {
+        method: "POST",
+        body: JSON.stringify({ requirementKey, summary, steps }),
+      },
     ).then((r) => r.data),
   useSolution: (id: string, reportId: string) =>
     request<SolutionCase>(`/solutions/${encodeURIComponent(id)}/use`, {
