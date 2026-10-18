@@ -16,6 +16,7 @@ import { EMBED_MODEL } from "./rag.js";
 import { toolGateway } from "./gateway.js";
 import { POLICY_VERSION } from "./policy.js";
 import { review, stripRefs, toEvidence } from "./review.js";
+import { critique, graphPaths } from "./critic.js";
 import { log } from "./log.js";
 import { ANONYMOUS, presentSources } from "./access.js";
 import { TIERS, thinkingFor } from "./models.js";
@@ -121,7 +122,7 @@ export async function runAgent({
   const companyId = company?.company.id;
   const readers = workspaceReaders(backend, company ? null : demo);
   // What this turn's tools and rules may use (gateway.js scopes, policy.js `when`).
-  const session = { company, orders: readers.orders, playbook: readers.playbook, stock: await stockFor(company, backend), memories: [] };
+  const session = { company, orders: readers.orders, playbook: readers.playbook, graph: readers.graph, stock: await stockFor(company, backend), memories: [] };
   // Who this chat runs as (agents/platform.js): Agent Platform session and Memory Bank scope.
   const userKey = userKeyFor({ company, user, sessionId });
 
@@ -193,9 +194,13 @@ export async function runAgent({
   // Every tool call, offered or not and by any agent, runs through the gateway and is recorded.
   // With `withEvidence`, what each tool returned, in call order (for the Agent Platform eval).
   const toolResults = [];
+  // What query_graph returned this turn: the paths the critic judges answers against (critic.js).
+  const graphOutputs = [];
+  let criticVerdict = null;
   async function runTool(name, args = {}, agent) {
     const r = await gateway.call(name, args);
     if (r.ok) evidence += " " + toEvidence(JSON.stringify(r.output));
+    if (r.ok && name === "query_graph") graphOutputs.push(r.output);
     if (withEvidence) toolResults.push(r.ok ? r.output : { error: r.error });
     push({
       kind: "tool",
@@ -229,15 +234,16 @@ export async function runAgent({
       if (call.step === max) request.config.toolConfig = { functionCallingConfig: { mode: FunctionCallingConfigMode.NONE } };
       return undefined;
     },
-    after({ context, response }) {
-      observe(context.agentName, calls.get(`${context.invocationId}/${context.agentName}`), response);
+    async after({ context, response }) {
+      await observe(context.agentName, calls.get(`${context.invocationId}/${context.agentName}`), response);
       return undefined;
     },
   };
 
   // Records each model response as a plan, report, draft or answer step. An answering agent's
-  // final answer that fails the auditor goes back once (not on its last step), to the analyst.
-  function observe(agent, call, res) {
+  // final answer that fails the auditor, or that the critic finds says more than the graph paths
+  // show, goes back once (not on its last step), to the analyst.
+  async function observe(agent, call, res) {
     const u = res.usageMetadata || {};
     const byAgent = (audit.usageByAgent[agent] ||= { promptTokens: 0, outputTokens: 0, thinkingTokens: 0, modelCalls: 0 });
     for (const usage of [audit.usage, byAgent]) {
@@ -264,16 +270,29 @@ export async function runAgent({
     if (agent !== ANSWERING.simple && agent !== ANSWERING.complex) return;
     const usedTools = audit.steps.some((s) => s.kind === "tool");
     const { problems } = review({ answer: text, retrieved: refs.all(), evidence, usedTools });
-    if (problems.length && !revised && !final) {
+    const sendBack = (by, found, ask) => {
       revised = true;
       push({ kind: "draft", latencyMs, thought, tokens, ...meta, excerpt: text.slice(0, 800) });
-      push({ kind: "review", problems });
+      push({ kind: "review", by, problems: found });
       if (current === "simple") {
         current = "complex";
         audit.route.escalated = true;
       }
-      revision = `Auditor review of your draft: ${problems.join(" ")} Verify with the tools (for totals, query_inventory with the skus) or remove what you cannot support, then give the corrected final answer.`;
+      revision = ask;
+    };
+    if (problems.length && !revised && !final) {
+      sendBack("auditor", problems, `Auditor review of your draft: ${problems.join(" ")} Verify with the tools (for totals, query_inventory with the skus) or remove what you cannot support, then give the corrected final answer.`);
       return;
+    }
+    // An answer built on knowledge graph paths: does it claim connections the paths don't show?
+    if (graphOutputs.length) {
+      const started = Date.now();
+      criticVerdict = await critique({ answer: text, paths: graphPaths(graphOutputs) });
+      audit.critic = { ...criticVerdict, latencyMs: Date.now() - started };
+      if (!criticVerdict.supported && !revised && !final) {
+        sendBack("critic", criticVerdict.problems, `Critic review of your draft: these claims about how orders are connected are not shown by the knowledge graph paths: ${criticVerdict.problems.join(" ")} Say only what the paths show (cite each order's path ref), or remove the claim, then give the corrected final answer.`);
+        return;
+      }
     }
     answer = text;
     audit.model = call?.model ?? audit.model;
@@ -337,6 +356,12 @@ export async function runAgent({
 
   const retrieved = refs.all();
   const { checks, citations } = review({ answer, retrieved, evidence, usedTools: audit.steps.some((s) => s.kind === "tool") });
+  if (criticVerdict && !criticVerdict.skipped)
+    checks.push({
+      name: "Graph paths support the claims (critic)",
+      ok: criticVerdict.supported,
+      detail: criticVerdict.error ? `Critic unavailable: ${criticVerdict.error}` : criticVerdict.supported ? `Judged by ${criticVerdict.model}` : criticVerdict.problems.join(" "),
+    });
   // An answer that still fails the auditor after its revision is shown, flagged for a person to check.
   if (audit.status === "ok" && checks.some((c) => !c.ok)) audit.status = "needs_review";
   const flags = audit.steps.flatMap((s) => s.flags || []);

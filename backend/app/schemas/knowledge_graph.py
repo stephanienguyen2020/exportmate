@@ -1,7 +1,8 @@
+from datetime import date
 from typing import Literal
 
 from app.schemas.common import CamelCaseModel
-from app.schemas.news import AccuracyByWayOut
+from app.schemas.news import AccuracyByWayOut, NewsPathStepOut
 
 
 class ChainProductOut(CamelCaseModel):
@@ -62,3 +63,36 @@ class MaterialChainOut(CamelCaseModel):
     industries: list[ChainIndustryOut]
     materials: list[ChainMaterialOut]
     by_way: list[AccuracyByWayOut]  # how often each way of suggesting was confirmed
+
+
+class GraphQueryUnderstoodOut(CamelCaseModel):
+    """What the walk made of the question's words, so an answer can say what it couldn't use."""
+
+    materials: list[str]  # graph materials, e.g. "Acacia"
+    products: list[
+        str
+    ]  # chain products named as words or HS codes, e.g. "Logs (wood in the rough)"
+    countries: list[str]  # origin countries, by name
+    markets: list[str]  # our market codes
+    unknown: list[str]  # words and codes the graph doesn't know
+
+
+class GraphQueryMatchOut(CamelCaseModel):
+    """One of the company's orders the question's material, origin, product or market reaches."""
+
+    order_id: str  # the order's external ID, as in /orders/{id}
+    product: str
+    supplier: str
+    destination: str
+    market: str | None
+    ship_date: date
+    status: str
+    via: Literal["supplier", "hs"]  # through a supplier's sourcing, or the same HS heading
+    reason: str
+    path: list[NewsPathStepOut]
+
+
+class GraphQueryOut(CamelCaseModel):
+    understood: GraphQueryUnderstoodOut
+    orders_checked: int  # the orders walked (open ones, or every one with includeShipped)
+    matches: list[GraphQueryMatchOut]

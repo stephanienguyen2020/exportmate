@@ -8,6 +8,7 @@
 //      ├─ stock_specialist      query_inventory, calculate
 //      ├─ news_specialist       get_alerts, get_scan_status, search_knowledge
 //      ├─ company_specialist    get_company_profile, query_orders, get_playbook (when offered)
+//      ├─ graph_specialist      query_graph (GraphRAG: orders a material, origin or product reaches, with paths)
 //      └─ knowledge_specialist  search_knowledge (help guides, the news archive)
 //
 // Specialists run on the simple tier as tools of the analyst (SpecialistTool). Every tool call
@@ -39,6 +40,12 @@ export const SPECIALISTS = [
     tools: ["get_company_profile", "query_orders", "get_playbook"],
     role: "you look up the company's own profile, orders with their document checklists, and playbook rules.",
     description: "The company's own records: its profile, its orders (ids such as PO-2291, values, ship dates, statuses, document checklists) and playbook rules.",
+  },
+  {
+    name: "graph_specialist",
+    tools: ["query_graph"],
+    role: "you walk the company's knowledge graph: which of its orders a material, an origin country, a product or HS code reaches, through which supplier and which steps of the material chain, each step with the official text behind it.",
+    description: "Connections and what-ifs: which orders depend on a material, an origin or a product (e.g. acacia from Laos, plywood, \"if Vietnam restricts log exports\"), with each order's cited path.",
   },
   {
     name: "knowledge_specialist",

@@ -96,11 +96,12 @@ const SCOPE_NEEDS = {
   company: "a signed-in company workspace",
   orders: "a workspace with orders",
   playbook: "a workspace with a playbook",
+  graph: "a signed-in company workspace",
 };
 
 /**
  * One gateway per agent turn (the budget is per turn).
- * registry: { [name]: { declaration, scope: "public" | "company" | "orders" | "playbook", run(args, ctx), timeoutMs?, maxCalls? } }
+ * registry: { [name]: { declaration, scope: "public" | "company" | "orders" | "playbook" | "graph", run(args, ctx), timeoutMs?, maxCalls? } }
  * ctx is passed to every handler; a tool whose scope isn't "public" runs only when ctx[scope]
  * is present (`ctx.company` for a signed-in company, `ctx.orders` / `ctx.playbook` readers).
  */

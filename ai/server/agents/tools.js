@@ -50,12 +50,24 @@ export function workspaceReaders(backend, demo) {
     return {
       orders: async () => (await read("/api/v1/trade-map", "orders")).orders,
       playbook: async () => (await read("/api/v1/playbook/rules", "playbook")).filter((r) => r.enabled),
+      graph: async (args) => read(`/api/v1/knowledge-graph/query?${graphQuery(args)}`, "knowledge graph"),
     };
   }
+  // The browser demo has no backend, so no knowledge graph to walk.
   return {
     orders: demo?.orders ? async () => demo.orders : null,
     playbook: demo?.playbook ? async () => demo.playbook : null,
+    graph: null,
   };
+}
+
+// query_graph's arguments as the backend's query string (each list parameter repeated).
+export function graphQuery({ materials = [], countries = [], hsCodes = [], markets = [], includeShipped = false }) {
+  const params = new URLSearchParams();
+  for (const [name, values] of [["material", materials], ["country", countries], ["hsCode", hsCodes], ["market", markets]])
+    for (const value of values) params.append(name, value);
+  if (includeShipped) params.set("includeShipped", "true");
+  return params.toString();
 }
 
 function citeAlert(refs, a) {
@@ -562,6 +574,82 @@ export const REGISTRY = {
         audit: { count: rules.length, results: rules.map((r) => ({ ref: r.ref, type: "playbook", title: `${r.category}: ${r.text}` })) },
       };
     },
+  },
+};
+
+// One path step as the model reads it: how it follows from the step before, and the official
+// text that says so, cited.
+function presentStep(step, refs) {
+  const source = step.sourceUrl
+    ? refs.cite(`chain-source:${step.sourceUrl}`, { type: "chain_source", id: step.sourceUrl, title: step.sourceTitle || step.sourceUrl, url: step.sourceUrl })
+    : undefined;
+  return {
+    kind: step.kind,
+    label: step.label,
+    ...(step.link ? { link: step.link } : {}),
+    ...(source ? { source, quote: step.quote } : {}),
+    ...(step.doubt ? { doubt: step.doubt } : {}),
+  };
+}
+
+REGISTRY.query_graph = {
+  scope: "graph",
+  // The company's orders and sourcing, read live from the backend.
+  live: true,
+  declaration: {
+    name: "query_graph",
+    description:
+      "Walks the company's knowledge graph (GraphRAG): which of its orders a material, an origin country, a product or HS code, or a market reaches, and how. Each match is an order with its path: the supplier that buys the material (and from where), then each step of the material chain (e.g. logs → veneer → plywood) with the official text that defines it, ending at the order. Use it for questions about connections and what-ifs: \"which orders depend on acacia from Laos?\", \"what if Vietnam restricts acacia log exports?\" (materials [\"acacia logs\"], countries [\"VN\"]), \"which orders use plywood?\". `understood` says what the graph recognised; `unknown` lists what it didn't. Open orders only unless includeShipped.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        materials: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Materials or products as words: a species (acacia, oil palm), a broad word (timber, hardwood) or a chain product (logs, plywood, cocoa butter); at most 8" },
+        countries: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Countries the materials come from, ISO alpha-2 (VN, LA, ID); at most 8" },
+        hsCodes: { type: Type.ARRAY, items: { type: Type.STRING }, description: "HS codes, 4 to 10 digits (4403, 4412.33); at most 8" },
+        markets: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Markets the orders ship to: EU, US, UK, … or a country code (NL counts as EU); at most 8" },
+        includeShipped: { type: Type.BOOLEAN, description: "Also orders that have shipped (default false)" },
+      },
+    },
+  },
+  async run(args, { refs, graph }) {
+    if (!["materials", "countries", "hsCodes"].some((k) => args[k]?.length))
+      throw new ToolError("invalid_args", "Name at least one material, origin country or HS code.");
+    const found = await graph(args);
+    const filters = describe(args, []);
+    const ref = refs.cite(`graph:${filters}`, {
+      type: "query",
+      id: filters,
+      title: `Knowledge graph walk (${filters}): ${found.matches.length} of ${found.ordersChecked} orders reached`,
+      url: "#/workspace/chain",
+    });
+    const matches = found.matches.map((m) => ({
+      ref: refs.cite(`path:${m.orderId}:${filters}`, {
+        type: "path",
+        id: m.orderId,
+        title: `${m.orderId} · ${m.reason}`,
+        url: `#/workspace/orders/${encodeURIComponent(m.orderId)}`,
+      }),
+      orderId: m.orderId,
+      product: m.product,
+      supplier: m.supplier,
+      destination: m.destination,
+      market: m.market,
+      shipDate: m.shipDate,
+      status: m.status,
+      via: m.via === "supplier" ? "through its supplier's sourcing and the material chain" : "same HS heading",
+      reason: m.reason,
+      path: m.path.map((step) => presentStep(step, refs)),
+    }));
+    return {
+      output: { ref, ordersChecked: found.ordersChecked, understood: found.understood, matches },
+      audit: {
+        count: matches.length,
+        results: [
+          { ref, type: "query", title: `${matches.length} of ${found.ordersChecked} orders reached` },
+          ...matches.map((m) => ({ ref: m.ref, type: "path", title: `${m.orderId} · ${m.reason}` })),
+        ],
+      },
+    };
   },
 };
 

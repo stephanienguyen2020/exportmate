@@ -42,6 +42,7 @@ from it with `.claude/skills/architecture-diagram/export_png.mjs`.
 | 21 | Stronger sources, one research round for every industry: HS chapter notes (WCO), EU Ecolabel criteria (furniture, floor coverings), U.S. Commerce scope texts (wooden cabinets, millwork), a CBP ruling (glulam from sawn boards), U.S. rules (40 CFR 428 and 63.6015 for rubber goods, 21 CFR 801.437 for latex, 21 CFR 163 for cacao), EU Regulations 853/2004 (meat, offal) and 1069/2009 (hides), EPA AP-42 (leather tanning), Codex soy protein products, the International Coffee Agreement 2007. Cattle gained hides and leather (EUDR 4101, 4104, 4107). Every link quotes a text; the hand-curated links (`extraLinks`) are gone. 7 industries, 71 products, 85 links | `data/industries.json`, `data/industries/` |
 | 22 | Pipeline: a rebuild offers the writer the current links to keep when a source quotes them and lists those it lost (`linksNoLongerSourced`); a long document names what to keep when cut (`focus`); an API answer is read from one field (`jsonField`, CBP rulings); a failed quote check says which part failed, so the revision can fix it | `build_chain.py` |
 | 23 | News watch runs in `skilful-scarab`: alerts carry `mentions`, so live suggestions walk the graph (18 Oct) | `infra/terraform/README.md` |
+| 24 | GraphRAG in the assistant: `GET /knowledge-graph/query` runs the walk for what a question names; the `query_graph` tool and a graph specialist give the agents the paths; the auditor wants each order's path cited and a critic (Gemini) checks the answer's connections against the paths | `services/graph_query.py`, `ai/server/agents/tools.js`, `ai/server/critic.js` |
 
 ### Next
 
@@ -49,9 +50,8 @@ from it with `.claude/skills/architecture-diagram/export_png.mjs`.
 | --- | --- | --- |
 | 1 | Industries outside the EUDR (textiles, metals, …): find official definitions first, then add them to `data/industries.json` | Every EUDR commodity is covered |
 | 2 | Lists still behind a few links: oil palm's derivatives quote EUDR Annex I ("produced using oil palm": law, but a list), rubber's retreading and unvulcanised forms and coffee preparations quote HS headings. No better official text was found (ISO 2000 for rubber is paid; the Codex cocoa PDFs can't be fetched) | Rebuild when one turns up |
-| 3 | GraphRAG in the assistant (`query_graph` tool) | Questions about connections (section 8) |
-| 4 | A graph database (Neo4j) only if the walk outgrows Postgres | Section 9 |
-| 5 | Draw paths on the trade map | Demos |
+| 3 | A graph database (Neo4j) only if the walk outgrows Postgres | Section 9 |
+| 4 | Draw paths on the trade map | Demos |
 | — | Housekeeping: re-seed the sample stock in `skilful-scarab` Firestore (`npm run seed`); 3 scan-eval cases fail on its old SKUs | Not graph work |
 
 ## 2. Data model
@@ -266,17 +266,31 @@ Next, item 2.
 
 An agent with search is only worth adding to find sources for a brand-new industry.
 
-## 8. GraphRAG in the assistant (next)
+## 8. GraphRAG in the assistant
 
-GraphRAG: for a question, fetch the relevant part of the graph (nodes and paths) and give it to
-Gemini as context. Today the assistant's RAG Engine finds similar text chunks, which can't follow
-connections across records ("which of my orders depend on wood from Laos?").
+GraphRAG: for a question, fetch the relevant part of the graph (paths) and give it to Gemini as
+context. The assistant's RAG Engine finds similar text chunks, which can't follow connections
+across records ("which of my orders depend on wood from Laos?"); the graph can.
 
-- One more read-only tool for the assistant's agents: `query_graph` (scope `orders`), calling a
-  backend endpoint that runs the same walk with the user's token, for a material, country, HS
-  code or what-if ("if Vietnam restricts acacia log exports").
-- The agent gets paths; the auditor (`ai/server/review.js`) checks the answer cites them, as for
-  `query_orders`. Gemini explains; the walk decides.
+- **Graph query API** (`GET /knowledge-graph/query`, `services/graph_query.py`, viewer): the same
+  walk as News watch (`GraphWalker`), for the materials, origin countries, HS codes and markets a
+  question names instead of an article's mentions. Returns each order reached with its path and
+  reason, and `understood` (what the graph recognised, and `unknown`: what it didn't), so "no
+  orders" isn't confused with "unknown word". Open orders unless `includeShipped`.
+- **`query_graph`** (`ai/server/agents/tools.js`, scope `graph`: company chats, read with the user's
+  token, never the demo): each order is cited as a `path`, each link's official text as a
+  `chain_source`. Held by `graph_specialist` (the analyst delegates to it) and `quick_answer`.
+  The router sends connection questions ("depends on", "made from", "supply chain", "restricts",
+  "which orders") to the analyst; the `graph-paths` policy rule has it name each order with its
+  path and add no links the path doesn't show.
+- **Auditor** (`review.js`): an order the walk reached that the answer names must cite its path.
+- **Critic** (`critic.js`): Gemini (the complex tier's model at LOW thinking) compares, order by
+  order, what the answer says connects the order with its path, given the order's own facts.
+  Restating or shortening is fine; a supplier, country or chain step the path doesn't show, or a
+  contradiction, sends the draft back once; still failing marks the answer `needs_review`.
+- Gemini explains; the walk decides. Tested on the demo company: "what if Vietnam restricts acacia
+  log exports?" names its 9 orders through Binh Phu Wood and An Cuong Wood with each chain; the
+  critic caught a planted wrong supplier, country and step and passed the correct answer.
 - Later: the company report's news → orders section and suggested solutions take paths too.
 
 ## 9. Graph database (Neo4j): how it works and when
@@ -312,8 +326,7 @@ backups. One recursive SQL query answers in milliseconds, with nothing to keep i
 written; a sync job (or change events) copies nodes, links, sourcing and orders into Neo4j
 (managed: AuraDB, on Google Cloud Marketplace), keyed per company. The walk and `query_graph`
 then run Cypher there. Before Neo4j, Apache AGE (a graph extension inside Postgres, with Cypher)
-is a smaller step to try. In the plan: after GraphRAG, only when one of the triggers above shows
-up.
+is a smaller step to try. In the plan: now that GraphRAG is built, only when one of the triggers above shows up.
 
 ## 10. Where the code is
 
@@ -323,8 +336,9 @@ up.
 | SQL (incl. the recursive walk) | `database/queries/knowledge_graph.py` |
 | Walk, word matching, sourcing, feedback | `services/knowledge_graph.py`, `services/graph_words.py`, `services/supplier_sourcing.py`, `services/graph_feedback.py` |
 | News watch, Material chain page | `services/news_matches.py` (`GET /news-matches`, `/news-matches/accuracy`), `services/material_chain.py` (`GET /knowledge-graph/chain`) |
+| GraphRAG | `services/graph_query.py` (`GET /knowledge-graph/query`); `ai/server/agents/tools.js` (`query_graph`), `agents/assistant.js` (`graph_specialist`), `review.js` (path check), `critic.js`, `policy.js` (`graph-paths`) |
 | Loading | `seed_reference_data.py` (graph, via `load_chain`), `seed_demo_data.py` (sourcing) |
 | Building chains | `knowledge_graph/build_chain.py`, `knowledge_graph/__init__.py` (`load_chain`) |
 | Scan and eval | `ai/server/scan.js`, `ai/server/mentions.js`, `ai/server/eval/scan-*.js` |
 | Screens | `frontend/ai/news/NewsOrders.tsx` (path), `frontend/src/trade-map/` (sourcing), `frontend/src/MaterialChain.tsx` |
-| Tests | `tests/test_build_chain.py`, `tests/test_knowledge_graph.py`, `tests/test_suppliers_and_sites.py`, `tests/test_supplier_documents.py`, `ai/server/test/mentions.test.js`, `ai/server/test/scan-eval.test.js` |
+| Tests | `tests/test_build_chain.py`, `tests/test_knowledge_graph.py`, `tests/test_suppliers_and_sites.py`, `tests/test_supplier_documents.py`, `ai/server/test/mentions.test.js`, `ai/server/test/scan-eval.test.js`, `ai/server/test/graph.test.js` |
