@@ -33,6 +33,8 @@ resource "google_cloud_run_v2_service" "web" {
           cpu    = "1"
           memory = "256Mi"
         }
+        # CPU only while answering a request (cheaper; under 512 Mi needs it).
+        cpu_idle = true
       }
 
       env {
