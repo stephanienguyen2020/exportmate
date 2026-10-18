@@ -7,7 +7,8 @@ Usage:  uv run python -m app.seed_demo_data --email lan@example.com
 With AUTH_MODE=dev, sign in as that user with the token "dev:lan@example.com".
 For a real Firebase user, pass --firebase-uid <uid> as well.
 
-Companies: `binh-duong` (default) is the frontend's demo, 12 orders to the EU and Asia.
+Companies: `binh-duong` (default) is the frontend's demo, 12 orders to the EU and Asia and one
+to the US (kitchen cabinets, so Rule watch shows the Section 232 tariff change).
 `us-furniture` is Vietnam Google AI Builder Furniture, 16 furniture orders from Vietnam to US
 ports (seed_data/us_furniture_company.json). As with an import, the orders are analysed once
 the suppliers are loaded, so statuses and reports (and supplier messages drafted from them)
@@ -100,6 +101,17 @@ def build_demo_orders() -> list[dict]:
             "value": 18000,
             "ship_date": date(2026, 10, 30),
             "hs_code": "4412.33",
+        },
+        # Ships to the US: Section 232 raises the tariff on kitchen cabinets on 1 January 2027,
+        # inside Rule watch's window, and a later ship date in "What if" changes the rate.
+        {
+            "external_id": "PO-2320",
+            "product": "Kitchen cabinet set",
+            "supplier": "Binh Phu Wood",
+            "destination": "Long Beach, US",
+            "value": 54300,
+            "ship_date": date(2026, 12, 18),
+            "hs_code": "9403.40",
         },
     ]
     for i, destination in enumerate(_OTHER_DESTINATIONS):
