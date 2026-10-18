@@ -117,7 +117,7 @@ gcloud run jobs execute exportmate-ai-task --region asia-southeast1 --wait --arg
 
 The website's AI service, its Firestore data, the daily scan and the assistant's agents all run here (moved from `exportmate-app` on 18 October 2026). The Cloud Run service `exportmate-ai` serves every `/api/*` route. The agents' Agent Runtime instance `exportmate-agents` (`projects/360016804920/locations/asia-southeast1/reasoningEngines/8488414484384186368`) runs the same image as its own Agent Identity, with Sessions and Memory Bank, behind the egress Agent Gateway `exportmate-egress` (IAP egress policy and Model Armor, both in observe mode).
 
-**Chats still run inside the Cloud Run service** (`var.agent_runtime` is empty): the gateway ends any request after 60 seconds, and one complex-tier model call (`gemini-4-argon`, MEDIUM thinking) can take longer, so 4 of 18 golden cases failed against the instance on 18 October (the gateway answered 500 after 60.2 s). Once the golden set passes against the instance, **owner:** `terraform apply -var agent_runtime=<instance>` relays chats to it (`AGENTS_AT=runtime`), and set that as the variable's default so every apply keeps it. Search is RAG Engine over the bucket `<project>-kb`; the daily scan (`exportmate-daily-news-scan`) runs at 07:00 Vietnam time. See `docs/AGENT_HARNESS.md`. Steps marked **owner** need dylan.exportmate@gmail.com.
+Chats are relayed to the instance (`AGENTS_AT=runtime`; `var.agent_runtime` defaults to it, so every apply keeps it). The gateway ends any request after 60 seconds, so the agents' complex tier thinks at LOW there (`ai/server/deploy.sh` sets `GEMINI_THINKING_COMPLEX`): at MEDIUM one `gemini-4-argon` call can take longer, and 4 of 18 golden cases failed (the gateway answered 500 after 60.2 s). At LOW the golden set passed 16 of 18 against the instance on 18 October (17 of 18 run locally at LOW; `eu-missing-geolocation` misses SKUs in both, on the simple tier).
 
 `ai/server/deploy.sh` (Every code change, above) updates the service, the job and the agents; it keeps the agents behind the gateway and gives them the backend's URL. `rag_service_agent_ready` defaults to true here (RAG Engine reads the bucket).
 
@@ -135,9 +135,8 @@ cd ai/server && PROJECT_ID=skilful-scarab-511320-q9 AGENT_RUNTIME=projects/36001
 
 Still to do:
 
-1. Fix the 60-second limit above, then relay chats to the instance.
-2. After a few days of clean Agent Gateway logs (no `DENIED` in `networkservices.googleapis.com/gateway_requests`, Model Armor `sanitize_operations` findings reviewed), **owner:** enforce with `ENFORCE=1 … infra/agent-platform/govern.sh`.
-3. Retire `exportmate-app`'s AI resources (its daily scan is paused), and the development resources made while building this (Agent Runtime instances `exportmate-agents-ai` and `exportmate-agents-dev`, the RAG corpora `exportmate-kb-*`, the bucket `exportmate-app-kb`, its Agent Gateway `exportmate-egress` with its policies, extensions and Agent Registry entries, the Model Armor template `exportmate-agent-traffic`, the image `exportmate-agents` in `cloud-run-source-deploy`):
+1. After a few days of clean Agent Gateway logs (no `DENIED` in `networkservices.googleapis.com/gateway_requests`, Model Armor `sanitize_operations` findings reviewed), **owner:** enforce with `ENFORCE=1 … infra/agent-platform/govern.sh`.
+2. Retire `exportmate-app`'s AI resources (its daily scan is paused), and the development resources made while building this (Agent Runtime instances `exportmate-agents-ai` and `exportmate-agents-dev`, the RAG corpora `exportmate-kb-*`, the bucket `exportmate-app-kb`, its Agent Gateway `exportmate-egress` with its policies, extensions and Agent Registry entries, the Model Armor template `exportmate-agent-traffic`, the image `exportmate-agents` in `cloud-run-source-deploy`):
    ```sh
    gcloud run services delete exportmate-ai --project exportmate-app --region asia-southeast1
    gcloud run services delete exportmate-chat --project exportmate-app --region asia-southeast1   # the service's earlier name; no requests since 10 Oct 2026
