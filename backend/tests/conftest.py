@@ -20,6 +20,7 @@ from app import seed_reference_data
 from app.core import gemini
 from app.core.config import get_settings
 from app.core.errors import AppError
+from app.core.neo4j import get_neo4j_driver
 from app.database.models import Base, Role
 from app.database.queries import users as user_queries
 from app.database.session import get_engine, open_session
@@ -44,7 +45,11 @@ def test_database() -> Iterator[None]:
     os.environ["DATABASE_URL"] = get_settings().test_database_url
     os.environ["AUTH_MODE"] = "dev"
     os.environ["ENV"] = "test"
+    # Never the Neo4j or Pub/Sub topic in backend/.env: tests walk and change Postgres only.
+    os.environ["NEO4J_URI"] = ""
+    os.environ["GRAPH_EVENTS_TOPIC"] = ""
     get_settings.cache_clear()
+    get_neo4j_driver.cache_clear()
     get_engine.cache_clear()
 
     with get_engine().begin() as conn:

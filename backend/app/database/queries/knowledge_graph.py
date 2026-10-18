@@ -2,9 +2,10 @@ import uuid
 from dataclasses import dataclass
 
 from sqlalchemy import Text, any_, cast, delete, func, literal, select
-from sqlalchemy.dialects.postgresql import ARRAY, UUID, array, insert
+from sqlalchemy.dialects.postgresql import ARRAY, UUID, aggregate_order_by, array, insert
 from sqlalchemy.orm import Session
 
+from app.database.graph_changes import note_supplier_changed
 from app.database.models import (
     ChainVersion,
     ChainVersionStatus,
@@ -44,6 +45,19 @@ def list_graph_edges(db: Session, edge_ids: set[uuid.UUID]) -> list[GraphEdge]:
 
 def list_all_graph_edges(db: Session) -> list[GraphEdge]:
     return list(db.scalars(select(GraphEdge).order_by(GraphEdge.from_key, GraphEdge.to_key)))
+
+
+def chain_fingerprint(db: Session) -> str:
+    """md5 of the graph_edges IDs, comma-separated in UUID order (graph_sync.edges_fingerprint
+    gives the same for the edges it copies to Neo4j). Rebuilding the graph renews every ID."""
+    ids = func.string_agg(cast(GraphEdge.id, Text), aggregate_order_by(literal(","), GraphEdge.id))
+    return db.scalar(select(func.md5(func.coalesce(ids, ""))))
+
+
+def list_supplier_company_ids(db: Session, supplier_ids: set[uuid.UUID]) -> set[uuid.UUID]:
+    if not supplier_ids:
+        return set()
+    return set(db.scalars(select(Supplier.company_id).where(Supplier.id.in_(supplier_ids))))
 
 
 def list_link_weights(db: Session) -> list[GraphLinkWeight]:
@@ -182,6 +196,7 @@ def replace_link_weights(db: Session, rows: list[dict]) -> None:
 
 
 def replace_supplier_sourcing(db: Session, supplier_id: uuid.UUID, rows: list[dict]) -> None:
+    note_supplier_changed(db, supplier_id)  # a bulk write the change events can't see
     db.execute(delete(SupplierSourcing).where(SupplierSourcing.supplier_id == supplier_id))
     if rows:
         db.execute(insert(SupplierSourcing).values(rows))

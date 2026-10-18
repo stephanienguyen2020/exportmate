@@ -102,6 +102,7 @@ uv run alembic upgrade head
 # Reference data, and vectors for the HS headings that HS code suggestions search (embedded once).
 uv run python -m app.seed_reference_data
 uv run python -m app.seed_demo_data --email "$DEMO_EMAIL"
+uv run python -m app.sync_graph   # Neo4j, when backend/.env has NEO4J_URI
 [ -n "$(uv run python -c 'from app.core.config import get_settings; print(get_settings().google_cloud_project or "")')" ] ||
   echo "warning: GOOGLE_CLOUD_PROJECT is not set in backend/.env, so the backend's AI steps answer 503 (see backend/.env.example)"
 

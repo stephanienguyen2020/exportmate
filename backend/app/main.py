@@ -12,6 +12,7 @@ from app.api import (
     audit_log,
     company_sites,
     cost_settings,
+    graph_sync,
     health,
     hs_suggestions,
     imports,
@@ -34,6 +35,7 @@ from app.core.config import get_settings
 from app.core.errors import register_error_handlers
 from app.core.logging import configure_logging
 from app.core.request_context import set_request_id, set_trace
+from app.services import graph_events
 
 API_PREFIX = "/api/v1"
 QUIET_PATHS = {f"{API_PREFIX}/health"}
@@ -44,6 +46,7 @@ log = logging.getLogger("app.request")
 def create_app() -> FastAPI:
     settings = get_settings()
     configure_logging(settings.log_level, settings.resolved_log_format)
+    graph_events.install()  # commits that change the graph are synced into Neo4j
     database = make_url(settings.database_url)
     logging.getLogger(__name__).info(
         "app.starting",
@@ -137,6 +140,7 @@ def create_app() -> FastAPI:
         news_matches,
         knowledge_graph,
         members,
+        graph_sync,
     ):
         api.include_router(module.router)
     app.include_router(api)
