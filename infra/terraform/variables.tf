@@ -83,9 +83,9 @@ variable "gemini_model_complex" {
 }
 
 variable "agent_runtime" {
-  description = "The agents' Agent Runtime instance (projects/…/locations/…/reasoningEngines/…), printed by ai/server/platform/runtime.py deploy. Empty: the Cloud Run service runs the agents itself."
+  description = "The agents' Agent Runtime instance (projects/…/locations/…/reasoningEngines/…), printed by ai/server/platform/runtime.py deploy. Empty: the Cloud Run service runs the agents itself. The default is this project's instance, so an apply from any machine keeps chats on it; set it to \"\" for a new project until its instance exists."
   type        = string
-  default     = ""
+  default     = "projects/360016804920/locations/asia-southeast1/reasoningEngines/8488414484384186368"
 }
 
 variable "rag_service_agent_ready" {
