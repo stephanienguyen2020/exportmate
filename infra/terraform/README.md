@@ -54,7 +54,7 @@ gcloud run jobs execute exportmate-backend-task --region asia-southeast1 --wait 
   --args="python -m app.seed_demo_data --email lan@example.com --firebase-uid <uid>"
 ```
 
-Create a test user and get an ID token (for Postman), using `apiKey` from `terraform output firebase_web_config`:
+Create a test user and get an ID token (for Postman), using `apiKey` from `terraform output firebase_web_config`. For the demo company, the user is `lan@example.com` with the password in the repository README (Try it):
 
 ```sh
 curl -s "https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=<apiKey>" \
@@ -63,7 +63,7 @@ curl -s "https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=<apiKey>"
 # → localId is the uid, idToken is the Bearer token (valid 1 hour)
 ```
 
-The backend rejects unverified emails (`403 email_not_verified`). Mark a test user verified:
+The backend rejects unverified emails (`403 email_not_verified`). Mark a test user verified (add `"password":"<password>"` to the same request to reset a password):
 
 ```sh
 curl -s -X POST "https://identitytoolkit.googleapis.com/v1/projects/$PROJECT_ID/accounts:update" \
