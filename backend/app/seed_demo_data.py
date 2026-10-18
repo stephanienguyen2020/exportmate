@@ -5,9 +5,7 @@ user.
 Usage:  uv run python -m app.seed_demo_data --email lan@example.com
         uv run python -m app.seed_demo_data --company us-furniture --email minh@example.com
 With AUTH_MODE=dev, sign in as that user with the token "dev:lan@example.com".
-For a real Firebase user, pass --firebase-uid <uid> as well, or --password <password>: the
-Firebase sign-in is then created (or given that password), verified, and used. Production:
-lan@example.com with the password in README.md (Try it).
+For a real Firebase user, pass --firebase-uid <uid> as well.
 
 Companies: `binh-duong` (default) is the frontend's demo, 12 orders to the EU and Asia and one
 to the US (kitchen cabinets, so Rule watch shows the Section 232 tariff change).
@@ -27,7 +25,6 @@ from datetime import date
 
 from sqlalchemy.orm import Session
 
-from app.core.auth import set_password_user
 from app.core.config import get_settings
 from app.core.context import CompanyContext
 from app.core.errors import AppError
@@ -377,18 +374,10 @@ def main() -> None:
         help="us-furniture: Vietnam Google AI Builder Furniture, Vietnam to the US",
     )
     parser.add_argument("--firebase-uid", help="defaults to the dev-mode uid 'dev:<email>'")
-    parser.add_argument(
-        "--password", help="create (or update) the Firebase sign-in with this password and use it"
-    )
     args = parser.parse_args()
     settings = get_settings()
     configure_logging(settings.log_level, settings.resolved_log_format)
-    seed = load_demo_company_seed(args.company)
-    if args.password:
-        uid = set_password_user(args.email, args.password, seed.owner_name)
-    else:
-        uid = args.firebase_uid or f"dev:{args.email}"
-    seed_demo_data(args.email, uid, args.company)
+    seed_demo_data(args.email, args.firebase_uid or f"dev:{args.email}", args.company)
 
 
 if __name__ == "__main__":

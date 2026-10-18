@@ -47,15 +47,14 @@ cd ../..
 PROJECT_ID=$PROJECT_ID backend/deploy.sh
 ```
 
-Demo data, with its Firebase sign-in: `--password` creates `lan@example.com` (or gives it that password), verified, then loads the demo company, its orders, suppliers, documents and sites, and the shared reference data. The password is the one in the repository README (Try it). Then copy it into Neo4j:
+Demo data for a real Firebase user (create the user first, see below). It also loads the shared trade-map reference data and the demo company's suppliers, documents and sites:
 
 ```sh
-gcloud run jobs execute exportmate-backend-task --region asia-southeast1 --wait --args="python -m app.seed_demo_data --email lan@example.com --password 'testinguser123@' && python -m app.sync_graph"
+gcloud run jobs execute exportmate-backend-task --region asia-southeast1 --wait \
+  --args="python -m app.seed_demo_data --email lan@example.com --firebase-uid <uid>"
 ```
 
-For a user made another way, pass `--firebase-uid <uid>` instead of `--password`.
-
-Create a test user and get an ID token (for Postman), using `apiKey` from `terraform output firebase_web_config`:
+Create a test user and get an ID token (for Postman), using `apiKey` from `terraform output firebase_web_config`. For the demo company, the user is `lan@example.com` with the password in the repository README (Try it):
 
 ```sh
 curl -s "https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=<apiKey>" \
@@ -64,7 +63,7 @@ curl -s "https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=<apiKey>"
 # → localId is the uid, idToken is the Bearer token (valid 1 hour)
 ```
 
-The backend rejects unverified emails (`403 email_not_verified`). Mark a test user verified:
+The backend rejects unverified emails (`403 email_not_verified`). Mark a test user verified (add `"password":"<password>"` to the same request to reset a password):
 
 ```sh
 curl -s -X POST "https://identitytoolkit.googleapis.com/v1/projects/$PROJECT_ID/accounts:update" \
