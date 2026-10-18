@@ -1,7 +1,7 @@
 """graph edges: who checked each link
 
 Revision ID: f5303c6ec7e6
-Revises: 43bbae082505
+Revises: 5363627c01dc
 Create Date: 2026-10-17 12:49:18.061493
 
 """
@@ -14,7 +14,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = "f5303c6ec7e6"
-down_revision: str | Sequence[str] | None = "43bbae082505"
+down_revision: str | Sequence[str] | None = "5363627c01dc"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
