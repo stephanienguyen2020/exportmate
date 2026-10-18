@@ -41,17 +41,17 @@ from it with `.claude/skills/architecture-diagram/export_png.mjs`.
 | 20 | Every EUDR commodity has a chain: soya, rubber and cattle added | `data/industries/` |
 | 21 | Stronger sources, one research round for every industry: HS chapter notes (WCO), EU Ecolabel criteria (furniture, floor coverings), U.S. Commerce scope texts (wooden cabinets, millwork), a CBP ruling (glulam from sawn boards), U.S. rules (40 CFR 428 and 63.6015 for rubber goods, 21 CFR 801.437 for latex, 21 CFR 163 for cacao), EU Regulations 853/2004 (meat, offal) and 1069/2009 (hides), EPA AP-42 (leather tanning), Codex soy protein products, the International Coffee Agreement 2007. Cattle gained hides and leather (EUDR 4101, 4104, 4107). Every link quotes a text; the hand-curated links (`extraLinks`) are gone. 7 industries, 71 products, 85 links | `data/industries.json`, `data/industries/` |
 | 22 | Pipeline: a rebuild offers the writer the current links to keep when a source quotes them and lists those it lost (`linksNoLongerSourced`); a long document names what to keep when cut (`focus`); an API answer is read from one field (`jsonField`, CBP rulings); a failed quote check says which part failed, so the revision can fix it | `build_chain.py` |
+| 23 | News watch runs in `skilful-scarab`: alerts carry `mentions`, so live suggestions walk the graph (18 Oct) | `infra/terraform/README.md` |
 
 ### Next
 
 | # | Step | Why |
 | --- | --- | --- |
-| 1 | Live News watch reads alerts from the AI service in `exportmate-app`, which doesn't write `mentions` yet: deploy main there, or move News watch to `skilful-scarab` (asked Loc, 17 Oct) | Until then real users get HS-heading suggestions only |
-| 2 | Industries outside the EUDR (textiles, metals, …): find official definitions first, then add them to `data/industries.json` | Every EUDR commodity is covered |
-| 3 | Lists still behind a few links: oil palm's derivatives quote EUDR Annex I ("produced using oil palm": law, but a list), rubber's retreading and unvulcanised forms and coffee preparations quote HS headings. No better official text was found (ISO 2000 for rubber is paid; the Codex cocoa PDFs can't be fetched) | Rebuild when one turns up |
-| 4 | GraphRAG in the assistant (`query_graph` tool) | Questions about connections (section 8) |
-| 5 | A graph database (Neo4j) only if the walk outgrows Postgres | Section 9 |
-| 6 | Draw paths on the trade map | Demos |
+| 1 | Industries outside the EUDR (textiles, metals, …): find official definitions first, then add them to `data/industries.json` | Every EUDR commodity is covered |
+| 2 | Lists still behind a few links: oil palm's derivatives quote EUDR Annex I ("produced using oil palm": law, but a list), rubber's retreading and unvulcanised forms and coffee preparations quote HS headings. No better official text was found (ISO 2000 for rubber is paid; the Codex cocoa PDFs can't be fetched) | Rebuild when one turns up |
+| 3 | GraphRAG in the assistant (`query_graph` tool) | Questions about connections (section 8) |
+| 4 | A graph database (Neo4j) only if the walk outgrows Postgres | Section 9 |
+| 5 | Draw paths on the trade map | Demos |
 | — | Housekeeping: re-seed the sample stock in `skilful-scarab` Firestore (`npm run seed`); 3 scan-eval cases fail on its old SKUs | Not graph work |
 
 ## 2. Data model
@@ -262,7 +262,7 @@ Regulations 853/2004 and 1069/2009, EPA AP-42 and HS chapter 41; cocoa the EU di
 21 CFR 163; coffee the EU directive and the International Coffee Agreement; soya and oil palm
 Codex standards and EUDR Annex I (sources table, above). Weakest left: sawn wood → seats
 quotes the JFSQ seat definition ("Seats with wooden frames"), and the list-based links in
-Next, item 3.
+Next, item 2.
 
 An agent with search is only worth adding to find sources for a brand-new industry.
 

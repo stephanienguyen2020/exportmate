@@ -21,13 +21,14 @@ they want answers. Never personal details (the managed USER_PERSONAL_INFO topic 
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 
 import agentplatform
 from agentplatform import types
 
-PROJECT = os.environ.get("GOOGLE_CLOUD_PROJECT", "exportmate-app")
+PROJECT = os.environ.get("GOOGLE_CLOUD_PROJECT", "skilful-scarab-511320-q9")
 LOCATION = os.environ.get("AGENT_LOCATION", "asia-southeast1")
 MEMORY_MODEL = os.environ.get("MEMORY_MODEL", "gemini-3.5-flash")
 MEMORY_TTL = f"{180 * 86400}s"
@@ -84,7 +85,7 @@ def find(client, name):
 
 def gateway_ca(gateway):
     """The root CA the gateway re-encrypts egress with (agentGatewayCard.rootCertificates)."""
-    out = subprocess.run(["gcloud", "network-services", "agent-gateways", "describe", gateway, "--format=json"], capture_output=True, text=True, check=True).stdout
+    out = subprocess.run([shutil.which("gcloud") or "gcloud", "network-services", "agent-gateways", "describe", gateway, "--format=json"], capture_output=True, text=True, check=True).stdout
     return "\n".join(json.loads(out)["agentGatewayCard"]["rootCertificates"])
 
 
