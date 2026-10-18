@@ -1,6 +1,6 @@
 # ExportMate backend — API
 
-What each endpoint does and where the app uses it. Business rules are in [REQUIREMENTS.md](REQUIREMENTS.md); technical decisions in [DECISIONS.md](DECISIONS.md). The live contract (exact field types) is the OpenAPI page at `/api/v1/docs`.
+What each endpoint does and where the app uses it. The live contract (exact field types) is the OpenAPI page at `/api/v1/docs`.
 
 ## Basics
 
@@ -356,7 +356,7 @@ Uploads never committed are deleted by `python -m app.cleanup_imports --older-th
 
 ## Playbook
 
-Playbook page. Every change records a new playbook revision. Each response returns its number in `meta.revision`. A rule with `when` and `then` is **checked** by every analysis run; one without them is stored only (REQUIREMENTS.md §4.4).
+Playbook page. Every change records a new playbook revision. Each response returns its number in `meta.revision`. A rule with `when` and `then` is **checked** by every analysis run; one without them is stored only.
 
 ```json
 {"id": "…", "text": "Problems over USD 2,000 go to the owner", "category": "Threshold", "enabled": true,
@@ -561,7 +561,7 @@ The regulation plus `versions[]`, newest first.
 
 ## Market requirements (drafted and reviewed)
 
-What a regulation version requires, per market, with the sentence that says so (REQUIREMENTS.md §4.5). Shared ones come from the seed. A company's own are drafted by AI from its own regulation documents and reviewed by the owner. Only reviewed ones in a version with no drafts left are checked; then the earlier versions' requirements become `replaced`.
+What a regulation version requires, per market, with the sentence that says so. Shared ones come from the seed. A company's own are drafted by AI from its own regulation documents and reviewed by the owner. Only reviewed ones in a version with no drafts left are checked; then the earlier versions' requirements become `replaced`.
 
 ```json
 {"id": "…", "marketCode": "EU", "requirementKey": "buyer_chain", "title": "FSC chain of custody (buyer policy)",
@@ -592,11 +592,11 @@ Edit a draft (`marketCode`, `title`, `level`, `documentKind`, `acceptedStandards
 
 ## Analysis (runs and reports)
 
-A run checks orders against the market requirements, prices the problems, applies the checked playbook rules, suggests one action and audits the result (REQUIREMENTS.md §4.6). Plain code, no AI: it finishes inside the request.
+A run checks orders against the market requirements, prices the problems, applies the checked playbook rules, suggests one action and audits the result. Plain code, no AI: it finishes inside the request.
 
 ### Cost settings
 
-The numbers analysis uses when a regulation doesn't give one (REQUIREMENTS.md §4.6 step 3). Shared defaults are seeded (`reference.json` `costDefaults`); a company can set its own.
+The numbers analysis uses when a regulation doesn't give one. Shared defaults are seeded (`reference.json` `costDefaults`); a company can set its own.
 
 #### `GET /company/cost-settings` (viewer)
 ```json
@@ -649,7 +649,7 @@ One order's report. Stored as it was written, so it reads the same after require
 
 ## HS code suggestions
 
-For orders imported without an HS code (REQUIREMENTS.md §8.3 J5, §8.4). A code from the CSV is never replaced.
+For orders imported without an HS code. A code from the CSV is never replaced.
 
 ### `POST /orders/{id}/hs-suggestions` (editor, rate limited, AI)
 1. Retrieves candidates: the company's past orders with a code and a similar product name (word similarity, `pg_trgm`), and the 12 official tariff lines closest in meaning to the product name (embeddings of the seeded HS headings, pgvector; shared words when embeddings aren't available).
@@ -800,7 +800,7 @@ Removes the verdict: a suggestion goes back to awaiting review; a linked order i
 
 ## Supplier messages
 
-From an analysis report to an email to the order's supplier (REQUIREMENTS.md §4.7). English only for now.
+From an analysis report to an email to the order's supplier. English only for now.
 
 ```json
 {"id": "…", "reportId": "…", "orderId": "PO-2291", "supplierId": "…", "status": "approved",
@@ -873,7 +873,7 @@ The whole log with the same filters as a CSV attachment (`exportmate-activity-YY
 
 ## Planned
 
-Not built. Shapes follow the requirements and may change. Phases are the ones in REQUIREMENTS.md §5.
+Not built. Shapes follow the requirements and may change.
 
 | Endpoint | Phase | Role | Does | Will be used by |
 | --- | --- | --- | --- | --- |

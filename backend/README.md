@@ -1,6 +1,6 @@
 # ExportMate backend
 
-FastAPI + Postgres. Docs in [docs/](docs/): [requirements](docs/REQUIREMENTS.md), [technical decisions](docs/DECISIONS.md), [endpoints](docs/API.md), [frontend gaps](docs/FRONTEND_GAPS.md).
+FastAPI + Postgres. Endpoints: [docs/API.md](docs/API.md).
 
 ## Run locally
 

@@ -1,5 +1,5 @@
 """Analysis runs: for each order, what is missing, what it costs, what the playbook says, what
-to do, and an audit of all of it. Plain code, no AI (docs/REQUIREMENTS.md §4.6).
+to do, and an audit of all of it. Plain code, no AI.
 
 Steps, in order, for every order in the run:
 1. relevance: which market the destination is in (orders outside every market need data).

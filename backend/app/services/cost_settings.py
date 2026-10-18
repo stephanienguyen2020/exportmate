@@ -1,7 +1,7 @@
 """Cost assumptions: shared defaults (seeded), which each company can change for itself.
 
 Analysis uses them for costs the regulation doesn't state, such as a day of delay. Every cost
-line names where its number came from (docs/REQUIREMENTS.md §4.6 step 3).
+line names where its number came from.
 """
 
 import logging

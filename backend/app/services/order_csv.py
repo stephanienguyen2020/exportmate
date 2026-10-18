@@ -17,7 +17,7 @@ from app.core.currencies import is_currency
 
 REQUIRED_COLUMNS = ["id", "product", "supplier", "destination", "value", "shipDate", "hsCode"]
 # The hsCode column must be there, but a cell may be empty: analysis then asks for the code (the
-# order's next step) and AI can suggest one (docs/REQUIREMENTS.md §8.4).
+# order's next step) and AI can suggest one.
 OPTIONAL_VALUES = {"hsCode"}
 MAX_LENGTHS = {"id": 100, "product": 300, "supplier": 300, "destination": 200}
 MAX_VALUE = Decimal(1000000000000)  # 1 trillion; anything above is a typo

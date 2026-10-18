@@ -1,5 +1,5 @@
 """What can be done with an analysis report: the owner's review, feedback, and whether a supplier
-message may be drafted from it (docs/REQUIREMENTS.md §4.6, §4.7)."""
+message may be drafted from it."""
 
 import logging
 import uuid
