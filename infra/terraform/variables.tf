@@ -89,7 +89,7 @@ variable "agent_runtime" {
 }
 
 variable "rag_service_agent_ready" {
-  description = "Set to true after the first `node rag.js` run has created RAG Engine's service agent; it then gets read access to the RAG bucket."
+  description = "Set to true after the first `node rag.js` run has created RAG Engine's service agent; it then gets read access to the RAG bucket. True for skilful-scarab; false for a new project until then."
   type        = bool
-  default     = false
+  default     = true
 }

@@ -27,7 +27,7 @@ import pandas as pd
 from agentplatform import types
 from google.cloud import storage
 
-PROJECT = os.environ.get("GOOGLE_CLOUD_PROJECT", "exportmate-app")
+PROJECT = os.environ.get("GOOGLE_CLOUD_PROJECT", "skilful-scarab-511320-q9")
 LOCATION = os.environ.get("EVAL_LOCATION", "us-central1")
 EXPERIMENT = os.environ.get("EVAL_EXPERIMENT", "ExportMate assistant")
 METRICS = [

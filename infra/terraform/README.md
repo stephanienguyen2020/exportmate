@@ -113,46 +113,31 @@ gcloud run jobs execute exportmate-ai-task --region asia-southeast1 --wait --arg
 gcloud run jobs execute exportmate-ai-task --region asia-southeast1 --wait --args="node ops.js --days=7"       # health report
 ```
 
-## Moving the AI service from exportmate-app (and onto Agent Platform)
+## The assistant on Agent Platform
 
-The AI service, its Firestore data and the daily scan used to live in project `exportmate-app`, with the assistant inside the Cloud Run service. They move here in one go, with the assistant's agents on Gemini Enterprise Agent Platform (Agent Runtime, Sessions, Memory Bank, RAG Engine, Evaluation, Govern; see `docs/AGENT_HARNESS.md`). Steps marked **owner** need dylan.exportmate@gmail.com; the rest work as Editor. Every command runs from the repository root unless noted.
+The website's AI service, its Firestore data, the daily scan and the assistant's agents all run here (moved from `exportmate-app` on 18 October 2026). The Cloud Run service `exportmate-ai` serves every `/api/*` route. The agents' Agent Runtime instance `exportmate-agents` (`projects/360016804920/locations/asia-southeast1/reasoningEngines/8488414484384186368`) runs the same image as its own Agent Identity, with Sessions and Memory Bank, behind the egress Agent Gateway `exportmate-egress` (IAP egress policy and Model Armor, both in observe mode).
 
-**Status (17 October 2026):** `exportmate-ai` here runs main with the agents inside the service (no `AGENTS_AT`), as the old one does, so the website can switch before the Agent Runtime: steps 1, 2, 4 and 8 move it, and 3 and 5–7 can follow. Until step 1 runs again there is no `<project>-kb` bucket, so the assistant's search here finds nothing and scans can't index what they find. Until step 2 runs, Firestore here has only the seed and test scans: no custom sources, companies' source settings or company alerts. The website, and the backend through `AI_SERVICE_URL`, use `exportmate-app`'s service until step 8; the daily scan runs there and is paused here.
+**Chats still run inside the Cloud Run service** (`var.agent_runtime` is empty): the gateway ends any request after 60 seconds, and one complex-tier model call (`gemini-4-argon`, MEDIUM thinking) can take longer, so 4 of 18 golden cases failed against the instance on 18 October (the gateway answered 500 after 60.2 s). Once the golden set passes against the instance, **owner:** `terraform apply -var agent_runtime=<instance>` relays chats to it (`AGENTS_AT=runtime`), and set that as the variable's default so every apply keeps it. Search is RAG Engine over the bucket `<project>-kb`; the daily scan (`exportmate-daily-news-scan`) runs at 07:00 Vietnam time. See `docs/AGENT_HARNESS.md`. Steps marked **owner** need dylan.exportmate@gmail.com.
 
-1. **Owner:** `terraform apply` (Firestore, service accounts and grants, the Cloud Run service, job and scheduler, the RAG bucket, the APIs Agent Gateway needs, metrics, build resources). `terraform plan` should show 0 to destroy apart from the two Firestore vector indexes on `kb`, which nothing uses any more.
-2. Copy the data (stock, sources and companies' source settings, articles, alerts, scans, audits) with an account that can read `exportmate-app` and write here. Documents already here are kept. Companies' goods aren't copied: they are rebuilt from the backend, and each company's first scan here reads back its recent news with this code, so those alerts carry the mentions the backend's knowledge graph walks:
-   ```sh
-   cd ai/server && node copy-firestore.js --from=exportmate-app --to=skilful-scarab-511320-q9 --dry-run   # then without --dry-run
-   ```
-3. Deploy the image to Cloud Run and create the agents' Agent Runtime instance (`exportmate-agents`, with Memory Bank and its own Agent Identity); the last line printed is the instance's name:
-   ```sh
-   PROJECT_ID=skilful-scarab-511320-q9 ai/server/deploy.sh
-   ```
-4. Build the search index on RAG Engine (creates the five corpora), then let RAG Engine read the bucket and build it again:
-   ```sh
-   gcloud run jobs execute exportmate-ai-task --project skilful-scarab-511320-q9 --region asia-southeast1 --wait --args="node rag.js"
-   # owner: terraform apply -var rag_service_agent_ready=true, then run the job again
-   ```
-5. **Owner:** govern the agents: Agent Identity roles, Agent Registry, egress IAM policies, Agent Gateway with IAP and Model Armor (observe mode). Add `BACKEND_URL=<backend Cloud Run URL>` so the agents may reach it:
-   ```sh
-   PROJECT_ID=skilful-scarab-511320-q9 RUNTIME=<name from step 3> BACKEND_URL=<backend url> infra/agent-platform/govern.sh
-   ```
-   Then bind the agents to the gateway: `PROJECT_ID=skilful-scarab-511320-q9 GATEWAY=projects/skilful-scarab-511320-q9/locations/asia-southeast1/agentGateways/exportmate-egress ai/server/deploy.sh`.
-6. **Owner:** point Cloud Run at the agents: `terraform apply -var agent_runtime=<name from step 3> -var rag_service_agent_ready=true` (sets `AGENTS_AT=runtime` and `AGENT_RUNTIME`).
-7. Check the deployed agents: the console playground (Agent Platform › Agent Runtime › exportmate-agents) answers, and the golden set passes against them and shows on Agent Platform › Evaluation:
-   ```sh
-   cd ai/server && PROJECT_ID=skilful-scarab-511320-q9 AGENT_RUNTIME=<name> npm run eval:vertex -- --engine
-   ```
-   Check the service too: `curl "$(terraform output -raw ai_url)/"` (Cloud Run reserves `/healthz`, so check `/`).
-8. Switch traffic: set the `/api/:path*` destination in `frontend/vercel.json` to this project's service (`https://exportmate-ai-3v6cd2xhpq-as.a.run.app`, the same service as `$(terraform output -raw ai_url)`) and the default project in `ai/server/db.js`, merge (Vercel deploys the website), then `terraform apply` from merged main (the backend's `AI_SERVICE_URL` follows the rewrite; until then `gcloud run services update exportmate-backend --update-env-vars AI_SERVICE_URL=<that URL>` sets the value Terraform keeps). Re-run step 2 just before merging if `exportmate-app` has had new scans or chats meanwhile. Move the daily scan at the same time, run one here so each company reads back its news, and monitor the service here:
-   ```sh
-   gcloud scheduler jobs resume exportmate-daily-news-scan --project skilful-scarab-511320-q9 --location asia-southeast1
-   gcloud scheduler jobs pause exportmate-daily-news-scan --project exportmate-app --location asia-southeast1
-   gcloud scheduler jobs run exportmate-daily-news-scan --project skilful-scarab-511320-q9 --location asia-southeast1
-   PROJECT_ID=skilful-scarab-511320-q9 PART=ai SERVICE=exportmate-ai ALERT_EMAIL=… infra/monitoring/apply.sh
-   ```
-9. After a few days of clean Agent Gateway logs (no `DENIED` in `networkservices.googleapis.com/gateway_requests`, Model Armor `sanitize_operations` findings reviewed), **owner:** enforce with `ENFORCE=1 … infra/agent-platform/govern.sh`.
-10. Retire the old project's AI resources, and the development resources made while building this (Agent Runtime instances `exportmate-agents-ai` and `exportmate-agents-dev`, the RAG corpora `exportmate-kb-*`, the bucket `exportmate-app-kb`, the Agent Gateway `exportmate-egress` and its policies, extensions and Agent Registry entries, the Model Armor template `exportmate-agent-traffic`, the image `exportmate-agents` in `cloud-run-source-deploy`):
+`ai/server/deploy.sh` (Every code change, above) updates the service, the job and the agents; it keeps the agents behind the gateway and gives them the backend's URL. `rag_service_agent_ready` defaults to true here (RAG Engine reads the bucket).
+
+**Owner:** run `infra/agent-platform/govern.sh` again whenever an endpoint is added (it is safe to run again; it needs a recent gcloud, with `agent-registry`):
+
+```sh
+PROJECT_ID=skilful-scarab-511320-q9 RUNTIME=projects/360016804920/locations/asia-southeast1/reasoningEngines/8488414484384186368 BACKEND_URL=https://exportmate-backend-3v6cd2xhpq-as.a.run.app infra/agent-platform/govern.sh
+```
+
+Check the agents: the console playground (Agent Platform › Agent Runtime › exportmate-agents) answers, and the golden set passes against them (shown on Agent Platform › Evaluation):
+
+```sh
+cd ai/server && PROJECT_ID=skilful-scarab-511320-q9 AGENT_RUNTIME=projects/360016804920/locations/asia-southeast1/reasoningEngines/8488414484384186368 npm run eval:vertex -- --engine
+```
+
+Still to do:
+
+1. Fix the 60-second limit above, then relay chats to the instance.
+2. After a few days of clean Agent Gateway logs (no `DENIED` in `networkservices.googleapis.com/gateway_requests`, Model Armor `sanitize_operations` findings reviewed), **owner:** enforce with `ENFORCE=1 … infra/agent-platform/govern.sh`.
+3. Retire `exportmate-app`'s AI resources (its daily scan is paused), and the development resources made while building this (Agent Runtime instances `exportmate-agents-ai` and `exportmate-agents-dev`, the RAG corpora `exportmate-kb-*`, the bucket `exportmate-app-kb`, its Agent Gateway `exportmate-egress` with its policies, extensions and Agent Registry entries, the Model Armor template `exportmate-agent-traffic`, the image `exportmate-agents` in `cloud-run-source-deploy`):
    ```sh
    gcloud run services delete exportmate-ai --project exportmate-app --region asia-southeast1
    gcloud run services delete exportmate-chat --project exportmate-app --region asia-southeast1   # the service's earlier name; no requests since 10 Oct 2026

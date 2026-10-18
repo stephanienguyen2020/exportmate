@@ -25,11 +25,18 @@ gcloud run jobs update exportmate-ai-task --project "$PROJECT_ID" --region "$REG
 echo "==> Deploying service"
 gcloud run services update exportmate-ai --project "$PROJECT_ID" --region "$REGION" --image "$IMAGE"
 
-# The agents on Agent Runtime run the same image (runtime.js). AGENTS=0 skips them; GATEWAY binds
-# them to the egress Agent Gateway (infra/agent-platform/govern.sh).
+# The agents on Agent Runtime run the same image (runtime.js). AGENTS=0 skips them. They stay behind
+# the egress Agent Gateway (infra/agent-platform/govern.sh) when the project has one, and reach the
+# backend's Cloud Run URL (registered by govern.sh); GATEWAY and BACKEND_URL override either.
 if [[ "${AGENTS:-1}" != 0 ]]; then
   echo "==> Updating the agents on Agent Runtime"
-  GOOGLE_CLOUD_PROJECT="$PROJECT_ID" RAG_BUCKET="${RAG_BUCKET:-$PROJECT_ID-kb}" \
+  GATEWAY_PATH="projects/$PROJECT_ID/locations/$REGION/agentGateways/exportmate-egress"
+  if [[ -z "${GATEWAY:-}" ]] && gcloud network-services agent-gateways describe "$GATEWAY_PATH" >/dev/null 2>&1; then
+    GATEWAY="$GATEWAY_PATH"
+  fi
+  BACKEND_URL="${BACKEND_URL:-$(gcloud run services describe exportmate-backend --project "$PROJECT_ID" --region "$REGION" --format='value(status.url)' 2>/dev/null || true)}"
+  echo "    gateway: ${GATEWAY:-none}, backend: ${BACKEND_URL:-none}"
+  GOOGLE_CLOUD_PROJECT="$PROJECT_ID" RAG_BUCKET="${RAG_BUCKET:-$PROJECT_ID-kb}" BACKEND_URL="$BACKEND_URL" \
     uv run --project platform python platform/runtime.py deploy --image "$IMAGE" ${GATEWAY:+--gateway "$GATEWAY"}
 fi
 

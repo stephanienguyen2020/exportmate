@@ -106,7 +106,7 @@ The API is public for the prototype. Chat is capped at 40 questions per client a
 
 ### Google Cloud resources
 
-Everything is defined for one project, `skilful-scarab-511320-q9`, in [`infra/terraform`](infra/terraform/). Until the move in [`infra/terraform/README.md`](infra/terraform/README.md#moving-the-ai-service-from-exportmate-app-and-onto-agent-platform) is finished, the website's AI service and its data are still in the project `exportmate-app`.
+Everything runs in one project, `skilful-scarab-511320-q9`, defined in [`infra/terraform`](infra/terraform/).
 
 | Resource | Name |
 | --- | --- |
