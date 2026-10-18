@@ -1,5 +1,8 @@
+import uuid
 from datetime import date, datetime
 from typing import Literal
+
+from pydantic import Field
 
 from app.schemas.common import CamelCaseModel
 from app.schemas.news import AccuracyByWayOut, NewsPathStepOut
@@ -45,6 +48,8 @@ class ChainLinkOut(CamelCaseModel):
 class ChainIndustryOut(CamelCaseModel):
     key: str  # "wood"
     name: str  # the EUDR commodity's name
+    version: int | None  # the published chain version, None before versions existed
+    published_at: datetime | None
     products: list[ChainProductOut]
     links: list[ChainLinkOut]
 
@@ -65,6 +70,8 @@ class MaterialChainOut(CamelCaseModel):
     materials: list[ChainMaterialOut]
     by_way: list[AccuracyByWayOut]  # how often each way of suggesting was confirmed
     weights_updated_at: datetime | None  # the link weights job's last run (every company's counts)
+    is_chain_admin: bool  # may review chain versions (CHAIN_ADMIN_EMAILS)
+    drafts_waiting: int  # chain versions waiting for a chain admin
 
 
 class GraphQueryUnderstoodOut(CamelCaseModel):
@@ -98,3 +105,60 @@ class GraphQueryOut(CamelCaseModel):
     understood: GraphQueryUnderstoodOut
     orders_checked: int  # the orders walked (open ones, or every one with includeShipped)
     matches: list[GraphQueryMatchOut]
+
+
+class ChainDiffLinkOut(CamelCaseModel):
+    """A link a chain version adds, removes or changes."""
+
+    from_key: str  # within the industry, e.g. "roundwood"
+    from_name: str
+    to_key: str
+    to_name: str
+    relation: Literal["used_to_make", "by_product"]
+    source_title: str
+    source_url: str | None
+    quote: str | None
+    basis: str | None
+    secondary: bool
+    changed: list[str] = Field(default_factory=list)  # for a changed link: source, quote, …
+
+
+class ChainVersionChangesOut(CamelCaseModel):
+    """What a version changes against its baseline: a draft against the published version, a
+    published one against the version it replaced."""
+
+    products_added: list[str]
+    products_removed: list[str]
+    links_added: list[ChainDiffLinkOut]
+    links_removed: list[ChainDiffLinkOut]
+    links_changed: list[ChainDiffLinkOut]
+
+
+class ChainVersionSummaryOut(CamelCaseModel):
+    id: uuid.UUID
+    industry: str
+    industry_name: str
+    number: int
+    status: Literal["draft", "published", "superseded", "rejected"]
+    origin: str  # "seed" (a file in data/industries/) or "pipeline"
+    note: str | None
+    product_count: int
+    link_count: int
+    created_at: datetime
+    reviewed_by: str | None
+    reviewed_at: datetime | None
+    review_note: str | None
+    published_at: datetime | None
+
+
+class ChainVersionOut(ChainVersionSummaryOut):
+    changes: ChainVersionChangesOut
+    flagged: dict | None  # what the pipeline couldn't keep: dropped links, links no longer sourced
+
+
+class ChainVersionPublishIn(CamelCaseModel):
+    note: str | None = Field(default=None, max_length=500)
+
+
+class ChainVersionRejectIn(CamelCaseModel):
+    note: str = Field(min_length=1, max_length=500)  # why, for whoever builds the next draft
