@@ -36,12 +36,23 @@ function Heading() {
 
 function Verdicts({ link }: { link: ChainLink }) {
   const { confirmed, rejected } = link.company;
-  if (!confirmed && !rejected)
-    return <span className="mc-muted">No verdicts from your team yet</span>;
+  const everyone = link.everyone.confirmed + link.everyone.rejected;
   return (
-    <span>
-      Your team: {confirmed} confirmed · {rejected} rejected
-    </span>
+    <>
+      {confirmed || rejected ? (
+        <span>
+          Your team: {confirmed} confirmed · {rejected} rejected
+        </span>
+      ) : (
+        <span className="mc-muted">No verdicts from your team yet</span>
+      )}
+      {everyone > 0 && (
+        <span title="Every company's verdicts, counted nightly. Between equally good paths, the walk prefers links with a higher weight.">
+          All companies: {link.everyone.confirmed} confirmed · {link.everyone.rejected} rejected · weight{" "}
+          {link.weight.toFixed(2)}
+        </span>
+      )}
+    </>
   );
 }
 
@@ -167,6 +178,11 @@ export default function MaterialChain({ live }: { live: boolean }) {
             and this shows how often each way of finding them is right.
           </p>
         )}
+        <p className="mc-muted">
+          {chain.weightsUpdatedAt
+            ? `Every company's verdicts were last counted ${new Date(chain.weightsUpdatedAt).toLocaleString()}; your team's count straight away.`
+            : "Every company's verdicts are counted nightly; your team's count straight away."}
+        </p>
       </section>
       <div className="toolbar mc-toolbar">
         <label className="search">

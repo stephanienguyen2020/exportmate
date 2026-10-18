@@ -43,6 +43,7 @@ from it with `.claude/skills/architecture-diagram/export_png.mjs`.
 | 22 | Pipeline: a rebuild offers the writer the current links to keep when a source quotes them and lists those it lost (`linksNoLongerSourced`); a long document names what to keep when cut (`focus`); an API answer is read from one field (`jsonField`, CBP rulings); a failed quote check says which part failed, so the revision can fix it | `build_chain.py` |
 | 23 | News watch runs in `skilful-scarab`: alerts carry `mentions`, so live suggestions walk the graph (18 Oct) | `infra/terraform/README.md` |
 | 24 | GraphRAG in the assistant: `GET /knowledge-graph/query` runs the walk for what a question names; the `query_graph` tool and a graph specialist give the agents the paths; the auditor wants each order's path cited and a critic (Gemini) checks the answer's connections against the paths | `services/graph_query.py`, `ai/server/agents/tools.js`, `ai/server/critic.js` |
+| 25 | Link weights job (nightly): every company's verdicts per link, with a weight, in `graph_link_weights`; walks read cross-company doubt and weights from it (a company's own verdicts stay live), and prefer higher-weight links between otherwise equal paths; Rules & news › Material chain shows them | `app/update_link_weights.py`, `services/graph_feedback.py`, `infra/terraform/backend_service.tf` |
 
 ### Next
 
@@ -170,10 +171,10 @@ Every rule and number the graph uses, with where it lives in code. Change both t
 | Markets | Our market codes; a country counts as its market ("GB" → UK, "NL" → EU); unknown codes are ignored, so they never hide every order | `GraphWalker.known_markets` |
 | Which suppliers | Those buying a named material; or from a named origin country; both when both are named; neither named → no supplier path | `GraphWalker.find_matches` |
 | How far | At most 4 links from what a supplier buys to the order's product; cycles aren't followed | `MAX_LINKS`; `walk_downstream` |
-| Which path | Shortest first; then fewest doubted links; then fewest `secondary` links. When the article names a product, the path goes through it, and the order's product must be made from it (otherwise no supplier path) | `chain_cost`, `_chain_through`, `_through_supplier` |
+| Which path | Shortest first; then fewest doubted links; then fewest `secondary` links; then the higher-weight links (each link's share of confirmations across companies, smoothed: (confirmed+1)/(judged+2)). When the article names a product, the path goes through it, and the order's product must be made from it (otherwise no supplier path) | `chain_cost`, `_chain_through`, `_through_supplier` |
 | By HS heading | Same first 4 digits as an HS code the article or an alert's stock item names; a stock item's markets apply; used when no supplier path reaches the order | `GraphWalker.find_matches` |
 | One suggestion per order | The first path found wins: the article's mentions before the alert's stock items | `news_matches.suggest_orders` |
-| Doubted link | At a company: at least 2 rejections and rejected more often than confirmed. Across companies: at least 5 rejections, rejected more often than confirmed. Counted per link on the paths of reviewed suggestions | `services/graph_feedback.py` (`MIN_COMPANY_REJECTIONS`, `MIN_SHARED_REJECTIONS`) |
+| Doubted link | At a company: at least 2 rejections and rejected more often than confirmed. Across companies: at least 5 rejections, rejected more often than confirmed. Counted per link on the paths of reviewed suggestions: a company's live, every company's by the nightly link weights job (`graph_link_weights`) | `services/graph_feedback.py` (`MIN_COMPANY_REJECTIONS`, `MIN_SHARED_REJECTIONS`), `app/update_link_weights.py` |
 | Doubted path | Kept, but its doubted steps are marked, the reason says so, and it's listed after the others | `GraphWalker.find_matches`, `_supplier_match` |
 | Sourcing from a certificate | At most 20 materials read; only ones the graph knows; a country only if on the map ("UK" → GB); a form only from that material's chain; one suggestion per material and country | `supplier_sourcing.suggest_sourcing` |
 | Sourcing lines | One per material and country, at most 20 per supplier; `basis` defaults to "Entered on the trade map", or "From <document kind> (<file>)" when ticked from a certificate | `schemas/trade_map.py`, `supplier_sourcing.save_sourcing` / `add_sourcing` |
@@ -198,7 +199,8 @@ Every rule and number the graph uses, with where it lives in code. Change both t
   way and by link.
 - Links people keep rejecting are **doubted** (`services/graph_feedback.py`): at a company once its
   people rejected suggestions through the link at least 2 times and more often than they
-  confirmed them; for everyone once 5 rejections across companies say the same. Between equally
+  confirmed them; for everyone once 5 rejections across companies say the same (counted nightly by
+  `app/update_link_weights.py` into `graph_link_weights`, with each link's weight). Between equally
   short paths the walk takes the one with fewer doubted links (then fewer `secondary` ones); a
   path that still needs one is kept but marked (`path[].doubt`, "People have often rejected a
   link on this path.") and listed last. Nothing is hidden and nobody edits links by hand.
@@ -332,9 +334,9 @@ is a smaller step to try. In the plan: now that GraphRAG is built, only when one
 
 | Layer | Files |
 | --- | --- |
-| Tables | `database/models/knowledge_graph.py`, `news_order_reviews` in `database/models/news.py` |
+| Tables | `database/models/knowledge_graph.py` (incl. `graph_link_weights`), `news_order_reviews` in `database/models/news.py` |
 | SQL (incl. the recursive walk) | `database/queries/knowledge_graph.py` |
-| Walk, word matching, sourcing, feedback | `services/knowledge_graph.py`, `services/graph_words.py`, `services/supplier_sourcing.py`, `services/graph_feedback.py` |
+| Walk, word matching, sourcing, feedback | `services/knowledge_graph.py`, `services/graph_words.py`, `services/supplier_sourcing.py`, `services/graph_feedback.py`; the nightly link weights job `app/update_link_weights.py` (Cloud Run job `exportmate-backend-link-weights`, Cloud Scheduler `exportmate-nightly-link-weights`, 01:30 Vietnam time) |
 | News watch, Material chain page | `services/news_matches.py` (`GET /news-matches`, `/news-matches/accuracy`), `services/material_chain.py` (`GET /knowledge-graph/chain`) |
 | GraphRAG | `services/graph_query.py` (`GET /knowledge-graph/query`); `ai/server/agents/tools.js` (`query_graph`), `agents/assistant.js` (`graph_specialist`), `review.js` (path check), `critic.js`, `policy.js` (`graph-paths`) |
 | Loading | `seed_reference_data.py` (graph, via `load_chain`), `seed_demo_data.py` (sourcing) |

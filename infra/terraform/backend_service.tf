@@ -204,3 +204,99 @@ resource "google_cloud_run_v2_job" "backend_task" {
     google_project_iam_member.backend_cloudsql_client,
   ]
 }
+
+# The nightly link weights job (backend/app/update_link_weights.py): counts every company's
+# News watch verdicts per chain link into graph_link_weights. Same image and database as the
+# task above; backend/deploy.sh sets its image too.
+resource "google_cloud_run_v2_job" "backend_link_weights" {
+  name                = "exportmate-backend-link-weights"
+  location            = var.region
+  deletion_protection = false
+
+  template {
+    task_count = 1
+
+    template {
+      service_account = google_service_account.backend.email
+      max_retries     = 1
+      timeout         = "300s"
+
+      volumes {
+        name = "cloudsql"
+        cloud_sql_instance {
+          instances = [google_sql_database_instance.main.connection_name]
+        }
+      }
+
+      containers {
+        image   = local.placeholder_image
+        command = ["python", "-m", "app.update_link_weights"]
+
+        dynamic "env" {
+          for_each = local.backend_env
+          content {
+            name  = env.key
+            value = env.value
+          }
+        }
+
+        env {
+          name = "DATABASE_URL"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.database_url.secret_id
+              version = "latest"
+            }
+          }
+        }
+
+        volume_mounts {
+          name       = "cloudsql"
+          mount_path = "/cloudsql"
+        }
+      }
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
+  }
+
+  depends_on = [
+    google_secret_manager_secret_version.database_url,
+    google_secret_manager_secret_iam_member.backend_reads_database_url,
+    google_project_iam_member.backend_cloudsql_client,
+  ]
+}
+
+# Cloud Scheduler starts it every night, after the day's verdicts (01:30 Vietnam time).
+resource "google_cloud_run_v2_job_iam_member" "scheduler_runs_link_weights" {
+  name     = google_cloud_run_v2_job.backend_link_weights.name
+  location = var.region
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.scheduler.email}"
+}
+
+resource "google_cloud_scheduler_job" "nightly_link_weights" {
+  name             = "exportmate-nightly-link-weights"
+  region           = var.region
+  schedule         = "30 1 * * *"
+  time_zone        = "Asia/Ho_Chi_Minh"
+  attempt_deadline = "320s"
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.project_id}/locations/${var.region}/jobs/${google_cloud_run_v2_job.backend_link_weights.name}:run"
+
+    oauth_token {
+      service_account_email = google_service_account.scheduler.email
+      scope                 = "https://www.googleapis.com/auth/cloud-platform"
+    }
+  }
+
+  depends_on = [google_cloud_run_v2_job_iam_member.scheduler_runs_link_weights]
+}

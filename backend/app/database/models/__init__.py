@@ -17,6 +17,7 @@ from app.database.models.hs_code import (
 )
 from app.database.models.knowledge_graph import (
     GraphEdge,
+    GraphLinkWeight,
     GraphNode,
     GraphNodeKind,
     GraphRelation,
@@ -79,6 +80,7 @@ __all__ = [
     "Country",
     "DocumentKind",
     "GraphEdge",
+    "GraphLinkWeight",
     "GraphNode",
     "GraphNodeKind",
     "GraphRelation",

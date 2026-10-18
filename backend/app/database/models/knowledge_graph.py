@@ -9,8 +9,9 @@ them into a separate graph.
 
 import enum
 import uuid
+from datetime import datetime
 
-from sqlalchemy import Boolean, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -80,6 +81,23 @@ class GraphEdge(Base):
         Boolean, nullable=False, default=False, server_default="false"
     )
     __table_args__ = (UniqueConstraint("from_key", "to_key", "relation"),)
+
+
+class GraphLinkWeight(Base):
+    """What every company's verdicts say about one chain link, counted by the nightly link
+    weights job (app/update_link_weights.py) from the paths of reviewed News watch suggestions.
+    Kept apart from graph_edges, which the reference seed rewrites, so a deploy doesn't reset
+    them; a link no longer in the chain simply isn't walked."""
+
+    __tablename__ = "graph_link_weights"
+    from_key: Mapped[str] = mapped_column(String(80), primary_key=True)
+    to_key: Mapped[str] = mapped_column(String(80), primary_key=True)
+    confirmed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    rejected: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # The share of verdicts that confirmed the link, smoothed: (confirmed + 1) / (judged + 2), so
+    # an unjudged link is 0.5 and one verdict moves it a little.
+    weight: Mapped[float] = mapped_column(Float, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class SupplierSourcing(Base):
