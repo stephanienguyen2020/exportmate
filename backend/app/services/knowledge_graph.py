@@ -222,11 +222,19 @@ class GraphWalker:
         for row in rows:
             chain = [edges[i] for i in row.edge_ids]
             key = (row.start_key, row.node_key)
-            if key not in chains or chain_cost(chain, self.doubted, self.weights) < chain_cost(
-                chains[key], self.doubted, self.weights
-            ):
+            if key not in chains or self._rank(chain) < self._rank(chains[key]):
                 chains[key] = chain
         return chains
+
+    def _rank(self, chain: list[GraphEdge]) -> tuple:
+        """`chain_cost`, then, between paths still equal, each product's usual input: from the
+        end of the path back, the link its chain lists first (`position`). Plywood's chain lists
+        veneer before sawn wood, so logs → veneer → plywood. A tie never depends on the order the
+        walk returned its rows in (Postgres and Neo4j return them in different orders)."""
+        return (
+            chain_cost(chain, self.doubted, self.weights),
+            tuple(edge.position for edge in reversed(chain)),
+        )
 
     def _through_supplier(
         self,
@@ -270,7 +278,7 @@ class GraphWalker:
         ]
         if not through:
             return chains.get((start, end))
-        return min(through, key=lambda chain: chain_cost(chain, self.doubted, self.weights))
+        return min(through, key=self._rank)
 
     def _supplier_match(
         self,

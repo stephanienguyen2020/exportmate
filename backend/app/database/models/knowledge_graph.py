@@ -80,6 +80,9 @@ class GraphEdge(Base):
     secondary: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"
     )
+    # Where the link is listed in its chain: between otherwise equal paths the walk takes, for
+    # each product, the input listed first (the chain's author lists the usual input first).
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     __table_args__ = (UniqueConstraint("from_key", "to_key", "relation"),)
 
 

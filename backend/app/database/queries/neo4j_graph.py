@@ -12,7 +12,7 @@ the other query modules are for SQL). The model, each part copied from the Postg
 import uuid
 from dataclasses import dataclass
 
-from neo4j import Driver, ManagedTransaction
+from neo4j import Driver, ManagedTransaction, RoutingControl
 
 from app.core.neo4j import neo4j_database
 from app.database.queries.knowledge_graph import GraphWalkRow
@@ -139,27 +139,33 @@ def remove_other_companies(driver: Driver, company_ids: list[uuid.UUID]) -> None
 
 # --- The walk
 
-
-def _walk(tx: ManagedTransaction, start_keys: list[str], max_depth: int) -> Neo4jWalk:
-    state = tx.run("MATCH (s:SyncState {name: 'chain'}) RETURN s.fingerprint AS f").single()
-    # Simple paths only (no node twice), as the Postgres walk; a start is reached at depth 0.
-    result = tx.run(
-        "UNWIND $starts AS start MATCH (s:GraphNode {key: start}) "
-        f"MATCH p = (s)-[:USED_TO_MAKE|BY_PRODUCT*0..{int(max_depth)}]->(n:GraphNode) "
-        "WHERE ALL(x IN nodes(p) WHERE single(y IN nodes(p) WHERE y = x)) "
-        "RETURN start, n.key AS node, length(p) AS depth, [r IN relationships(p) | r.id] AS edges "
-        "ORDER BY depth",
-        starts=start_keys,
-    )
-    rows = [
-        GraphWalkRow(r["start"], r["node"], r["depth"], [uuid.UUID(e) for e in r["edges"]])
-        for r in result
-    ]
-    return Neo4jWalk(state["f"] if state else None, rows)
+# One query (one round trip set: AuraDB may be an ocean away): the fingerprint of the chain Neo4j
+# holds, and every simple path (no node twice, as the Postgres walk) from each start, a start
+# being reached from itself at depth 0. Starts Neo4j doesn't hold give no rows.
+WALK = (
+    "OPTIONAL MATCH (state:SyncState {{name: 'chain'}}) "
+    "WITH state.fingerprint AS fingerprint "
+    "UNWIND $starts AS start "
+    "OPTIONAL MATCH (s:GraphNode {{key: start}}) "
+    "OPTIONAL MATCH p = (s)-[:USED_TO_MAKE|BY_PRODUCT*0..{depth}]->(n:GraphNode) "
+    "WHERE ALL(x IN nodes(p) WHERE single(y IN nodes(p) WHERE y = x)) "
+    "RETURN fingerprint, start, n.key AS node, length(p) AS depth, "
+    "[r IN relationships(p) | r.id] AS edges"
+)
 
 
 def walk_downstream(driver: Driver, start_keys: set[str], max_depth: int) -> Neo4jWalk:
     """The Postgres walk (knowledge_graph.walk_downstream) as Cypher, with the fingerprint of the
-    chain Neo4j holds, read in the same transaction."""
-    with driver.session(database=neo4j_database()) as session:
-        return session.execute_read(_walk, sorted(start_keys), max_depth)
+    chain Neo4j holds, read in the same query."""
+    records = driver.execute_query(
+        WALK.format(depth=int(max_depth)),
+        starts=sorted(start_keys),
+        database_=neo4j_database(),
+        routing_=RoutingControl.READ,
+    ).records
+    rows = [
+        GraphWalkRow(r["start"], r["node"], r["depth"], [uuid.UUID(e) for e in r["edges"]])
+        for r in records
+        if r["node"] is not None
+    ]
+    return Neo4jWalk(records[0]["fingerprint"] if records else None, rows)
