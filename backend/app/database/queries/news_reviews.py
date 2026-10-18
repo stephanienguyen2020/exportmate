@@ -13,9 +13,15 @@ def list_news_reviews(db: Session, company_id: uuid.UUID) -> list[NewsOrderRevie
     return list(db.scalars(select(NewsOrderReview).where(NewsOrderReview.company_id == company_id)))
 
 
-def list_reviews_with_path(db: Session) -> list[NewsOrderReview]:
-    """Every company's verdicts on suggestions that kept a path, for link feedback."""
-    return list(db.scalars(select(NewsOrderReview).where(NewsOrderReview.path.is_not(None))))
+def list_reviews_with_path(
+    db: Session, company_id: uuid.UUID | None = None
+) -> list[NewsOrderReview]:
+    """Verdicts on suggestions that kept a path, for link feedback: one company's, or every
+    company's (the nightly link weights job)."""
+    query = select(NewsOrderReview).where(NewsOrderReview.path.is_not(None))
+    if company_id is not None:
+        query = query.where(NewsOrderReview.company_id == company_id)
+    return list(db.scalars(query))
 
 
 def list_confirmed_news_by_impact(db: Session, company_id: uuid.UUID) -> dict[str, list[str]]:

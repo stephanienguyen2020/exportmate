@@ -97,14 +97,24 @@ def product_of_hs_code(hs_code: object, products: list[GraphNode]) -> GraphNode 
 
 
 def chain_cost(
-    chain: list[GraphEdge], doubted: frozenset[tuple[str, str]] = frozenset()
-) -> tuple[int, int, int]:
+    chain: list[GraphEdge],
+    doubted: frozenset[tuple[str, str]] = frozenset(),
+    weights: dict[tuple[str, str], float] | None = None,
+) -> tuple[int, int, int, float]:
     """Shorter chains first; between equally short ones, fewer links people keep rejecting,
-    then fewer less common links."""
+    then fewer less common links, then the links people confirm more (the nightly weights)."""
+    weights = weights or {}
     return (
         len(chain),
         sum(1 for edge in chain if (edge.from_key, edge.to_key) in doubted),
         sum(1 for edge in chain if edge.secondary),
+        round(
+            sum(
+                1 - weights.get((edge.from_key, edge.to_key), graph_feedback.UNJUDGED_WEIGHT)
+                for edge in chain
+            ),
+            4,
+        ),
     )
 
 
@@ -131,6 +141,7 @@ class GraphWalker:
         self.market_of_country = {c.alpha2: c.market_code for c in countries if c.market_code}
         self.feedback = graph_feedback.link_feedback(db, company_id)
         self.doubted = frozenset(link for link, f in self.feedback.items() if f.doubt)
+        self.weights = {link: f.weight for link, f in self.feedback.items()}
 
     def find_matches(
         self, mentions: GraphMentions, open_orders: list[tuple[Order, str | None]]
@@ -207,8 +218,8 @@ class GraphWalker:
         for row in rows:
             chain = [edges[i] for i in row.edge_ids]
             key = (row.start_key, row.node_key)
-            if key not in chains or chain_cost(chain, self.doubted) < chain_cost(
-                chains[key], self.doubted
+            if key not in chains or chain_cost(chain, self.doubted, self.weights) < chain_cost(
+                chains[key], self.doubted, self.weights
             ):
                 chains[key] = chain
         return chains
@@ -255,7 +266,7 @@ class GraphWalker:
         ]
         if not through:
             return chains.get((start, end))
-        return min(through, key=lambda chain: chain_cost(chain, self.doubted))
+        return min(through, key=lambda chain: chain_cost(chain, self.doubted, self.weights))
 
     def _supplier_match(
         self,
