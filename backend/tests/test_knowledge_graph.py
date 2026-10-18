@@ -11,6 +11,7 @@ from app.database.models import GraphEdge, GraphNode, GraphNodeKind, SupplierSou
 from app.database.queries import knowledge_graph as graph_queries
 from app.database.queries import users as user_queries
 from app.database.session import open_session
+from app.knowledge_graph import load_chain
 from app.seed_demo_data import seed_company_map_data
 from app.seed_reference_data import seed_reference_data
 from app.services import news_matches as news_service
@@ -70,15 +71,18 @@ def test_seed_loads_the_material_chain_and_sourcing(lan):
         wood = db.get(GraphNode, "commodity.wood")
         edges = db.scalar(select(func.count()).select_from(GraphEdge))
         sourcing = db.scalars(select(SupplierSourcing)).all()
+    # Wood written by hand, and every industry the pipeline released (data/industries/).
+    chain = load_chain()
     assert kinds == {
         GraphNodeKind.commodity: 7,
-        GraphNodeKind.product: 14,
-        GraphNodeKind.material: 11,
+        GraphNodeKind.product: sum(len(i["products"]) for i in chain["industries"]),
+        GraphNodeKind.material: len(chain["materials"]),
     }
+    assert {i["key"] for i in chain["industries"]} >= {"wood", "cocoa", "coffee", "oil-palm"}
     assert {"4403", "4412", "940360"} <= set(wood.hs_prefixes)
     assert wood.source_key == "eudr-annex-i"
     assert {"wood", "timber", "hardwood"} <= set(wood.aliases)
-    assert edges == 25
+    assert edges == sum(len(i["links"]) for i in chain["industries"])
     by_material = {(s.material_key, s.country_alpha2, s.form_key) for s in sourcing}
     assert ("material.acacia", "VN", "wood.roundwood") in by_material
     assert ("material.okoume", "GA", "wood.veneer") in by_material
@@ -124,8 +128,8 @@ def test_an_article_reaches_orders_through_the_suppliers_sourcing(client, lan, n
     ]
     assert steps[1]["link"] == "buys acacia from Vietnam (species document)"
     assert steps[3]["link"] == "used to make"
-    assert steps[3]["sourceUrl"].startswith("https://fao.org/")
-    assert "veneer logs" in steps[3]["quote"]
+    assert "fao.org/" in steps[3]["sourceUrl"]
+    assert "used for the production of veneer" in steps[3]["quote"]
 
 
 def test_a_country_alone_reaches_every_supplier_buying_there(client, lan, news_watch):
@@ -217,7 +221,7 @@ def test_verdicts_measure_each_way_and_link(client, lan, news_watch):
     sawn_to_furniture = links[
         (
             "Sawn wood (lumber) (HS 4407)",
-            "Wooden furniture (office, kitchen, bedroom, other) and parts (HS 9403.30, 9403.40)",
+            "Wooden furniture (HS 9403.30, 9403.40)",
         )
     ]
     assert (sawn_to_furniture["confirmed"], sawn_to_furniture["rejected"]) == (0, 1)
@@ -239,8 +243,10 @@ def test_links_people_keep_rejecting_are_avoided_and_marked(client, lan, news_wa
     reject_cabinets("article-2")
     news_watch["alerts"] = [{**alert(acacia), "id": "article-3"}]
     found = matches(client, lan)
-    # The walk now takes the other path as short (through veneer), with no doubted link on it.
-    assert "Veneer sheets (HS 4408) → Wooden furniture" in found["PO-4"]["reason"]
+    # The walk now takes another path as short (logs → particle board → furniture), with no
+    # doubted link on it.
+    assert "Sawn wood" not in found["PO-4"]["reason"]
+    assert "→ Wooden furniture" in found["PO-4"]["reason"]
     assert not any(step["doubt"] for step in found["PO-4"]["path"])
     assert "rejected" not in found["PO-1"]["reason"]
 
@@ -278,25 +284,24 @@ def test_the_material_chain_page_shows_links_sources_checks_and_verdicts(client,
     response = client.get("/api/v1/knowledge-graph/chain", headers=lan)
     assert response.status_code == 200, response.text
     chain = response.json()["data"]
-    [wood] = chain["industries"]
+    wood = next(i for i in chain["industries"] if i["key"] == "wood")
     assert (wood["key"], wood["name"]) == ("wood", "Wood")
     # Products read from forest to finished goods.
     assert wood["products"][0]["key"] == "wood.roundwood"
-    assert {
-        "key": "wood.plywood",
-        "name": "Plywood and veneered panels",
-        "hsCodes": ["4412"],
-        "stage": "panel",
-    } in wood["products"]
-    assert len(wood["links"]) == 25
+    assert {"key": "wood.plywood", "hsCodes": ["4412"]} in [
+        {"key": p["key"], "hsCodes": p["hsCodes"]} for p in wood["products"]
+    ]
+    assert len(wood["links"]) == len(
+        next(i for i in load_chain()["industries"] if i["key"] == "wood")["links"]
+    )
     assert wood["links"][0]["fromKey"] == "wood.roundwood"
     veneer = next(
         link
         for link in wood["links"]
         if (link["fromKey"], link["toKey"]) == ("wood.roundwood", "wood.veneer")
     )
-    assert veneer["sourceUrl"].startswith("https://fao.org/")
-    assert "veneer logs" in veneer["quote"]
+    assert "fao.org/" in veneer["sourceUrl"]
+    assert "production of veneer" in veneer["quote"]
     assert veneer["aiCheck"]["verdict"] == "agree"
     assert veneer["secondary"] is False
     sawn = next(
@@ -306,11 +311,40 @@ def test_the_material_chain_page_shows_links_sources_checks_and_verdicts(client,
     )
     assert sawn["company"] == {"confirmed": 0, "rejected": 1}
     assert sawn["doubt"] is None  # one rejection isn't enough
-    furniture_veneer = next(
-        link
-        for link in wood["links"]
-        if (link["fromKey"], link["toKey"]) == ("wood.veneer", "wood.wooden-furniture")
+    secondary_in_data = {
+        (f"wood.{link['from']}", f"wood.{link['to']}")
+        for industry in load_chain()["industries"]
+        if industry["key"] == "wood"
+        for link in industry["links"]
+        if link.get("secondary")
+    }
+    assert {(link["fromKey"], link["toKey"]) for link in wood["links"] if link["secondary"]} == (
+        secondary_in_data
     )
-    assert furniture_veneer["secondary"] is True
     assert {m["key"] for m in chain["materials"]} >= {"acacia", "okoume"}
     assert chain["byWay"] == [{"via": "supplier", "confirmed": 0, "rejected": 1}]
+
+
+def test_released_industries_join_the_graph(client, lan, news_watch):
+    # A cocoa supplier in Ghana and a chocolate order: the cocoa chain was built by the pipeline.
+    supplier = {
+        "name": "Kumasi Cocoa",
+        "country": "GH",
+        "sourcing": [{"material": "cocoa", "country": "GH", "form": "cocoa-beans"}],
+    }
+    created = client.post("/api/v1/suppliers", headers=lan, json=supplier)
+    assert created.status_code == 201, created.text
+    import_orders(
+        client,
+        lan,
+        "id,product,supplier,destination,value,shipDate,hsCode\n"
+        f'PO-9,Dark chocolate bars,Kumasi Cocoa,"Hamburg, DE",8000,{ships_in(30)},1806.32\n',
+    )
+    news_watch["alerts"] = [alert({"materials": ["cocoa beans"], "originCountries": ["GH"]})]
+    found = matches(client, lan)
+    assert set(found) == {"PO-9"}
+    reason = found["PO-9"]["reason"]
+    assert reason.startswith("Kumasi Cocoa buys cocoa from Ghana; Cocoa")
+    assert "(HS 1806" in reason
+    chain = client.get("/api/v1/knowledge-graph/chain", headers=lan).json()["data"]
+    assert {i["key"] for i in chain["industries"]} >= {"wood", "cocoa", "coffee", "oil-palm"}

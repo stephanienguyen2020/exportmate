@@ -1,0 +1,412 @@
+{
+ "_about": "Released from data/drafts/rubber.json on 2026-10-18 (build_chain.py). Loaded by seed_reference_data with material_chain.json (load_chain).",
+ "industry": {
+  "key": "rubber",
+  "name": "Natural rubber and rubber goods",
+  "eudrCommodity": "Rubber",
+  "genericTerms": {
+   "rubber": [],
+   "mixed rubber compound": []
+  },
+  "products": [
+   {
+    "key": "natural-rubber-primary",
+    "name": "Natural rubber in primary forms",
+    "hsCodes": [
+     "4001",
+     "4001.10",
+     "4001.21",
+     "4001.22",
+     "4001.29",
+     "4001.30"
+    ],
+    "stage": "raw",
+    "aliases": [
+     "balata",
+     "chicle",
+     "guayule",
+     "gutta-percha",
+     "latex",
+     "natural rubber",
+     "smoked sheets",
+     "tsnr"
+    ]
+   },
+   {
+    "key": "compounded-rubber",
+    "name": "Compounded rubber, unvulcanised",
+    "hsCodes": [
+     "4005",
+     "4005.10",
+     "4005.20",
+     "4005.91",
+     "4005.99"
+    ],
+    "stage": "first processing",
+    "aliases": [
+     "compounded rubber",
+     "mixed rubber compound",
+     "unvulcanised rubber"
+    ]
+   },
+   {
+    "key": "unvulcanised-rubber-forms",
+    "name": "Unvulcanised rubber in other forms and articles",
+    "hsCodes": [
+     "4006",
+     "4006.10",
+     "4006.90"
+    ],
+    "stage": "further processing",
+    "aliases": [
+     "camel-back strips",
+     "unvulcanised rubber articles",
+     "unvulcanised rubber forms"
+    ]
+   },
+   {
+    "key": "vulcanised-rubber-thread",
+    "name": "Vulcanised rubber thread and cord",
+    "hsCodes": [
+     "4007",
+     "4007.00"
+    ],
+    "stage": "further processing",
+    "aliases": [
+     "vulcanised rubber cord",
+     "vulcanised rubber thread"
+    ]
+   },
+   {
+    "key": "vulcanised-rubber-shapes",
+    "name": "Plates, sheets, strip, rods and profile shapes of vulcanised rubber",
+    "hsCodes": [
+     "4008",
+     "4008.11",
+     "4008.19",
+     "4008.21",
+     "4008.29"
+    ],
+    "stage": "further processing",
+    "aliases": [
+     "cellular rubber",
+     "non-cellular rubber",
+     "plates",
+     "profile shapes",
+     "rods",
+     "sheets",
+     "strip"
+    ]
+   },
+   {
+    "key": "new-pneumatic-tyres",
+    "name": "New pneumatic tyres",
+    "hsCodes": [
+     "4011",
+     "4011.10",
+     "4011.20",
+     "4011.30",
+     "4011.40",
+     "4011.50",
+     "4011.70",
+     "4011.80",
+     "4011.90"
+    ],
+    "stage": "final",
+    "aliases": [
+     "bicycle tyres",
+     "car tyres",
+     "new pneumatic tyres",
+     "tires",
+     "truck tyres",
+     "tyres"
+    ]
+   },
+   {
+    "key": "retreaded-used-tyres",
+    "name": "Retreaded, used, or solid tyres and treads",
+    "hsCodes": [
+     "4012",
+     "4012.11",
+     "4012.12",
+     "4012.13",
+     "4012.19",
+     "4012.20",
+     "4012.90"
+    ],
+    "stage": "final",
+    "aliases": [
+     "cushion tyres",
+     "retreaded tyres",
+     "solid tyres",
+     "tyre flaps",
+     "tyre treads",
+     "used tyres"
+    ]
+   },
+   {
+    "key": "inner-tubes",
+    "name": "Inner tubes of rubber",
+    "hsCodes": [
+     "4013",
+     "4013.10",
+     "4013.20",
+     "4013.90"
+    ],
+    "stage": "final",
+    "aliases": [
+     "inner tubes"
+    ]
+   },
+   {
+    "key": "apparel-vulcanised-rubber",
+    "name": "Articles of apparel and clothing accessories of vulcanised rubber",
+    "hsCodes": [
+     "4015",
+     "4015.12",
+     "4015.19",
+     "4015.90"
+    ],
+    "stage": "final",
+    "aliases": [
+     "apparel",
+     "clothing accessories",
+     "gloves",
+     "latex gloves",
+     "medical gloves",
+     "mittens",
+     "mitts",
+     "surgical gloves"
+    ]
+   },
+   {
+    "key": "hard-rubber",
+    "name": "Hard rubber and articles thereof",
+    "hsCodes": [
+     "4017",
+     "4017.00"
+    ],
+    "stage": "further processing",
+    "aliases": [
+     "ebonite",
+     "hard rubber",
+     "hard rubber articles"
+    ]
+   }
+  ],
+  "links": [
+   {
+    "from": "natural-rubber-primary",
+    "to": "compounded-rubber",
+    "relation": "used_to_make",
+    "source": "us-40-cfr-63-6015",
+    "quote": "Rubber means the sum of the materials (for example, natural rubber, synthetic rubber, carbon black, oils, sulfur) that are combined in specific formulations",
+    "confidence": 0.9,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The quote defines rubber as a combination of materials including natural rubber, which describes the compounding process.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "compounded-rubber",
+    "to": "unvulcanised-rubber-forms",
+    "relation": "used_to_make",
+    "source": "hs-nomenclature",
+    "quote": "Compounded rubber, unvulcanized, in primary forms or in plates, sheets or strip… Other forms… of unvulcanized rubber",
+    "confidence": 0.7,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The HS nomenclature headings show that unvulcanised rubber in other forms is made from compounded unvulcanised rubber.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "unvulcanised-rubber-forms",
+    "to": "retreaded-used-tyres",
+    "relation": "used_to_make",
+    "source": "hs-nomenclature",
+    "quote": "\"Camel-back\" strips for retreading rubber tires",
+    "confidence": 0.9,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The quote explicitly states that 'camel-back' strips (an unvulcanised rubber form) are used for retreading rubber tires.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "natural-rubber-primary",
+    "to": "vulcanised-rubber-thread",
+    "relation": "used_to_make",
+    "source": "us-21-cfr-801-437",
+    "quote": "The term “natural rubber latex” means rubber that is produced by the natural rubber latex process… Products are formed from natural rubber latex by dipping, extruding, or coating.",
+    "confidence": 0.8,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The quote states that products are formed from natural rubber latex by extrusion, which is the process used to make vulcanised rubber thread.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "natural-rubber-primary",
+    "to": "new-pneumatic-tyres",
+    "relation": "used_to_make",
+    "source": "us-40-cfr-428",
+    "quote": "The term “raw material” shall mean all natural and synthetic rubber, carbon black, oils, chemical compounds, fabric and wire used in the manufacture of pneumatic tires and inner tubes or components thereof.",
+    "confidence": 0.95,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The quote explicitly identifies natural rubber as a raw material used in the manufacture of pneumatic tires.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "natural-rubber-primary",
+    "to": "inner-tubes",
+    "relation": "used_to_make",
+    "source": "us-40-cfr-428",
+    "quote": "The term “raw material” shall mean all natural and synthetic rubber, carbon black, oils, chemical compounds, fabric and wire used in the manufacture of pneumatic tires and inner tubes or components thereof.",
+    "confidence": 0.95,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The quote explicitly identifies natural rubber as a raw material used in the manufacture of inner tubes.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "new-pneumatic-tyres",
+    "to": "retreaded-used-tyres",
+    "relation": "used_to_make",
+    "source": "hs-nomenclature",
+    "quote": "Retreaded or used pneumatic tires of rubber; solid or cushion tires, tire treads and tire flaps, of rubber",
+    "confidence": 0.9,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "Used and retreaded pneumatic tires are directly derived from new pneumatic tires, which is supported by the HS description.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "natural-rubber-primary",
+    "to": "hard-rubber",
+    "relation": "used_to_make",
+    "source": "wco-hs-chapter-40",
+    "quote": "the expression “rubber” means the following products, whether or not vulcanised or hard : natural rubber, balata, gutta-percha, guayule, chicle and similar natural gums",
+    "confidence": 0.9,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The WCO note states that 'rubber' includes natural rubber whether or not hard, supporting that hard rubber is made from natural rubber.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "natural-rubber-primary",
+    "to": "vulcanised-rubber-shapes",
+    "relation": "used_to_make",
+    "source": "us-40-cfr-428",
+    "quote": "The term “raw material” shall mean all natural and synthetic rubber, carbon black, oils, chemical compounds, and fabric used in the manufacture of general molded, extruded, and fabricated rubber products.",
+    "confidence": 0.9,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The cited regulation confirms that natural rubber is a raw material used to manufacture general molded, extruded, and fabricated rubber products, which encompasses vulcanised rubber shapes.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "natural-rubber-primary",
+    "to": "apparel-vulcanised-rubber",
+    "relation": "used_to_make",
+    "source": "us-21-cfr-801-437",
+    "quote": "Products are formed from dry natural rubber by compression molding, extrusion, or by converting the sheets into a solution for dipping.",
+    "confidence": 0.9,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The FDA regulation states that products are formed from dry natural rubber by converting sheets into a solution for dipping, which is the process used to make vulcanised rubber apparel such as gloves.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   }
+  ]
+ },
+ "materials": [
+  {
+   "key": "natural-rubber",
+   "name": "Natural rubber",
+   "industry": "rubber",
+   "scientificNames": [],
+   "aliases": [
+    "dry natural rubber",
+    "latex",
+    "natural rubber",
+    "natural rubber latex"
+   ]
+  },
+  {
+   "key": "balata",
+   "name": "Balata",
+   "industry": "rubber",
+   "scientificNames": [],
+   "aliases": [
+    "balata"
+   ]
+  },
+  {
+   "key": "gutta-percha",
+   "name": "Gutta-percha",
+   "industry": "rubber",
+   "scientificNames": [],
+   "aliases": [
+    "gutta-percha"
+   ]
+  },
+  {
+   "key": "guayule",
+   "name": "Guayule",
+   "industry": "rubber",
+   "scientificNames": [],
+   "aliases": [
+    "guayule"
+   ]
+  },
+  {
+   "key": "chicle",
+   "name": "Chicle",
+   "industry": "rubber",
+   "scientificNames": [],
+   "aliases": [
+    "chicle"
+   ]
+  }
+ ],
+ "sources": {
+  "wco-hs-chapter-40": {
+   "title": "WCO Harmonized System 2022, Chapter 40: Rubber and articles thereof (notes and headings)",
+   "url": "https://www.wcoomd.org/-/media/wco/public/global/pdf/topics/nomenclature/instruments-and-tools/hs-nomenclature-2022/2022/0740_2022e.pdf"
+  },
+  "us-40-cfr-428": {
+   "title": "40 CFR Part 428, Rubber Manufacturing Point Source Category (U.S. EPA)",
+   "url": "https://www.ecfr.gov/current/title-40/part-428"
+  },
+  "us-40-cfr-63-6015": {
+   "title": "40 CFR 63.6015, rubber tire manufacturing: definitions (U.S. EPA)",
+   "url": "https://www.ecfr.gov/current/title-40/part-63/section-63.6015"
+  },
+  "us-21-cfr-801-437": {
+   "title": "21 CFR 801.437, devices that contain natural rubber (U.S. FDA)",
+   "url": "https://www.ecfr.gov/current/title-21/section-801.437"
+  },
+  "cbp-ruling-964837": {
+   "title": "U.S. Customs and Border Protection ruling 964837: non-medical use latex gloves (2001)",
+   "url": "https://rulings.cbp.gov/ruling/964837"
+  }
+ }
+}

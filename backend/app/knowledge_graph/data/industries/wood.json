@@ -1,0 +1,697 @@
+{
+ "_about": "Released from data/drafts/wood.json on 2026-10-18 (build_chain.py). Loaded by seed_reference_data with material_chain.json (load_chain).",
+ "industry": {
+  "key": "wood",
+  "name": "Wood and wooden furniture",
+  "eudrCommodity": "Wood",
+  "genericTerms": {},
+  "products": [
+   {
+    "key": "roundwood",
+    "name": "Logs (wood in the rough)",
+    "hsCodes": [
+     "4403"
+    ],
+    "stage": "raw",
+    "aliases": [
+     "industrial roundwood",
+     "logs",
+     "roundwood",
+     "wood in the rough"
+    ]
+   },
+   {
+    "key": "chips-residues",
+    "name": "Wood chips, sawdust and residues",
+    "hsCodes": [
+     "4401.21",
+     "4401.22",
+     "4401.41",
+     "4401.49"
+    ],
+    "stage": "by-product",
+    "aliases": [
+     "sawdust",
+     "scrap",
+     "wood chips",
+     "wood residues",
+     "wood waste"
+    ]
+   },
+   {
+    "key": "pellets",
+    "name": "Wood pellets",
+    "hsCodes": [
+     "4401.31"
+    ],
+    "stage": "further processing",
+    "aliases": [
+     "pellets",
+     "wood pellets"
+    ]
+   },
+   {
+    "key": "other-agglomerates",
+    "name": "Other wood agglomerates",
+    "hsCodes": [
+     "4401.32",
+     "4401.39"
+    ],
+    "stage": "further processing",
+    "aliases": [
+     "agglomerates",
+     "briquettes",
+     "wood briquettes",
+     "wood logs"
+    ]
+   },
+   {
+    "key": "charcoal",
+    "name": "Wood charcoal",
+    "hsCodes": [
+     "4402"
+    ],
+    "stage": "first processing",
+    "aliases": [
+     "charcoal",
+     "wood charcoal"
+    ]
+   },
+   {
+    "key": "sawnwood",
+    "name": "Sawn wood (lumber)",
+    "hsCodes": [
+     "4407"
+    ],
+    "stage": "first processing",
+    "aliases": [
+     "beams",
+     "lumber",
+     "planks",
+     "sawnwood"
+    ]
+   },
+   {
+    "key": "veneer",
+    "name": "Veneer sheets",
+    "hsCodes": [
+     "4408"
+    ],
+    "stage": "first processing",
+    "aliases": [
+     "veneer",
+     "veneer sheets"
+    ]
+   },
+   {
+    "key": "shaped-wood",
+    "name": "Mouldings and unassembled flooring strips",
+    "hsCodes": [
+     "4409"
+    ],
+    "stage": "further processing",
+    "aliases": [
+     "millwork",
+     "parquet flooring",
+     "wood mouldings"
+    ]
+   },
+   {
+    "key": "particle-board",
+    "name": "Particle board and OSB",
+    "hsCodes": [
+     "4410"
+    ],
+    "stage": "first processing",
+    "aliases": [
+     "chipboard",
+     "oriented strand board",
+     "osb",
+     "particle board"
+    ]
+   },
+   {
+    "key": "fibreboard",
+    "name": "Fibreboard (MDF, HDF)",
+    "hsCodes": [
+     "4411"
+    ],
+    "stage": "first processing",
+    "aliases": [
+     "fibreboard",
+     "hardboard",
+     "hdf",
+     "mdf"
+    ]
+   },
+   {
+    "key": "plywood",
+    "name": "Plywood and veneered panels",
+    "hsCodes": [
+     "4412"
+    ],
+    "stage": "first processing",
+    "aliases": [
+     "blockboard",
+     "laminated wood",
+     "plywood",
+     "veneered panels"
+    ]
+   },
+   {
+    "key": "joinery",
+    "name": "Builders' joinery and assembled flooring",
+    "hsCodes": [
+     "4418"
+    ],
+    "stage": "further processing",
+    "aliases": [
+     "assembled flooring",
+     "builders' joinery",
+     "carpentry",
+     "clt",
+     "glulam"
+    ]
+   },
+   {
+    "key": "wood-pulp",
+    "name": "Wood pulp",
+    "hsCodes": [
+     "47"
+    ],
+    "stage": "first processing",
+    "aliases": [
+     "chemical woodpulp",
+     "mechanical woodpulp",
+     "pulp of wood",
+     "wood pulp"
+    ]
+   },
+   {
+    "key": "paper",
+    "name": "Paper and paperboard",
+    "hsCodes": [
+     "48"
+    ],
+    "stage": "further processing",
+    "aliases": [
+     "graphic papers",
+     "newsprint",
+     "paper",
+     "paperboard"
+    ]
+   },
+   {
+    "key": "wooden-seats",
+    "name": "Seats with wooden frames, and their wooden parts",
+    "hsCodes": [
+     "9401.31",
+     "9401.41",
+     "9401.61",
+     "9401.69",
+     "9401.80",
+     "9401.91"
+    ],
+    "stage": "final",
+    "aliases": [
+     "seats with wooden frames",
+     "swivel seats",
+     "wooden seats"
+    ]
+   },
+   {
+    "key": "wooden-furniture",
+    "name": "Wooden furniture",
+    "hsCodes": [
+     "9403.30",
+     "9403.40",
+     "9403.50",
+     "9403.60",
+     "9403.91"
+    ],
+    "stage": "final",
+    "aliases": [
+     "cabinets",
+     "vanities",
+     "wooden furniture"
+    ]
+   },
+   {
+    "key": "prefabricated-buildings",
+    "name": "Prefabricated buildings of wood",
+    "hsCodes": [
+     "9406.10"
+    ],
+    "stage": "final",
+    "aliases": [
+     "prefabricated buildings",
+     "wooden buildings"
+    ]
+   }
+  ],
+  "links": [
+   {
+    "from": "roundwood",
+    "to": "charcoal",
+    "relation": "used_to_make",
+    "source": "jfsq-definitions",
+    "quote": "Roundwood that will be used as fuel…and wood that will be used for the production of charcoal",
+    "confidence": 1.0,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The JFSQ definitions state that wood fuel includes roundwood that will be used for the production of charcoal.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "roundwood",
+    "to": "chips-residues",
+    "relation": "by_product",
+    "source": "jfsq-definitions",
+    "quote": "WOOD CHIPS, PARTICLES AND RESIDUES…It is the volume of roundwood that is left over after the production of forest products in the wood processing industry",
+    "confidence": 1.0,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The JFSQ definitions state that wood chips, particles, and residues represent the volume of roundwood left over after the production of forest products.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "chips-residues",
+    "to": "pellets",
+    "relation": "used_to_make",
+    "source": "jfsq-definitions",
+    "quote": "wood residues that will be used for production of pellets",
+    "confidence": 1.0,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The JFSQ definitions state that wood residues include those used for the production of pellets.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "chips-residues",
+    "to": "other-agglomerates",
+    "relation": "used_to_make",
+    "source": "jfsq-definitions",
+    "quote": "wood residues that will be used for production of pellets, other agglomerated products",
+    "confidence": 1.0,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The JFSQ definitions state that wood residues include those used for the production of other agglomerated products.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "roundwood",
+    "to": "sawnwood",
+    "relation": "used_to_make",
+    "source": "jfsq-definitions",
+    "quote": "Wood that has been produced from both domestic and imported roundwood, either by sawing lengthways or by a profile-chipping process",
+    "confidence": 1.0,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The JFSQ definitions state that sawnwood is produced from roundwood by sawing or profile-chipping.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "roundwood",
+    "to": "veneer",
+    "relation": "used_to_make",
+    "source": "jfsq-definitions",
+    "quote": "Roundwood that will be sawn (or chipped) lengthways for the manufacture of sawnwood or railway sleepers (ties) or used for the production of veneer",
+    "confidence": 1.0,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The JFSQ definitions state that sawlogs and veneer logs are roundwood used for the production of veneer.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "sawnwood",
+    "to": "shaped-wood",
+    "relation": "used_to_make",
+    "source": "jfsq-definitions",
+    "quote": "Wood sawn or chipped lengthwise…and continuously shaped",
+    "confidence": 1.0,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The JFSQ definitions state that further processed sawnwood is sawnwood that is continuously shaped.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "roundwood",
+    "to": "particle-board",
+    "relation": "used_to_make",
+    "source": "jfsq-definitions",
+    "quote": "Roundwood that will be used for the production of pulp, particle board, oriented strand board (OSB) or fibreboard.",
+    "confidence": 1.0,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The JFSQ definitions state that pulpwood is roundwood used for the production of particle board.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "chips-residues",
+    "to": "particle-board",
+    "relation": "used_to_make",
+    "source": "jfsq-definitions",
+    "quote": "A panel manufactured from small pieces of wood or other ligno-cellulosic materials (e.g. chips, flakes, splinters, strands, shreds, shives, etc.) bonded together",
+    "confidence": 1.0,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The JFSQ definitions state that particle board is manufactured from small pieces of wood such as chips and flakes.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "roundwood",
+    "to": "fibreboard",
+    "relation": "used_to_make",
+    "source": "jfsq-definitions",
+    "quote": "Roundwood that will be used for the production of pulp, particle board, oriented strand board (OSB) or fibreboard.",
+    "confidence": 1.0,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The JFSQ definitions state that pulpwood is roundwood used for the production of fibreboard.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "veneer",
+    "to": "plywood",
+    "relation": "used_to_make",
+    "source": "jfsq-definitions",
+    "quote": "A panel consisting of an assembly of veneer sheets bonded together with the direction of the grain in alternate plies generally at right angles.",
+    "confidence": 1.0,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The JFSQ definitions state that plywood consists of an assembly of veneer sheets bonded together.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "sawnwood",
+    "to": "plywood",
+    "relation": "used_to_make",
+    "source": "jfsq-definitions",
+    "quote": "plywood with a solid core…consists of narrow boards, blocks or strips of wood placed side by side",
+    "confidence": 0.9,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The JFSQ definitions state that core plywood or blockboard consists of a solid core of narrow boards, blocks, or strips of wood, which are forms of sawnwood.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "roundwood",
+    "to": "wood-pulp",
+    "relation": "used_to_make",
+    "source": "jfsq-definitions",
+    "quote": "Roundwood that will be used for the production of pulp",
+    "confidence": 1.0,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The JFSQ definitions state that pulpwood is roundwood used for the production of pulp.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "chips-residues",
+    "to": "wood-pulp",
+    "relation": "used_to_make",
+    "source": "jfsq-definitions",
+    "quote": "Fibrous material prepared from pulpwood, wood chips, particles or residues by mechanical and/or chemical process",
+    "confidence": 1.0,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The JFSQ definitions state that wood pulp is prepared from pulpwood, wood chips, particles, or residues.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "wood-pulp",
+    "to": "paper",
+    "relation": "used_to_make",
+    "source": "jfsq-definitions",
+    "quote": "Fibrous material prepared from pulpwood, wood chips, particles or residues by mechanical and/or chemical process for further manufacture into paper, paperboard",
+    "confidence": 1.0,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The JFSQ definitions state that wood pulp is used for the further manufacture of paper and paperboard.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "sawnwood",
+    "to": "joinery",
+    "relation": "used_to_make",
+    "source": "cbp-ruling-e83110",
+    "quote": "wood boards used to make “glulam” beams",
+    "confidence": 1.0,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The CBP ruling confirms that wood boards (sawnwood) are used to make glulam beams, which are classified as builders' joinery.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "sawnwood",
+    "to": "wooden-seats",
+    "relation": "used_to_make",
+    "source": "jfsq-definitions",
+    "quote": "Seats with wooden frames",
+    "confidence": 0.8,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The JFSQ definitions state that wooden furniture includes seats with wooden frames, which are typically made from sawnwood.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "sawnwood",
+    "to": "wooden-furniture",
+    "relation": "used_to_make",
+    "source": "eu-ecolabel-furniture",
+    "quote": "Supplied timber may be considered as a component material but be later sawn and treated to be converted into a component part.",
+    "confidence": 0.9,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The EU Ecolabel criteria for furniture state that supplied timber (sawnwood) can be converted into component parts for furniture.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "sawnwood",
+    "to": "prefabricated-buildings",
+    "relation": "used_to_make",
+    "source": "jfsq-definitions",
+    "quote": "Prefabricated buildings with wooden structure, exterior walls, floor and other characteristic constructive elements consisting essentially of wood.",
+    "confidence": 0.8,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The JFSQ definitions state that prefabricated buildings of wood have structures and elements consisting essentially of wood (sawnwood).",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "veneer",
+    "to": "wooden-furniture",
+    "relation": "used_to_make",
+    "source": "us-wooden-cabinets-scope",
+    "quote": "Subject merchandise includes wooden cabinets and vanities with or without wood veneers",
+    "confidence": 0.9,
+    "secondary": true,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The U.S. Commerce scope for wooden cabinets states that they include cabinets with or without wood veneers.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "sawnwood",
+    "to": "chips-residues",
+    "relation": "by_product",
+    "source": "jfsq-definitions",
+    "quote": "It includes wood waste and scrap not useable as timber such as sawmill rejects, slabs, edgings and trimmings",
+    "confidence": 1.0,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The JFSQ definitions state that wood residues include wood waste and scrap from sawmilling, such as sawmill rejects, slabs, edgings, and trimmings.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "veneer",
+    "to": "chips-residues",
+    "relation": "by_product",
+    "source": "jfsq-definitions",
+    "quote": "It includes wood waste and scrap not useable as timber such as…veneer log cores, veneer rejects",
+    "confidence": 1.0,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The JFSQ definitions state that wood residues include veneer log cores and veneer rejects from veneer production.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "plywood",
+    "to": "wooden-furniture",
+    "relation": "used_to_make",
+    "source": "us-wooden-cabinets-scope",
+    "quote": "made substantially of wood products, including solid wood and engineered wood products…such as plywood",
+    "confidence": 1.0,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The U.S. Commerce scope for wooden cabinets states that they are made of wood products, including engineered wood products such as plywood.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "particle-board",
+    "to": "wooden-furniture",
+    "relation": "used_to_make",
+    "source": "us-wooden-cabinets-scope",
+    "quote": "made substantially of wood products, including solid wood and engineered wood products…such as plywood, strand board, block board, particle board",
+    "confidence": 1.0,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The U.S. Commerce scope for wooden cabinets states that they are made of wood products, including engineered wood products such as particle board.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "fibreboard",
+    "to": "wooden-furniture",
+    "relation": "used_to_make",
+    "source": "us-wooden-cabinets-scope",
+    "quote": "made substantially of wood products, including solid wood and engineered wood products…such as plywood, strand board, block board, particle board, or fiberboard",
+    "confidence": 1.0,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The U.S. Commerce scope for wooden cabinets states that they are made of wood products, including engineered wood products such as fiberboard.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "plywood",
+    "to": "joinery",
+    "relation": "used_to_make",
+    "source": "jfsq-definitions",
+    "quote": "BUILDER’S JOINERY AND CARPENTRY OF WOOD…cellular wood panels (also called cellular board which is plywood with a core of cellular construction)",
+    "confidence": 1.0,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The JFSQ definitions state that builders' joinery includes cellular wood panels, which are defined as plywood with a core of cellular construction.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "veneer",
+    "to": "joinery",
+    "relation": "used_to_make",
+    "source": "eu-ecolabel-floor-coverings",
+    "quote": "Wood veneer floor covering means rigid floor covering consisting of a substrate made from a wood-based panel, with a top layer of wood veneer",
+    "confidence": 1.0,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The EU Ecolabel criteria for floor coverings state that wood veneer floor coverings (a type of joinery) consist of a substrate with a top layer of wood veneer.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "chips-residues",
+    "to": "fibreboard",
+    "relation": "used_to_make",
+    "source": "jfsq-definitions",
+    "quote": "Wood that has been reduced to small pieces and is suitable for pulping, for particle board and/or fibreboard production",
+    "confidence": 1.0,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The JFSQ definitions state that wood chips and particles are suitable for fibreboard production.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "fibreboard",
+    "to": "joinery",
+    "relation": "used_to_make",
+    "source": "eu-ecolabel-floor-coverings",
+    "quote": "Laminate floorings…manufacturing of the core board",
+    "confidence": 0.9,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The EU Ecolabel criteria for floor coverings indicate that laminate floorings (a type of joinery) involve the manufacturing of a core board, which is typically made of fibreboard.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   }
+  ]
+ },
+ "materials": [],
+ "sources": {
+  "fao-jfsq": {
+   "title": "FAO Joint Forest Sector Questionnaire: forest products definitions",
+   "url": "https://fao.org/forestry-fao/35789-0902b3c041384fd87f2451da2bb9237.pdf"
+  },
+  "jfsq-definitions": {
+   "title": "Joint Forest Sector Questionnaire definitions (Eurostat, FAO, ITTO, UNECE), incl. secondary processed wood products",
+   "url": "https://www.fao.org/forestry-fao/7800-0944787ecbf6036088182f841ab15fe42.pdf"
+  },
+  "eu-ecolabel-furniture": {
+   "title": "Commission Decision (EU) 2016/1332: EU Ecolabel criteria for furniture",
+   "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32016D1332"
+  },
+  "eu-ecolabel-floor-coverings": {
+   "title": "Commission Decision (EU) 2017/176: EU Ecolabel criteria for wood-, cork- and bamboo-based floor coverings",
+   "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32017D0176"
+  },
+  "wco-hs-chapter-44": {
+   "title": "WCO Harmonized System 2022, Chapter 44: Wood and articles of wood (notes and headings)",
+   "url": "https://www.wcoomd.org/-/media/wco/public/global/pdf/topics/nomenclature/instruments-and-tools/hs-nomenclature-2022/2022/0944_2022e.pdf"
+  },
+  "us-wooden-cabinets-scope": {
+   "title": "U.S. Commerce, wooden cabinets and vanities from China: scope of the orders (Federal Register, 17 September 2025)",
+   "url": "https://www.federalregister.gov/documents/2025/09/17/2025-17986"
+  },
+  "us-millwork-scope": {
+   "title": "U.S. Commerce, wood mouldings and millwork products from China: scope of the orders (Federal Register, 30 June 2026)",
+   "url": "https://www.federalregister.gov/documents/2026/06/30/2026-13103"
+  },
+  "cbp-ruling-e83110": {
+   "title": "U.S. Customs and Border Protection ruling E83110: wood boards used to make glulam beams (1999)",
+   "url": "https://rulings.cbp.gov/ruling/E83110"
+  }
+ }
+}

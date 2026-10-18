@@ -59,7 +59,7 @@ Article: "Laos bans exports of acacia logs"
 - **Postgres first.** A graph database (Neo4j) only if the walk outgrows it: much bigger supplier networks, graph algorithms, or the assistant's graph questions need it.
 
 ### Later
-1. **More industries** (coffee, cocoa, textiles): an offline pipeline where one AI writes chain links from official texts and another reviews them, and we check what they flag.
+1. **More industries:** an offline pipeline where one AI writes chain links from official texts and another reviews them, and we check what they flag. Built: every EUDR commodity has a chain (wood, cocoa, coffee, oil palm, soya, rubber, cattle), every link quoting an official text (EU directives and regulations, Codex standards, FAO definitions, HS chapter notes, U.S. rules and rulings); no link is written by hand. Next: industries outside the EUDR, such as textiles.
 2. **GraphRAG in the assistant:** answer questions about connections from the graph.
 
    | Question in the chat | Plain RAG today | With GraphRAG |

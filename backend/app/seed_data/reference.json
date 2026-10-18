@@ -472,6 +472,61 @@
       "name": "Gabon"
     },
     {
+      "alpha2": "GH",
+      "numeric": "288",
+      "name": "Ghana"
+    },
+    {
+      "alpha2": "CI",
+      "numeric": "384",
+      "name": "Côte d'Ivoire"
+    },
+    {
+      "alpha2": "CM",
+      "numeric": "120",
+      "name": "Cameroon"
+    },
+    {
+      "alpha2": "NG",
+      "numeric": "566",
+      "name": "Nigeria"
+    },
+    {
+      "alpha2": "EC",
+      "numeric": "218",
+      "name": "Ecuador"
+    },
+    {
+      "alpha2": "CO",
+      "numeric": "170",
+      "name": "Colombia"
+    },
+    {
+      "alpha2": "PE",
+      "numeric": "604",
+      "name": "Peru"
+    },
+    {
+      "alpha2": "HN",
+      "numeric": "340",
+      "name": "Honduras"
+    },
+    {
+      "alpha2": "ET",
+      "numeric": "231",
+      "name": "Ethiopia"
+    },
+    {
+      "alpha2": "UG",
+      "numeric": "800",
+      "name": "Uganda"
+    },
+    {
+      "alpha2": "PG",
+      "numeric": "598",
+      "name": "Papua New Guinea"
+    },
+    {
       "alpha2": "TH",
       "numeric": "764",
       "name": "Thailand"
