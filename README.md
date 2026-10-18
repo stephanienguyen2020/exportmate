@@ -1,143 +1,256 @@
-# ExportMate
+# ExportMate - Your AI Trade Companion
 
-A trade-compliance prototype for small manufacturers. It checks each export order against the rules of its destination market, watches trade news and regulation changes for the goods a company ships, and drafts what to do about a gap. An assistant answers questions with a cited source for every fact. The demo company is a Vietnamese wood-products and furniture exporter.
+🌏 Export compliance, news impact and next steps for small manufacturers
 
-Live: [exportmate.vercel.app](https://exportmate.vercel.app). "Explore the demo" opens a sample workspace in the browser with no account; signing in uses a company workspace stored on the backend.
+ExportMate answers three questions for every export order: **what changed, does it affect my order,
+and what should I do next?** **Gemini** reads regulations, supplier documents and trade news; a team
+of **Google ADK agents** on **Gemini Enterprise Agent Platform** answers questions with a cited source
+for every fact; and a **knowledge graph** traces how a news story about a raw material reaches a
+finished order. 
 
-All legal and regulatory content is illustrative, the demo's stock is synthetic, and the news is real. Alerts and answers are AI assessments, not legal advice.
+🔗 Live: [exportmate.vercel.app](https://exportmate.vercel.app). "Explore the demo" opens a sample
+workspace in the browser with no account; signing in opens a company workspace.
 
-## Repository layout
+> All legal and regulatory content is illustrative, the demo's stock is synthetic, and the news is
+> real. Alerts and answers are AI assessments, not legal advice.
+
+---
+
+## ✨ Features
+
+### 📦 Orders and analysis
+
+- **Import orders** from a CSV: every row is validated before import, and imported orders are analysed
+  straight away.
+- **Analysis report per order:** the order is checked against its destination market's checklist, the
+  supplier's documents and the company's own playbook rules. The report lists each gap, the official
+  text behind it and the estimated cost, and sets the order's status (in the clear, or action needed).
+- **Next moves** on each report open the right fix in place: the order's HS code, destination or ship
+  date, or the supplier's record.
+- **HS code suggestions** for an order without one, from the company's past orders and the official
+  tariff lines (vector search with **pgvector**).
+- **Status by hand**, one order or many, with a required note; every change is kept as the order's
+  history.
+
+### 📜 Rules and regulations
+
+- **Regulations:** official texts with their version history. **Gemini drafts a market's
+  requirements** from the text, each line quoting its source, and the owner reviews them before they
+  count.
+- **Rule watch:** checklist lines that take effect or change in the next 90 days, in the markets of
+  open orders.
+- **Playbook:** the company's own **WHEN/THEN rules** (margins, documents, supplier deadlines), checked
+  in every analysis.
+
+### 🛠️ Acting on a gap
+
+- **Suggested solutions:** Gemini writes a summary and steps for each gap from the report's facts, the
+  cited text and the team's notes on earlier fixes; every number and link is checked against what it
+  was given. Solutions are saved, reused for later orders and listed in the **Knowledge base**, and
+  expire when the rule changes.
+- **Supplier messages:** Gemini drafts an email asking the supplier for what's missing; the owner
+  approves it, and it's sent once.
+- **Reports:** order and company reports, editable, exported as PDF with every edit highlighted, and
+  emailed.
+
+### 🗺️ Suppliers and the trade map
+
+- **Trade map:** destinations, suppliers, production sites and routes on a 3D globe.
+- **What if:** compare another destination, ship date or transit hub, see which documents carry over
+  and which requirements need another check, and save the comparison with a note. Gemini can start
+  the note from a reading of the comparison.
+- **Supplier certificates:** upload one and **Gemini reads it**: the number, issuer, expiry, and what
+  the supplier buys (material, origin country, form), which becomes the supplier's sourcing.
+
+### 📰 News watch
+
+- **Daily news scan:** trade news from built-in and company-added feeds. Gemini reads each article and
+  pulls out the goods it affects and what it names (materials, HS codes, origin countries, markets).
+  **Model Armor** screens articles for prompt injection first.
+- **Orders it may hit:** the **knowledge graph** finds the open orders an article reaches, with the path
+  and a source on every link. The team confirms or rejects each match, and links people keep rejecting
+  are avoided.
+
+### 💬 The assistant
+
+- Opens from every screen: ask about your orders, rules, news, stock, or how to use the app.
+- **Ask about connections:** "what if Vietnam restricts acacia log exports?" or "which orders depend on
+  acacia?" The assistant walks the knowledge graph and names each order with the path that reaches it
+  (**GraphRAG**).
+- Every fact carries a **numbered citation**; an auditor checks citations and figures, and a critic
+  checks that each connection it claims matches its path, before the answer is shown.
+- **Audit trail:** each answer's steps, the agent behind each one, the tools called, the evidence and
+  the checks, live and saved.
+- **Memory:** remembers a signed-in user's preferences and work; Account › What the assistant remembers
+  lists them and forgets any on request.
+
+### 👥 Team and accounts
+
+- Sign-in with **Firebase Auth** (email or Google), company workspaces, invites, and owner, editor and
+  viewer roles.
+- An **activity log** of every change, exportable as CSV.
+- **Browser demo:** the full workspace in the browser with sample orders, no account needed.
+
+---
+
+## 🤖 How It Uses AI Agents
+
+The assistant is a multi-agent team built with **Google ADK** and running on **Agent Platform's Agent
+Runtime**.
+
+1. **Router**
+   - Picks the model for each question: a **quick-answer agent** on a small Gemini model, or an
+     **analyst** on a larger one. Connection questions ("depends on", "made from", "which orders",
+     "restricts") go to the analyst.
+
+2. **Specialists**
+   - The analyst delegates to specialists, each with its own read-only tools: **company** (orders,
+     checklists and playbook, read with the user's own token), **news** (alerts and scans), **stock**,
+     **knowledge** (search over **RAG Engine**, then a BM25 rerank) and **graph** (`query_graph`, the
+     knowledge graph's paths from material to order).
+
+3. **Auditor**
+   - Checks every draft: citations resolve, figures appear in what the tools returned, news carries its
+     date, links are real sources, and every order the graph reached that the answer names cites its
+     path. A failing draft goes back to the analyst once.
+
+4. **Critic**
+   - A Gemini check after the auditor: order by order, it compares what the answer says connects the
+     order with its path and the order's own facts. An added supplier, country or step, or a
+     contradiction, sends the draft back once; still failing, the answer is flagged for review.
+
+5. **Sessions and Memory Bank**
+   - Keep each chat's context and what a user asked the assistant to remember.
+
+6. **Governance and evaluation**
+   - The agents run as their own **Agent Identity**, call only endpoints listed in **Agent Registry**,
+     and send their traffic through **Agent Gateway** with **Model Armor**.
+   - A golden set of questions is scored after changes, also on **Agent Platform › Evaluation** with
+     managed judges.
+
+Gemini also works outside the chat, always with code checking its answer before it's saved: drafting
+requirements from regulations, reading supplier certificates, assessing news, writing solutions,
+drafting supplier emails, reading what-if comparisons, and building the material chain.
+
+📖 How to use the AI features: [docs/AI_GUIDE.md](docs/AI_GUIDE.md). The harness around the agents
+(policy, tools, guard, auditor, evals): [docs/AGENT_HARNESS.md](docs/AGENT_HARNESS.md).
+
+---
+
+## 🧩 The Knowledge Graph
+
+News rarely names your order. A story about **acacia logs from Vietnam** never mentions plywood or
+PO-2291, yet the order depends on it. The knowledge graph connects them.
+
+- **Nodes:** materials (acacia, rubberwood), products (each an HS heading: logs, veneer, plywood,
+  furniture), suppliers and orders.
+- **Links:** a product is *used to make* another (each link quoting an official text), a supplier
+  *buys* a material from a country in a form, a supplier *supplies* an order, and an order *is* a
+  product through its HS code.
+
+```
+Binh Phu Wood ──BUYS (Vietnam, logs)──► acacia
+logs ──USED_TO_MAKE──► veneer ──USED_TO_MAKE──► plywood
+PO-2291 ──IS_PRODUCT──► plywood        Binh Phu Wood ──SUPPLIES──► PO-2291
+```
+
+The material chain covers **every commodity in the EU deforestation rule** (wood, cocoa, coffee, oil
+palm, soya, rubber, cattle). It is built offline by a **Gemini writer** that proposes links with quotes
+from official texts, **code checks** on each quote and HS code, and a **Gemini reviewer** that flags
+doubtful links for a person.
+
+**How the graph is used:**
+
+- **Neo4j AuraDB** holds the graph as a read model: products, materials and chain links with their
+  weights, and each company's suppliers (*buys*) and orders (*supplies*, *is*). **Cloud SQL Postgres**
+  stays the source of truth.
+- **The walk** runs as a **Cypher** query on Neo4j while its copy matches Postgres (a fingerprint of
+  the chain), and falls back to a recursive SQL query otherwise. The query reports where it walked.
+- **Ranking:** between paths of equal length, the walk prefers fewer doubted links, then fewer less
+  common routes, then links with higher weights.
+- **Learning from verdicts:** a nightly job counts every company's confirms and rejects per chain link
+  into a weight. A link a company keeps rejecting is doubted for that company straight away.
+- **Chain versions:** each industry's chain is versioned in Postgres. A new build arrives as a draft
+  with what it changes and what the pipeline flagged; a **chain admin** reviews it on the Material
+  chain page and publishes or rejects it. Publishing rebuilds the graph.
+
+### 🚀 Architecture
+
+![Knowledge graph and GraphRAG architecture by flow](docs/knowledge-graph-architecture.png)
+
+#### 🩵 1. News watch
+
+- **Cloud Scheduler** starts the news scan on **Cloud Run**; Gemini assesses each article and the alert
+  is saved in **Firestore**.
+- The **News matches API** reads the alerts, walks the graph on **Neo4j** for the orders each one
+  reaches, returns them with their paths, and saves each verdict in Postgres.
+- The **link weights job** (a Cloud Run job, started by Cloud Scheduler every night) turns verdicts
+  into link weights.
+
+#### 📘 2. Material chain builder (offline)
+
+- The Gemini writer, code checks and Gemini reviewer turn official texts into links, each quoting its
+  source.
+- The result is saved as a draft **chain version**; a chain admin reviews the changes and flags, and
+  publishes or rejects it.
+- A **source finder agent** that collects new official texts into Cloud Storage is the next addition.
+
+#### 🏭 3. Supplier sourcing
+
+- An uploaded certificate is read by Gemini, the user confirms the suggestions, and they're saved as
+  the supplier's sourcing: each one a *buys* link from the supplier to a material.
+
+#### 🧠 4. Assistant (GraphRAG)
+
+- The router sends a connection question to the analyst, which hands it to the **graph specialist**.
+- Its `query_graph` call goes through **Agent Gateway** and **Model Armor** to the **Graph query API**
+  on Cloud Run, which reads what the question names (materials, countries, HS codes, markets), walks
+  the graph for the user's company with a **Cypher** query on **Neo4j AuraDB**, and returns each order
+  with its cited path and what it did and didn't recognise.
+- The answer cites each order's path and each link's official text. The **auditor** checks every
+  order named cites its path, and the **critic** checks the claims match the paths.
+
+#### 🗄️ Data
+
+- **Cloud SQL Postgres** is the source of truth, one block per table.
+- After each change (the chain, or a company's suppliers, sourcing or orders), an event goes to
+  **Pub/Sub**; its push subscription calls the **graph sync** endpoint, which rewrites that part of
+  **Neo4j** from Postgres. Failed syncs are retried, and deploys and the nightly job run a full sync.
+
+---
+
+## ☁️ Google Cloud
+
+Everything runs in one project, defined in [`infra/terraform`](infra/terraform/).
+
+| Service | What ExportMate uses it for |
+| --- | --- |
+| Gemini | the assistant's two model tiers, news assessment, regulation drafting, certificate reading, solutions, supplier emails, the material chain builder |
+| Agent Platform: Agent Runtime, Sessions, Memory Bank | the ADK agents, each chat's session, per-user memories |
+| Agent Platform: RAG Engine | search over stock, articles, alerts, sources and help guides |
+| Agent Platform: Evaluation | golden-set runs scored by managed judges |
+| Agent Identity, Agent Registry, Agent Gateway, Model Armor | the agents' identity, the endpoints they may call, their egress, prompt-injection screening |
+| Cloud Run | the AI service (`exportmate-ai`), the backend (`exportmate-backend`, including the Graph query API and the graph sync endpoint), the link weights job, and a job for seeding, indexing, scans and evals |
+| Cloud SQL (Postgres + pgvector) | company data, the trade map, regulations, the knowledge graph's source of truth and chain versions, HS code vectors |
+| Pub/Sub | change events that keep Neo4j in step with Postgres (a push subscription to the graph sync endpoint) |
+| Firestore | news, alerts, stock, chat audits, the answer cache |
+| Cloud Storage | the files RAG Engine indexes, uploaded documents |
+| Cloud Scheduler | the daily news scan and the nightly link weights job |
+| Secret Manager | the Neo4j password and other credentials |
+| Cloud Build, Artifact Registry | building and storing the images |
+| Cloud Logging and Monitoring | JSON logs, log-based metrics, alerts and dashboards |
+
+Outside Google Cloud: **Neo4j AuraDB** holds the graph read model, the frontend is a React app on
+Vercel, and Firebase Auth signs people in.
+
+---
+
+## 📁 Repository
 
 | Folder | What it is |
 | --- | --- |
-| [`frontend/`](frontend/) | React 19 + TypeScript + Vite single-page app, deployed to Vercel. The chat and News watch UI live in [`frontend/ai/`](frontend/ai/). |
-| [`backend/`](backend/) | FastAPI + Postgres company API under `/api/v1` (orders, analysis, trade map, reports, regulations, team), Firebase Auth. See [`backend/README.md`](backend/README.md). |
-| [`ai/server/`](ai/server/) | Node service for every other `/api/*` route: the assistant (an ADK multi-agent team on Gemini Enterprise Agent Platform), News watch and search. Data in Firestore, models are Gemini. |
-| [`infra/`](infra/) | Terraform for Google Cloud ([`infra/terraform/README.md`](infra/terraform/README.md)), Agent Platform governance and monitoring. |
-| [`docs/`](docs/) | [How the AI features work](docs/AI_GUIDE.md), [the agent harness](docs/AGENT_HARNESS.md) and [the architecture](docs/architecture.svg) (generated by `architecture.py`; an editable sketch in `architecture.excalidraw`). |
-
-## The workspace
-
-- **Overview:** exposure across open orders and the next action.
-- **Orders:** search and filter orders; each order's page has its facts (editable), its latest analysis report with next steps, a status history and supplier messages.
-- **Trade map:** destinations, suppliers, sites and routes on a globe; compare a market, ship date or route ("What if") and save the comparison with a note. Signed in only.
-- **Rules & news:** News watch (trade news matched to the company's goods), Rule watch (checklist changes coming up in your markets), Regulations (official texts with version history), the Playbook (your own WHEN/THEN rules) and the Knowledge base (saved solutions to past gaps).
-- **Reports:** order and company reports, editable, exported as PDF and emailed.
-- **Data room:** upload a CSV of orders, review the validation, then import; imported orders are analysed straight away.
-- **Account:** profile, team and roles, cost settings, the activity log, and what the assistant remembers.
-
-The assistant opens from the bottom-right of every screen; `#/chat` is the full-screen view with each answer's audit trail.
-
-### The browser demo
-
-The demo keeps its orders, rules and profile in browser storage and checks every order, imported ones included, against one sample rule change (`sampleCheck` in [`frontend/src/data.ts`](frontend/src/data.ts)): EU-bound HS 4412.33 or acacia goods whose supplier has no geolocation record. "Run demo" on Overview or "Run rule-change demo" on Rule watch walks through the orders it affects, including an auditor rejecting an unsupported claim. Counts, costs and dates are worked out from the orders and today's date. Supplier messages in the demo are recorded locally and never sent. The Maker/Buyer switch shows separately seeded estimates; it is not access control or a currency conversion.
-
-To reset the demo, clear these keys in the browser's developer tools: localStorage `em-orders`, `em-rules`, `em-sent`, `em-demo-profile`, `em-news-reviews`, `em-tour-done`; sessionStorage `em-session`, `em-next`, `em-chat`, `em-chat-session`.
-
-## Run locally
-
-The whole stack (Postgres, backend, AI service and frontend) with one command, from the repository root:
-
-```sh
-./dev.sh
-```
-
-It needs Docker and [uv](https://docs.astral.sh/uv/), installs dependencies when lockfiles change, migrates and seeds the database, and uses dev sign-in: log in at http://127.0.0.1:5173/#/login as `lan@example.com` with any password of 8+ characters. Ctrl+C stops everything except Postgres. The AI features call Gemini and read the AI service's Firestore in GCP, so run `gcloud auth application-default login` once. `GOOGLE_CLOUD_PROJECT` in `backend/.env` turns on the backend's AI steps, and `ai/server/.env` (see [`.env.example`](ai/server/.env.example)) can turn on the assistant's Sessions and Memory Bank.
-
-The frontend alone is enough for the browser demo:
-
-```sh
-cd frontend
-npm install
-npm run dev       # http://127.0.0.1:5173
-npm run build     # type-check and build to dist/
-npm run preview   # serve the production build
-```
-
-For the backend on its own, see [`backend/README.md`](backend/README.md). The AI service:
-
-```sh
-cd ai/server && npm install
-npm run seed      # synthetic stock and default news sources, then rebuild the search index
-npm run scan      # one news scan now (--max-age=N sets the age rule for this run; 0 = any age)
-npm run index     # rebuild the RAG Engine index; `node rag.js "<query>"` runs a test search
-npm run dev       # API on :8080
-```
-
-### Frontend configuration
-
-Copy [`frontend/.env.example`](frontend/.env.example) to `frontend/.env.local` and fill in the Firebase web app configuration (`VITE_FIREBASE_*`). The backend must use the same Firebase project. Never put service-account keys or database credentials in `VITE_*` variables.
-
-Requests to `/api/v1/*` go to the backend: on Vercel through [`frontend/api/backend.ts`](frontend/api/backend.ts) to `BACKEND_URL` (a clear 503 if it isn't set), locally through the Vite proxy to `BACKEND_URL` or `127.0.0.1:8000`. Every other `/api/*` request goes to the AI service: on Vercel by the rewrite in [`frontend/vercel.json`](frontend/vercel.json), locally to `AI_SERVICE_URL` or `127.0.0.1:8080`. `VITE_BACKEND_API_URL` can point straight at a backend's `/api/v1` when its CORS allows the frontend.
-
-`VITE_AUTH_MODE=dev`, paired with `AUTH_MODE=dev` in `backend/.env`, accepts any password and sends `dev:<email>` tokens to the local backend. Production builds never accept them. The demo never falls back to sample records when an API request fails.
-
-## Tests and CI
-
-```sh
-# frontend/
-npx playwright install chromium   # once
-npm test                          # Vercel proxy test (Node 22.18+) and Playwright tests against mocked APIs
-TEST_REAL_BACKEND=1 npm test      # also a real FastAPI/Postgres round trip, with the local backend running
-
-# backend/
-uv run pytest                     # needs Postgres
-
-# ai/server/
-npm test                          # the assistant harness's unit tests, no GCP needed
-npm run eval                      # golden-set eval against live Gemini and Firestore
-```
-
-GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs three jobs on every push to `main` and every pull request: `frontend` (build and tests), `backend` (ruff, `alembic check`, pytest against Postgres) and `ai-server` (parse check and unit tests). `main` is protected: changes go through a pull request with all three passing. The evals need GCP and are run by hand. [`frontend/docs/VALIDATION.md`](frontend/docs/VALIDATION.md) records the flows checked by hand in a browser.
-
-## AI features
-
-How to use the assistant and News watch, and how they work: [docs/AI_GUIDE.md](docs/AI_GUIDE.md). How the harness around the agents is built: [docs/AGENT_HARNESS.md](docs/AGENT_HARNESS.md).
-
-- **Assistant:** a router sends each question to a quick-answer agent (small, fast model) or to an analyst (larger model), which delegates to stock, news, company and knowledge specialists. The agents run on Agent Runtime ([`ai/server/runtime.js`](ai/server/runtime.js), [`ai/server/agents/`](ai/server/agents/)). Every tool is read-only, and signed in, the assistant reads the company's orders and playbook with the user's own token. Every fact carries a numbered citation; before an answer is returned, an auditor checks that citations resolve and that figures appear in what the tools returned, and sends a failing draft back once.
-- **Search:** Agent Platform RAG Engine, one corpus per document type (stock items, articles, alerts, sources, help guides), filled from text files in Cloud Storage ([`ai/server/rag.js`](ai/server/rag.js)). Results the caller may not see are dropped before any agent reads them, then reranked with BM25.
-- **Sessions and memory:** each chat keeps an Agent Platform session, and Memory Bank remembers a signed-in user's preferences and work (never personal details, 180 days). Account › What the assistant remembers lists them and forgets any on request.
-- **Audit trail:** each answer streams its steps live and is stored in Firestore `audits` with every tool call, the evidence retrieved, the auditor's findings, citations, model, tokens and timing. Open "Audit" under any answer, or download it as JSON.
-- **News watch:** every day at 07:00 Asia/Ho_Chi_Minh, Cloud Scheduler calls `POST /api/scan`. The scan reads the enabled RSS/Atom feeds, skips articles older than a year (a company can switch that rule off for itself) and asks Gemini which goods each new article could affect: a signed-in company's own goods (what its profile names and its orders ship) or, in the demo, the sample stock. Each alert has a severity, a direction (risk, opportunity or watch), the affected items and a next step. Owners and editors can confirm which open orders an alert concerns.
-- **Sources:** seven built-in feeds (Timber Trades Journal, VnExpress International, the European Commission press corner and four Google News searches). Owners and editors can switch a built-in feed off for their company and add any public HTTPS feed, which only their company sees. The service tests a new feed first and blocks private and metadata addresses. Articles with instructions aimed at the assistant are withheld.
-- **Governance:** the agents run as their own Agent Identity with least-privilege roles; Agent Registry lists every endpoint they call; their traffic goes through Agent Gateway, with IAM egress policies and Model Armor screening for prompt injection (observe mode until enforced).
-
-The API is public for the prototype. Chat is capped at 40 questions per client and 200 per instance each hour (`CHAT_LIMIT_PER_CLIENT`, `CHAT_LIMIT_PER_INSTANCE`), and "Scan now" at one scan per 10 minutes (the scheduled scan skips that limit).
-
-### Google Cloud resources
-
-Everything runs in one project, `skilful-scarab-511320-q9`, defined in [`infra/terraform`](infra/terraform/).
-
-| Resource | Name |
-| --- | --- |
-| Cloud Run service | `exportmate-ai` (asia-southeast1, at most 3 instances): the API in front of the agents, running as `exportmate-ai@…` with `roles/aiplatform.user`, `roles/datastore.user`, `roles/modelarmor.user` and write access to the RAG bucket |
-| Agent Runtime | `exportmate-agents` (asia-southeast1): the agents, from the same image (`SERVE=runtime`), with Sessions and Memory Bank, created by [`ai/server/platform/runtime.py`](ai/server/platform/runtime.py) and running as its own Agent Identity |
-| RAG Engine | corpora `exportmate-kb-<type>` (asia-southeast1), imported from the `<project>-kb` bucket |
-| Govern | Agent Registry entries, IAM egress policies, Agent Gateway `exportmate-egress` with IAP and Model Armor ([`infra/agent-platform/govern.sh`](infra/agent-platform/govern.sh)) |
-| Evaluation | experiment "ExportMate assistant" on Agent Platform › Evaluation (us-central1): golden-set runs scored by managed judges (`npm run eval:vertex`) |
-| Cloud Run job | `exportmate-ai-task` (same image): seed, re-index, scan, eval, ops |
-| Firestore | `(default)` database, native mode, asia-southeast1 |
-| Cloud Scheduler | `exportmate-daily-news-scan`, OIDC-signed as `exportmate-scheduler@…` |
-| Cloud Build | images built as `exportmate-builder@…` into the `exportmate` Artifact Registry repository |
-| Cloud Logging / Monitoring | JSON logs; log-based metrics `exportmate_ai/chat_answers`, `chat_latency`, `guard_withheld`, `scan_failures` |
-| Models | assistant: `gemini-3.5-flash-lite` (simple questions) and `gemini-4-argon` (complex ones); news scan and eval judge: `gemini-3.5-flash`; search embeddings: `text-multilingual-embedding-002`. These are the defaults in [`ai/server/models.js`](ai/server/models.js); `GET /` reports what the service runs (`/healthz` locally; Cloud Run reserves that path) |
-
-The backend runs on Cloud Run (`exportmate-backend`) with Cloud SQL Postgres in the same project.
-
-## Deploy
-
-1. Open a pull request to `main` and wait for CI.
-2. Merging deploys the frontend: the Vercel project `exportmate` (team `stephanies-projects-5bf9fd09`, root directory `frontend/`) builds production from `main`, and every pull request gets a preview. Set the `VITE_FIREBASE_*` variables and `BACKEND_URL` for Production and Preview, and never set `VITE_AUTH_MODE=dev`. To deploy by hand, run `vercel --prod` from the repository root.
-3. Deploy the backend from merged `main` straight after, since the new frontend may need it: `PROJECT_ID=skilful-scarab-511320-q9 backend/deploy.sh` (migrations and the reference seed run as part of it).
-4. Deploy the AI service when it changed: `PROJECT_ID=skilful-scarab-511320-q9 ai/server/deploy.sh` builds the image on Cloud Build and rolls out the Cloud Run service, the job and Agent Runtime.
-
-## Planning documents
-
-Plans describe intended designs and are not all built.
-
-- Frontend: [page plan](frontend/docs/FRONTEND_PLAN.md), [site and account flow](frontend/docs/ACCOUNT_AND_SITE_PLAN.md), [landing design](frontend/docs/LANDING_DESIGN.md), [trade map review](frontend/docs/TRADE_MAP_REVIEW.md), [fixes](frontend/docs/FIXES.md)
-- Backend: [requirements](backend/docs/REQUIREMENTS.md), [technical decisions](backend/docs/DECISIONS.md), [API](backend/docs/API.md), [AI ideas](backend/docs/AI_IDEAS.md), [frontend gaps](backend/docs/FRONTEND_GAPS.md), [original implementation plan](backend/docs/BACKEND_PLAN.md)
-
-## Assets
-
-Port photography from [Unsplash](https://images.unsplash.com/photo-1578575437130-527eed3abbec), stored at `frontend/public/port.jpg`; it is illustrative and does not show a port on the demo's routes. DM Sans and DM Mono load from Google Fonts with system fallbacks. Icons are from Lucide.
+| [`frontend/`](frontend/) | React 19 + TypeScript + Vite app; the chat and News watch UI live in [`frontend/ai/`](frontend/ai/) |
+| [`backend/`](backend/) | FastAPI + Postgres company API; see [`backend/README.md`](backend/README.md) |
+| [`ai/server/`](ai/server/) | Node service: the ADK agents, News watch and search |
+| [`infra/`](infra/) | Terraform, Agent Platform governance, monitoring |
+| [`docs/`](docs/) | AI guide, agent harness, architecture diagrams |
