@@ -186,7 +186,7 @@ doubtful links for a person.
 
 ### 🚀 Architecture
 
-![Knowledge graph and GraphRAG architecture by flow](docs/knowledge-graph-architecture.png)
+![Knowledge graph and GraphRAG architecture by flow](docs/images/knowledge-graph-architecture.png)
 
 #### 🩵 1. News watch
 

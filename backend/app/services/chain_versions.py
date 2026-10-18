@@ -1,6 +1,6 @@
 """Versions of each industry's material chain, and the graph built from the published ones.
 
-The architecture's material chain builder (docs/knowledge-graph-architecture.excalidraw, lane 2):
+The architecture's material chain builder (lane 2 of the knowledge graph diagram):
 the pipeline (build_chain.py) drafts an industry's chain; a chain admin reads the draft on Rules
 & news › Material chain (what changed against the published version, and what the pipeline
 flagged) and publishes or rejects it. Publishing rebuilds the graph from the published versions,
