@@ -71,3 +71,10 @@ test("mentionsDate accepts common forms and rejects other days", async () => {
   for (const t of ["2026-10-05", "5 October", "Oct. 5", "October 5th", "5th of October", "ngày 5/10", "5 tháng 10"]) assert.ok(mentionsDate(t, iso), t);
   for (const t of ["15 October", "October 15", "5 November", "2026-10-15", "105/10"]) assert.equal(mentionsDate(t, iso), false, t);
 });
+
+test("a decimal figure is traced in evidence written with trailing zeros (HS codes)", () => {
+  const { problems } = review({ answer: "Wooden furniture (HS 9403.30, 9403.40) [1].", retrieved, evidence: toEvidence("Wooden furniture (HS 9403.30, 9403.40)"), usedTools: true });
+  assert.deepEqual(problems, []);
+  // Still whole numbers: 9403.3 is not 9403.35.
+  assert.match(review({ answer: "HS 9403.3 [1]", retrieved, evidence: "HS 9403.35", usedTools: true }).problems.join(), /9403\.3/);
+});

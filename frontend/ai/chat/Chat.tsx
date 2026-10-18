@@ -55,9 +55,13 @@ function load(): Message[] {
   }
 }
 
+// Citation types shown in words; others are shown as they are (item, alert, order, …).
+const TYPE_LABELS: Record<string, string> = { path: "graph path", chain_source: "official text" };
+const typeLabel = (type: string) => TYPE_LABELS[type] ?? type;
+
 function CiteLink({ n, citation }: { n: number; citation?: Citation }) {
   if (!citation) return <span className="chat-cite missing">{n}</span>;
-  const label = `${citation.type}: ${citation.title}`;
+  const label = `${typeLabel(citation.type)}: ${citation.title}`;
   if (citation.url?.startsWith("http"))
     return (
       <a className="chat-cite" href={citation.url} target="_blank" rel="noopener noreferrer" title={label}>
@@ -128,7 +132,7 @@ function Sources({ citations }: { citations: Citation[] }) {
       {citations.map((c) => (
         <li key={c.ref}>
           <span className="chat-src-ref">{c.ref}</span>
-          <span className="chat-src-type">{c.type}</span>
+          <span className="chat-src-type">{typeLabel(c.type)}</span>
           {c.url?.startsWith("http") ? (
             <a href={c.url} target="_blank" rel="noopener noreferrer">
               {c.title}
