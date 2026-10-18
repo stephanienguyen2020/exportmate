@@ -16,6 +16,8 @@ from app.database.models.hs_code import (
     HsSuggestionStatus,
 )
 from app.database.models.knowledge_graph import (
+    ChainVersion,
+    ChainVersionStatus,
     GraphEdge,
     GraphLinkWeight,
     GraphNode,
@@ -72,6 +74,8 @@ __all__ = [
     "AnalysisRun",
     "AuditEvent",
     "Base",
+    "ChainVersion",
+    "ChainVersionStatus",
     "Company",
     "CompanyCostSetting",
     "CompanyInvite",

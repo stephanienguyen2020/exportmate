@@ -777,6 +777,8 @@ export type MaterialChain = {
   industries: {
     key: string;
     name: string;
+    version: number | null; // the published chain version
+    publishedAt: string | null;
     products: { key: string; name: string; hsCodes: string[]; stage: string | null }[];
     links: ChainLink[];
   }[];
@@ -789,6 +791,49 @@ export type MaterialChain = {
   }[];
   byWay: { via: "supplier" | "hs" | "linked"; confirmed: number; rejected: number }[];
   weightsUpdatedAt: string | null;
+  isChainAdmin: boolean; // may review chain versions (CHAIN_ADMIN_EMAILS)
+  draftsWaiting: number;
+};
+
+// Versions of an industry's material chain, reviewed by chain admins (GET /knowledge-graph/chain-versions).
+export type ChainVersionSummary = {
+  id: string;
+  industry: string;
+  industryName: string;
+  number: number;
+  status: "draft" | "published" | "superseded" | "rejected";
+  origin: string; // "seed" (a file in data/industries/) or "pipeline"
+  note: string | null;
+  productCount: number;
+  linkCount: number;
+  createdAt: string;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  reviewNote: string | null;
+  publishedAt: string | null;
+};
+export type ChainDiffLink = {
+  fromKey: string;
+  fromName: string;
+  toKey: string;
+  toName: string;
+  relation: "used_to_make" | "by_product";
+  sourceTitle: string;
+  sourceUrl: string | null;
+  quote: string | null;
+  basis: string | null;
+  secondary: boolean;
+  changed: string[];
+};
+export type ChainVersion = ChainVersionSummary & {
+  changes: {
+    productsAdded: string[];
+    productsRemoved: string[];
+    linksAdded: ChainDiffLink[];
+    linksRemoved: ChainDiffLink[];
+    linksChanged: ChainDiffLink[];
+  };
+  flagged: Record<string, unknown> | null;
 };
 
 export type NewsMatch = {
@@ -1419,6 +1464,22 @@ export const api = {
   },
   materialChain: (signal?: AbortSignal) =>
     request<MaterialChain>("/knowledge-graph/chain", { signal }).then((r) => r.data),
+  chainVersions: (signal?: AbortSignal) =>
+    request<ChainVersionSummary[]>("/knowledge-graph/chain-versions", { signal }).then((r) => r.data),
+  chainVersion: (id: string, signal?: AbortSignal) =>
+    request<ChainVersion>(`/knowledge-graph/chain-versions/${encodeURIComponent(id)}`, { signal }).then(
+      (r) => r.data,
+    ),
+  publishChainVersion: (id: string, note: string) =>
+    request<ChainVersion>(`/knowledge-graph/chain-versions/${encodeURIComponent(id)}/publish`, {
+      method: "POST",
+      body: JSON.stringify({ note: note || null }),
+    }).then((r) => r.data),
+  rejectChainVersion: (id: string, note: string) =>
+    request<ChainVersion>(`/knowledge-graph/chain-versions/${encodeURIComponent(id)}/reject`, {
+      method: "POST",
+      body: JSON.stringify({ note }),
+    }).then((r) => r.data),
   newsMatches: (signal?: AbortSignal) =>
     request<{ newsAvailable: boolean; matches: NewsMatch[] }>("/news-matches", {
       signal,

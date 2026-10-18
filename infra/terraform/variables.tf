@@ -9,6 +9,12 @@ variable "region" {
   default     = "asia-southeast1"
 }
 
+variable "chain_admin_emails" {
+  description = "Who reviews and publishes material chain versions on Rules & news › Material chain (shared by every company): emails, comma-separated, matched on the verified sign-in email."
+  type        = string
+  default     = "dylan.exportmate@gmail.com"
+}
+
 variable "contact_inbox" {
   description = "Where the public contact form (POST /api/v1/contact) is emailed. Delivered only once the backend has a Resend key."
   type        = string

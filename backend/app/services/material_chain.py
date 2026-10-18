@@ -6,7 +6,7 @@ from collections import defaultdict
 from sqlalchemy.orm import Session
 
 from app.core.context import CompanyContext
-from app.database.models import GraphNodeKind
+from app.database.models import ChainVersionStatus, GraphNodeKind
 from app.database.queries import knowledge_graph as graph_queries
 from app.schemas.knowledge_graph import (
     AiCheckOut,
@@ -17,7 +17,7 @@ from app.schemas.knowledge_graph import (
     MaterialChainOut,
     VerdictCountsOut,
 )
-from app.services import graph_feedback
+from app.services import chain_versions, graph_feedback
 from app.services import news_matches as news_service
 
 STAGE_ORDER = ["raw", "by-product", "first processing", "further processing", "processed", "panel"]
@@ -67,6 +67,8 @@ def build_material_chain(db: Session, ctx: CompanyContext) -> MaterialChainOut:
             )
         )
     commodities = {n.industry: n for n in nodes if n.kind == GraphNodeKind.commodity and n.industry}
+    versions = graph_queries.list_chain_versions(db)
+    published = {v.industry: v for v in versions if v.status == ChainVersionStatus.published}
     products = [n for n in nodes if n.kind == GraphNodeKind.product]
     industries = []
     for industry in sorted({p.industry for p in products if p.industry}):
@@ -79,6 +81,8 @@ def build_material_chain(db: Session, ctx: CompanyContext) -> MaterialChainOut:
             ChainIndustryOut(
                 key=industry,
                 name=commodities[industry].name if industry in commodities else industry,
+                version=published[industry].number if industry in published else None,
+                published_at=published[industry].published_at if industry in published else None,
                 products=[
                     ChainProductOut(
                         key=p.key,
@@ -110,4 +114,6 @@ def build_material_chain(db: Session, ctx: CompanyContext) -> MaterialChainOut:
         ],
         by_way=news_service.news_match_accuracy(db, ctx).by_way,
         weights_updated_at=graph_feedback.weights_updated_at(db),
+        is_chain_admin=chain_versions.is_chain_admin(ctx.user),
+        drafts_waiting=sum(1 for v in versions if v.status == ChainVersionStatus.draft),
     )

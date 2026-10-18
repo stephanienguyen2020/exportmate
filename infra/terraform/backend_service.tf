@@ -21,6 +21,7 @@ locals {
     GOOGLE_CLOUD_PROJECT       = var.project_id # Vertex AI project for Gemini
     GEMINI_MODEL               = var.gemini_model
     CONTACT_INBOX              = var.contact_inbox
+    CHAIN_ADMIN_EMAILS         = var.chain_admin_emails
   }
 }
 
