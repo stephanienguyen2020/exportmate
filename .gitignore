@@ -12,3 +12,7 @@ test-results/
 .venv/
 ai/server/eval/results/
 playwright-report/
+
+# Claude Code: kept on each machine, not in the repository
+CLAUDE.md
+.claude/

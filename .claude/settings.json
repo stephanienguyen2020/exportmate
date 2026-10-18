@@ -1,7 +1,0 @@
-{
-  "enabledPlugins": {
-    "ai-ml-tools@claudekit-skills": true,
-    "devops-tools@claudekit-skills": true,
-    "problem-solving-tools@claudekit-skills": true
-  }
-}
