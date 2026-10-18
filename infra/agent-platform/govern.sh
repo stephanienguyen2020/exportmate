@@ -15,7 +15,13 @@ RUNTIME="${RUNTIME:?Set RUNTIME to the reasoning engine resource name (platform/
 NUMBER="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
 LOCATION="$(cut -d/ -f4 <<<"$RUNTIME")"
 ENGINE="$(cut -d/ -f6 <<<"$RUNTIME")"
-AGENT="principal://agents.global.proj-${NUMBER}.system.id.goog/resources/aiplatform/projects/${NUMBER}/locations/${LOCATION}/reasoningEngines/${ENGINE}"
+# The identity Agent Runtime gave the instance: agents.global.proj-<number>… for a project outside
+# an organization, agents.global.org-<id>… inside one, so it is read rather than built.
+IDENTITY="$(curl -sf -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+  "https://${LOCATION}-aiplatform.googleapis.com/v1beta1/projects/${NUMBER}/locations/${LOCATION}/reasoningEngines/${ENGINE}" |
+  sed -n 's/.*"effectiveIdentity": *"\([^"]*\)".*/\1/p')"
+[[ -n "$IDENTITY" ]] || { echo "No effectiveIdentity on ${RUNTIME}: deploy it with platform/runtime.py first" >&2; exit 1; }
+AGENT="principal://${IDENTITY}"
 
 echo "==> Agent Identity roles for ${AGENT}"
 for role in roles/datastore.user roles/aiplatform.user roles/logging.logWriter roles/cloudtrace.agent; do

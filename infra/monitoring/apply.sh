@@ -3,7 +3,7 @@
 # alert policies (errors, 5xx, file storage, ...) and a dashboard, from the JSON files in ai/ or backend/. Safe to run again:
 # each item is found by its name and updated in place.
 #
-#   PROJECT_ID=exportmate-app PART=ai SERVICE=exportmate-ai ALERT_EMAIL=you@example.com ./apply.sh
+#   PROJECT_ID=skilful-scarab-511320-q9 PART=ai SERVICE=exportmate-ai ALERT_EMAIL=you@example.com ./apply.sh
 #   PROJECT_ID=skilful-scarab-511320-q9 PART=backend SERVICE=exportmate-backend \
 #     WEBSITE_HOST=exportmate.vercel.app ALERT_EMAIL=you@example.com ./apply.sh
 #

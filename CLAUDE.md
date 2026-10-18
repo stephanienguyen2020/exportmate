@@ -23,7 +23,7 @@ npx playwright test -g "news sources"   # single Playwright test; `npx playwrigh
 npm run preview
 ```
 
-AI service (`ai/server/`, needs `gcloud auth application-default login`; talks to the real Firestore of `PROJECT_ID` or `GOOGLE_CLOUD_PROJECT`, default `skilful-scarab-511320-q9`; the website's AI service and its data moved there from `exportmate-app`, see `infra/terraform/README.md`):
+AI service (`ai/server/`, needs `gcloud auth application-default login`; talks to the real Firestore of `PROJECT_ID` or `GOOGLE_CLOUD_PROJECT`, default `skilful-scarab-511320-q9`, where the website's AI service and its data run):
 
 ```sh
 npm run dev       # node --watch on :8080; reads ai/server/.env if present (.env.example: AGENT_RUNTIME = a dev instance turns on Sessions + Memory Bank locally)

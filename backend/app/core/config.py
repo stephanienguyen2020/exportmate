@@ -19,7 +19,7 @@ class Settings(BaseSettings):
         "postgresql+psycopg://exportmate:exportmate@127.0.0.1:5433/exportmate_test"
     )
     auth_mode: Literal["firebase", "dev"] = "firebase"
-    firebase_project_id: str = "exportmate-app"
+    firebase_project_id: str = "skilful-scarab-511320-q9"
     allowed_origins: str = "http://127.0.0.1:5173,http://localhost:5173"
     # Vercel's proxy function accepts bodies up to about 4.5 MB, so uploads are capped at 4 MB.
     max_upload_bytes: int = 4 * 1024 * 1024
