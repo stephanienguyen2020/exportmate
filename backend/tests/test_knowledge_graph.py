@@ -2,6 +2,7 @@
 news article names, through suppliers' sourcing and the material chain."""
 
 from datetime import date, timedelta
+from types import SimpleNamespace
 
 import pytest
 from conftest import import_orders, onboard
@@ -16,6 +17,8 @@ from app.seed_demo_data import seed_company_map_data
 from app.seed_reference_data import seed_reference_data
 from app.services import news_matches as news_service
 from app.services.graph_feedback import LinkFeedback, LinkVerdicts
+from app.services.knowledge_graph import chain_cost
+from app.update_link_weights import update_link_weights
 
 
 def ships_in(days: int) -> str:
@@ -408,4 +411,65 @@ def test_the_graph_query_needs_a_signed_in_company(client, lan):
     assert (
         client.get("/api/v1/knowledge-graph/query", params={"material": "acacia"}).status_code
         == 401
+    )
+
+
+def test_the_nightly_job_counts_every_companys_verdicts_into_link_weights(client, lan, news_watch):
+    news_watch["alerts"] = [alert({"materials": ["acacia logs"], "originCountries": ["VN"]})]
+    matches(client, lan)
+    url = "/api/v1/news-matches/article-1/orders"
+    assert (
+        client.put(f"{url}/PO-4", headers=lan, json={"verdict": "not_relevant"}).status_code == 200
+    )
+    assert client.put(f"{url}/PO-1", headers=lan, json={"verdict": "relevant"}).status_code == 200
+
+    def wood_links() -> tuple[dict, dict]:
+        chain = client.get("/api/v1/knowledge-graph/chain", headers=lan).json()["data"]
+        wood = next(i for i in chain["industries"] if i["key"] == "wood")
+        return chain, {(link["fromKey"], link["toKey"]): link for link in wood["links"]}
+
+    # Before the job: the company's own verdicts count straight away, everyone's not yet.
+    chain, links = wood_links()
+    sawn = links[("wood.sawnwood", "wood.wooden-furniture")]
+    assert chain["weightsUpdatedAt"] is None
+    assert (sawn["company"], sawn["everyone"], sawn["weight"]) == (
+        {"confirmed": 0, "rejected": 1},
+        {"confirmed": 0, "rejected": 0},
+        0.5,
+    )
+
+    assert (
+        update_link_weights() == 4
+    )  # the 2 links on each path: logs → sawn → furniture, logs → veneer → plywood
+    chain, links = wood_links()
+    assert chain["weightsUpdatedAt"]
+    sawn = links[("wood.sawnwood", "wood.wooden-furniture")]
+    veneer = links[("wood.veneer", "wood.plywood")]
+    assert (sawn["everyone"], sawn["weight"]) == ({"confirmed": 0, "rejected": 1}, 0.3333)
+    assert (veneer["everyone"], veneer["weight"]) == ({"confirmed": 1, "rejected": 0}, 0.6667)
+    judged = {
+        link for link, row in links.items() if row["everyone"] != {"confirmed": 0, "rejected": 0}
+    }
+    assert len(judged) == 4
+    assert {row["weight"] for link, row in links.items() if link not in judged} == {0.5}
+
+    # Run again after the verdict is withdrawn: the job's rows are the whole set.
+    assert client.delete(f"{url}/PO-4", headers=lan).status_code == 200
+    assert update_link_weights() == 2
+
+
+def test_weights_break_ties_between_equally_good_paths():
+    def edge(start: str, end: str, secondary: bool = False) -> SimpleNamespace:
+        return SimpleNamespace(from_key=start, to_key=end, secondary=secondary)
+
+    via_sawn = [edge("logs", "sawn"), edge("sawn", "furniture")]
+    via_board = [edge("logs", "board"), edge("board", "furniture")]
+    weights = {("sawn", "furniture"): 0.3333, ("logs", "board"): 0.8}
+    assert chain_cost(via_board, weights=weights) < chain_cost(via_sawn, weights=weights)
+    # Length, doubt and secondary links still come first.
+    assert chain_cost(via_sawn, weights=weights) < chain_cost(
+        [*via_board, edge("x", "y")], weights=weights
+    )
+    assert chain_cost(via_sawn) < chain_cost(
+        [edge("logs", "board"), edge("board", "furniture", secondary=True)], weights=weights
     )

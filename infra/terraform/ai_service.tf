@@ -165,7 +165,7 @@ resource "google_project_iam_member" "ai_modelarmor" {
 # Signs the daily scan's OIDC token. It needs no roles: the AI service checks the token's email.
 resource "google_service_account" "scheduler" {
   account_id   = "exportmate-scheduler"
-  display_name = "Cloud Scheduler: daily news scan"
+  display_name = "Cloud Scheduler: daily news scan, nightly link weights"
 
   depends_on = [google_project_service.apis]
 }

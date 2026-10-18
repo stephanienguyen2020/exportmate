@@ -751,11 +751,11 @@ Each `byLink` row also has `fromKey` / `toKey` (graph nodes; `null` for paths st
               "relation": "used_to_make", "secondary": false, "sourceTitle": "FAO …", "sourceUrl": "https://fao.org/…",
               "quote": "… sawlogs and veneer logs …", "basis": null,
               "aiCheck": {"verdict": "agree", "note": "…", "by": "Claude", "on": "2026-10-16"},
-              "company": {"confirmed": 3, "rejected": 0}, "everyone": {"confirmed": 5, "rejected": 1}, "doubt": null}]}],
+              "company": {"confirmed": 3, "rejected": 0}, "everyone": {"confirmed": 5, "rejected": 1}, "weight": 0.75, "doubt": null}]}],
  "materials": [{"key": "acacia", "name": "Acacia", "industry": "wood", "scientificNames": ["Acacia mangium"], "woodType": "non-coniferous"}],
- "byWay": [{"via": "supplier", "confirmed": 3, "rejected": 2}]}}
+ "byWay": [{"via": "supplier", "confirmed": 3, "rejected": 2}], "weightsUpdatedAt": "2026-10-18T18:30:00Z"}}
 ```
-The shared material chain the knowledge graph walks, products from raw to finished, each link with its source, who checked it (`aiCheck`) and the verdicts on suggestions through it: this company's (`company`) and every company's (`everyone`). `doubt` is set when people keep rejecting a link (at this company: ≥2 rejections and more rejected than confirmed; across companies: ≥5): the walk then takes an equally short path without it when there is one, and marks the steps it still needs (`path[].doubt` in `GET /news-matches`), listing those suggestions last.
+The shared material chain the knowledge graph walks, products from raw to finished, each link with its source, who checked it (`aiCheck`) and the verdicts on suggestions through it: this company's (`company`, live) and every company's (`everyone`, as of the nightly link weights job, `weightsUpdatedAt`; null before its first run). `weight` is the link's share of confirmations across companies, smoothed ((confirmed+1)/(judged+2); 0.5 when unjudged): between otherwise equally good paths, the walk prefers higher weights. `doubt` is set when people keep rejecting a link (at this company: ≥2 rejections and more rejected than confirmed; across companies: ≥5): the walk then takes an equally short path without it when there is one, and marks the steps it still needs (`path[].doubt` in `GET /news-matches`), listing those suggestions last.
 
 ### `GET /knowledge-graph/query` (viewer)
 `?material=acacia%20logs&country=VN&hsCode=4403&market=EU&includeShipped=false`, each list parameter repeatable, at most 8 of each:

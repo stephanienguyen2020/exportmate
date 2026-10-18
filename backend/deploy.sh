@@ -24,6 +24,12 @@ gcloud run jobs update exportmate-backend-task \
   --args="alembic upgrade head && python -m app.seed_reference_data"
 gcloud run jobs execute exportmate-backend-task --project "$PROJECT_ID" --region "$REGION" --wait
 
+# The nightly link weights job runs the same image (infra/terraform/backend_service.tf).
+if gcloud run jobs describe exportmate-backend-link-weights --project "$PROJECT_ID" --region "$REGION" >/dev/null 2>&1; then
+  echo "==> Updating the link weights job"
+  gcloud run jobs update exportmate-backend-link-weights --project "$PROJECT_ID" --region "$REGION" --image "$IMAGE"
+fi
+
 echo "==> Deploying service"
 gcloud run services update exportmate-backend --project "$PROJECT_ID" --region "$REGION" --image "$IMAGE"
 

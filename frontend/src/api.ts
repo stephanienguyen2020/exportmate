@@ -768,7 +768,9 @@ export type ChainLink = {
   basis: string | null;
   aiCheck: { verdict: string; note: string; by: string; on: string } | null;
   company: { confirmed: number; rejected: number };
+  // Every company's verdicts, as of the nightly link weights job (weightsUpdatedAt).
   everyone: { confirmed: number; rejected: number };
+  weight: number; // share confirmed, smoothed (0.5 unjudged); breaks ties between paths
   doubt: string | null;
 };
 export type MaterialChain = {
@@ -786,6 +788,7 @@ export type MaterialChain = {
     woodType: string | null;
   }[];
   byWay: { via: "supplier" | "hs" | "linked"; confirmed: number; rejected: number }[];
+  weightsUpdatedAt: string | null;
 };
 
 export type NewsMatch = {
