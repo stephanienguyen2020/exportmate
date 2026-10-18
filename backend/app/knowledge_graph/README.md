@@ -44,6 +44,7 @@ from it with `.claude/skills/architecture-diagram/export_png.mjs`.
 | 23 | News watch runs in `skilful-scarab`: alerts carry `mentions`, so live suggestions walk the graph (18 Oct) | `infra/terraform/README.md` |
 | 24 | GraphRAG in the assistant: `GET /knowledge-graph/query` runs the walk for what a question names; the `query_graph` tool and a graph specialist give the agents the paths; the auditor wants each order's path cited and a critic (Gemini) checks the answer's connections against the paths | `services/graph_query.py`, `ai/server/agents/tools.js`, `ai/server/critic.js` |
 | 25 | Link weights job (nightly): every company's verdicts per link, with a weight, in `graph_link_weights`; walks read cross-company doubt and weights from it (a company's own verdicts stay live), and prefer higher-weight links between otherwise equal paths; Rules & news › Material chain shows them | `app/update_link_weights.py`, `services/graph_feedback.py`, `infra/terraform/backend_service.tf` |
+| 26 | Chain versions: each industry's chain in Postgres (`chain_versions`), the files in `data/industries/` as first published versions; a changed file (or, next, the pipeline) makes a draft; chain admins (`CHAIN_ADMIN_EMAILS`) see its changes and flags on Rules & news › Material chain and publish it (the graph is rebuilt) or reject it | `services/chain_versions.py`, `frontend/src/ChainReview.tsx` |
 
 ### Next
 
@@ -206,6 +207,9 @@ Every rule and number the graph uses, with where it lives in code. Change both t
   link on this path.") and listed last. Nothing is hidden and nobody edits links by hand.
 - Everyone in the company sees the chain, each link's source, check and verdicts, and how each
   way of suggesting did, on Rules & news › Material chain (`GET /knowledge-graph/chain`).
+- What changes the chain itself: a new version, published by a chain admin (`CHAIN_ADMIN_EMAILS`,
+  ExportMate staff, since the chain is shared) after reading what it changes. Every version is
+  kept (`chain_versions`): who published or rejected it, when and why.
 - `secondary` marks a less common route (veneer → furniture: veneer is mostly a surface).
 
 ## 7. Building chains offline
@@ -223,7 +227,8 @@ steps are fixed, so it's cheaper, repeatable and testable (`tests/test_build_cha
 | 4. Review | Gemini, reviewer (`chain_review`, own instructions, strict) | agree / disagree / unsure and a reason per link; an agreed link's verdict becomes its `aiCheck` (`by`: the model) |
 | 5. Revise once | Gemini, writer (`chain_revise`) | Links that failed a check or weren't agreed, with why; the revised ones are checked and reviewed again. Anything still failing is dropped and listed with why |
 | 6. Our check | Us | Read `data/drafts/<key>.json`: kept links, `forAPerson` (dropped links, product problems) |
-| 7. Release | Code | `--release` copies the draft to `data/industries/<key>.json`; the reference seed loads it next to `material_chain.json` |
+| 7. Release | Code | `--release` copies the draft to `data/industries/<key>.json`; on the next deploy the reference seed adds it as a draft version |
+| 8. Publish | A chain admin | Reads the draft's changes against the published version and what was flagged (Rules & news › Material chain), then publishes it, which rebuilds the graph, or rejects it with why (`services/chain_versions.py`) |
 
 ```sh
 cd backend
@@ -339,8 +344,8 @@ is a smaller step to try. In the plan: now that GraphRAG is built, only when one
 | Walk, word matching, sourcing, feedback | `services/knowledge_graph.py`, `services/graph_words.py`, `services/supplier_sourcing.py`, `services/graph_feedback.py`; the nightly link weights job `app/update_link_weights.py` (Cloud Run job `exportmate-backend-link-weights`, Cloud Scheduler `exportmate-nightly-link-weights`, 01:30 Vietnam time) |
 | News watch, Material chain page | `services/news_matches.py` (`GET /news-matches`, `/news-matches/accuracy`), `services/material_chain.py` (`GET /knowledge-graph/chain`) |
 | GraphRAG | `services/graph_query.py` (`GET /knowledge-graph/query`); `ai/server/agents/tools.js` (`query_graph`), `agents/assistant.js` (`graph_specialist`), `review.js` (path check), `critic.js`, `policy.js` (`graph-paths`) |
-| Loading | `seed_reference_data.py` (graph, via `load_chain`), `seed_demo_data.py` (sourcing) |
+| Loading, versions | `seed_reference_data.py` (versions from the files, then the graph), `services/chain_versions.py` (`sync_from_files`, `published_chain`, `rebuild_graph`, publish and reject), `knowledge_graph/__init__.py` (`layer_vocabulary`), `seed_demo_data.py` (sourcing) |
 | Building chains | `knowledge_graph/build_chain.py`, `knowledge_graph/__init__.py` (`load_chain`) |
 | Scan and eval | `ai/server/scan.js`, `ai/server/mentions.js`, `ai/server/eval/scan-*.js` |
-| Screens | `frontend/ai/news/NewsOrders.tsx` (path), `frontend/src/trade-map/` (sourcing), `frontend/src/MaterialChain.tsx` |
-| Tests | `tests/test_build_chain.py`, `tests/test_knowledge_graph.py`, `tests/test_suppliers_and_sites.py`, `tests/test_supplier_documents.py`, `ai/server/test/mentions.test.js`, `ai/server/test/scan-eval.test.js`, `ai/server/test/graph.test.js` |
+| Screens | `frontend/ai/news/NewsOrders.tsx` (path), `frontend/src/trade-map/` (sourcing), `frontend/src/MaterialChain.tsx`, `frontend/src/ChainReview.tsx` (chain admins) |
+| Tests | `tests/test_build_chain.py`, `tests/test_knowledge_graph.py`, `tests/test_chain_versions.py`, `tests/test_suppliers_and_sites.py`, `tests/test_supplier_documents.py`, `ai/server/test/mentions.test.js`, `ai/server/test/scan-eval.test.js`, `ai/server/test/graph.test.js` |

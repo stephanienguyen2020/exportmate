@@ -15,7 +15,7 @@ from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Te
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.database.models.base import Base, id_column, pg_enum
+from app.database.models.base import Base, created_column, id_column, pg_enum
 
 
 class GraphNodeKind(str, enum.Enum):
@@ -81,6 +81,43 @@ class GraphEdge(Base):
         Boolean, nullable=False, default=False, server_default="false"
     )
     __table_args__ = (UniqueConstraint("from_key", "to_key", "relation"),)
+
+
+class ChainVersionStatus(str, enum.Enum):
+    draft = "draft"  # waiting for a chain admin
+    published = "published"  # what the graph walks (one per industry)
+    superseded = "superseded"  # published before
+    rejected = "rejected"
+
+
+class ChainVersion(Base):
+    """One version of an industry's material chain: its products, links (each quoting an
+    official text), materials and sources, as build_chain.py writes them. A draft comes from the
+    pipeline or from a changed file in data/industries/; a chain admin publishes it (the graph is
+    rebuilt from the published versions) or rejects it."""
+
+    __tablename__ = "chain_versions"
+    id: Mapped[uuid.UUID] = id_column()
+    industry: Mapped[str] = mapped_column(String(40), index=True, nullable=False)
+    number: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[ChainVersionStatus] = mapped_column(
+        pg_enum(ChainVersionStatus, "chain_version_status"), nullable=False
+    )
+    # {"industry": {...products, links}, "materials": [...], "sources": {...}}
+    content: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    # What the pipeline couldn't keep, for the reviewer: dropped links, links no longer
+    # sourced, product problems (build_chain.py's forAPerson).
+    flagged: Mapped[dict | None] = mapped_column(JSONB)
+    origin: Mapped[str] = mapped_column(String(20), nullable=False)  # "seed" or "pipeline"
+    note: Mapped[str | None] = mapped_column(Text)  # where it came from
+    created_at: Mapped[datetime] = created_column()
+    reviewed_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    review_note: Mapped[str | None] = mapped_column(Text)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (UniqueConstraint("industry", "number"),)
 
 
 class GraphLinkWeight(Base):

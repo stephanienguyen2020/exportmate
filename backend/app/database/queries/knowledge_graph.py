@@ -6,6 +6,8 @@ from sqlalchemy.dialects.postgresql import ARRAY, UUID, array, insert
 from sqlalchemy.orm import Session
 
 from app.database.models import (
+    ChainVersion,
+    ChainVersionStatus,
     GraphEdge,
     GraphLinkWeight,
     GraphNode,
@@ -46,6 +48,39 @@ def list_all_graph_edges(db: Session) -> list[GraphEdge]:
 
 def list_link_weights(db: Session) -> list[GraphLinkWeight]:
     return list(db.scalars(select(GraphLinkWeight)))
+
+
+def list_chain_versions(db: Session, industry: str | None = None) -> list[ChainVersion]:
+    """Versions, by industry then newest first."""
+    query = select(ChainVersion).order_by(ChainVersion.industry, ChainVersion.number.desc())
+    if industry is not None:
+        query = query.where(ChainVersion.industry == industry)
+    return list(db.scalars(query))
+
+
+def get_chain_version(db: Session, version_id: uuid.UUID) -> ChainVersion | None:
+    return db.get(ChainVersion, version_id)
+
+
+def list_published_versions(db: Session) -> list[ChainVersion]:
+    return list(
+        db.scalars(
+            select(ChainVersion)
+            .where(ChainVersion.status == ChainVersionStatus.published)
+            .order_by(ChainVersion.industry)
+        )
+    )
+
+
+def add_chain_version(db: Session, **fields) -> ChainVersion:
+    """A new version numbered after the industry's last one."""
+    last = db.scalar(
+        select(func.max(ChainVersion.number)).where(ChainVersion.industry == fields["industry"])
+    )
+    version = ChainVersion(number=(last or 0) + 1, **fields)
+    db.add(version)
+    db.flush()
+    return version
 
 
 def list_graph_sources(db: Session) -> list[GraphSource]:

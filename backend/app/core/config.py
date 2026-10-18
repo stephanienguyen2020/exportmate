@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     app_url: str = "https://exportmate.vercel.app"
     member_invite_days: int = 14
     member_invites_per_hour: int = 30  # per owner
+    # Who reviews and publishes material chain versions (shared by every company): emails,
+    # comma-separated, matched on the verified sign-in email.
+    chain_admin_emails: str = ""
     # AI service origin; company reports read its news alerts with the caller's token.
     ai_service_url: str = "http://127.0.0.1:8080"
     # Gemini on Vertex AI (core/gemini.py), in the project above. Production sets GEMINI_MODEL
