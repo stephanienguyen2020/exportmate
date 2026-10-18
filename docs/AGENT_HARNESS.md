@@ -11,7 +11,7 @@ How ExportMate's AI follows agent and harness engineering practice: what each co
 
 Risk tier for both: low. Neither sends messages, spends money or deletes records. When actions arrive (drafting and sending supplier messages, backend phase 3), they are drafted, approved by a person (who/when/hash of the exact text), then sent once with an idempotency key.
 
-**Why one agent and not many.** `docs/agent-architecture.excalidraw` sketches a multi-agent pipeline (scouts, change detector, verifier, per-firm A1–A5). Today's tasks are small and sequential, so one tool-using agent with a separate deterministic auditor is cheaper, faster and easier to debug. Split into agents when a step becomes independent and parallel (per-jurisdiction scouts), or needs different permissions (the backend's order analysis).
+**Why one agent and not many.** The original plan sketched a multi-agent pipeline (scouts, change detector, verifier, per-firm A1–A5). Today's tasks are small and sequential, so one tool-using agent with a separate deterministic auditor is cheaper, faster and easier to debug. Split into agents when a step becomes independent and parallel (per-jurisdiction scouts), or needs different permissions (the backend's order analysis).
 
 Still open: name an owner for each agent and record it here.
 

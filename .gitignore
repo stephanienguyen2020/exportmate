@@ -16,3 +16,6 @@ playwright-report/
 # Claude Code: kept on each machine, not in the repository
 CLAUDE.md
 .claude/
+
+# Architecture diagrams and their sources: kept on each machine (the README's PNG is in docs/images/)
+docs/architecture/
