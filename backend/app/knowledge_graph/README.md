@@ -1,8 +1,7 @@
 # Knowledge graph
 
 How News watch finds the orders an article may hit by following links (material → products
-made from it → suppliers that buy it → their orders), not only by comparing HS codes. Why, and
-the business decisions: phase 1 of [`docs/NEWS_IMPACT_PLAN.md`](../../../docs/NEWS_IMPACT_PLAN.md).
+made from it → suppliers that buy it → their orders), not only by comparing HS codes.
 This file is the technical side: the data, how the walk works, what's built and what's next.
 
 Target architecture (the finished system; section 1 says what's built today):
@@ -19,7 +18,7 @@ from it with `.claude/skills/architecture-diagram/export_png.mjs`.
 
 | # | Step | Where |
 | --- | --- | --- |
-| 1 | Plan, and where the material chain comes from | `docs/NEWS_IMPACT_PLAN.md`, section 3 below |
+| 1 | Where the material chain comes from | Section 3 below |
 | 2 | Seed data: EUDR Annex I parsed (93 codes, 7 commodities), the wood chain (14 products, 25 links, each citing FAO or the HS headings), 11 materials | `data/`, `build_eudr_products.py` |
 | 3 | Tables and loading: graph nodes, edges and sources (reference seed), supplier sourcing (company seeds) | `database/models/knowledge_graph.py`, `seed_reference_data.py`, `seed_demo_data.py` |
 | 4 | The walk, and News watch suggestions from it with a cited path; the HS-heading rule kept as one path | `services/knowledge_graph.py`, `services/news_matches.py` |

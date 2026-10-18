@@ -37,7 +37,7 @@ Three.js reference: https://threejs.org/docs/
 
 ## Backend follow-up
 
-Replace the explicit demo entry screen with the authentication flow described in `backend/docs/BACKEND_PLAN.md`. Public landing and authenticated workspace must remain separate. Hiding routes client-side is not an authorization boundary. Connect a genuine contact channel before replacing the prototype contact dialog with an enquiry form.
+Replace the explicit demo entry screen with the Firebase sign-in flow. Public landing and authenticated workspace must remain separate. Hiding routes client-side is not an authorization boundary. Connect a genuine contact channel before replacing the prototype contact dialog with an enquiry form.
 
 ## Long-form landing revision
 
