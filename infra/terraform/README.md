@@ -117,12 +117,12 @@ gcloud run jobs execute exportmate-ai-task --region asia-southeast1 --wait --arg
 
 The AI service, its Firestore data and the daily scan used to live in project `exportmate-app`, with the assistant inside the Cloud Run service. They move here in one go, with the assistant's agents on Gemini Enterprise Agent Platform (Agent Runtime, Sessions, Memory Bank, RAG Engine, Evaluation, Govern; see `docs/AGENT_HARNESS.md`). Steps marked **owner** need dylan.exportmate@gmail.com; the rest work as Editor. Every command runs from the repository root unless noted.
 
-**Status (15 October 2026):** the first `terraform apply` (before the Agent Platform resources) is done, and `exportmate-ai` here runs the code from before the move to Agent Platform: there is no `<project>-kb` bucket, no RAG corpus and no Agent Runtime instance yet. Its Firestore was filled with `node seed.js` and one scan (`node scan.js --lookback=14`: 58 articles, all screened by Model Armor), not yet copied from `exportmate-app`. The backend's `AI_SERVICE_URL` follows the website: Terraform reads it from the `/api` rewrite in `frontend/vercel.json`, so News watch matches and company reports use the alerts people see. Both use the old service until step 8. Don't redeploy it from this code before step 1 runs again: the assistant's search needs the RAG bucket and the index from step 4.
+**Status (17 October 2026):** `exportmate-ai` here runs main with the agents inside the service (no `AGENTS_AT`), as the old one does, so the website can switch before the Agent Runtime: steps 1, 2, 4 and 8 move it, and 3 and 5–7 can follow. Until step 1 runs again there is no `<project>-kb` bucket, so the assistant's search here finds nothing and scans can't index what they find. Until step 2 runs, Firestore here has only the seed and test scans: no custom sources, companies' source settings or company alerts. The website, and the backend through `AI_SERVICE_URL`, use `exportmate-app`'s service until step 8; the daily scan runs there and is paused here.
 
 1. **Owner:** `terraform apply` (Firestore, service accounts and grants, the Cloud Run service, job and scheduler, the RAG bucket, the APIs Agent Gateway needs, metrics, build resources). `terraform plan` should show 0 to destroy apart from the two Firestore vector indexes on `kb`, which nothing uses any more.
-2. Copy the data (stock, sources, articles, alerts, scans, audits) with an account that can read `exportmate-app` and write here:
+2. Copy the data (stock, sources and companies' source settings, articles, alerts, scans, audits) with an account that can read `exportmate-app` and write here. Documents already here are kept. Companies' goods aren't copied: they are rebuilt from the backend, and each company's first scan here reads back its recent news with this code, so those alerts carry the mentions the backend's knowledge graph walks:
    ```sh
-   cd ai/server && node copy-firestore.js --from=exportmate-app --to=skilful-scarab-511320-q9
+   cd ai/server && node copy-firestore.js --from=exportmate-app --to=skilful-scarab-511320-q9 --dry-run   # then without --dry-run
    ```
 3. Deploy the image to Cloud Run and create the agents' Agent Runtime instance (`exportmate-agents`, with Memory Bank and its own Agent Identity); the last line printed is the instance's name:
    ```sh
@@ -144,11 +144,16 @@ The AI service, its Firestore data and the daily scan used to live in project `e
    cd ai/server && PROJECT_ID=skilful-scarab-511320-q9 AGENT_RUNTIME=<name> npm run eval:vertex -- --engine
    ```
    Check the service too: `curl "$(terraform output -raw ai_url)/"` (Cloud Run reserves `/healthz`, so check `/`).
-8. Switch traffic: set the `/api/:path*` destination in `frontend/vercel.json` to `$(terraform output -raw ai_url)/api/:path*`, set the default project in `ai/server/db.js` and the comment in `dev.sh` to `skilful-scarab-511320-q9`, then deploy the frontend and `terraform apply` (the backend's `AI_SERVICE_URL` follows the rewrite). Re-run step 2 just before this if `exportmate-app` has had new scans or chats meanwhile.
+8. Switch traffic: set the `/api/:path*` destination in `frontend/vercel.json` to this project's service (`https://exportmate-ai-3v6cd2xhpq-as.a.run.app`, the same service as `$(terraform output -raw ai_url)`) and the default project in `ai/server/db.js`, merge (Vercel deploys the website), then `terraform apply` from merged main (the backend's `AI_SERVICE_URL` follows the rewrite; until then `gcloud run services update exportmate-backend --update-env-vars AI_SERVICE_URL=<that URL>` sets the value Terraform keeps). Re-run step 2 just before merging if `exportmate-app` has had new scans or chats meanwhile. Move the daily scan at the same time, run one here so each company reads back its news, and monitor the service here:
+   ```sh
+   gcloud scheduler jobs resume exportmate-daily-news-scan --project skilful-scarab-511320-q9 --location asia-southeast1
+   gcloud scheduler jobs pause exportmate-daily-news-scan --project exportmate-app --location asia-southeast1
+   gcloud scheduler jobs run exportmate-daily-news-scan --project skilful-scarab-511320-q9 --location asia-southeast1
+   PROJECT_ID=skilful-scarab-511320-q9 PART=ai SERVICE=exportmate-ai ALERT_EMAIL=… infra/monitoring/apply.sh
+   ```
 9. After a few days of clean Agent Gateway logs (no `DENIED` in `networkservices.googleapis.com/gateway_requests`, Model Armor `sanitize_operations` findings reviewed), **owner:** enforce with `ENFORCE=1 … infra/agent-platform/govern.sh`.
 10. Retire the old project's AI resources, and the development resources made while building this (Agent Runtime instances `exportmate-agents-ai` and `exportmate-agents-dev`, the RAG corpora `exportmate-kb-*`, the bucket `exportmate-app-kb`, the Agent Gateway `exportmate-egress` and its policies, extensions and Agent Registry entries, the Model Armor template `exportmate-agent-traffic`, the image `exportmate-agents` in `cloud-run-source-deploy`):
    ```sh
-   gcloud scheduler jobs pause exportmate-daily-news-scan --project exportmate-app --location asia-southeast1
    gcloud run services delete exportmate-ai --project exportmate-app --region asia-southeast1
    gcloud run services delete exportmate-chat --project exportmate-app --region asia-southeast1   # the service's earlier name; no requests since 10 Oct 2026
    ```
