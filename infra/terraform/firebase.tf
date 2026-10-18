@@ -12,9 +12,11 @@ resource "google_identity_platform_config" "auth" {
   provider = google-beta
   project  = var.project_id
 
+  # The website's Cloud Run addresses too, for Google sign-in there.
   authorized_domains = concat(
     var.auth_domains,
     ["${var.project_id}.firebaseapp.com", "${var.project_id}.web.app"],
+    [for url in google_cloud_run_v2_service.web.urls : trimprefix(url, "https://")],
   )
 
   sign_in {
