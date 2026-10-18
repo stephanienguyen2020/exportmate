@@ -11,6 +11,16 @@ finished order.
 🔗 Live: [exportmate.vercel.app](https://exportmate.vercel.app). "Explore the demo" opens a sample
 workspace in the browser with no account; signing in opens a company workspace.
 
+**Try it** with the demo company, Binh Duong Wood Co. (a Vietnamese plywood and furniture exporter):
+sign in at [exportmate.vercel.app/#/login](https://exportmate.vercel.app/#/login) with
+
+| Email | Password |
+|---|---|
+| `lan@example.com` | `testinguser123@` |
+
+It has 13 orders to the EU, Asia and the US, five suppliers with what each buys, the playbook, the
+trade map, News watch and the assistant with the knowledge graph. Please don't change the password.
+
 > All legal and regulatory content is illustrative, the demo's stock is synthetic, and the news is
 > real. Alerts and answers are AI assessments, not legal advice.
 

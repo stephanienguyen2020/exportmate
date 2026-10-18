@@ -47,12 +47,13 @@ cd ../..
 PROJECT_ID=$PROJECT_ID backend/deploy.sh
 ```
 
-Demo data for a real Firebase user (create the user first, see below). It also loads the shared trade-map reference data and the demo company's suppliers, documents and sites:
+Demo data, with its Firebase sign-in: `--password` creates `lan@example.com` (or gives it that password), verified, then loads the demo company, its orders, suppliers, documents and sites, and the shared reference data. The password is the one in the repository README (Try it). Then copy it into Neo4j:
 
 ```sh
-gcloud run jobs execute exportmate-backend-task --region asia-southeast1 --wait \
-  --args="python -m app.seed_demo_data --email lan@example.com --firebase-uid <uid>"
+gcloud run jobs execute exportmate-backend-task --region asia-southeast1 --wait --args="python -m app.seed_demo_data --email lan@example.com --password 'testinguser123@' && python -m app.sync_graph"
 ```
+
+For a user made another way, pass `--firebase-uid <uid>` instead of `--password`.
 
 Create a test user and get an ID token (for Postman), using `apiKey` from `terraform output firebase_web_config`:
 

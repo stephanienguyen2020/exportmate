@@ -9,7 +9,7 @@ cp .env.example .env
 docker compose up -d                 # Postgres on 127.0.0.1:5433 (+ exportmate_test DB)
 uv sync
 uv run alembic upgrade head
-uv run python -m app.seed_demo_data --email lan@example.com   # demo company, 12 orders (analysed), 3 rules, map data
+uv run python -m app.seed_demo_data --email lan@example.com   # demo company, 13 orders (analysed), 3 rules, map data; --password <pw> also makes its Firebase sign-in
 uv run python -m app.seed_demo_data --company us-furniture --email minh@example.com   # furniture maker, Vietnam to the US
 uv run uvicorn app.main:app --reload --port 8000
 ```

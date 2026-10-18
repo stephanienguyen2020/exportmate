@@ -52,6 +52,21 @@ def _firebase_app() -> firebase_admin.App:
     return firebase_admin.get_app()
 
 
+def set_password_user(email: str, password: str, name: str) -> str:
+    """A Firebase email-and-password sign-in for a demo account, verified, created or given this
+    password. Returns its uid. For seeds only (app/seed_demo_data.py --password)."""
+    app = _firebase_app()
+    try:
+        user = fb_auth.get_user_by_email(email, app=app)
+    except fb_auth.UserNotFoundError:
+        user = fb_auth.create_user(
+            email=email, password=password, email_verified=True, display_name=name, app=app
+        )
+    else:
+        fb_auth.update_user(user.uid, password=password, email_verified=True, app=app)
+    return user.uid
+
+
 def _session_state(uid: str) -> tuple[int, bool]:
     """(tokens valid after, in ms; account disabled) for a user, cached briefly."""
     now = time.monotonic()
