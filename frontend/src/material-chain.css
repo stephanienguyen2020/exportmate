@@ -128,3 +128,16 @@
   color: #6f7869;
   font-style: italic;
 }
+
+.mc-version { font-weight: 400; color: var(--muted); font-size: 0.8rem; }
+.mc-review .mc-drafts { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+.mc-draft { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: grid; gap: 8px; }
+.mc-diff h4 { margin: 4px 0; font-size: 0.85rem; }
+.mc-diff ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+.mc-diff.green h4 { color: var(--green, #2f7d4a); }
+.mc-diff.red h4 { color: var(--red, #b3261e); }
+.mc-diff.blue h4 { color: var(--blue, #1864ab); }
+.mc-diff.amber h4 { color: var(--amber, #a15c00); }
+.mc-note { display: grid; gap: 4px; font-size: 0.85rem; }
+.mc-note textarea { width: 100%; font: inherit; }
+.mc-actions { display: flex; gap: 8px; flex-wrap: wrap; }

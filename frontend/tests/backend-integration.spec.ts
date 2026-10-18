@@ -2451,3 +2451,94 @@ test("the material chain shows each link's source, check and the team's verdicts
   await expect(links.getByRole("listitem")).toHaveCount(1);
   await expect(page.getByText("Acacia mangium · non-coniferous")).toBeVisible();
 });
+
+test("a chain admin reviews a draft chain version and publishes it", async ({ page }) => {
+  await fixture(page);
+  const industry = (version: number) => ({
+    key: "soya",
+    name: "Soya",
+    version,
+    publishedAt: "2026-10-18T06:00:00Z",
+    products: [{ key: "soya.soya-beans", name: "Soya beans", hsCodes: ["1201"], stage: "raw" }],
+    links: [],
+  });
+  let published = 1;
+  const chain = () => ({
+    industries: [industry(published)],
+    materials: [],
+    byWay: [],
+    weightsUpdatedAt: null,
+    isChainAdmin: true,
+    draftsWaiting: published === 1 ? 1 : 0,
+  });
+  const summary = {
+    id: "v2",
+    industry: "soya",
+    industryName: "Soya",
+    number: 2,
+    status: "draft",
+    origin: "pipeline",
+    note: "Monthly rebuild",
+    productCount: 4,
+    linkCount: 4,
+    createdAt: "2026-10-18T05:00:00Z",
+    reviewedBy: null,
+    reviewedAt: null,
+    reviewNote: null,
+    publishedAt: null,
+  };
+  const diffLink = {
+    fromKey: "soya-bean-oil",
+    fromName: "Soya bean oil",
+    toKey: "soya-lecithin",
+    toName: "Soya lecithin",
+    relation: "by_product",
+    sourceTitle: "Codex CXS 210",
+    sourceUrl: "https://fao.org/cxs210.pdf",
+    quote: "lecithin is obtained from soya bean oil",
+    basis: null,
+    secondary: false,
+    changed: [],
+  };
+  let publishBody: unknown = null;
+  await page.route("**/api/v1/knowledge-graph/chain", (route) =>
+    route.fulfill({ json: { data: chain(), meta: {} } }),
+  );
+  await page.route("**/api/v1/knowledge-graph/chain-versions", (route) =>
+    route.fulfill({ json: { data: published === 1 ? [summary] : [], meta: {} } }),
+  );
+  await page.route("**/api/v1/knowledge-graph/chain-versions/v2", (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          ...summary,
+          changes: { productsAdded: ["Soya lecithin"], productsRemoved: [], linksAdded: [diffLink], linksRemoved: [], linksChanged: [] },
+          flagged: { droppedLinks: ["soya-beans → soya-hulls: the quote isn't in the source"] },
+        },
+        meta: {},
+      },
+    }),
+  );
+  await page.route("**/api/v1/knowledge-graph/chain-versions/v2/publish", (route) => {
+    publishBody = route.request().postDataJSON();
+    published = 2;
+    return route.fulfill({ json: { data: { ...summary, status: "published" }, meta: {} } });
+  });
+  await login(page);
+  await page.goto("/#/workspace/chain");
+  const review = page.getByRole("region", { name: "Chain versions to review" });
+  const draft = review.getByRole("listitem", { name: "Soya version 2" });
+  await expect(draft).toContainText("Products added: Soya lecithin.");
+  await expect(draft).toContainText("Links added (1)");
+  await expect(draft).toContainText("“lecithin is obtained from soya bean oil”");
+  await expect(draft).toContainText("the quote isn't in the source");
+  await expect(page.getByRole("heading", { name: /Soya · version 1/ })).toBeVisible();
+  // Rejecting needs a reason.
+  await draft.getByRole("button", { name: "Reject" }).click();
+  await expect(draft.getByRole("alert")).toContainText("Say why you reject it");
+  await draft.getByLabel("Note (required to reject)").fill("Lecithin is in Codex.");
+  await draft.getByRole("button", { name: "Publish version 2" }).click();
+  await expect(review).toContainText("No drafts waiting.");
+  expect(publishBody).toEqual({ note: "Lecithin is in Codex." });
+  await expect(page.getByRole("heading", { name: /Soya · version 2/ })).toBeVisible();
+});

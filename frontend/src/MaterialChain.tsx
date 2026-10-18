@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ExternalLink, GitBranch, Loader2, Search } from "lucide-react";
 import { api, type ChainLink, type MaterialChain as Chain } from "./api";
 import { errorMessage } from "./auth";
+import ChainReview from "./ChainReview";
 import "./material-chain.css";
 
 const WAYS: Record<string, string> = {
@@ -100,6 +101,8 @@ export default function MaterialChain({ live }: { live: boolean }) {
   const [chain, setChain] = useState<Chain | null>(null);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
+  // Bumped after a chain admin publishes or rejects a version, to read the chain again.
+  const [reload, setReload] = useState(0);
   useEffect(() => {
     if (!live) return;
     const controller = new AbortController();
@@ -108,7 +111,7 @@ export default function MaterialChain({ live }: { live: boolean }) {
       .then((value) => !controller.signal.aborted && setChain(value))
       .catch((e) => !controller.signal.aborted && setError(errorMessage(e)));
     return () => controller.abort();
-  }, [live]);
+  }, [live, reload]);
   const words = useMemo(
     () => query.toLowerCase().split(/\s+/).filter(Boolean),
     [query],
@@ -184,6 +187,7 @@ export default function MaterialChain({ live }: { live: boolean }) {
             : "Every company's verdicts are counted nightly; your team's count straight away."}
         </p>
       </section>
+      {chain.isChainAdmin && <ChainReview onReviewed={() => setReload((n) => n + 1)} />}
       <div className="toolbar mc-toolbar">
         <label className="search">
           <Search size={14} aria-hidden="true" />
@@ -199,7 +203,16 @@ export default function MaterialChain({ live }: { live: boolean }) {
         const links = shown(industry.links);
         return (
           <section className="panel mc-industry" key={industry.key}>
-            <h2>{industry.name}</h2>
+            <h2>
+              {industry.name}
+              {industry.version !== null && (
+                <small className="mc-version">
+                  {" "}
+                  · version {industry.version}
+                  {industry.publishedAt && `, published ${new Date(industry.publishedAt).toLocaleDateString()}`}
+                </small>
+              )}
+            </h2>
             <div className="mc-products" aria-label={`${industry.name} products`}>
               {industry.products.map((p) => (
                 <span key={p.key} title={p.stage ?? undefined}>

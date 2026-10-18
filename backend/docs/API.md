@@ -115,6 +115,10 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
 | `GET /news-matches` | viewer | News watch, Alerts tab: "Orders this may affect" on each alert, and the "Orders" filter |
 | `GET /news-matches/accuracy` | viewer | Not used by the frontend yet (how often each way of suggesting, and each chain link, is confirmed) |
 | `GET /knowledge-graph/chain` | viewer | Rules & news › Material chain |
+| `GET /knowledge-graph/chain-versions` | chain admin | Rules & news › Material chain: "Chain versions to review" |
+| `GET /knowledge-graph/chain-versions/{id}` | chain admin | the same: a draft's changes and flags |
+| `POST /knowledge-graph/chain-versions/{id}/publish` | chain admin | the same: "Publish version N" |
+| `POST /knowledge-graph/chain-versions/{id}/reject` | chain admin | the same: "Reject" |
 | `GET /knowledge-graph/query` | viewer | Not called by the website: the assistant's `query_graph` tool (AI service, with the user's token) |
 | `PUT /news-matches/{impactId}/orders/{orderId}` | editor | News watch alert: "Affects this order" / "Not relevant", "Link order" |
 | `DELETE /news-matches/{impactId}/orders/{orderId}` | editor | News watch alert: "Undo" |
@@ -745,7 +749,7 @@ Each `byLink` row also has `fromKey` / `toKey` (graph nodes; `null` for paths st
 
 ### `GET /knowledge-graph/chain` (viewer)
 ```json
-{"data": {"industries": [{"key": "wood", "name": "Wood",
+{"data": {"industries": [{"key": "wood", "name": "Wood", "version": 1, "publishedAt": "2026-10-18T06:00:00Z",
    "products": [{"key": "wood.roundwood", "name": "Logs (wood in the rough)", "hsCodes": ["4403"], "stage": "raw"}],
    "links": [{"fromKey": "wood.roundwood", "fromName": "Logs (wood in the rough)", "toKey": "wood.veneer", "toName": "Veneer sheets",
               "relation": "used_to_make", "secondary": false, "sourceTitle": "FAO …", "sourceUrl": "https://fao.org/…",
@@ -753,9 +757,23 @@ Each `byLink` row also has `fromKey` / `toKey` (graph nodes; `null` for paths st
               "aiCheck": {"verdict": "agree", "note": "…", "by": "Claude", "on": "2026-10-16"},
               "company": {"confirmed": 3, "rejected": 0}, "everyone": {"confirmed": 5, "rejected": 1}, "weight": 0.75, "doubt": null}]}],
  "materials": [{"key": "acacia", "name": "Acacia", "industry": "wood", "scientificNames": ["Acacia mangium"], "woodType": "non-coniferous"}],
- "byWay": [{"via": "supplier", "confirmed": 3, "rejected": 2}], "weightsUpdatedAt": "2026-10-18T18:30:00Z"}}
+ "byWay": [{"via": "supplier", "confirmed": 3, "rejected": 2}], "weightsUpdatedAt": "2026-10-18T18:30:00Z",
+ "isChainAdmin": false, "draftsWaiting": 1}}
 ```
 The shared material chain the knowledge graph walks, products from raw to finished, each link with its source, who checked it (`aiCheck`) and the verdicts on suggestions through it: this company's (`company`, live) and every company's (`everyone`, as of the nightly link weights job, `weightsUpdatedAt`; null before its first run). `weight` is the link's share of confirmations across companies, smoothed ((confirmed+1)/(judged+2); 0.5 when unjudged): between otherwise equally good paths, the walk prefers higher weights. `doubt` is set when people keep rejecting a link (at this company: ≥2 rejections and more rejected than confirmed; across companies: ≥5): the walk then takes an equally short path without it when there is one, and marks the steps it still needs (`path[].doubt` in `GET /news-matches`), listing those suggestions last.
+
+### Chain versions (chain admin)
+Each industry's material chain is kept as versions (`chain_versions`): the files in `data/industries/` are each industry's first published version, and a draft comes from the pipeline or a file changed in git (the reference seed adds it). Chain admins are the emails in `CHAIN_ADMIN_EMAILS` (matched on the verified sign-in email; anyone else gets `403 not_chain_admin`); the chain is shared by every company, so they review it for everyone.
+
+`GET /knowledge-graph/chain-versions`: every version, drafts first, then each industry's newest first:
+```json
+{"data": [{"id": "…", "industry": "soya", "industryName": "Soya", "number": 2, "status": "draft", "origin": "seed",
+           "note": "data/industries/soya.json changed in git", "productCount": 5, "linkCount": 4, "createdAt": "…",
+           "reviewedBy": null, "reviewedAt": null, "reviewNote": null, "publishedAt": null}]}
+```
+`GET /knowledge-graph/chain-versions/{id}`: the same fields with `changes` (`productsAdded`, `productsRemoved`, `linksAdded`, `linksRemoved`, `linksChanged`, each link with its names, source, quote and, when changed, which of `source`, `quote`, `basis`, `secondary` changed) and `flagged` (what the pipeline couldn't keep). A draft is compared with the published version; a published or superseded one with the version it replaced. `404 chain_version_not_found`.
+
+`POST /knowledge-graph/chain-versions/{id}/publish` `{"note": "…"}` (optional, ≤500): the draft becomes published, the industry's previous version superseded, and the graph is rebuilt from the published versions (News watch, the graph query API and the assistant walk it straight away). `POST …/reject` `{"note": "…"}` (required, ≤500). Both return the version; `409 chain_version_not_draft` for anything but a draft.
 
 ### `GET /knowledge-graph/query` (viewer)
 `?material=acacia%20logs&country=VN&hsCode=4403&market=EU&includeShipped=false`, each list parameter repeatable, at most 8 of each:
