@@ -192,7 +192,7 @@ def test_materials_a_document_names_are_suggested_for_the_suppliers_sourcing(
         materials=[
             {"name": "Acacia mangium", "country": "la", "form": "logs"},
             {"name": "Eucalyptus", "country": "VN", "form": None},
-            {"name": "Cocoa beans", "country": "CI", "form": None},  # not in the graph
+            {"name": "Cotton lint", "country": "IN", "form": None},  # no textile chain yet
             {"name": "Acacia mangium", "country": "LA", "form": "sawn timber"},  # repeat
         ]
     )

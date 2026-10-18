@@ -1,0 +1,149 @@
+{
+ "_about": "Released from data/drafts/coffee.json on 2026-10-18 (build_chain.py). Loaded by seed_reference_data with material_chain.json (load_chain).",
+ "industry": {
+  "key": "coffee",
+  "name": "Coffee",
+  "eudrCommodity": "Coffee",
+  "genericTerms": {
+   "coffee": [],
+   "processed coffee": []
+  },
+  "products": [
+   {
+    "key": "unroasted-coffee",
+    "name": "Unroasted Coffee",
+    "hsCodes": [
+     "0901.11",
+     "0901.12"
+    ],
+    "stage": "raw",
+    "aliases": [
+     "coffee cherries",
+     "green coffee",
+     "parchment coffee",
+     "unroasted coffee"
+    ]
+   },
+   {
+    "key": "roasted-coffee",
+    "name": "Roasted Coffee",
+    "hsCodes": [
+     "0901.21",
+     "0901.22"
+    ],
+    "stage": "first processing",
+    "aliases": [
+     "ground coffee",
+     "roasted coffee"
+    ]
+   },
+   {
+    "key": "coffee-extracts-essences-concentrates",
+    "name": "Coffee Extracts, Essences, and Concentrates",
+    "hsCodes": [
+     "2101.11"
+    ],
+    "stage": "further processing",
+    "aliases": [
+     "coffee concentrates",
+     "coffee essences",
+     "coffee extract",
+     "coffee extracts",
+     "instant coffee",
+     "soluble coffee"
+    ]
+   },
+   {
+    "key": "coffee-preparations",
+    "name": "Coffee Preparations",
+    "hsCodes": [
+     "2101.12"
+    ],
+    "stage": "final",
+    "aliases": [
+     "coffee preparations",
+     "preparations with a basis of coffee"
+    ]
+   }
+  ],
+  "links": [
+   {
+    "from": "unroasted-coffee",
+    "to": "roasted-coffee",
+    "relation": "used_to_make",
+    "source": "international-coffee-agreement-2007",
+    "quote": "roasted coffee means green coffee roasted to any degree",
+    "confidence": 1.0,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The source defines roasted coffee as green (unroasted) coffee roasted to any degree, confirming that unroasted coffee is used to make roasted coffee.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "roasted-coffee",
+    "to": "coffee-extracts-essences-concentrates",
+    "relation": "used_to_make",
+    "source": "eu-coffee-extracts-directive",
+    "quote": "obtained by extraction from roasted coffee beans",
+    "confidence": 1.0,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The source states that coffee extract is obtained by extraction from roasted coffee beans, confirming that roasted coffee is used to make coffee extracts.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "coffee-extracts-essences-concentrates",
+    "to": "coffee-preparations",
+    "relation": "used_to_make",
+    "source": "hs-nomenclature",
+    "quote": "Preparations with a basis of extracts, essences or concentrates",
+    "confidence": 1.0,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The HS nomenclature describes these preparations as having a basis of extracts, essences, or concentrates, confirming they are made from them.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "roasted-coffee",
+    "to": "coffee-preparations",
+    "relation": "used_to_make",
+    "source": "hs-nomenclature",
+    "quote": "Preparations with a basis of extracts, essences or concentrates or with a basis of coffee",
+    "confidence": 1.0,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The HS nomenclature describes these preparations as having a basis of coffee, which includes roasted coffee, confirming it is used to make them.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   }
+  ]
+ },
+ "materials": [
+  {
+   "key": "coffee-tree",
+   "name": "Coffee tree",
+   "industry": "coffee",
+   "scientificNames": [],
+   "aliases": [
+    "coffee tree"
+   ]
+  }
+ ],
+ "sources": {
+  "eu-coffee-extracts-directive": {
+   "title": "Directive 1999/4/EC on coffee extracts and chicory extracts, Annex (consolidated 18 November 2013)",
+   "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:01999L0004-20131118"
+  },
+  "international-coffee-agreement-2007": {
+   "title": "International Coffee Agreement 2007, Article 2 Definitions",
+   "url": "https://www.ico.org/documents/ica2007e.pdf"
+  }
+ }
+}

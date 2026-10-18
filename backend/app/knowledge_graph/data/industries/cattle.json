@@ -1,0 +1,426 @@
+{
+ "_about": "Released from data/drafts/cattle.json on 2026-10-18 (build_chain.py). Loaded by seed_reference_data with material_chain.json (load_chain).",
+ "industry": {
+  "key": "cattle",
+  "name": "Cattle, beef and leather",
+  "eudrCommodity": "Cattle",
+  "genericTerms": {
+   "meat": [],
+   "hides": [],
+   "skins": [],
+   "leather": [],
+   "animal by-products": []
+  },
+  "products": [
+   {
+    "key": "live-cattle",
+    "name": "Live cattle",
+    "hsCodes": [
+     "0102",
+     "0102.21",
+     "0102.29",
+     "0102.31",
+     "0102.39",
+     "0102.90"
+    ],
+    "stage": "raw",
+    "aliases": [
+     "bovine",
+     "buffalo",
+     "cattle",
+     "live bovine animals",
+     "live cattle"
+    ]
+   },
+   {
+    "key": "fresh-beef",
+    "name": "Fresh or chilled beef",
+    "hsCodes": [
+     "0201",
+     "0201.10",
+     "0201.20",
+     "0201.30"
+    ],
+    "stage": "first processing",
+    "aliases": [
+     "carcasses",
+     "chilled beef",
+     "chilled bovine meat",
+     "fresh beef",
+     "fresh bovine meat"
+    ]
+   },
+   {
+    "key": "frozen-beef",
+    "name": "Frozen beef",
+    "hsCodes": [
+     "0202",
+     "0202.10",
+     "0202.20",
+     "0202.30"
+    ],
+    "stage": "first processing",
+    "aliases": [
+     "frozen beef",
+     "frozen bovine meat"
+    ]
+   },
+   {
+    "key": "edible-offal",
+    "name": "Edible offal of cattle",
+    "hsCodes": [
+     "0206",
+     "0206.10",
+     "0206.21",
+     "0206.22",
+     "0206.29"
+    ],
+    "stage": "by-product",
+    "aliases": [
+     "blood",
+     "livers",
+     "offal",
+     "tongues",
+     "viscera"
+    ]
+   },
+   {
+    "key": "prepared-beef",
+    "name": "Prepared or preserved beef",
+    "hsCodes": [
+     "1602",
+     "1602.50"
+    ],
+    "stage": "further processing",
+    "aliases": [
+     "meat products",
+     "prepared beef",
+     "preserved beef",
+     "preserved meat"
+    ]
+   },
+   {
+    "key": "raw-hides",
+    "name": "Raw hides and skins",
+    "hsCodes": [
+     "4101",
+     "4101.20",
+     "4101.50",
+     "4101.90"
+    ],
+    "stage": "by-product",
+    "aliases": [
+     "bellies",
+     "bends",
+     "butts",
+     "raw hides",
+     "raw skins",
+     "unsplit hides"
+    ]
+   },
+   {
+    "key": "tanned-leather",
+    "name": "Tanned or crust leather",
+    "hsCodes": [
+     "4104",
+     "4104.11",
+     "4104.19",
+     "4104.41",
+     "4104.49"
+    ],
+    "stage": "first processing",
+    "aliases": [
+     "crust hides",
+     "crust leather",
+     "tanned hides",
+     "tanned leather",
+     "wet-blue"
+    ]
+   },
+   {
+    "key": "prepared-leather",
+    "name": "Prepared leather",
+    "hsCodes": [
+     "4107",
+     "4107.11",
+     "4107.12",
+     "4107.19",
+     "4107.91",
+     "4107.92",
+     "4107.99"
+    ],
+    "stage": "further processing",
+    "aliases": [
+     "finished leather",
+     "grain splits",
+     "parchment-dressed leather",
+     "prepared leather"
+    ]
+   },
+   {
+    "key": "patent-leather",
+    "name": "Patent leather",
+    "hsCodes": [
+     "4114",
+     "4114.20"
+    ],
+    "stage": "further processing",
+    "aliases": [
+     "metallised leather",
+     "patent laminated leather",
+     "patent leather"
+    ]
+   },
+   {
+    "key": "composition-leather",
+    "name": "Composition leather",
+    "hsCodes": [
+     "4115",
+     "4115.10"
+    ],
+    "stage": "further processing",
+    "aliases": [
+     "composition leather",
+     "leather fibre"
+    ]
+   },
+   {
+    "key": "leather-waste",
+    "name": "Leather waste and parings",
+    "hsCodes": [
+     "4115",
+     "4115.20"
+    ],
+    "stage": "by-product",
+    "aliases": [
+     "leather dust",
+     "leather flour",
+     "leather powder",
+     "leather waste",
+     "parings"
+    ]
+   }
+  ],
+  "links": [
+   {
+    "from": "live-cattle",
+    "to": "fresh-beef",
+    "relation": "used_to_make",
+    "source": "eu-food-hygiene-853-2004",
+    "quote": "\"Meat\" means edible parts of the animals… \"Domestic ungulates\" means domestic bovine",
+    "confidence": 0.9,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "Live cattle are slaughtered to produce fresh beef, and the cited regulation defines meat from domestic bovine animals.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "live-cattle",
+    "to": "frozen-beef",
+    "relation": "used_to_make",
+    "source": "eu-food-hygiene-853-2004",
+    "quote": "\"Fresh meat\" means meat that has not undergone any preserving process other than chilling, freezing or quick-freezing",
+    "confidence": 0.9,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "Live cattle are slaughtered to produce beef, and the cited regulation defines fresh meat as including frozen or quick-frozen meat.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "live-cattle",
+    "to": "edible-offal",
+    "relation": "by_product",
+    "source": "eu-food-hygiene-853-2004",
+    "quote": "\"Offal\" means fresh meat other than that of the carcase, including viscera and blood.",
+    "confidence": 0.9,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "Edible offal is a by-product of slaughtering live cattle, and the cited regulation defines offal as fresh meat other than that of the carcass.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "fresh-beef",
+    "to": "prepared-beef",
+    "relation": "used_to_make",
+    "source": "eu-food-hygiene-853-2004",
+    "quote": "\"Meat products\" means processed products resulting from the processing of meat or from the further processing of such processed products",
+    "confidence": 0.9,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "Fresh beef is processed to make prepared beef, and the cited regulation defines meat products as processed products resulting from the processing of meat.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "frozen-beef",
+    "to": "prepared-beef",
+    "relation": "used_to_make",
+    "source": "eu-food-hygiene-853-2004",
+    "quote": "\"Meat products\" means processed products resulting from the processing of meat or from the further processing of such processed products",
+    "confidence": 0.9,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "Frozen beef is processed to make prepared beef, and the cited regulation defines meat products as processed products resulting from the processing of meat.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "edible-offal",
+    "to": "prepared-beef",
+    "relation": "used_to_make",
+    "source": "eu-food-hygiene-853-2004",
+    "quote": "\"Meat products\" means processed products resulting from the processing of meat or from the further processing of such processed products",
+    "confidence": 0.9,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "Edible offal is processed to make prepared beef products, and the cited regulation defines meat products as processed products resulting from the processing of meat.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "live-cattle",
+    "to": "raw-hides",
+    "relation": "by_product",
+    "source": "epa-ap42-leather-tanning",
+    "quote": "The three types of hides and skins most often used in leather manufacture are from cattle, sheep, and pigs.",
+    "confidence": 0.9,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "Raw hides are a by-product of cattle slaughter, and the cited source confirms that cattle hides are commonly used in leather manufacture.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "raw-hides",
+    "to": "tanned-leather",
+    "relation": "used_to_make",
+    "source": "epa-ap42-leather-tanning",
+    "quote": "Leather tanning is the process of converting raw hides or skins into leather.",
+    "confidence": 1.0,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "Raw hides are the primary input used to make tanned leather, which is directly supported by the cited source defining leather tanning.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "tanned-leather",
+    "to": "prepared-leather",
+    "relation": "used_to_make",
+    "source": "wco-hs-chapter-41",
+    "quote": "Leather further prepared after tanning or crusting, including parchment-dressed leather, of bovine (including buffalo) or equine animals",
+    "confidence": 1.0,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "Tanned leather is further processed to make prepared leather, which is supported by the HS Chapter 41 description of leather further prepared after tanning.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "prepared-leather",
+    "to": "patent-leather",
+    "relation": "used_to_make",
+    "source": "epa-ap42-leather-tanning",
+    "quote": "lacquered with urethane for a glossy patent leather.",
+    "confidence": 0.9,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "Prepared leather is used to make patent leather, and the cited source confirms that patent leather is produced by lacquering leather.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "tanned-leather",
+    "to": "composition-leather",
+    "relation": "used_to_make",
+    "source": "wco-hs-chapter-41",
+    "quote": "Composition leather with a basis of leather or leather fibre, in slabs, sheets or strip",
+    "confidence": 0.9,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "Tanned leather or its fibers are used to make composition leather, which is supported by the HS Chapter 41 definition of composition leather.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "prepared-leather",
+    "to": "composition-leather",
+    "relation": "used_to_make",
+    "source": "wco-hs-chapter-41",
+    "quote": "Composition leather with a basis of leather or leather fibre, in slabs, sheets or strip",
+    "confidence": 0.9,
+    "secondary": true,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "Prepared leather or its fibers are used to make composition leather, which is supported by the HS Chapter 41 definition of composition leather.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "tanned-leather",
+    "to": "leather-waste",
+    "relation": "by_product",
+    "source": "wco-hs-chapter-41",
+    "quote": "parings and other waste of leather or of composition leather, not suitable for the manufacture of leather articles; leather dust, powder and flour.",
+    "confidence": 0.9,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "Leather waste is a by-product of processing tanned leather, and the cited HS Chapter 41 text defines parings and other waste of leather.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   }
+  ]
+ },
+ "materials": [
+  {
+   "key": "cattle",
+   "name": "Cattle",
+   "industry": "cattle",
+   "scientificNames": [
+    "Bos taurus",
+    "Bubalus bubalis",
+    "Bison bison"
+   ],
+   "aliases": [
+    "bison",
+    "bovine",
+    "buffalo",
+    "cattle"
+   ]
+  }
+ ],
+ "sources": {
+  "eu-food-hygiene-853-2004": {
+   "title": "Regulation (EC) No 853/2004, hygiene rules for food of animal origin, Annex I definitions",
+   "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32004R0853"
+  },
+  "eu-animal-by-products-1069-2009": {
+   "title": "Regulation (EC) No 1069/2009, animal by-products: Category 3 material",
+   "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32009R1069"
+  },
+  "epa-ap42-leather-tanning": {
+   "title": "U.S. EPA AP-42, Section 9.15 Leather Tanning",
+   "url": "https://www.epa.gov/sites/default/files/2020-10/documents/c9s15.pdf"
+  },
+  "wco-hs-chapter-41": {
+   "title": "WCO Harmonized System 2022, Chapter 41: Raw hides and skins (other than furskins) and leather (notes and headings)",
+   "url": "https://www.wcoomd.org/-/media/wco/public/global/pdf/topics/nomenclature/instruments-and-tools/hs-nomenclature-2022/2022/0841_2022e.pdf"
+  }
+ }
+}

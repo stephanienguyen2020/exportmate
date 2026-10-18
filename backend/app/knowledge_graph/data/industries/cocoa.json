@@ -1,0 +1,272 @@
+{
+ "_about": "Released from data/drafts/cocoa.json on 2026-10-18 (build_chain.py). Loaded by seed_reference_data with material_chain.json (load_chain).",
+ "industry": {
+  "key": "cocoa",
+  "name": "Cocoa and chocolate",
+  "eudrCommodity": "Cocoa",
+  "genericTerms": {
+   "cacao products": [],
+   "cocoa products": [],
+   "chocolate products": [],
+   "cacao": [],
+   "cocoa": []
+  },
+  "products": [
+   {
+    "key": "cocoa-beans",
+    "name": "Cocoa beans",
+    "hsCodes": [
+     "1801",
+     "1801.00"
+    ],
+    "stage": "raw",
+    "aliases": [
+     "cacao beans",
+     "cocoa beans",
+     "raw cocoa",
+     "roasted cocoa"
+    ]
+   },
+   {
+    "key": "cocoa-shells-waste",
+    "name": "Cocoa shells and waste",
+    "hsCodes": [
+     "1802",
+     "1802.00"
+    ],
+    "stage": "by-product",
+    "aliases": [
+     "cacao shell",
+     "cocoa shells",
+     "cocoa waste",
+     "husks",
+     "skins"
+    ]
+   },
+   {
+    "key": "cocoa-paste",
+    "name": "Cocoa paste",
+    "hsCodes": [
+     "1803",
+     "1803.10",
+     "1803.20"
+    ],
+    "stage": "first processing",
+    "aliases": [
+     "baking chocolate",
+     "bitter chocolate",
+     "cacao paste",
+     "chocolate liquor",
+     "cocoa paste",
+     "cooking chocolate",
+     "unsweetened chocolate"
+    ]
+   },
+   {
+    "key": "cocoa-butter",
+    "name": "Cocoa butter, fat and oil",
+    "hsCodes": [
+     "1804",
+     "1804.00"
+    ],
+    "stage": "first processing",
+    "aliases": [
+     "cacao fat",
+     "cocoa butter",
+     "cocoa fat",
+     "cocoa oil"
+    ]
+   },
+   {
+    "key": "cocoa-powder-unsweetened",
+    "name": "Cocoa powder, unsweetened",
+    "hsCodes": [
+     "1805",
+     "1805.00"
+    ],
+    "stage": "first processing",
+    "aliases": [
+     "breakfast cocoa",
+     "cocoa powder",
+     "lowfat cocoa",
+     "unsweetened cocoa"
+    ]
+   },
+   {
+    "key": "chocolate-and-preparations",
+    "name": "Chocolate and other food preparations containing cocoa",
+    "hsCodes": [
+     "1806",
+     "1806.10",
+     "1806.20",
+     "1806.31",
+     "1806.32",
+     "1806.90"
+    ],
+    "stage": "final",
+    "aliases": [
+     "chocolate",
+     "drinking chocolate",
+     "filled chocolate",
+     "milk chocolate",
+     "praline",
+     "sweet chocolate",
+     "sweetened cocoa",
+     "white chocolate"
+    ]
+   }
+  ],
+  "links": [
+   {
+    "from": "cocoa-beans",
+    "to": "cocoa-shells-waste",
+    "relation": "by_product",
+    "source": "us-21-cfr-163",
+    "quote": "Cacao nibs is the food prepared by removing the shell from cured, cleaned, dried, and cracked cacao beans.",
+    "confidence": 0.9,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "Removing the shell from cacao beans yields cacao nibs and cocoa shells as a by-product.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "cocoa-beans",
+    "to": "cocoa-butter",
+    "relation": "used_to_make",
+    "source": "eu-cocoa-chocolate-directive",
+    "quote": "designates the fat obtained from cocoa beans or parts of cocoa beans",
+    "confidence": 1.0,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The quote directly states that cocoa butter is the fat obtained from cocoa beans.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "cocoa-beans",
+    "to": "cocoa-powder-unsweetened",
+    "relation": "used_to_make",
+    "source": "eu-cocoa-chocolate-directive",
+    "quote": "obtained by converting into powder cocoa beans which have been cleaned, shelled and roasted",
+    "confidence": 1.0,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The quote directly states that cocoa powder is obtained by converting cocoa beans into powder.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "cocoa-beans",
+    "to": "cocoa-paste",
+    "relation": "used_to_make",
+    "source": "us-21-cfr-163",
+    "quote": "Chocolate liquor is the solid or semiplastic food prepared by finely grinding cacao nibs.",
+    "confidence": 0.9,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "Chocolate liquor (cocoa paste) is made by grinding cacao nibs, which are prepared from cocoa beans.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "cocoa-paste",
+    "to": "cocoa-butter",
+    "relation": "used_to_make",
+    "source": "us-21-cfr-163",
+    "quote": "prepared by pulverizing the material remaining after part of the cacao fat has been removed from ground cacao nibs.",
+    "confidence": 0.8,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The quote indicates that cacao fat (cocoa butter) is removed from ground cacao nibs (cocoa paste).",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "cocoa-paste",
+    "to": "cocoa-powder-unsweetened",
+    "relation": "used_to_make",
+    "source": "us-21-cfr-163",
+    "quote": "prepared by pulverizing the material remaining after part of the cacao fat has been removed from ground cacao nibs.",
+    "confidence": 0.9,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The quote indicates that cocoa powder is prepared from ground cacao nibs (cocoa paste) after removing fat.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "cocoa-paste",
+    "to": "chocolate-and-preparations",
+    "relation": "used_to_make",
+    "source": "us-21-cfr-163",
+    "quote": "Sweet chocolate is the solid or semiplastic food prepared by intimately mixing and grinding chocolate liquor with one or more optional nutritive carbohydrate sweeteners",
+    "confidence": 1.0,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The quote states that sweet chocolate is prepared by mixing and grinding chocolate liquor (cocoa paste) with sweeteners.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "cocoa-butter",
+    "to": "chocolate-and-preparations",
+    "relation": "used_to_make",
+    "source": "eu-cocoa-chocolate-directive",
+    "quote": "White chocolate… designates the product obtained from cocoa butter, milk or milk products and sugars",
+    "confidence": 1.0,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The quote directly states that white chocolate is obtained from cocoa butter, milk products, and sugars.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "cocoa-powder-unsweetened",
+    "to": "chocolate-and-preparations",
+    "relation": "used_to_make",
+    "source": "eu-cocoa-chocolate-directive",
+    "quote": "Powdered chocolate… designate the product consisting of a mixture of cocoa powder and sugars",
+    "confidence": 1.0,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The quote directly states that powdered chocolate consists of a mixture of cocoa powder and sugars.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   }
+  ]
+ },
+ "materials": [
+  {
+   "key": "cocoa",
+   "name": "Cocoa",
+   "industry": "cocoa",
+   "scientificNames": [
+    "Theobroma cacao"
+   ],
+   "aliases": [
+    "cacao",
+    "cocoa"
+   ]
+  }
+ ],
+ "sources": {
+  "eu-cocoa-chocolate-directive": {
+   "title": "Directive 2000/36/EC on cocoa and chocolate products, Annex I (consolidated 18 November 2013)",
+   "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:02000L0036-20131118"
+  },
+  "us-21-cfr-163": {
+   "title": "21 CFR Part 163, Cacao Products (U.S. FDA standards of identity)",
+   "url": "https://www.ecfr.gov/current/title-21/part-163"
+  }
+ }
+}
