@@ -334,7 +334,13 @@ up any lost event, and `deploy.sh` does the same after the reference seed
 of at most 4 links, as the recursive SQL) and trusts the answer only when Neo4j's chain
 fingerprint (md5 of the `graph_edges` IDs) is Postgres's. Otherwise (no Neo4j, never synced,
 behind a graph rebuild, or down) it walks Postgres, and after a failure leaves Neo4j alone for a
-minute. The two give the same rows: checked on all 99 nodes (291 rows) on 18 Oct 2026. The rest
+minute. It asks Neo4j once per request, in one query, for the walk from every node (about
+300 rows) and answers each of the request's walks from that: the AuraDB Free instance is in
+us-east1, about 230 ms per round trip from Cloud Run in Singapore, so one ask costs about half a
+second (News watch used to make one walk per alert). The two give the same rows: checked on all
+99 nodes (291 rows) on 18 Oct 2026, locally and in Cloud Run. Between paths that are otherwise
+equal, the walk takes each product's input its chain lists first (`graph_edges.position`), so
+the choice never depends on the order either database returned its rows in. The rest
 of the walk (sourcing, markets, doubt, costs) is the same Python code either way.
 `GET /knowledge-graph/query` says where it walked (`walkedOn`).
 

@@ -4,7 +4,7 @@ set. Callers fall back to Postgres whenever Neo4j can't answer (services/graph_s
 import logging
 from functools import lru_cache
 
-from neo4j import Driver, GraphDatabase
+from neo4j import Driver, GraphDatabase, NotificationMinimumSeverity
 
 from app.core.config import get_settings
 
@@ -26,6 +26,8 @@ def get_neo4j_driver() -> Driver | None:
         connection_timeout=CONNECTION_TIMEOUT_SECONDS,
         connection_acquisition_timeout=CONNECTION_TIMEOUT_SECONDS,
         max_transaction_retry_time=RETRY_SECONDS,
+        # Not its notes on our queries ("constraint already exists") in our logs.
+        notifications_min_severity=NotificationMinimumSeverity.OFF,
     )
 
 
