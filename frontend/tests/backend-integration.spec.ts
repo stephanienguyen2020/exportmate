@@ -2370,6 +2370,7 @@ test("the material chain shows each link's source, check and the team's verdicts
     aiCheck: null,
     company: { confirmed: 0, rejected: 0 },
     everyone: { confirmed: 0, rejected: 0 },
+    weight: 0.5,
     doubt: null,
     ...fields,
   });
@@ -2394,6 +2395,8 @@ test("the material chain shows each link's source, check and the team's verdicts
                   quote: "sawlogs and veneer logs",
                   aiCheck: { verdict: "agree", note: "Veneer is peeled from logs.", by: "Claude", on: "2026-10-16" },
                   company: { confirmed: 3, rejected: 0 },
+                  everyone: { confirmed: 7, rejected: 1 },
+                  weight: 0.8,
                 }),
                 link({
                   fromKey: "wood.sawnwood",
@@ -2413,6 +2416,7 @@ test("the material chain shows each link's source, check and the team's verdicts
             { key: "acacia", name: "Acacia", industry: "wood", scientificNames: ["Acacia mangium"], woodType: "non-coniferous" },
           ],
           byWay: [{ via: "supplier", confirmed: 3, rejected: 2 }],
+          weightsUpdatedAt: "2026-10-18T18:30:00Z",
         },
         meta: {},
       },
@@ -2433,6 +2437,9 @@ test("the material chain shows each link's source, check and the team's verdicts
   await expect(links.getByRole("listitem").first()).toContainText(
     "Checked by Claude, 2026-10-16: agree. Veneer is peeled from logs.",
   );
+  // Every company's verdicts, from the nightly link weights job.
+  await expect(links.getByRole("listitem").first()).toContainText("All companies: 7 confirmed · 1 rejected · weight 0.80");
+  await expect(page.getByRole("region", { name: "How suggestions did" })).toContainText("Every company's verdicts were last counted");
   await expect(links.getByRole("link", { name: /FAO forest products definitions/ })).toHaveAttribute(
     "href",
     "https://fao.org/forestry-fao/definitions.pdf",

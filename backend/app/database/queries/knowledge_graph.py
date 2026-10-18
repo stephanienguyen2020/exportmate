@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.database.models import (
     GraphEdge,
+    GraphLinkWeight,
     GraphNode,
     GraphNodeKind,
     GraphSource,
@@ -41,6 +42,10 @@ def list_graph_edges(db: Session, edge_ids: set[uuid.UUID]) -> list[GraphEdge]:
 
 def list_all_graph_edges(db: Session) -> list[GraphEdge]:
     return list(db.scalars(select(GraphEdge).order_by(GraphEdge.from_key, GraphEdge.to_key)))
+
+
+def list_link_weights(db: Session) -> list[GraphLinkWeight]:
+    return list(db.scalars(select(GraphLinkWeight)))
 
 
 def list_graph_sources(db: Session) -> list[GraphSource]:
@@ -132,6 +137,13 @@ def replace_graph_edges(db: Session, rows: list[dict]) -> None:
     db.execute(delete(GraphEdge))
     if rows:
         db.execute(insert(GraphEdge).values(rows))
+
+
+def replace_link_weights(db: Session, rows: list[dict]) -> None:
+    """The nightly job's counts are the whole set: links no verdict names any more are removed."""
+    db.execute(delete(GraphLinkWeight))
+    if rows:
+        db.execute(insert(GraphLinkWeight).values(rows))
 
 
 def replace_supplier_sourcing(db: Session, supplier_id: uuid.UUID, rows: list[dict]) -> None:

@@ -11,11 +11,12 @@ Creates everything ExportMate runs on Google Cloud (backend and AI service) in o
 | Image registry | `<region>-docker.pkg.dev/<project>/exportmate` |
 | Cloud Run service (public) | `exportmate-backend` |
 | Cloud Run job (same image, one command) | `exportmate-backend-task` |
+| Cloud Run job + Cloud Scheduler (nightly) | `exportmate-backend-link-weights` (`python -m app.update_link_weights`: every company's News watch verdicts per chain link into `graph_link_weights`), started by `exportmate-nightly-link-weights` at 01:30 Asia/Ho_Chi_Minh; `backend/deploy.sh` keeps its image current |
 | Firebase Auth (email + password; Google when `google_oauth_client_id` is set) + web app | config printed as `firebase_web_config` |
 | Bucket (private, versioned) | `exportmate-regulation-documents-dev`: company uploads under `companies/`, shared official texts under `shared/`; the backend can create, read and delete objects (`objectUser`, `regulation_documents.tf`) |
 | **AI service** (`ai_service.tf`) | |
 | Firestore | `(default)`, native, asia-southeast1, with the two `kb` vector indexes (768-d) |
-| Service accounts | `exportmate-ai` (Firestore user, Vertex AI user, Model Armor user), `exportmate-scheduler` (signs the scan's OIDC token, no roles) |
+| Service accounts | `exportmate-ai` (Firestore user, Vertex AI user, Model Armor user), `exportmate-scheduler` (signs the scan's OIDC token; may run the link weights job) |
 | Cloud Run service (public) | `exportmate-ai`, URL printed as `ai_url` |
 | Cloud Run job (same image, one command) | `exportmate-ai-task` |
 | Model Armor template | `exportmate-untrusted-text` (prompt injection and jailbreak at medium confidence and above, malicious links, any language), screens each new news article; set on the service as `MODEL_ARMOR_TEMPLATE`. In `us-central1` (`model_armor_region`): `asia-southeast1` lacks the malicious-link filter and multi-language detection, and only public news articles are sent to it |

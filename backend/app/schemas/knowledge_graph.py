@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from typing import Literal
 
 from app.schemas.common import CamelCaseModel
@@ -37,7 +37,8 @@ class ChainLinkOut(CamelCaseModel):
     basis: str | None  # otherwise why, from the source
     ai_check: AiCheckOut | None
     company: VerdictCountsOut  # this company's verdicts on suggestions through the link
-    everyone: VerdictCountsOut
+    everyone: VerdictCountsOut  # every company's, as of the last link weights job
+    weight: float  # share confirmed, smoothed (0.5 unjudged); breaks ties between paths
     doubt: str | None  # "Often rejected at your company": the walk avoids it when it can
 
 
@@ -63,6 +64,7 @@ class MaterialChainOut(CamelCaseModel):
     industries: list[ChainIndustryOut]
     materials: list[ChainMaterialOut]
     by_way: list[AccuracyByWayOut]  # how often each way of suggesting was confirmed
+    weights_updated_at: datetime | None  # the link weights job's last run (every company's counts)
 
 
 class GraphQueryUnderstoodOut(CamelCaseModel):

@@ -62,6 +62,7 @@ def build_material_chain(db: Session, ctx: CompanyContext) -> MaterialChainOut:
                     confirmed=verdicts.everyone.confirmed if verdicts else 0,
                     rejected=verdicts.everyone.rejected if verdicts else 0,
                 ),
+                weight=verdicts.weight if verdicts else graph_feedback.UNJUDGED_WEIGHT,
                 doubt=verdicts.doubt if verdicts else None,
             )
         )
@@ -108,4 +109,5 @@ def build_material_chain(db: Session, ctx: CompanyContext) -> MaterialChainOut:
             if n.kind == GraphNodeKind.material
         ],
         by_way=news_service.news_match_accuracy(db, ctx).by_way,
+        weights_updated_at=graph_feedback.weights_updated_at(db),
     )
