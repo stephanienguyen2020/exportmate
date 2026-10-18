@@ -129,7 +129,7 @@ Note: the scripted steps are labelled `"azure_service": "Azure OpenAI GPT-4-Turb
 
 | Idea | Globot | For ExportMate |
 | --- | --- | --- |
-| Gemini document extraction | OCR → JSON fields | Extract certificate of origin / FSC / phytosanitary fields (number, issuer, expiry, HS code) from uploads. Use Vertex `responseSchema` (stricter than plain JSON mode). Fits the "document extraction" item in `BACKEND_PLAN.md`. |
+| Gemini document extraction | OCR → JSON fields | Extract certificate of origin / FSC / phytosanitary fields (number, issuer, expiry, HS code) from uploads. Use Vertex `responseSchema` (stricter than plain JSON mode). |
 | Semantic verifier step | Re-checks "missing" docs by embedding search before reporting | Before marking an order `exposed` for a missing document, search the company's uploaded docs. Our rule "missing data → `needs_data`, not `clear`" stays. |
 | Embedding + type check | distance ≤ 0.6 **and** same canonical type | Same double check when matching docs or HS codes, so one weak signal can't decide alone. |
 | Adversarial challenge | Scripted debate on cost assumptions | Our auditor already checks citations. Add one "challenge the assumption" pass on the cost step (e.g. "USD 200/day delay: where from?"). |

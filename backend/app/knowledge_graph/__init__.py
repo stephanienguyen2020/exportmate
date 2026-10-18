@@ -6,7 +6,7 @@ in data/industries/ are each industry's first published version, and a changed f
 draft a chain admin reviews (services/chain_versions.py). material_chain.json is the
 hand-written vocabulary (sources, materials, broad words) laid over the chains (`layer_vocabulary`).
 
-Loaded into Postgres by the reference seed (docs/NEWS_IMPACT_PLAN.md, phase 1). See README.md here.
+Loaded into Postgres by the reference seed. See README.md here.
 """
 
 import json

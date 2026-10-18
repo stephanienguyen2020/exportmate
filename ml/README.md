@@ -1,14 +1,12 @@
 # ML (offline models)
 
-Offline models for ExportMate, starting with news severity: phase 2 of
-`docs/NEWS_IMPACT_PLAN.md`; design in [SEVERITY_MODEL.md](SEVERITY_MODEL.md).
-Nothing here runs in the app yet. Paused until the knowledge graph (phase 1) is done.
+Offline models for ExportMate, starting with news severity.
+Nothing here runs in the app yet.
 
 ## Layout
 
 ```
 ml/
-  SEVERITY_MODEL.md   # design: labels, features, models, workflow
   data/          # git-ignored: downloaded and prepared data
     raw/         # files exactly as downloaded, one folder per source
       gta/       # Global Trade Alert "GTA entries" CSV exports

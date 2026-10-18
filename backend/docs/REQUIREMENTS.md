@@ -1,6 +1,6 @@
 # ExportMate backend — requirements
 
-What the backend must do and why: features, business rules, open questions, roadmap. How it is built: [DECISIONS.md](DECISIONS.md). Every endpoint and where the app calls it: [API.md](API.md). AI ideas still to decide: [AI_IDEAS.md](AI_IDEAS.md).
+What the backend must do and why: features, business rules, open questions, roadmap. How it is built: [DECISIONS.md](DECISIONS.md). Every endpoint and where the app calls it: [API.md](API.md).
 
 The backend replaces the browser-only data (localStorage) and the simulated flows in the frontend with a real server. The browser-only demo ("Explore the demo") stays, clearly separate from live company data.
 
@@ -197,7 +197,7 @@ The playbook is the company's own instructions, the way a manager briefs a new e
   | Source (which version) | The seed downloads the official text | The crawler stores the new version (J1) |
   | The requirement and its quote | Shared: written by hand in the seed, copied from the downloaded text and checked. Company: drafted by AI from the version's text (PDF, HTML, plain text; long texts cut down to the closest sections), each quote checked against the text; the owner reviews (`draft` → `reviewed` / `rejected`) | Shared: drafted by the extraction agent (J3) from crawled versions; the operator reviews |
 
-- Only reviewed requirements are checked and raise alerts (seed requirements count as reviewed). A new version gets its own requirements; once none is left as a draft (and at least one is reviewed), they replace the previous version's. Until then the previous version's stay in use. Comparing the two lists shows what was added, changed or removed ([AI_IDEAS.md](AI_IDEAS.md) G). A report records the version it checked against.
+- Only reviewed requirements are checked and raise alerts (seed requirements count as reviewed). A new version gets its own requirements; once none is left as a draft (and at least one is reviewed), they replace the previous version's. Until then the previous version's stay in use. Comparing the two lists shows what was added, changed or removed. A report records the version it checked against.
 
 **Choosing official texts** (the seed now, the crawler later)
 - Official publisher, latest consolidated text (EUDR consolidated 18.09.2026 includes its 3 amendments). With no consolidated text, the base act is v1 and each amending act the next version (Section 232: Proclamation 10976, then the January 2026 amendment).

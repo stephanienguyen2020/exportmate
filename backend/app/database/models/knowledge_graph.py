@@ -1,4 +1,4 @@
-"""Knowledge graph tables (docs/NEWS_IMPACT_PLAN.md, phase 1).
+"""Knowledge graph tables (backend/app/knowledge_graph/README.md).
 
 Shared reference data, from app/knowledge_graph/data/: the sources links cite, the nodes
 (EUDR commodities, products by HS code, materials) and the links between products ("logs are
