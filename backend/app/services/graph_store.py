@@ -21,38 +21,46 @@ _neo4j_skipped_until = 0.0
 
 
 class GraphStore:
-    """One request's walks: the Postgres fingerprint is read once, and each walk's answer kept."""
+    """One request's walks. Neo4j is asked once, for the walk from every node (the graph is
+    small: about 300 rows), and each walk is then read from that, so a request pays Neo4j's
+    round trips once however many walks it makes (News watch makes one per alert)."""
 
     def __init__(self, db: Session):
         self.db = db
-        self._fingerprint: str | None = None
-        self._walks: dict[tuple[frozenset[str], int], list[GraphWalkRow]] = {}
+        self._from_neo4j: dict[str, list[GraphWalkRow]] | None = None
+        self._neo4j_asked = False
         self.answered_by: set[str] = set()  # "neo4j", "postgres"
 
-    def _postgres_fingerprint(self) -> str:
-        if self._fingerprint is None:
-            self._fingerprint = graph_queries.chain_fingerprint(self.db)
-        return self._fingerprint
-
     def walk_downstream(self, start_keys: set[str], max_depth: int) -> list[GraphWalkRow]:
-        key = (frozenset(start_keys), max_depth)
-        if key not in self._walks:
-            self._walks[key] = self._walk(start_keys, max_depth) if start_keys else []
-        return self._walks[key]
-
-    def _walk(self, start_keys: set[str], max_depth: int) -> list[GraphWalkRow]:
-        global _neo4j_skipped_until
-        driver = get_neo4j_driver()
-        if driver is not None and time.monotonic() >= _neo4j_skipped_until:
-            try:
-                walk = neo4j_graph.walk_downstream(driver, start_keys, max_depth)
-            except (Neo4jError, DriverError, OSError) as error:
-                _neo4j_skipped_until = time.monotonic() + SKIP_AFTER_FAILURE_SECONDS
-                log.warning("graph.neo4j_unavailable", extra={"error": type(error).__name__})
-            else:
-                if walk.fingerprint == self._postgres_fingerprint():
-                    self.answered_by.add("neo4j")
-                    return walk.rows
-                log.warning("graph.neo4j_stale")
+        if not start_keys:
+            return []
+        walked = self._neo4j_walk(max_depth)
+        if walked is not None:
+            self.answered_by.add("neo4j")
+            return [row for key in sorted(start_keys) for row in walked.get(key, [])]
         self.answered_by.add("postgres")
         return graph_queries.walk_downstream(self.db, start_keys, max_depth)
+
+    def _neo4j_walk(self, max_depth: int) -> dict[str, list[GraphWalkRow]] | None:
+        """The walk from every node, by start; None when Neo4j can't be trusted to answer."""
+        global _neo4j_skipped_until
+        if self._neo4j_asked:
+            return self._from_neo4j
+        self._neo4j_asked = True
+        driver = get_neo4j_driver()
+        if driver is None or time.monotonic() < _neo4j_skipped_until:
+            return None
+        keys = {node.key for node in graph_queries.list_graph_nodes(self.db)}
+        try:
+            walk = neo4j_graph.walk_downstream(driver, keys, max_depth)
+        except (Neo4jError, DriverError, OSError) as error:
+            _neo4j_skipped_until = time.monotonic() + SKIP_AFTER_FAILURE_SECONDS
+            log.warning("graph.neo4j_unavailable", extra={"error": type(error).__name__})
+            return None
+        if walk.fingerprint != graph_queries.chain_fingerprint(self.db):
+            log.warning("graph.neo4j_stale")
+            return None
+        self._from_neo4j = {}
+        for row in walk.rows:
+            self._from_neo4j.setdefault(row.start_key, []).append(row)
+        return self._from_neo4j

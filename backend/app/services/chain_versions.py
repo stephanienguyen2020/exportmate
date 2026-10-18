@@ -170,6 +170,8 @@ def rebuild_graph(db: Session) -> dict[str, int]:
         }
         for m in chain["materials"]
     ]
+    for position, edge in enumerate(edges):
+        edge["position"] = position  # ties between equal paths go to the link listed first
     graph_queries.upsert_graph_nodes(db, nodes)
     graph_queries.replace_graph_edges(db, edges)
     return {"graph_nodes": len(nodes), "graph_edges": len(edges)}
