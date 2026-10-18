@@ -159,6 +159,25 @@ def test_neo4j_answers_the_walk_only_while_it_holds_the_same_chain(lan, neo4j):
         assert neo4j["calls"] == calls + 1
 
 
+def test_suggestions_dont_depend_on_the_order_rows_come_in(client, lan, neo4j):
+    """Neo4j returns the walk's rows in another order than Postgres: ties between equally good
+    paths must still go the same way."""
+    params = {"material": "timber"}
+    url = "/api/v1/knowledge-graph/query"
+    with open_session() as db:
+        keys = {n.key for n in graph_queries.list_graph_nodes(db)}
+        rows = graph_queries.walk_downstream(db, keys, 4)
+        fingerprint = graph_queries.chain_fingerprint(db)
+    neo4j["answer"] = ServiceUnavailable("off")
+    from_postgres = client.get(url, headers=lan["headers"], params=params).json()["data"]
+    for ordered in (rows, list(reversed(rows))):
+        neo4j["answer"] = Neo4jWalk(fingerprint, ordered)
+        graph_store._neo4j_skipped_until = 0.0
+        from_neo4j = client.get(url, headers=lan["headers"], params=params).json()["data"]
+        assert from_neo4j["walkedOn"] == ["neo4j"]
+        assert from_neo4j["matches"] == from_postgres["matches"]
+
+
 def test_the_graph_query_says_where_it_walked(client, lan, neo4j):
     neo4j["answer"] = ServiceUnavailable("paused")
     response = client.get(
