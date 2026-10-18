@@ -751,6 +751,41 @@ export type NewsPathStep = {
   sourceTitle: string | null;
   sourceUrl: string | null;
   quote: string | null;
+  key?: string | null; // the graph node, for a product step
+  doubt?: string | null; // people often rejected the link to this step
+};
+
+export type ChainLink = {
+  fromKey: string;
+  fromName: string;
+  toKey: string;
+  toName: string;
+  relation: "used_to_make" | "by_product";
+  secondary: boolean;
+  sourceTitle: string;
+  sourceUrl: string;
+  quote: string | null;
+  basis: string | null;
+  aiCheck: { verdict: string; note: string; by: string; on: string } | null;
+  company: { confirmed: number; rejected: number };
+  everyone: { confirmed: number; rejected: number };
+  doubt: string | null;
+};
+export type MaterialChain = {
+  industries: {
+    key: string;
+    name: string;
+    products: { key: string; name: string; hsCodes: string[]; stage: string | null }[];
+    links: ChainLink[];
+  }[];
+  materials: {
+    key: string;
+    name: string;
+    industry: string | null;
+    scientificNames: string[];
+    woodType: string | null;
+  }[];
+  byWay: { via: "supplier" | "hs" | "linked"; confirmed: number; rejected: number }[];
 };
 
 export type NewsMatch = {
@@ -1379,6 +1414,8 @@ export const api = {
     link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 60000);
   },
+  materialChain: (signal?: AbortSignal) =>
+    request<MaterialChain>("/knowledge-graph/chain", { signal }).then((r) => r.data),
   newsMatches: (signal?: AbortSignal) =>
     request<{ newsAvailable: boolean; matches: NewsMatch[] }>("/news-matches", {
       signal,

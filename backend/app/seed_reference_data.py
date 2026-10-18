@@ -33,7 +33,7 @@ from app.database.queries import orders as order_queries
 from app.database.queries import regulations as regulation_queries
 from app.database.queries import trade_map as map_queries
 from app.database.session import open_session
-from app.knowledge_graph import load_graph_file
+from app.knowledge_graph import load_chain, load_graph_file
 from app.seed_data import load_seed_file
 from app.services import regulations as regulation_service
 
@@ -142,7 +142,7 @@ def _slug(name: str) -> str:
 def seed_knowledge_graph(db: Session) -> dict[str, int]:
     """The graph's sources, nodes and links (app/knowledge_graph/data/). Nodes are updated in
     place; links not in the file are removed."""
-    chain = load_graph_file("material_chain.json")
+    chain = load_chain()
     eudr = load_graph_file("eudr_products.json")
     graph_queries.upsert_graph_sources(
         db, [{"key": k, "title": v["title"], "url": v["url"]} for k, v in chain["sources"].items()]
@@ -190,6 +190,7 @@ def seed_knowledge_graph(db: Session) -> dict[str, int]:
                 "quote": link.get("quote"),
                 "basis": link.get("basis"),
                 "secondary": link.get("secondary", False),
+                "ai_check": link.get("aiCheck"),
             }
             for link in industry["links"]
         ]

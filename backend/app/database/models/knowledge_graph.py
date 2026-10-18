@@ -72,6 +72,8 @@ class GraphEdge(Base):
     source_key: Mapped[str] = mapped_column(ForeignKey("graph_sources.key"), nullable=False)
     quote: Mapped[str | None] = mapped_column(Text)  # the source's words, when it says so
     basis: Mapped[str | None] = mapped_column(Text)  # otherwise why, from the source
+    # Who checked the link, the verdict and why: {"verdict", "note", "by", "on"}.
+    ai_check: Mapped[dict | None] = mapped_column(JSONB)
     # A less common route (veneer is mostly a furniture surface): used only when no equally
     # short path avoids it.
     secondary: Mapped[bool] = mapped_column(

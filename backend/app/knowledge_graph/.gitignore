@@ -1,2 +1,4 @@
 # Downloaded source texts (EUDR HTML, FAO PDF), kept locally to check quotes; never committed.
 sources/
+# Pipeline drafts (build_chain.py): read locally, then --release into data/industries/.
+data/drafts/
