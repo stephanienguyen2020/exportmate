@@ -1,0 +1,329 @@
+{
+ "_about": "Industries the offline pipeline (build_chain.py) builds a material chain for. Sources: the commodity's lines in EUDR Annex I (eudrCommodity), the official descriptions of its HS headings (hsPrefixes), and documents that define what each product is made from (downloaded once into sources/, text extracted; long ones cut to their definitions, or to what `focus` names; `jsonField`: an API answer whose text is one field, such as a CBP ruling). handWrittenMaterials: the industry's materials and broad words stay in material_chain.json (species with local words and wood types), so the pipeline's are left out.",
+ "industries": [
+  {
+   "key": "wood",
+   "name": "Wood and wooden furniture",
+   "eudrCommodity": "Wood",
+   "hsPrefixes": [
+    "4401",
+    "4403",
+    "4407",
+    "4408",
+    "4409",
+    "4410",
+    "4411",
+    "4412",
+    "4418",
+    "47",
+    "4801",
+    "4802",
+    "940161",
+    "940169",
+    "940330",
+    "940340",
+    "940350",
+    "940360"
+   ],
+   "handWrittenMaterials": true,
+   "documents": [
+    {
+     "key": "fao-jfsq",
+     "title": "FAO Joint Forest Sector Questionnaire: forest products definitions",
+     "url": "https://fao.org/forestry-fao/35789-0902b3c041384fd87f2451da2bb9237.pdf",
+     "download": "https://fao.org/forestry-fao/35789-0902b3c041384fd87f2451da2bb9237.pdf",
+     "filename": "fao-jfsq-definitions.pdf",
+     "contentType": "application/pdf"
+    },
+    {
+     "key": "jfsq-definitions",
+     "title": "Joint Forest Sector Questionnaire definitions (Eurostat, FAO, ITTO, UNECE), incl. secondary processed wood products",
+     "url": "https://www.fao.org/forestry-fao/7800-0944787ecbf6036088182f841ab15fe42.pdf",
+     "download": "https://www.fao.org/forestry-fao/7800-0944787ecbf6036088182f841ab15fe42.pdf",
+     "filename": "jfsq-definitions.pdf",
+     "contentType": "application/pdf"
+    },
+    {
+     "key": "eu-ecolabel-furniture",
+     "title": "Commission Decision (EU) 2016/1332: EU Ecolabel criteria for furniture",
+     "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32016D1332",
+     "download": "http://publications.europa.eu/resource/celex/32016D1332",
+     "accept": "application/xhtml+xml",
+     "filename": "eu-ecolabel-furniture-2016.html",
+     "contentType": "text/html",
+     "focus": "wood-based panels used in the furniture product; definitions of wood-based panels, particleboard, plywood and fibreboard; seating"
+    },
+    {
+     "key": "eu-ecolabel-floor-coverings",
+     "title": "Commission Decision (EU) 2017/176: EU Ecolabel criteria for wood-, cork- and bamboo-based floor coverings",
+     "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32017D0176",
+     "download": "http://publications.europa.eu/resource/celex/32017D0176",
+     "accept": "application/xhtml+xml",
+     "filename": "eu-ecolabel-floor-coverings-2017.html",
+     "contentType": "text/html",
+     "focus": "definitions of wood flooring, laminate flooring and wood-based materials (fibreboard, particleboard, plywood); multi-layer and wood veneer floor coverings"
+    },
+    {
+     "key": "wco-hs-chapter-44",
+     "title": "WCO Harmonized System 2022, Chapter 44: Wood and articles of wood (notes and headings)",
+     "url": "https://www.wcoomd.org/-/media/wco/public/global/pdf/topics/nomenclature/instruments-and-tools/hs-nomenclature-2022/2022/0944_2022e.pdf",
+     "download": "https://www.wcoomd.org/-/media/wco/public/global/pdf/topics/nomenclature/instruments-and-tools/hs-nomenclature-2022/2022/0944_2022e.pdf",
+     "filename": "wco-hs-2022-chapter-44.pdf",
+     "contentType": "application/pdf"
+    },
+    {
+     "key": "us-wooden-cabinets-scope",
+     "title": "U.S. Commerce, wooden cabinets and vanities from China: scope of the orders (Federal Register, 17 September 2025)",
+     "url": "https://www.federalregister.gov/documents/2025/09/17/2025-17986",
+     "download": "https://www.federalregister.gov/documents/full_text/html/2025/09/17/2025-17986.html",
+     "filename": "us-wooden-cabinets-scope-2025.html",
+     "contentType": "text/html"
+    },
+    {
+     "key": "us-millwork-scope",
+     "title": "U.S. Commerce, wood mouldings and millwork products from China: scope of the orders (Federal Register, 30 June 2026)",
+     "url": "https://www.federalregister.gov/documents/2026/06/30/2026-13103",
+     "download": "https://www.federalregister.gov/documents/full_text/html/2026/06/30/2026-13103.html",
+     "filename": "us-millwork-scope-2026.html",
+     "contentType": "text/html"
+    },
+    {
+     "key": "cbp-ruling-e83110",
+     "title": "U.S. Customs and Border Protection ruling E83110: wood boards used to make glulam beams (1999)",
+     "url": "https://rulings.cbp.gov/ruling/E83110",
+     "download": "https://rulings.cbp.gov/api/ruling/E83110",
+     "jsonField": "text",
+     "filename": "cbp-ruling-e83110.json",
+     "contentType": "text/html"
+    }
+   ]
+  },
+  {
+   "key": "cocoa",
+   "name": "Cocoa and chocolate",
+   "eudrCommodity": "Cocoa",
+   "hsPrefixes": [
+    "1801",
+    "1802",
+    "1803",
+    "1804",
+    "1805",
+    "1806"
+   ],
+   "documents": [
+    {
+     "key": "eu-cocoa-chocolate-directive",
+     "title": "Directive 2000/36/EC on cocoa and chocolate products, Annex I (consolidated 18 November 2013)",
+     "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:02000L0036-20131118",
+     "download": "http://publications.europa.eu/resource/celex/02000L0036-20131118",
+     "accept": "application/xhtml+xml",
+     "filename": "eu-cocoa-chocolate-directive-2013-11-18.html",
+     "contentType": "text/html"
+    },
+    {
+     "key": "us-21-cfr-163",
+     "title": "21 CFR Part 163, Cacao Products (U.S. FDA standards of identity)",
+     "url": "https://www.ecfr.gov/current/title-21/part-163",
+     "download": "https://www.ecfr.gov/api/renderer/v1/content/enhanced/current/title-21?part=163",
+     "filename": "us-21-cfr-163.html",
+     "contentType": "text/html",
+     "focus": "descriptions of cacao nibs (shell removed), chocolate liquor, breakfast cocoa, cocoa, cacao fat, chocolate"
+    }
+   ]
+  },
+  {
+   "key": "coffee",
+   "name": "Coffee",
+   "eudrCommodity": "Coffee",
+   "hsPrefixes": [
+    "0901",
+    "2101"
+   ],
+   "documents": [
+    {
+     "key": "eu-coffee-extracts-directive",
+     "title": "Directive 1999/4/EC on coffee extracts and chicory extracts, Annex (consolidated 18 November 2013)",
+     "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:01999L0004-20131118",
+     "download": "http://publications.europa.eu/resource/celex/01999L0004-20131118",
+     "accept": "application/xhtml+xml",
+     "filename": "eu-coffee-extracts-directive-2013-11-18.html",
+     "contentType": "text/html"
+    },
+    {
+     "key": "international-coffee-agreement-2007",
+     "title": "International Coffee Agreement 2007, Article 2 Definitions",
+     "url": "https://www.ico.org/documents/ica2007e.pdf",
+     "download": "https://www.ico.org/documents/ica2007e.pdf",
+     "filename": "international-coffee-agreement-2007.pdf",
+     "contentType": "application/pdf",
+     "focus": "Article 2 definitions: green coffee, dried coffee cherry, parchment coffee, roasted coffee, decaffeinated, liquid and soluble coffee"
+    }
+   ]
+  },
+  {
+   "key": "oil-palm",
+   "name": "Oil palm and palm oil",
+   "eudrCommodity": "Oil palm",
+   "hsPrefixes": [
+    "1207",
+    "1511",
+    "1513",
+    "1516",
+    "2306"
+   ],
+   "documents": [
+    {
+     "key": "codex-named-vegetable-oils",
+     "title": "Codex Alimentarius Standard for Named Vegetable Oils (CXS 210-1999), section 2",
+     "url": "https://www.fao.org/3/y2774e/y2774e04.htm",
+     "download": "https://www.fao.org/3/y2774e/y2774e04.htm",
+     "filename": "codex-named-vegetable-oils.html",
+     "contentType": "text/html"
+    }
+   ]
+  },
+  {
+   "key": "soya",
+   "name": "Soya",
+   "eudrCommodity": "Soya",
+   "hsPrefixes": [
+    "1201",
+    "1208",
+    "1507",
+    "2304"
+   ],
+   "documents": [
+    {
+     "key": "codex-named-vegetable-oils",
+     "title": "Codex Alimentarius Standard for Named Vegetable Oils (CXS 210-1999), section 2",
+     "url": "https://www.fao.org/3/y2774e/y2774e04.htm",
+     "download": "https://www.fao.org/3/y2774e/y2774e04.htm",
+     "filename": "codex-named-vegetable-oils.html",
+     "contentType": "text/html"
+    },
+    {
+     "key": "codex-soy-protein-products",
+     "title": "Codex General Standard for Soy Protein Products (CXS 175-1989)",
+     "url": "https://fao.org/input/download/standards/325/CXS_175e.pdf",
+     "download": "https://fao.org/input/download/standards/325/CXS_175e.pdf",
+     "filename": "codex-soy-protein-products.pdf",
+     "contentType": "application/pdf"
+    }
+   ]
+  },
+  {
+   "key": "rubber",
+   "name": "Natural rubber and rubber goods",
+   "eudrCommodity": "Rubber",
+   "hsPrefixes": [
+    "4001",
+    "4005",
+    "4006",
+    "4007",
+    "4008",
+    "4011",
+    "4012",
+    "4013",
+    "4015",
+    "4017"
+   ],
+   "documents": [
+    {
+     "key": "wco-hs-chapter-40",
+     "title": "WCO Harmonized System 2022, Chapter 40: Rubber and articles thereof (notes and headings)",
+     "url": "https://www.wcoomd.org/-/media/wco/public/global/pdf/topics/nomenclature/instruments-and-tools/hs-nomenclature-2022/2022/0740_2022e.pdf",
+     "download": "https://www.wcoomd.org/-/media/wco/public/global/pdf/topics/nomenclature/instruments-and-tools/hs-nomenclature-2022/2022/0740_2022e.pdf",
+     "filename": "wco-hs-2022-chapter-40.pdf",
+     "contentType": "application/pdf"
+    },
+    {
+     "key": "us-40-cfr-428",
+     "title": "40 CFR Part 428, Rubber Manufacturing Point Source Category (U.S. EPA)",
+     "url": "https://www.ecfr.gov/current/title-40/part-428",
+     "download": "https://www.ecfr.gov/api/renderer/v1/content/enhanced/current/title-40?part=428",
+     "filename": "us-40-cfr-428.html",
+     "contentType": "text/html",
+     "focus": "applicability of each subcategory and the term raw material: natural and synthetic rubber used in the manufacture of tires, inner tubes, molded, extruded and fabricated rubber products, latex-dipped products, retreaded tires"
+    },
+    {
+     "key": "us-40-cfr-63-6015",
+     "title": "40 CFR 63.6015, rubber tire manufacturing: definitions (U.S. EPA)",
+     "url": "https://www.ecfr.gov/current/title-40/part-63/section-63.6015",
+     "download": "https://www.ecfr.gov/api/renderer/v1/content/enhanced/current/title-40?part=63&section=63.6015",
+     "filename": "us-40-cfr-63-6015.html",
+     "contentType": "text/html"
+    },
+    {
+     "key": "us-21-cfr-801-437",
+     "title": "21 CFR 801.437, devices that contain natural rubber (U.S. FDA)",
+     "url": "https://www.ecfr.gov/current/title-21/section-801.437",
+     "download": "https://www.ecfr.gov/api/renderer/v1/content/enhanced/current/title-21?section=801.437",
+     "filename": "us-21-cfr-801-437.html",
+     "contentType": "text/html"
+    },
+    {
+     "key": "cbp-ruling-964837",
+     "title": "U.S. Customs and Border Protection ruling 964837: non-medical use latex gloves (2001)",
+     "url": "https://rulings.cbp.gov/ruling/964837",
+     "download": "https://rulings.cbp.gov/api/ruling/964837",
+     "jsonField": "text",
+     "filename": "cbp-ruling-964837.json",
+     "contentType": "text/html"
+    }
+   ]
+  },
+  {
+   "key": "cattle",
+   "name": "Cattle, beef and leather",
+   "eudrCommodity": "Cattle",
+   "hsPrefixes": [
+    "0102",
+    "0201",
+    "0202",
+    "0206",
+    "1602",
+    "4101",
+    "4104",
+    "4107"
+   ],
+   "documents": [
+    {
+     "key": "eu-food-hygiene-853-2004",
+     "title": "Regulation (EC) No 853/2004, hygiene rules for food of animal origin, Annex I definitions",
+     "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32004R0853",
+     "download": "http://publications.europa.eu/resource/celex/32004R0853",
+     "accept": "application/xhtml+xml",
+     "filename": "eu-853-2004.html",
+     "contentType": "text/html",
+     "focus": "Annex I definitions: meat, domestic ungulates (bovine), carcase, fresh meat, offal, meat products"
+    },
+    {
+     "key": "eu-animal-by-products-1069-2009",
+     "title": "Regulation (EC) No 1069/2009, animal by-products: Category 3 material",
+     "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32009R1069",
+     "download": "http://publications.europa.eu/resource/celex/32009R1069",
+     "accept": "application/xhtml+xml",
+     "filename": "eu-1069-2009.html",
+     "contentType": "text/html",
+     "focus": "Category 3 material: hides and skins from animals slaughtered in a slaughterhouse"
+    },
+    {
+     "key": "epa-ap42-leather-tanning",
+     "title": "U.S. EPA AP-42, Section 9.15 Leather Tanning",
+     "url": "https://www.epa.gov/sites/default/files/2020-10/documents/c9s15.pdf",
+     "download": "https://www.epa.gov/sites/default/files/2020-10/documents/c9s15.pdf",
+     "filename": "epa-ap42-9-15-leather-tanning.pdf",
+     "contentType": "application/pdf"
+    },
+    {
+     "key": "wco-hs-chapter-41",
+     "title": "WCO Harmonized System 2022, Chapter 41: Raw hides and skins (other than furskins) and leather (notes and headings)",
+     "url": "https://www.wcoomd.org/-/media/wco/public/global/pdf/topics/nomenclature/instruments-and-tools/hs-nomenclature-2022/2022/0841_2022e.pdf",
+     "download": "https://www.wcoomd.org/-/media/wco/public/global/pdf/topics/nomenclature/instruments-and-tools/hs-nomenclature-2022/2022/0841_2022e.pdf",
+     "filename": "wco-hs-2022-chapter-41.pdf",
+     "contentType": "application/pdf"
+    }
+   ]
+  }
+ ]
+}

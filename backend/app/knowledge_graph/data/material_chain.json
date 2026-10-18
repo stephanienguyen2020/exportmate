@@ -1,5 +1,5 @@
 {
- "_about": "The knowledge graph's material chain (docs/NEWS_IMPACT_PLAN.md, phase 1): which products are made from which, by HS code, per industry, and the materials (species) news and supplier documents name. Hand-written from the sources below; every link cites one. data/eudr_products.json adds the official commodity → product links (EUDR Annex I). Loaded by seed_reference_data. aiCheck: who checked a link (an AI so far), its verdict and why. secondary: a path through the link is used only when no equally short path avoids it.",
+ "_about": "Written by hand: the sources links cite, the materials (species with their local words and wood types) and, per industry, its broad words. The chains themselves are built by the offline pipeline (build_chain.py) into data/industries/; load_chain lays this file over them.",
  "sources": {
   "eudr-annex-i": {
    "title": "EU Deforestation Regulation (EU) 2023/1115, Annex I (consolidated 18 September 2026)",
@@ -22,167 +22,189 @@
    "eudrCommodity": "Wood",
    "genericTermsNote": "Broad words news uses for this industry's materials: each stands for every material whose woodType is listed (empty: all). A more specific word in the same phrase wins ('tropical timber' over 'timber'); a named species wins over all of them.",
    "genericTerms": {
-    "wood": [], "wooden": [], "timber": [], "timbers": [],
-    "hardwood": ["non-coniferous", "tropical"], "hardwoods": ["non-coniferous", "tropical"],
-    "softwood": ["coniferous"], "softwoods": ["coniferous"],
-    "tropical timber": ["tropical"], "tropical wood": ["tropical"], "tropical hardwood": ["tropical"]
-   },
-   "products": [
-    { "key": "roundwood", "name": "Logs (wood in the rough)", "hsCodes": ["4403"], "stage": "raw", "aliases": ["logs", "log", "roundwood", "wood in the rough"] },
-    { "key": "chips-residues", "name": "Wood chips, sawdust and residues", "hsCodes": ["4401.21", "4401.22", "4401.41", "4401.49"], "stage": "by-product", "aliases": ["wood chips", "woodchips", "sawdust", "wood residues"] },
-    { "key": "pellets", "name": "Wood pellets", "hsCodes": ["4401.31"], "stage": "processed", "aliases": ["wood pellets", "pellets"] },
-    { "key": "sawnwood", "name": "Sawn wood (lumber)", "hsCodes": ["4407"], "stage": "first processing", "aliases": ["sawn wood", "sawnwood", "sawn timber", "lumber"] },
-    { "key": "veneer", "name": "Veneer sheets", "hsCodes": ["4408"], "stage": "first processing", "aliases": ["veneer", "veneers", "veneer sheets"] },
-    { "key": "shaped-wood", "name": "Mouldings and unassembled flooring strips", "hsCodes": ["4409"], "stage": "further processing", "aliases": ["mouldings", "moldings"] },
-    { "key": "particle-board", "name": "Particle board and OSB", "hsCodes": ["4410"], "stage": "panel", "aliases": ["particle board", "particleboard", "chipboard", "osb"] },
-    { "key": "fibreboard", "name": "Fibreboard (MDF, HDF)", "hsCodes": ["4411"], "stage": "panel", "aliases": ["fibreboard", "fiberboard", "mdf", "hdf"] },
-    { "key": "plywood", "name": "Plywood and veneered panels", "hsCodes": ["4412"], "stage": "panel", "aliases": ["plywood"] },
-    { "key": "joinery", "name": "Builders' joinery and assembled flooring", "hsCodes": ["4418"], "stage": "final", "aliases": ["joinery", "flooring", "wooden doors"] },
-    { "key": "wood-pulp", "name": "Wood pulp", "hsCodes": ["47"], "stage": "first processing", "aliases": ["wood pulp", "pulp"] },
-    { "key": "paper", "name": "Paper and paperboard", "hsCodes": ["48"], "stage": "final", "aliases": ["paper", "paperboard"] },
-    { "key": "wooden-seats", "name": "Seats with wooden frames, and their wooden parts", "hsCodes": ["9401.31", "9401.41", "9401.61", "9401.69", "9401.80", "9401.91"], "stage": "final", "aliases": ["chairs", "chair", "seats", "sofas", "sofa frames"] },
-    { "key": "wooden-furniture", "name": "Wooden furniture (office, kitchen, bedroom, other) and parts", "hsCodes": ["9403.30", "9403.40", "9403.50", "9403.60", "9403.91"], "stage": "final", "aliases": ["furniture", "cabinets", "kitchen cabinets", "tables", "beds"] }
-   ],
-   "links": [
-    {
-     "from": "roundwood", "to": "sawnwood", "relation": "used_to_make", "source": "fao-jfsq",
-     "quote": "SAWNWOOD … Wood that has been produced from both domestic and imported roundwood, either by sawing lengthways or by a profile-chipping process and that exceeds 6 mm in thickness.",
-     "aiCheck": {"verdict": "agree", "note": "Sawmills saw logs into lumber; the FAO definition says so directly.", "by": "Claude", "on": "2026-10-16"}
-    },
-    {
-     "from": "roundwood", "to": "veneer", "relation": "used_to_make", "source": "fao-jfsq",
-     "quote": "INDUSTRIAL ROUNDWOOD (WOOD IN THE ROUGH) … it is an aggregate comprising sawlogs and veneer logs; pulpwood, round and split; and other industrial roundwood.",
-     "aiCheck": {"verdict": "agree", "note": "Veneer is peeled or sliced from veneer logs; the quote lists veneer logs as part of roundwood.", "by": "Claude", "on": "2026-10-16"}
-    },
-    {
-     "from": "veneer", "to": "plywood", "relation": "used_to_make", "source": "fao-jfsq",
-     "quote": "PLYWOOD … A panel consisting of an assembly of veneer sheets bonded together with the direction of the grain in alternate plies generally at right angles.",
-     "aiCheck": {"verdict": "agree", "note": "Plywood is veneer sheets glued in crossed plies; the FAO definition says so directly.", "by": "Claude", "on": "2026-10-16"}
-    },
-    {
-     "from": "sawnwood", "to": "plywood", "relation": "used_to_make", "source": "fao-jfsq",
-     "quote": "It includes … core plywood or blockboard (plywood with a solid core (i.e. the central layer, generally thicker than the other plies) that consists of narrow boards, blocks or strips",
-     "aiCheck": {"verdict": "agree, minor route", "note": "Core plywood and blockboard have a core of sawn strips; most plywood is all veneer.", "by": "Claude", "on": "2026-10-16"}
-    },
-    {
-     "from": "roundwood", "to": "chips-residues", "relation": "used_to_make", "source": "fao-jfsq",
-     "quote": "WOOD CHIPS AND PARTICLES Wood that has been reduced to small pieces and is suitable for pulping, for particle board and/or fibreboard production, for use as a fuel, or for other purposes.",
-     "aiCheck": {"verdict": "agree", "note": "Logs are chipped for pulp and panels; the FAO definition covers chips made from wood.", "by": "Claude", "on": "2026-10-16"}
-    },
-    {
-     "from": "sawnwood", "to": "chips-residues", "relation": "by_product", "source": "fao-jfsq",
-     "quote": "WOOD RESIDUES … It includes wood waste and scrap not useable as timber such as sawmill rejects, slabs, edgings and trimmings, veneer log cores, veneer rejects, sawdust, residues from carpentry and joinery production",
-     "aiCheck": {"verdict": "agree", "note": "Sawing logs leaves slabs, edgings and sawdust, as the FAO residue definition lists.", "by": "Claude", "on": "2026-10-16"}
-    },
-    {
-     "from": "veneer", "to": "chips-residues", "relation": "by_product", "source": "fao-jfsq",
-     "quote": "WOOD RESIDUES … It includes wood waste and scrap not useable as timber such as sawmill rejects, slabs, edgings and trimmings, veneer log cores, veneer rejects, sawdust",
-     "aiCheck": {"verdict": "agree", "note": "Peeling leaves log cores and veneer rejects, as the FAO residue definition lists.", "by": "Claude", "on": "2026-10-16"}
-    },
-    {
-     "from": "chips-residues", "to": "pellets", "relation": "used_to_make", "source": "fao-jfsq",
-     "quote": "WOOD RESIDUES INCLUDING WOOD FOR AGGLOMERATES … and wood residues that will be used for production of pellets and other agglomerated products.",
-     "aiCheck": {"verdict": "agree", "note": "Pellets are pressed from sawdust and residues; the FAO definition says so.", "by": "Claude", "on": "2026-10-16"}
-    },
-    {
-     "from": "chips-residues", "to": "particle-board", "relation": "used_to_make", "source": "fao-jfsq",
-     "quote": "PARTICLE BOARD, ORIENTED STRANDBOARD (OSB) AND SIMILAR BOARD A panel manufactured from small pieces of wood or other ligno-cellulosic materials (e.g. chips, flakes, splinters, strands, shreds, shives, etc.) bonded together",
-     "aiCheck": {"verdict": "agree", "note": "Particle board and OSB are made from chips, flakes and strands.", "by": "Claude", "on": "2026-10-16"}
-    },
-    {
-     "from": "chips-residues", "to": "fibreboard", "relation": "used_to_make", "source": "fao-jfsq",
-     "quote": "WOOD CHIPS AND PARTICLES Wood that has been reduced to small pieces and is suitable for pulping, for particle board and/or fibreboard production",
-     "aiCheck": {"verdict": "agree", "note": "MDF and HDF are made from wood fibres refined from chips.", "by": "Claude", "on": "2026-10-16"}
-    },
-    {
-     "from": "roundwood", "to": "wood-pulp", "relation": "used_to_make", "source": "fao-jfsq",
-     "quote": "WOOD PULP Fibrous material prepared from pulpwood, wood chips, particles or residues by mechanical and/or chemical process",
-     "aiCheck": {"verdict": "agree", "note": "Pulpwood logs are pulped directly; the FAO definition names pulpwood.", "by": "Claude", "on": "2026-10-16"}
-    },
-    {
-     "from": "chips-residues", "to": "wood-pulp", "relation": "used_to_make", "source": "fao-jfsq",
-     "quote": "WOOD PULP Fibrous material prepared from pulpwood, wood chips, particles or residues by mechanical and/or chemical process",
-     "aiCheck": {"verdict": "agree", "note": "Mill chips and residues are a main pulp input; the FAO definition names them.", "by": "Claude", "on": "2026-10-16"}
-    },
-    {
-     "from": "wood-pulp", "to": "paper", "relation": "used_to_make", "source": "fao-jfsq",
-     "quote": "WOOD PULP … for further manufacture into paper, paperboard, fibreboard or other cellulose products.",
-     "aiCheck": {"verdict": "agree", "note": "Paper and paperboard are made from pulp.", "by": "Claude", "on": "2026-10-16"}
-    },
-    {
-     "from": "sawnwood", "to": "shaped-wood", "relation": "used_to_make", "source": "fao-jfsq",
-     "quote": "SAWNWOOD … It excludes sleepers, wooden flooring, mouldings (sawnwood continuously shaped along any of its edges or faces, like tongued, grooved, rebated, V-jointed, beaded, moulded, rounded or the like)",
-     "aiCheck": {"verdict": "agree", "note": "Mouldings and unassembled flooring strips are sawn wood shaped along its edges or faces.", "by": "Claude", "on": "2026-10-16"}
-    },
-    {
-     "from": "veneer", "to": "wooden-furniture", "relation": "used_to_make", "source": "fao-jfsq", "secondary": true,
-     "quote": "VENEER SHEETS … It includes wood used for the manufacture of laminated construction material, furniture, veneer containers, etc.",
-     "aiCheck": {"verdict": "agree, secondary route", "note": "Veneer is mostly a surface on furniture (over particle board, MDF or plywood), rather than its main material, so a path through sawn wood or panels is preferred when both are as short.", "by": "Claude", "on": "2026-10-16"}
-    },
-    {
-     "from": "sawnwood", "to": "wooden-furniture", "relation": "used_to_make", "source": "hs-nomenclature",
-     "basis": "Heading 9403 'Other furniture and parts thereof', subheadings 9403.30–9403.60 'Wooden furniture …'; solid-wood furniture is made from sawn wood (4407).",
-     "aiCheck": {"verdict": "agree", "note": "Solid wood furniture (tables, beds, chairs' frames) is made from sawn wood.", "by": "Claude", "on": "2026-10-16"}
-    },
-    {
-     "from": "plywood", "to": "wooden-furniture", "relation": "used_to_make", "source": "hs-nomenclature",
-     "basis": "Subheadings 9403.30–9403.60 'Wooden furniture'; carcasses, cabinets and shelves are commonly plywood (4412).",
-     "aiCheck": {"verdict": "agree", "note": "Cabinet carcasses, shelves and drawer parts are commonly plywood.", "by": "Claude", "on": "2026-10-16"}
-    },
-    {
-     "from": "particle-board", "to": "wooden-furniture", "relation": "used_to_make", "source": "hs-nomenclature",
-     "basis": "Subheadings 9403.30–9403.60 'Wooden furniture'; flat-pack and cabinet furniture is commonly particle board (4410).",
-     "aiCheck": {"verdict": "agree", "note": "Flat-pack and cabinet furniture is commonly particle board.", "by": "Claude", "on": "2026-10-16"}
-    },
-    {
-     "from": "fibreboard", "to": "wooden-furniture", "relation": "used_to_make", "source": "hs-nomenclature",
-     "basis": "Subheadings 9403.30–9403.60 'Wooden furniture'; cabinet doors and carcasses are commonly MDF (4411).",
-     "aiCheck": {"verdict": "agree", "note": "Cabinet doors and carcasses are commonly MDF.", "by": "Claude", "on": "2026-10-16"}
-    },
-    {
-     "from": "sawnwood", "to": "wooden-seats", "relation": "used_to_make", "source": "hs-nomenclature",
-     "basis": "Subheadings 9401.61 / 9401.69 'Other seats, with wooden frames'; frames are made from sawn wood (4407).",
-     "aiCheck": {"verdict": "agree", "note": "Wooden seat frames are made from sawn wood.", "by": "Claude", "on": "2026-10-16"}
-    },
-    {
-     "from": "plywood", "to": "wooden-seats", "relation": "used_to_make", "source": "hs-nomenclature",
-     "basis": "Subheading 9401.61 'Other seats, with wooden frames: Upholstered'; sofa frames are commonly plywood (4412).",
-     "aiCheck": {"verdict": "agree", "note": "Upholstered sofa and chair frames are commonly plywood.", "by": "Claude", "on": "2026-10-16"}
-    },
-    {
-     "from": "sawnwood", "to": "joinery", "relation": "used_to_make", "source": "hs-nomenclature",
-     "basis": "Heading 4418 'Builders' joinery and carpentry of wood, including cellular wood panels, assembled flooring panels'; made from sawn wood (4407).",
-     "aiCheck": {"verdict": "agree", "note": "Doors, windows and assembled flooring are made from sawn wood.", "by": "Claude", "on": "2026-10-16"}
-    },
-    {
-     "from": "plywood", "to": "joinery", "relation": "used_to_make", "source": "hs-nomenclature",
-     "basis": "Heading 4418 includes assembled flooring panels and cellular wood panels, commonly with a plywood (4412) base.",
-     "aiCheck": {"verdict": "agree", "note": "Engineered flooring panels commonly have a plywood base.", "by": "Claude", "on": "2026-10-16"}
-    },
-    {
-     "from": "veneer", "to": "joinery", "relation": "used_to_make", "source": "hs-nomenclature",
-     "basis": "Heading 4418 includes assembled flooring panels; engineered flooring has a hardwood veneer top layer (4408).",
-     "aiCheck": {"verdict": "added", "note": "Missing from the first pass: engineered flooring's top layer is veneer.", "by": "Claude", "on": "2026-10-16"}
-    },
-    {
-     "from": "fibreboard", "to": "joinery", "relation": "used_to_make", "source": "hs-nomenclature",
-     "basis": "Heading 4418 includes doors and their frames; flush and moulded doors are commonly faced with MDF or HDF (4411).",
-     "aiCheck": {"verdict": "added", "note": "Missing from the first pass: door skins are commonly MDF or HDF.", "by": "Claude", "on": "2026-10-16"}
-    }
-   ]
+    "wood": [],
+    "wooden": [],
+    "timber": [],
+    "timbers": [],
+    "hardwood": [
+     "non-coniferous",
+     "tropical"
+    ],
+    "hardwoods": [
+     "non-coniferous",
+     "tropical"
+    ],
+    "softwood": [
+     "coniferous"
+    ],
+    "softwoods": [
+     "coniferous"
+    ],
+    "tropical timber": [
+     "tropical"
+    ],
+    "tropical wood": [
+     "tropical"
+    ],
+    "tropical hardwood": [
+     "tropical"
+    ]
+   }
   }
  ],
  "materials": [
-  { "key": "acacia", "name": "Acacia", "industry": "wood", "scientificNames": ["Acacia mangium", "Acacia auriculiformis", "Acacia mangium × auriculiformis"], "aliases": ["acacia", "keo"], "woodType": "non-coniferous" },
-  { "key": "eucalyptus", "name": "Eucalyptus", "industry": "wood", "scientificNames": ["Eucalyptus urophylla", "Eucalyptus grandis"], "aliases": ["eucalyptus", "bạch đàn"], "woodType": "non-coniferous" },
-  { "key": "rubberwood", "name": "Rubberwood", "industry": "wood", "scientificNames": ["Hevea brasiliensis"], "aliases": ["rubberwood", "rubber wood", "cao su"], "woodType": "non-coniferous", "note": "Timber of the rubber tree: EUDR 'Wood', not 'Rubber' (natural rubber, heading 4001)" },
-  { "key": "okoume", "name": "Okoume", "industry": "wood", "scientificNames": ["Aucoumea klaineana"], "aliases": ["okoume", "okoumé", "gaboon"], "woodType": "tropical" },
-  { "key": "birch", "name": "Birch", "industry": "wood", "scientificNames": ["Betula pendula", "Betula pubescens"], "aliases": ["birch"], "woodType": "non-coniferous" },
-  { "key": "oak", "name": "Oak", "industry": "wood", "scientificNames": ["Quercus alba", "Quercus robur", "Quercus petraea"], "aliases": ["oak", "white oak", "european oak"], "woodType": "non-coniferous" },
-  { "key": "ash", "name": "Ash", "industry": "wood", "scientificNames": ["Fraxinus americana", "Fraxinus excelsior"], "aliases": ["ash", "white ash", "european ash"], "woodType": "non-coniferous" },
-  { "key": "walnut", "name": "Black walnut", "industry": "wood", "scientificNames": ["Juglans nigra"], "aliases": ["walnut", "black walnut"], "woodType": "non-coniferous" },
-  { "key": "pine", "name": "Pine", "industry": "wood", "scientificNames": ["Pinus radiata"], "aliases": ["pine", "radiata pine"], "woodType": "coniferous" },
-  { "key": "teak", "name": "Teak", "industry": "wood", "scientificNames": ["Tectona grandis"], "aliases": ["teak", "plantation teak"], "woodType": "tropical" },
-  { "key": "sapele", "name": "Sapele", "industry": "wood", "scientificNames": ["Entandrophragma cylindricum"], "aliases": ["sapele"], "woodType": "tropical" }
+  {
+   "key": "acacia",
+   "name": "Acacia",
+   "industry": "wood",
+   "scientificNames": [
+    "Acacia mangium",
+    "Acacia auriculiformis",
+    "Acacia mangium × auriculiformis"
+   ],
+   "aliases": [
+    "acacia",
+    "keo"
+   ],
+   "woodType": "non-coniferous"
+  },
+  {
+   "key": "eucalyptus",
+   "name": "Eucalyptus",
+   "industry": "wood",
+   "scientificNames": [
+    "Eucalyptus urophylla",
+    "Eucalyptus grandis"
+   ],
+   "aliases": [
+    "eucalyptus",
+    "bạch đàn"
+   ],
+   "woodType": "non-coniferous"
+  },
+  {
+   "key": "rubberwood",
+   "name": "Rubberwood",
+   "industry": "wood",
+   "scientificNames": [
+    "Hevea brasiliensis"
+   ],
+   "aliases": [
+    "rubberwood",
+    "rubber wood",
+    "cao su"
+   ],
+   "woodType": "non-coniferous",
+   "note": "Timber of the rubber tree: EUDR 'Wood', not 'Rubber' (natural rubber, heading 4001)"
+  },
+  {
+   "key": "okoume",
+   "name": "Okoume",
+   "industry": "wood",
+   "scientificNames": [
+    "Aucoumea klaineana"
+   ],
+   "aliases": [
+    "okoume",
+    "okoumé",
+    "gaboon"
+   ],
+   "woodType": "tropical"
+  },
+  {
+   "key": "birch",
+   "name": "Birch",
+   "industry": "wood",
+   "scientificNames": [
+    "Betula pendula",
+    "Betula pubescens"
+   ],
+   "aliases": [
+    "birch"
+   ],
+   "woodType": "non-coniferous"
+  },
+  {
+   "key": "oak",
+   "name": "Oak",
+   "industry": "wood",
+   "scientificNames": [
+    "Quercus alba",
+    "Quercus robur",
+    "Quercus petraea"
+   ],
+   "aliases": [
+    "oak",
+    "white oak",
+    "european oak"
+   ],
+   "woodType": "non-coniferous"
+  },
+  {
+   "key": "ash",
+   "name": "Ash",
+   "industry": "wood",
+   "scientificNames": [
+    "Fraxinus americana",
+    "Fraxinus excelsior"
+   ],
+   "aliases": [
+    "ash",
+    "white ash",
+    "european ash"
+   ],
+   "woodType": "non-coniferous"
+  },
+  {
+   "key": "walnut",
+   "name": "Black walnut",
+   "industry": "wood",
+   "scientificNames": [
+    "Juglans nigra"
+   ],
+   "aliases": [
+    "walnut",
+    "black walnut"
+   ],
+   "woodType": "non-coniferous"
+  },
+  {
+   "key": "pine",
+   "name": "Pine",
+   "industry": "wood",
+   "scientificNames": [
+    "Pinus radiata"
+   ],
+   "aliases": [
+    "pine",
+    "radiata pine"
+   ],
+   "woodType": "coniferous"
+  },
+  {
+   "key": "teak",
+   "name": "Teak",
+   "industry": "wood",
+   "scientificNames": [
+    "Tectona grandis"
+   ],
+   "aliases": [
+    "teak",
+    "plantation teak"
+   ],
+   "woodType": "tropical"
+  },
+  {
+   "key": "sapele",
+   "name": "Sapele",
+   "industry": "wood",
+   "scientificNames": [
+    "Entandrophragma cylindricum"
+   ],
+   "aliases": [
+    "sapele"
+   ],
+   "woodType": "tropical"
+  }
  ]
 }

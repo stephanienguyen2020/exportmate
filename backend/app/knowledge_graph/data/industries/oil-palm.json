@@ -1,0 +1,517 @@
+{
+ "_about": "Released from data/drafts/oil-palm.json on 2026-10-17 (build_chain.py). Loaded by seed_reference_data with material_chain.json (load_chain).",
+ "industry": {
+  "key": "oil-palm",
+  "name": "Oil palm and palm oil",
+  "eudrCommodity": "Oil palm",
+  "genericTerms": {
+   "palm": [],
+   "oil palm": []
+  },
+  "products": [
+   {
+    "key": "palm-nuts-kernels",
+    "name": "Palm nuts and kernels",
+    "hsCodes": [
+     "1207.10"
+    ],
+    "stage": "raw",
+    "aliases": [
+     "palm kernels",
+     "palm nuts"
+    ]
+   },
+   {
+    "key": "palm-oil",
+    "name": "Palm oil",
+    "hsCodes": [
+     "1511",
+     "1511.10",
+     "1511.90"
+    ],
+    "stage": "first processing",
+    "aliases": [
+     "crude palm oil",
+     "palm oil",
+     "refined palm oil"
+    ]
+   },
+   {
+    "key": "palm-kernel-oil-crude",
+    "name": "Crude palm kernel oil",
+    "hsCodes": [
+     "1513.21"
+    ],
+    "stage": "first processing",
+    "aliases": [
+     "crude palm kernel oil"
+    ]
+   },
+   {
+    "key": "palm-kernel-oil-refined",
+    "name": "Refined palm kernel oil",
+    "hsCodes": [
+     "1513.29"
+    ],
+    "stage": "further processing",
+    "aliases": [
+     "palm kernel oil fractions",
+     "refined palm kernel oil"
+    ]
+   },
+   {
+    "key": "palm-olein",
+    "name": "Palm olein",
+    "hsCodes": [
+     "1511"
+    ],
+    "stage": "further processing",
+    "aliases": [
+     "palm olein"
+    ]
+   },
+   {
+    "key": "palm-stearin",
+    "name": "Palm stearin",
+    "hsCodes": [
+     "1511"
+    ],
+    "stage": "further processing",
+    "aliases": [
+     "palm stearin"
+    ]
+   },
+   {
+    "key": "oilcake-palm-kernel",
+    "name": "Palm kernel oilcake",
+    "hsCodes": [
+     "2306.60"
+    ],
+    "stage": "by-product",
+    "aliases": [
+     "oilcake",
+     "palm kernel cake",
+     "solid residues of palm nuts"
+    ]
+   },
+   {
+    "key": "hydrogenated-palm-oil",
+    "name": "Hydrogenated palm oil",
+    "hsCodes": [
+     "1516.20"
+    ],
+    "stage": "further processing",
+    "aliases": [
+     "hydrogenated palm oil",
+     "inter-esterified palm oil"
+    ]
+   },
+   {
+    "key": "chemically-modified-palm-oil",
+    "name": "Chemically modified palm oil",
+    "hsCodes": [
+     "1518.00"
+    ],
+    "stage": "further processing",
+    "aliases": [
+     "boiled palm oil",
+     "modified palm oil"
+    ]
+   },
+   {
+    "key": "crude-glycerol",
+    "name": "Crude glycerol",
+    "hsCodes": [
+     "1520.00"
+    ],
+    "stage": "by-product",
+    "aliases": [
+     "crude glycerol",
+     "glycerol waters"
+    ]
+   },
+   {
+    "key": "pure-glycerol",
+    "name": "Pure glycerol",
+    "hsCodes": [
+     "2905.45"
+    ],
+    "stage": "further processing",
+    "aliases": [
+     "glycerol",
+     "pure glycerine"
+    ]
+   },
+   {
+    "key": "industrial-fatty-acids",
+    "name": "Industrial fatty acids",
+    "hsCodes": [
+     "3823.11",
+     "3823.12",
+     "3823.19"
+    ],
+    "stage": "further processing",
+    "aliases": [
+     "fatty acids",
+     "oleic acid",
+     "stearic acid"
+    ]
+   },
+   {
+    "key": "industrial-fatty-alcohols",
+    "name": "Industrial fatty alcohols",
+    "hsCodes": [
+     "3823.70"
+    ],
+    "stage": "further processing",
+    "aliases": [
+     "fatty alcohols"
+    ]
+   },
+   {
+    "key": "soap",
+    "name": "Soap",
+    "hsCodes": [
+     "3401.11",
+     "3401.20"
+    ],
+    "stage": "final",
+    "aliases": [
+     "soap",
+     "soap bars"
+    ]
+   },
+   {
+    "key": "polyethers",
+    "name": "Polyethers",
+    "hsCodes": [
+     "3907.29"
+    ],
+    "stage": "final",
+    "aliases": [
+     "polyethers"
+    ]
+   },
+   {
+    "key": "organic-acids-esters",
+    "name": "Organic acids and esters",
+    "hsCodes": [
+     "2915.39",
+     "2915.70",
+     "2915.90",
+     "2916.15",
+     "2916.19"
+    ],
+    "stage": "further processing",
+    "aliases": [
+     "esters of acetic acid",
+     "palmitic acid",
+     "stearic acid"
+    ]
+   },
+   {
+    "key": "nitrogen-compounds",
+    "name": "Nitrogen compounds",
+    "hsCodes": [
+     "2921.19",
+     "2923.90",
+     "2924.19"
+    ],
+    "stage": "further processing",
+    "aliases": [
+     "acyclic amides",
+     "acyclic monoamines",
+     "quaternary ammonium salts"
+    ]
+   },
+   {
+    "key": "saturated-monohydric-alcohols",
+    "name": "Saturated monohydric alcohols",
+    "hsCodes": [
+     "2905.16",
+     "2905.17",
+     "2905.19"
+    ],
+    "stage": "further processing",
+    "aliases": [
+     "cetyl alcohol",
+     "dodecan-1-ol",
+     "octanol",
+     "stearyl alcohol"
+    ]
+   },
+   {
+    "key": "other-chemical-preparations",
+    "name": "Other chemical preparations",
+    "hsCodes": [
+     "3824.99"
+    ],
+    "stage": "further processing",
+    "aliases": [
+     "chemical preparations",
+     "chemical products"
+    ]
+   }
+  ],
+  "links": [
+   {
+    "from": "palm-nuts-kernels",
+    "to": "palm-kernel-oil-crude",
+    "relation": "used_to_make",
+    "source": "codex-named-vegetable-oils",
+    "quote": "Palm kernel oil is derived from the kernel of the fruit of the oil palm",
+    "confidence": 1.0,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The source confirms that palm kernel oil is derived from the kernel of the oil palm fruit.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-17"
+    }
+   },
+   {
+    "from": "palm-nuts-kernels",
+    "to": "oilcake-palm-kernel",
+    "relation": "by_product",
+    "source": "eudr-annex-i",
+    "quote": "Oilcake and other solid residues of palm nuts or kernels… resulting from the extraction of palm nut or kernel fats or oils",
+    "confidence": 1.0,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The source confirms that palm kernel oilcake is a residue resulting from the extraction of oil from palm nuts or kernels.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-17"
+    }
+   },
+   {
+    "from": "palm-oil",
+    "to": "palm-olein",
+    "relation": "used_to_make",
+    "source": "codex-named-vegetable-oils",
+    "quote": "Palm olein is the liquid fraction derived from the fractionation of palm oil",
+    "confidence": 1.0,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The source confirms that palm olein is a liquid fraction derived from the fractionation of palm oil.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-17"
+    }
+   },
+   {
+    "from": "palm-oil",
+    "to": "palm-stearin",
+    "relation": "used_to_make",
+    "source": "codex-named-vegetable-oils",
+    "quote": "Palm stearin is the high-melting fraction derived from the fractionation of palm oil",
+    "confidence": 1.0,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The source confirms that palm stearin is a high-melting fraction derived from the fractionation of palm oil.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-17"
+    }
+   },
+   {
+    "from": "palm-kernel-oil-crude",
+    "to": "palm-kernel-oil-refined",
+    "relation": "used_to_make",
+    "source": "eudr-annex-i",
+    "quote": "Palm kernel and babassu oil and their fractions, whether or not refined, other than crude oil",
+    "confidence": 0.9,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The source confirms that refined palm kernel oil is a refined fraction of palm kernel oil, distinct from the crude oil.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-17"
+    }
+   },
+   {
+    "from": "palm-oil",
+    "to": "hydrogenated-palm-oil",
+    "relation": "used_to_make",
+    "source": "eudr-annex-i",
+    "quote": "Palm, palm kernel and babassu oils and their fractions, partly or wholly hydrogenated, inter-esterified, re-esterified or elaidinised",
+    "confidence": 1.0,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The source confirms that hydrogenated palm oil is produced by hydrogenating palm oil or its fractions.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-17"
+    }
+   },
+   {
+    "from": "palm-oil",
+    "to": "chemically-modified-palm-oil",
+    "relation": "used_to_make",
+    "source": "eudr-annex-i",
+    "quote": "Palm, palm kernel and babassu oils and their fractions boiled, oxidised, dehydrated, sulphurised, blown, polymerised by heat in vacuum or in inert gas or otherwise chemically modified",
+    "confidence": 1.0,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The source confirms that chemically modified palm oil is produced by chemically modifying palm oil or its fractions.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-17"
+    }
+   },
+   {
+    "from": "palm-oil",
+    "to": "crude-glycerol",
+    "relation": "by_product",
+    "source": "eudr-annex-i",
+    "quote": "Crude glycerol, glycerol waters and lyes that have been produced using oil palm",
+    "confidence": 0.8,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The source confirms that crude glycerol is produced as a by-product using oil palm.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-17"
+    }
+   },
+   {
+    "from": "palm-oil",
+    "to": "industrial-fatty-acids",
+    "relation": "used_to_make",
+    "source": "eudr-annex-i",
+    "quote": "Stearic acid, industrial that has been synthesized using oil palm",
+    "confidence": 0.9,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The source confirms that industrial fatty acids like stearic acid are synthesized using oil palm.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-17"
+    }
+   },
+   {
+    "from": "palm-oil",
+    "to": "industrial-fatty-alcohols",
+    "relation": "used_to_make",
+    "source": "eudr-annex-i",
+    "quote": "Industrial fatty alcohols that have been synthesized using oil palm",
+    "confidence": 0.9,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The source confirms that industrial fatty alcohols are synthesized using oil palm.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-17"
+    }
+   },
+   {
+    "from": "crude-glycerol",
+    "to": "pure-glycerol",
+    "relation": "used_to_make",
+    "source": "eudr-annex-i",
+    "quote": "Glycerol, with a purity of 95 % or more… that has been synthesized using oil palm",
+    "confidence": 0.9,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The source confirms that pure glycerol with a purity of 95% or more is synthesized using oil palm.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-17"
+    }
+   },
+   {
+    "from": "palm-oil",
+    "to": "polyethers",
+    "relation": "used_to_make",
+    "source": "eudr-annex-i",
+    "quote": "Other polyethers in primary forms… that have been made using oil palm",
+    "confidence": 0.9,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The source confirms that polyethers in primary forms can be made using oil palm.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-17"
+    }
+   },
+   {
+    "from": "palm-oil",
+    "to": "organic-acids-esters",
+    "relation": "used_to_make",
+    "source": "eudr-annex-i",
+    "quote": "Palmitic acid, stearic acid, their salts and esters that have been synthesized using oil palm",
+    "confidence": 0.9,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The source confirms that organic acids and esters like palmitic and stearic acid are synthesized using oil palm.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-17"
+    }
+   },
+   {
+    "from": "palm-oil",
+    "to": "nitrogen-compounds",
+    "relation": "used_to_make",
+    "source": "eudr-annex-i",
+    "quote": "Acyclic monoamines and their derivatives; salts thereof… that have been synthesized using oil palm",
+    "confidence": 0.9,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The source confirms that nitrogen compounds like acyclic monoamines are synthesized using oil palm.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-17"
+    }
+   },
+   {
+    "from": "palm-oil",
+    "to": "saturated-monohydric-alcohols",
+    "relation": "used_to_make",
+    "source": "eudr-annex-i",
+    "quote": "Dodecan-1-ol (lauryl alcohol), hexadecan-1-ol (cetyl alcohol) and octadecan-1-ol (stearyl alcohol), that have been synthesized using oil palm",
+    "confidence": 0.9,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The source confirms that saturated monohydric alcohols like lauryl, cetyl, and stearyl alcohols are synthesized using oil palm.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-17"
+    }
+   },
+   {
+    "from": "palm-oil",
+    "to": "other-chemical-preparations",
+    "relation": "used_to_make",
+    "source": "eudr-annex-i",
+    "quote": "Other chemical products and preparations of the chemical or allied industries… that contain or have been made using oil palm",
+    "confidence": 0.9,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The source confirms that other chemical preparations can contain or be made using oil palm.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-17"
+    }
+   },
+   {
+    "from": "palm-oil",
+    "to": "soap",
+    "relation": "used_to_make",
+    "source": "eudr-annex-i",
+    "quote": "3401 11 00: Soap in the form of bars, cakes, moulded pieces or shapes for toilet use (including medicated products), that contain or have been made using oil palm",
+    "confidence": 1.0,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The cited EUDR Annex I text confirms that soap can be made using oil palm, which encompasses palm oil and its derivatives.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-17"
+    }
+   }
+  ]
+ },
+ "materials": [
+  {
+   "key": "oil-palm",
+   "name": "Oil palm",
+   "industry": "oil-palm",
+   "scientificNames": [
+    "Elaeis guineensis"
+   ],
+   "aliases": [
+    "elaeis guineensis",
+    "oil palm"
+   ]
+  }
+ ],
+ "sources": {
+  "codex-named-vegetable-oils": {
+   "title": "Codex Alimentarius Standard for Named Vegetable Oils (CXS 210-1999), section 2",
+   "url": "https://www.fao.org/3/y2774e/y2774e04.htm"
+  }
+ }
+}

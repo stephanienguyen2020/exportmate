@@ -1,0 +1,130 @@
+.mc-muted {
+  color: #6f7869;
+  font-size: 12px;
+}
+.mc-accuracy,
+.mc-industry,
+.mc-materials {
+  margin-top: 16px;
+}
+.mc-accuracy h2,
+.mc-industry h2,
+.mc-materials h2 {
+  margin: 0 0 12px;
+  font-size: 18px;
+}
+.mc-accuracy ul,
+.mc-links,
+.mc-materials ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.mc-accuracy li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 16px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+.mc-accuracy li:last-child {
+  border-bottom: 0;
+}
+.mc-toolbar {
+  margin-top: 16px;
+}
+.mc-toolbar .search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 1 auto;
+  width: 100%;
+  max-width: 420px;
+  box-sizing: border-box;
+  border: 1px solid var(--line);
+  padding: 6px 10px;
+  background: #fff;
+}
+.mc-toolbar .search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  font: inherit;
+  font-size: 13px;
+}
+.mc-products {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.mc-products span {
+  max-width: 100%;
+  border: 1px solid var(--line);
+  padding: 3px 8px;
+  font-size: 11px;
+  background: #fff;
+}
+.mc-products small {
+  color: #6f7869;
+}
+.mc-links li {
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+.mc-links li.doubted {
+  border-left: 3px solid #d39b2a;
+  padding-left: 10px;
+}
+.mc-link-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  font-size: 13px;
+}
+.mc-link-head b {
+  font-weight: 600;
+}
+.mc-relation {
+  color: #6f7869;
+  font-style: italic;
+}
+.mc-quote {
+  margin: 6px 0 4px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: #3d4639;
+}
+.mc-quote a {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: #6f7869;
+  font-size: 11px;
+}
+.mc-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: #6f7869;
+}
+.mc-materials li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+.mc-materials li:last-child {
+  border-bottom: 0;
+}
+.mc-materials small {
+  color: #6f7869;
+  font-style: italic;
+}

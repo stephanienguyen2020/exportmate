@@ -533,6 +533,9 @@
   color: #6f7869;
   font-style: italic;
 }
+.news-path-doubt {
+  color: #9a6b12;
+}
 .news-path-supplier .news-path-label {
   font-weight: 600;
 }

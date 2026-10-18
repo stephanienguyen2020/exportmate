@@ -32,6 +32,11 @@ function MatchPath({ path }: { path: NewsPathStep[] }) {
         <li key={i} className={`news-path-${step.kind}`}>
           <span className="news-path-link">{step.kind === "mention" ? "named in the alert" : step.link}</span>{" "}
           <span className="news-path-label">{step.label}</span>
+          {step.doubt && (
+            <span className="news-path-doubt" title="See Rules & news › Material chain">
+              {" "}({step.doubt.toLowerCase()})
+            </span>
+          )}
           {isWebLink(step.sourceUrl) && (
             <a
               className="news-path-source"

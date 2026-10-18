@@ -1,0 +1,148 @@
+{
+ "_about": "Released from data/drafts/soya.json on 2026-10-18 (build_chain.py). Loaded by seed_reference_data with material_chain.json (load_chain).",
+ "industry": {
+  "key": "soya",
+  "name": "Soya",
+  "eudrCommodity": "Soya",
+  "genericTerms": {
+   "oil seeds": [],
+   "oleaginous fruits": [],
+   "vegetable protein products": [],
+   "soy protein products": []
+  },
+  "products": [
+   {
+    "key": "soya-beans",
+    "name": "Soya beans",
+    "hsCodes": [
+     "1201",
+     "1201.10",
+     "1201.90"
+    ],
+    "stage": "raw",
+    "aliases": [
+     "soya bean",
+     "soya beans",
+     "soybean",
+     "soybeans"
+    ]
+   },
+   {
+    "key": "soya-bean-oil",
+    "name": "Soya-bean oil",
+    "hsCodes": [
+     "1507",
+     "1507.10",
+     "1507.90"
+    ],
+    "stage": "first processing",
+    "aliases": [
+     "soya bean oil",
+     "soya-bean oil",
+     "soybean oil"
+    ]
+   },
+   {
+    "key": "soya-flour-and-meal",
+    "name": "Soya bean flour and meal",
+    "hsCodes": [
+     "1208",
+     "1208.10",
+     "1208.90"
+    ],
+    "stage": "first processing",
+    "aliases": [
+     "flours and meals of soybeans",
+     "soy protein flour",
+     "soya bean flour",
+     "soya bean meal"
+    ]
+   },
+   {
+    "key": "soya-oilcake",
+    "name": "Soya oilcake and solid residues",
+    "hsCodes": [
+     "2304",
+     "2304.00"
+    ],
+    "stage": "by-product",
+    "aliases": [
+     "oilcake",
+     "oilcake and other solid residues",
+     "solid residues"
+    ]
+   }
+  ],
+  "links": [
+   {
+    "from": "soya-beans",
+    "to": "soya-bean-oil",
+    "relation": "used_to_make",
+    "source": "codex-named-vegetable-oils",
+    "quote": "Soya bean oil (soybean oil) is derived from soya beans (seeds of Glycine max (L.) Merr.).",
+    "confidence": 1.0,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The source explicitly states that soya bean oil is derived from soya beans.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "soya-beans",
+    "to": "soya-oilcake",
+    "relation": "by_product",
+    "source": "eudr-annex-i",
+    "quote": "Oilcake and other solid residues, whether or not ground or in the form of pellets, resulting from the extraction of soya-bean oil",
+    "confidence": 0.9,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The source confirms that oilcake is a residue resulting from the extraction of soya-bean oil, which is processed from soya beans.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   },
+   {
+    "from": "soya-beans",
+    "to": "soya-flour-and-meal",
+    "relation": "used_to_make",
+    "source": "codex-soy-protein-products",
+    "quote": "Vegetable Protein Products (VPP) prepared from soybeans…in the case of soy protein flour (SPF)",
+    "confidence": 1.0,
+    "aiCheck": {
+     "verdict": "agree",
+     "note": "The source confirms that soy protein flour is a vegetable protein product prepared from soybeans.",
+     "by": "gemini-3.5-flash",
+     "on": "2026-10-18"
+    }
+   }
+  ]
+ },
+ "materials": [
+  {
+   "key": "soya",
+   "name": "Soya",
+   "industry": "soya",
+   "scientificNames": [
+    "Glycine max (L.) Merr.",
+    "Glycine Max.L."
+   ],
+   "aliases": [
+    "soy",
+    "soya",
+    "soya bean",
+    "soybean"
+   ]
+  }
+ ],
+ "sources": {
+  "codex-named-vegetable-oils": {
+   "title": "Codex Alimentarius Standard for Named Vegetable Oils (CXS 210-1999), section 2",
+   "url": "https://www.fao.org/3/y2774e/y2774e04.htm"
+  },
+  "codex-soy-protein-products": {
+   "title": "Codex General Standard for Soy Protein Products (CXS 175-1989)",
+   "url": "https://fao.org/input/download/standards/325/CXS_175e.pdf"
+  }
+ }
+}

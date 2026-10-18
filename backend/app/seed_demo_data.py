@@ -34,7 +34,7 @@ from app.database.queries import knowledge_graph as graph_queries
 from app.database.queries import orders as order_queries
 from app.database.queries import trade_map as map_queries
 from app.database.session import open_session
-from app.knowledge_graph import load_graph_file
+from app.knowledge_graph import load_chain
 from app.schemas.account import CompanyUpdate, OnboardingIn
 from app.schemas.playbook import RuleIn
 from app.seed_data import load_seed_file
@@ -170,9 +170,7 @@ def seed_company_map_data(
 ) -> tuple[int, int]:
     """Suppliers (with their documents and sourcing) and sites from a seed file in seed_data/."""
     data = load_seed_file(seed_file)
-    industry_of_material = {
-        m["key"]: m["industry"] for m in load_graph_file("material_chain.json")["materials"]
-    }
+    industry_of_material = {m["key"]: m["industry"] for m in load_chain()["materials"]}
     for supplier in data["suppliers"]:
         supplier_id = map_queries.upsert_supplier(
             db,
