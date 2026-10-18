@@ -52,6 +52,18 @@ class Settings(BaseSettings):
     # Who reviews and publishes material chain versions (shared by every company): emails,
     # comma-separated, matched on the verified sign-in email.
     chain_admin_emails: str = ""
+    # Neo4j (AuraDB), the knowledge graph's read model (services/graph_sync.py, graph_store.py).
+    # No URI: the walk uses Postgres only and nothing is synced.
+    neo4j_uri: str = ""
+    neo4j_username: str = "neo4j"
+    neo4j_password: str = ""
+    neo4j_database: str = "neo4j"
+    # Pub/Sub topic ("projects/<p>/topics/<t>") for graph change events after each commit; its
+    # push subscription calls POST /internal/graph-sync with an OIDC token for this audience,
+    # signed as this service account. No topic: the changes are synced in-process.
+    graph_events_topic: str = ""
+    graph_sync_audience: str = ""
+    graph_sync_invoker: str = ""
     # AI service origin; company reports read its news alerts with the caller's token.
     ai_service_url: str = "http://127.0.0.1:8080"
     # Gemini on Vertex AI (core/gemini.py), in the project above. Production sets GEMINI_MODEL

@@ -14,7 +14,9 @@ the chain ("plywood", "logs"), which counts like an HS code the article names. A
   before the graph).
 
 When the article names markets, only orders shipping to one of them are reached. The walk is
-code, not AI: the same mentions give the same paths, and each link cites its source.
+code, not AI: the same mentions give the same paths, and each link cites its source. The chain
+walk runs as Cypher on Neo4j when it holds the same chain as Postgres, else as SQL on Postgres
+(graph_store.py); the rest is the code below either way.
 """
 
 import re
@@ -28,6 +30,7 @@ from app.database.models import SupplierSourcing as Sourcing
 from app.database.queries import knowledge_graph as graph_queries
 from app.database.queries import trade_map as map_queries
 from app.services import graph_feedback
+from app.services.graph_store import GraphStore
 from app.services.graph_words import broad_materials, named_nodes
 from app.services.trade_map import supplier_name_key
 
@@ -142,6 +145,7 @@ class GraphWalker:
         self.feedback = graph_feedback.link_feedback(db, company_id)
         self.doubted = frozenset(link for link, f in self.feedback.items() if f.doubt)
         self.weights = {link: f.weight for link, f in self.feedback.items()}
+        self.store = GraphStore(db)  # Neo4j when it holds the chain, else Postgres
 
     def find_matches(
         self, mentions: GraphMentions, open_orders: list[tuple[Order, str | None]]
@@ -207,7 +211,7 @@ class GraphWalker:
         return found
 
     def _shortest_chains(self, start_keys: set[str]) -> dict[tuple[str, str], list[GraphEdge]]:
-        rows = graph_queries.walk_downstream(self.db, start_keys, MAX_LINKS)
+        rows = self.store.walk_downstream(start_keys, MAX_LINKS)
         edges = {
             e.id: e
             for e in graph_queries.list_graph_edges(

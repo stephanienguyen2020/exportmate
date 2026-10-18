@@ -16,6 +16,7 @@ dependencies = [
     "google-genai>=1.0",
     "pgvector>=0.3",
     "pypdf>=5",
+    "neo4j>=6.4.1",
 ]
 
 [dependency-groups]
