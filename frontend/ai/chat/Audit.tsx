@@ -18,6 +18,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   Users,
+  Waypoints,
 } from "lucide-react";
 import { downloadJson, type Audit, type AuditStep } from "./agent-client";
 
@@ -30,6 +31,7 @@ const TOOL_LABELS: Record<string, [React.ElementType, string]> = {
   get_company_profile: [Building2, "Read the company profile"],
   query_orders: [ClipboardList, "Read the company's orders"],
   get_playbook: [BookOpen, "Read the playbook"],
+  query_graph: [Waypoints, "Walked the knowledge graph"],
 };
 
 // Why the tool gateway refused or failed a call.
@@ -65,7 +67,8 @@ export function describeStep(step: AuditStep): { icon: React.ElementType; label:
     return { icon, label, detail: `${query}${step.count ?? 0} result${step.count === 1 ? "" : "s"}` };
   }
   if (step.kind === "draft") return { icon: FilePen, label: "Drafted an answer" };
-  if (step.kind === "review") return { icon: ShieldCheck, label: "Auditor sent the draft back", detail: step.problems?.join(" ") };
+  if (step.kind === "review")
+    return { icon: ShieldCheck, label: step.by === "critic" ? "Critic sent the draft back: claims the graph paths don't show" : "Auditor sent the draft back", detail: step.problems?.join(" ") };
   if (step.kind === "memory")
     return { icon: Bookmark, label: step.count ? `Recalled ${step.count} memor${step.count === 1 ? "y" : "ies"}` : "No memories recalled" };
   if (step.kind === "delegate")

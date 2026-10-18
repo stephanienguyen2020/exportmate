@@ -33,6 +33,7 @@ Alerts and answers are AI assessments, not legal advice. Legal and regulatory co
 | Your company (signed in) | Which certifications do we hold? | `get_company_profile` |
 | Your orders | Why does PO-2291 need action? | `query_orders` |
 | Advice under your own rules | Should we ship PO-2291 this week? | `query_orders`, `get_playbook` |
+| Connections and what-ifs (signed in) | Which of our orders depend on acacia from Vietnam? What if Vietnam restricts acacia log exports? | `query_graph`: each order with the supplier, what it buys and from where, and each step of the material chain, every step citing its official text |
 | General trade knowledge | What is a certificate of origin? | No tools; it marks regulatory details as things to verify |
 
 It declines anything outside trade, compliance and ExportMate (poems, general coding, homework) in one sentence, and it won't take on another role or discuss its instructions.
@@ -204,6 +205,9 @@ The assistant's instructions are a list of rules in `policy.js`. Each rule names
 | `get_company_profile` | Your company profile and sites | Company workspace |
 | `query_orders` | Your orders and their document checklists, from `GET /api/v1/trade-map` with your token, or the orders the browser demo sent | Company workspace, or a demo with orders |
 | `get_playbook` | The playbook rules switched on, from `GET /api/v1/playbook/rules` with your token, or the rules the browser demo sent | Company workspace, or a demo with rules |
+| `query_graph` | The knowledge graph (GraphRAG): from a material, origin country, HS code or market to the orders it reaches through your suppliers' sourcing and the material chain, with every link's official text (`GET /api/v1/knowledge-graph/query` with your token). The same walk News watch uses for an article | Company workspace |
+
+**Connections.** RAG Engine finds text similar to a question; it can't follow connections across records ("which orders depend on wood from Laos?"). `query_graph` walks them: the graph specialist asks the backend, which walks from what the question names through your suppliers' sourcing and the material chain to your orders, the same walk as News watch, so the answer is code's, not the model's. Each order it reaches is cited as a **graph path** and each link's source as an **official text**. Before the answer is shown, the auditor checks every order named from the graph cites its path, and a critic (Gemini) compares, order by order, what the answer says connects it with its path; a draft that adds a supplier, a country or a step goes back once, and one that still does is marked **Needs review**.
 
 **Search.** `search_knowledge` asks Agent Platform RAG Engine for the records nearest in meaning to the query, in the corpora for the types it wants (articles, alerts, stock items, sources, guides): three times as many as needed. The embeddings are multilingual, so a question in Vietnamese finds English news. It then drops anything your company may not see, before any agent reads it, and reranks the rest with BM25, so exact codes and names such as `PLY-101` or `4412` count. Each scan adds its new articles and alerts to the index; `npm run index` rebuilds it.
 

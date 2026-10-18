@@ -2,7 +2,8 @@
 // - simple (small fast model): one lookup or explanation, e.g. a SKU's supplier, a count,
 //   which items carry a certification, when the scan ran, how to use the app, a decline.
 // - complex (bigger model): anything that needs the conversation so far, arithmetic over
-//   several records, judgement about rules, risk or exposure, or text pasted from someone
+//   several records, judgement about rules, risk or exposure, how orders connect to materials and
+//   origins (the knowledge graph), or text pasted from someone
 //   else (a bigger model is better at not following instructions hidden in it).
 // Rules, not a classifier call: free, instant and testable against the golden set. A simple-
 // tier draft the auditor sends back is revised on the complex tier (agent.js).
@@ -15,6 +16,10 @@ const JUDGEMENT =
 // Words for trade rules in any industry, not the names of particular rules.
 const RULES =
   /\b(anti-?dumping|countervailing|dut(y|ies)|tariffs?|quotas?|sanctions?|embargo(es)?|bans?|banned|regulations?|regulat(ed|es)|directives?|requirements?|requir(e|es|ed)|complian(ce|t)|comply|due diligence|legal|law)\b|thuế|chống bán phá giá|quy định/i;
+// Questions about how things connect (orders, suppliers, materials, origins): the knowledge
+// graph's paths, which the analyst's graph specialist walks and the critic checks.
+const CONNECTIONS =
+  /\b(depends?|depending|dependen(t|cy|cies)|connected|connections?|made (from|of)|comes? from|sourced( from)?|sourcing|supply chains?|upstream|downstream|restricts?|restrictions?|which (of my |our )?orders?)\b|phụ thuộc|chuỗi cung ứng/i;
 const QUOTED = /["“'‘][^"”'’]{40,}["”'’]/;
 const LONG = 300;
 
@@ -24,6 +29,7 @@ const SIGNALS = [
   ["arithmetic", (q) => ARITHMETIC.test(q)],
   ["judgement", (q) => JUDGEMENT.test(q)],
   ["trade rules", (q) => RULES.test(q)],
+  ["connections", (q) => CONNECTIONS.test(q)],
   ["pasted text", (q) => QUOTED.test(q) || q.split("\n").filter((l) => l.trim()).length > 3],
   ["instructions aimed at the assistant", (q) => Boolean(findInjection(q))],
   ["long question", (q) => q.length > LONG],

@@ -5,9 +5,9 @@ from datetime import date, timedelta
 
 import pytest
 from conftest import import_orders, onboard
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 
-from app.database.models import GraphEdge, GraphNode, GraphNodeKind, SupplierSourcing
+from app.database.models import GraphEdge, GraphNode, GraphNodeKind, Order, SupplierSourcing
 from app.database.queries import knowledge_graph as graph_queries
 from app.database.queries import users as user_queries
 from app.database.session import open_session
@@ -348,3 +348,64 @@ def test_released_industries_join_the_graph(client, lan, news_watch):
     assert "(HS 1806" in reason
     chain = client.get("/api/v1/knowledge-graph/chain", headers=lan).json()["data"]
     assert {i["key"] for i in chain["industries"]} >= {"wood", "cocoa", "coffee", "oil-palm"}
+
+
+def graph_query(client, headers, **params) -> dict:
+    response = client.get("/api/v1/knowledge-graph/query", headers=headers, params=params)
+    assert response.status_code == 200, response.text
+    return response.json()["data"]
+
+
+def test_a_question_reaches_orders_with_the_walks_cited_paths(client, lan):
+    found = graph_query(client, lan, material=["acacia logs"], country=["vn"])
+    by_order = {m["orderId"]: m for m in found["matches"]}
+    # The same paths News watch gives for an article naming acacia logs from Vietnam.
+    assert set(by_order) == {"PO-1", "PO-4"}
+    plywood = by_order["PO-1"]
+    assert plywood["via"] == "supplier"
+    assert plywood["supplier"] == "Binh Phu Wood"
+    assert plywood["status"]
+    assert [s["kind"] for s in plywood["path"]][-2:] == ["product", "order"]
+    assert "used for the production of veneer" in plywood["path"][3]["quote"]
+    assert found["understood"] == {
+        "materials": ["Acacia"],
+        "products": ["Logs (wood in the rough)"],
+        "countries": ["Vietnam"],
+        "markets": [],
+        "unknown": [],
+    }
+    assert found["ordersChecked"] == 4
+
+
+def test_a_question_says_what_the_graph_doesnt_know(client, lan):
+    found = graph_query(client, lan, material=["unobtainium"], country=["XX"], market=["MARS"])
+    assert found["matches"] == []
+    assert found["understood"]["unknown"] == ["unobtainium", "XX", "MARS"]
+
+
+def test_hs_codes_markets_and_shipped_orders(client, lan):
+    # A heading reaches orders by HS code, narrowed to the market named (NL counts as the EU).
+    found = graph_query(client, lan, hsCode=["4412.33"], market=["NL"])
+    assert {m["orderId"]: m["via"] for m in found["matches"]} == {"PO-1": "hs", "PO-3": "hs"}
+    assert found["understood"]["markets"] == ["EU"]
+    # Shipped orders are left out unless asked for.
+    with open_session() as db:
+        db.execute(
+            update(Order)
+            .where(Order.external_id == "PO-1")
+            .values(ship_date=date.today() - timedelta(days=1))
+        )
+        db.commit()
+    assert {m["orderId"] for m in graph_query(client, lan, hsCode=["4412.33"])["matches"]} == {
+        "PO-3"
+    }
+    shipped = graph_query(client, lan, hsCode=["4412.33"], includeShipped="true")
+    assert {m["orderId"] for m in shipped["matches"]} == {"PO-1", "PO-3"}
+    assert shipped["ordersChecked"] == 4
+
+
+def test_the_graph_query_needs_a_signed_in_company(client, lan):
+    assert (
+        client.get("/api/v1/knowledge-graph/query", params={"material": "acacia"}).status_code
+        == 401
+    )

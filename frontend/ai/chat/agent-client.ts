@@ -66,6 +66,8 @@ export type AuditStep = {
   attempts?: number;
   flags?: GuardFlag[];
   problems?: string[];
+  // review: who sent the draft back, the auditor (code checks) or the critic (Gemini, graph paths).
+  by?: "auditor" | "critic";
   excerpt?: string;
   finishReason?: string;
   // The model that made this call (plan, draft, answer); the router picks it per question.
