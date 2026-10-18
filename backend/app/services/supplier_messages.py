@@ -1,4 +1,4 @@
-"""Messages to suppliers, from an analysis report (docs/REQUIREMENTS.md §4.7).
+"""Messages to suppliers, from an analysis report.
 
 1. An editor asks for a draft from a report that may lead to one (report_review): Gemini writes
    it in English from the report's facts only (the order, what is missing, by when). Code checks

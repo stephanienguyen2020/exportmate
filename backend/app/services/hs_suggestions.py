@@ -1,4 +1,4 @@
-"""AI-suggested HS codes for orders imported without one (docs/REQUIREMENTS.md §8.3 J5).
+"""AI-suggested HS codes for orders imported without one.
 
 1. Retrieve candidates:
    - the company's own past orders with a code and a similar product name (word similarity:

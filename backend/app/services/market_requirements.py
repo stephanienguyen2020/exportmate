@@ -10,8 +10,7 @@
 3. When no drafts are left and at least one was reviewed, the version is in force: orders are
    checked against it, and the earlier versions' requirements become `replaced`.
 
-Shared requirements (official texts) are written in the seed and reviewed as code
-(docs/REQUIREMENTS.md §4.5, open question 10).
+Shared requirements (official texts) are written in the seed and reviewed as code.
 """
 
 import logging

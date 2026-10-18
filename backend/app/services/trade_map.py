@@ -3,7 +3,7 @@ still needs in its market, and what changes if an order went to another market.
 
 Geography and market requirements are shared reference tables; suppliers, their documents and
 sites belong to one company. Each market requirement cites the shared regulation document that
-sets it (docs/REQUIREMENTS.md §4.5). Analysis (services/analysis.py) runs the same check. Observations marked sample are not a live feed.
+sets it. Analysis (services/analysis.py) runs the same check. Observations marked sample are not a live feed.
 """
 
 import logging

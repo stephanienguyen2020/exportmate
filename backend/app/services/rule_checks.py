@@ -3,7 +3,7 @@
 A rule is data, not code: each condition is a field from FIELDS, a comparison that field allows,
 and a value. One checker (`rule_fires`) runs every rule against the facts analysis computed for
 an order, so a new rule never needs new code. Rules that need facts we don't have (margin) can't
-be written here and stay stored only (docs/REQUIREMENTS.md §4.4).
+be written here and stay stored only.
 """
 
 import re
