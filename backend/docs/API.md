@@ -115,6 +115,7 @@ What each endpoint does and where the app uses it. Business rules are in [REQUIR
 | `GET /news-matches` | viewer | News watch, Alerts tab: "Orders this may affect" on each alert, and the "Orders" filter |
 | `GET /news-matches/accuracy` | viewer | Not used by the frontend yet (how often each way of suggesting, and each chain link, is confirmed) |
 | `GET /knowledge-graph/chain` | viewer | Rules & news › Material chain |
+| `GET /knowledge-graph/query` | viewer | Not called by the website: the assistant's `query_graph` tool (AI service, with the user's token) |
 | `PUT /news-matches/{impactId}/orders/{orderId}` | editor | News watch alert: "Affects this order" / "Not relevant", "Link order" |
 | `DELETE /news-matches/{impactId}/orders/{orderId}` | editor | News watch alert: "Undo" |
 | **Supplier messages and report actions** | | |
@@ -755,6 +756,18 @@ Each `byLink` row also has `fromKey` / `toKey` (graph nodes; `null` for paths st
  "byWay": [{"via": "supplier", "confirmed": 3, "rejected": 2}]}}
 ```
 The shared material chain the knowledge graph walks, products from raw to finished, each link with its source, who checked it (`aiCheck`) and the verdicts on suggestions through it: this company's (`company`) and every company's (`everyone`). `doubt` is set when people keep rejecting a link (at this company: ≥2 rejections and more rejected than confirmed; across companies: ≥5): the walk then takes an equally short path without it when there is one, and marks the steps it still needs (`path[].doubt` in `GET /news-matches`), listing those suggestions last.
+
+### `GET /knowledge-graph/query` (viewer)
+`?material=acacia%20logs&country=VN&hsCode=4403&market=EU&includeShipped=false`, each list parameter repeatable, at most 8 of each:
+```json
+{"data": {"understood": {"materials": ["Acacia"], "products": ["Logs (wood in the rough)"], "countries": ["Vietnam"], "markets": [], "unknown": []},
+ "ordersChecked": 4,
+ "matches": [{"orderId": "PO-1", "product": "Acacia plywood 18 mm", "supplier": "Binh Phu Wood", "destination": "Rotterdam, NL",
+              "market": "EU", "shipDate": "2026-10-28", "status": "exposed", "via": "supplier",
+              "reason": "Binh Phu Wood buys acacia from Vietnam; Logs … → Veneer sheets … → Plywood …, this order's product.",
+              "path": [{"kind": "mention", "label": "acacia logs, VN", "link": null, "sourceTitle": null, "sourceUrl": null, "quote": null}, "…"]}]}}
+```
+Which of the company's orders a question's material (a species, a broad word such as "timber", or a chain product such as "plywood"), origin country, HS code or market reaches, each with its cited path: the walk `GET /news-matches` uses for an article, run for what a question names (GraphRAG; the assistant's `query_graph` tool calls it with the user's token). Open orders only unless `includeShipped`. `understood` says what the graph recognised and `unknown` what it didn't (a word no node names, a malformed HS code, a country or market we don't know), so an answer can say so instead of reporting "no orders".
 
 ### `PUT /news-matches/{impactId}/orders/{orderId}` (editor)
 `{"verdict": "relevant" | "not_relevant", "note": "…"}` (note optional, ≤500). `orderId` is the order's own ID. Works for any order of the company, suggested or not: an order that wasn't suggested is stored with `suggested: false`. A new verdict replaces the last one, whoever gave it. Returns the match. Audited as `news.reviewed`. `404` for an alert News watch doesn't show this company or an order that isn't the company's; `503` if News watch can't be reached.
