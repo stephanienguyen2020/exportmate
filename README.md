@@ -8,11 +8,11 @@ of **Google ADK agents** on **Gemini Enterprise Agent Platform** answers questio
 for every fact; and a **knowledge graph** traces how a news story about a raw material reaches a
 finished order. 
 
-🔗 Live: [exportmate.vercel.app](https://exportmate.vercel.app). "Explore the demo" opens a sample
+🔗 Live: [https://exportmate-web-3v6cd2xhpq-as.a.run.app/](https://exportmate-web-3v6cd2xhpq-as.a.run.app/). "Explore the demo" opens a sample
 workspace in the browser with no account; signing in opens a company workspace.
 
 **Try it** with the demo company, Binh Duong Wood Co. (a Vietnamese plywood and furniture exporter):
-sign in at [exportmate.vercel.app/#/login](https://exportmate.vercel.app/#/login) with
+sign in at [https://exportmate.vercel.app/#/login](https://exportmate-web-3v6cd2xhpq-as.a.run.app/#/login) with
 
 | Email | Password |
 |---|---|
