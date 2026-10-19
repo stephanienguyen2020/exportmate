@@ -12,7 +12,7 @@ finished order.
 workspace in the browser with no account; signing in opens a company workspace.
 
 **Try it** with the demo company, Binh Duong Wood Co. (a Vietnamese plywood and furniture exporter):
-sign in at [https://exportmate.vercel.app/#/login](https://exportmate-web-3v6cd2xhpq-as.a.run.app/#/login) with
+sign in at [https://exportmate-web-3v6cd2xhpq-as.a.run.app/#/login](https://exportmate-web-3v6cd2xhpq-as.a.run.app/#/login) with
 
 | Email | Password |
 |---|---|
