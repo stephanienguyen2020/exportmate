@@ -79,7 +79,6 @@ def generate_json(
             model=settings.gemini_model,
             contents=contents,
             config=types.GenerateContentConfig(
-                temperature=0,
                 response_mime_type="application/json",
                 response_schema=schema,
                 thinking_config=_thinking(settings.gemini_model, settings.gemini_thinking_level),

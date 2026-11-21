@@ -142,7 +142,6 @@ ${RULES}`;
       model: MODEL,
       contents: prompt,
       config: {
-        temperature: 0.2,
         responseMimeType: "application/json",
         responseSchema: SCHEMA,
         maxOutputTokens: 16384,

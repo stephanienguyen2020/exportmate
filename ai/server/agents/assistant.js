@@ -102,7 +102,7 @@ export function buildAssistant({ session, declarations, runTool, plugins, hooks,
     // transfer preamble out of the versioned prompts.
     disallowTransferToParent: true,
     disallowTransferToPeers: true,
-    generateContentConfig: { temperature: 0.2, maxOutputTokens: 4096 },
+    generateContentConfig: { maxOutputTokens: 4096 },
     beforeModelCallback: ({ context, request }) => hooks.before({ context, request, tier }),
     afterModelCallback: ({ context, response }) => hooks.after({ context, response, tier }),
   });

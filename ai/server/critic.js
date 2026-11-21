@@ -94,7 +94,7 @@ const defaultGenerate = (prompt) => {
     ai.models.generateContent({
       model: MODEL,
       contents: prompt,
-      config: { temperature: 0, responseMimeType: "application/json", responseSchema: SCHEMA, maxOutputTokens: 4096, thinkingConfig: thinkingConfig(MODEL, THINKING) },
+      config: { responseMimeType: "application/json", responseSchema: SCHEMA, maxOutputTokens: 4096, thinkingConfig: thinkingConfig(MODEL, THINKING) },
     }),
   ).then((res) => res.text);
 };
