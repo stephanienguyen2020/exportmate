@@ -20,7 +20,7 @@ import { ANONYMOUS, publicAudit, publicStep } from "./access.js";
 import { deleteMemory, listMemories } from "./agents/platform.js";
 import { startTracing } from "./agents/telemetry.js";
 import { readJson } from "./limits.js";
-import { log } from "./log.js";
+import { inRequestTrace, log } from "./log.js";
 
 const PORT = Number(process.env.PORT || 8080);
 const BACKEND_URL = (process.env.BACKEND_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
@@ -61,7 +61,7 @@ export function chatInput(input = {}) {
 const METHODS = {
   async query(input) {
     const turn = chatInput(input);
-    const result = await runAgent(turn);
+    const result = await inRequestTrace(input.traceparent, () => runAgent(turn));
     if (turn.channel === "eval") return { result: { ...publicAudit(result), evidence: result.evidence, trace: result.trace } };
     return { reply: result.answer, citations: result.citations, audit: publicAudit(result), status: result.status };
   },
@@ -77,7 +77,8 @@ async function stream(input, res) {
   res.writeHead(200, { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-cache, no-transform" });
   const write = (event) => res.write(JSON.stringify(event) + "\n");
   try {
-    const result = await runAgent({ ...chatInput(input), onStep: (step) => write({ type: "step", step: publicStep(step) }) });
+    // Inside the chat request's trace (index.js sends its traceparent): ADK's spans and these logs join it.
+    const result = await inRequestTrace(input.traceparent, () => runAgent({ ...chatInput(input), onStep: (step) => write({ type: "step", step: publicStep(step) }) }));
     if (result.status === "error") write({ type: "error", error: "The assistant is unavailable right now.", auditId: result.id });
     else write({ type: "done", reply: result.answer, citations: result.citations, audit: publicAudit(result) });
   } catch (e) {

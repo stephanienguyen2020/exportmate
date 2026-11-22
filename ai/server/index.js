@@ -9,7 +9,7 @@ import { fetchFeed } from "./feeds.js";
 import { runScan } from "./scan.js";
 import { runAgent, audits, clearCaches } from "./agent.js";
 import { indexDocs, removeDocs, toDoc } from "./rag.js";
-import { log } from "./log.js";
+import { log, traceparentFrom } from "./log.js";
 import { ANONYMOUS, auditVisible, isShared, presentScan, presentSources, publicAudit, publicStep, scanRules, sourceVisible, visibleItems } from "./access.js";
 import { readJson, scanBlocked } from "./limits.js";
 import { deleteMemory, listMemories, memoryKeepDays, remembers, userKeyFor } from "./agents/platform.js";
@@ -250,7 +250,8 @@ async function streamChat(req, res, body, origin, requestId) {
       // The agents run on Agent Runtime (agents/remote.js): relay their events. The user's token
       // goes along only so the company specialist can read orders and playbook with it.
       const token = company ? req.headers.authorization.replace(/^Bearer /, "") : undefined;
-      for await (const event of streamTurn({ ...turn, backendToken: token })) {
+      // The request's trace goes along too, so the agents' spans and logs join this request's trace.
+      for await (const event of streamTurn({ ...turn, backendToken: token, traceparent: traceparentFrom(req.headers) })) {
         write(event);
         if (event.type === "done") logChat(event.audit, trace);
         if (event.type === "error") log("ERROR", "chat.agents_error", { requestId, trace, auditId: event.auditId });
