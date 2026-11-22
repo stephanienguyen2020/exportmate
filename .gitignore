@@ -19,3 +19,7 @@ CLAUDE.md
 
 # Architecture diagrams and their sources: kept on each machine (the README's PNG is in docs/images/)
 docs/architecture/
+
+# Local end-to-end trace check (ai/server/scripts/trace-e2e.sh)
+ai/server/.e2e/
+ai/server/.e2e-*.mjs
