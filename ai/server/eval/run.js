@@ -7,6 +7,10 @@
 //                                           of running them in this process
 //        npm run eval -- --vertex           also create an evaluation run on Agent Platform (Gen AI evaluation:
 //                                           tool use, hallucination, response quality, safety; platform/evaluate.py, needs uv)
+//        npm run exam                       the company exam (exam.js) on the deployed agents, signed in as the
+//                                           demo company's owner: EXAM_PASSWORD, FIREBASE_API_KEY and BACKEND_URL
+//                                           (the deployed backend); EXAM_EMAIL defaults to lan@example.com
+//        npm run exam -- --history          the exam's scoreboard: its recent runs, one line each
 // On GCP: gcloud run jobs execute exportmate-ai-task --args="node eval/run.js --judge" --wait
 // Each run is stored in the Firestore `eval_runs` collection and compared with the
 // previous run; it exits 1 if a case that passed now fails (a regression). Run it
@@ -25,6 +29,7 @@ import { PROJECT, db, inventory, list } from "../db.js";
 import { GEMINI_LOCATION, SCAN_MODEL, TIERS } from "../models.js";
 import { summarizeAudits } from "../metrics.js";
 import { POLICY_VERSION, RULES } from "../policy.js";
+import { examCases, checkBar, PASS_BAR } from "./exam.js";
 import { goldenCases } from "./golden.js";
 import { compareRuns, scoreCase, summarizeRun } from "./score.js";
 
@@ -35,6 +40,8 @@ const useJudge = arg("judge") !== undefined;
 const tier = arg("tier") || undefined;
 const toVertex = arg("vertex") !== undefined;
 const onEngine = arg("engine") !== undefined;
+const asCompany = arg("company") !== undefined;
+const SET = asCompany ? "company" : "golden";
 if (onEngine && !runtime) throw new Error("--engine needs AGENT_RUNTIME (the deployed instance)");
 if (tier && !TIERS[tier]) throw new Error(`--tier must be one of ${Object.keys(TIERS).join(", ")}`);
 const JUDGE_MODEL = process.env.JUDGE_MODEL || SCAN_MODEL;
@@ -117,10 +124,64 @@ const delegations = (r) => {
   return used.length ? ` (${used.join(", ")})` : "";
 };
 
-const items = await list(inventory);
-const cases = goldenCases(items, { rules: RULES }).filter((c) => !only || only.includes(c.id));
+// This set's earlier runs, newest first (runs from before sets existed are the golden set's).
+async function previousRuns(limit) {
+  const recent = await list(evalRuns.orderBy("runAt", "desc").limit(limit * 4));
+  return recent.filter((r) => (r.set || "golden") === SET).slice(0, limit);
+}
+
+if (arg("history") !== undefined) {
+  console.log(`${SET} runs, newest first:`);
+  for (const r of await previousRuns(20)) {
+    const { latencyMs } = r.ops;
+    console.log(
+      `${r.runAt.slice(0, 16).replace("T", " ")}  ${String(r.summary.passed).padStart(2)}/${r.summary.cases}  p50 ${(latencyMs.p50 / 1000).toFixed(1)}s p95 ${(latencyMs.p95 / 1000).toFixed(1)}s  ${r.bar ? (r.bar.met ? "bar met" : "bar missed") : ""}  ${r.models.complex}${r.only ? ` (only ${r.only.join(",")})` : ""}`,
+    );
+  }
+  process.exit(0);
+}
+
+// Signs in as the exam's company owner (Firebase email + password) and reads what the exam's
+// answers are worked out from, with the same token the agents then use.
+async function companyExam() {
+  const { EXAM_PASSWORD, FIREBASE_API_KEY, BACKEND_URL } = process.env;
+  const email = process.env.EXAM_EMAIL || "lan@example.com";
+  if (!EXAM_PASSWORD || !FIREBASE_API_KEY || !BACKEND_URL) throw new Error("--company needs EXAM_PASSWORD, FIREBASE_API_KEY and BACKEND_URL");
+  const signIn = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password: EXAM_PASSWORD, returnSecureToken: true }),
+  });
+  if (!signIn.ok) throw new Error(`Signing in as ${email} failed (${signIn.status})`);
+  const { idToken: token } = await signIn.json();
+  const backend = async (path) => {
+    const res = await fetch(`${BACKEND_URL.replace(/\/$/, "")}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+    return { status: res.status, body: await res.json().catch(() => ({})) };
+  };
+  const read = async (path) => {
+    const { status, body } = await backend(path);
+    if (status !== 200) throw new Error(`GET ${path}: ${status} ${body.error?.code || ""}`);
+    return body.data;
+  };
+  const [profile, map, rules, acacia] = await Promise.all([
+    read("/api/v1/company/knowledge"),
+    read("/api/v1/trade-map"),
+    read("/api/v1/playbook/rules"),
+    read("/api/v1/knowledge-graph/query?material=acacia&country=VN"),
+  ]);
+  const data = { markets: map.markets, orders: map.orders, suppliers: map.suppliers || [], rules: rules.filter((r) => r.enabled), acacia, today: new Date().toISOString().slice(0, 10) };
+  return { token, backend, profile, cases: examCases(data, { policyRules: RULES }) };
+}
+
+const exam = asCompany ? await companyExam() : null;
+const cases = (exam ? exam.cases : goldenCases(await list(inventory), { rules: RULES })).filter((c) => !only || only.includes(c.id));
 const sessionId = `eval-${Date.now().toString(36)}`;
-console.log(`Eval ${sessionId}${onEngine ? ` on ${runtime.name}` : ""}: ${cases.length} cases, policy ${POLICY_VERSION}${tier ? `, all on ${tier} (${TIERS[tier].model})` : ""}${useJudge ? `, judge ${JUDGE_MODEL}` : ""}`);
+console.log(
+  `${asCompany ? `Exam as ${exam.profile.company.name}` : "Eval"} ${sessionId}${onEngine ? ` on ${runtime.name}` : ""}: ${cases.length} cases, policy ${POLICY_VERSION}${tier ? `, all on ${tier} (${TIERS[tier].model})` : ""}${useJudge ? `, judge ${JUDGE_MODEL}` : ""}`,
+);
+// A company case runs as a signed-in chat does (index.js): the profile, the company's view of the
+// news sources, and its backend read with the owner's own token.
+const company = exam ? { company: exam.profile, access: { companyId: exam.profile.company.id, disabled: [] } } : null;
 
 const scored = [];
 const results = [];
@@ -128,8 +189,8 @@ for (const c of cases) {
   // A demo case's orders and playbook go through the same checks as a demo chat's (index.js).
   const demo = c.demo ? { orders: demoMapOrders(c.demo.orders), playbook: demoPlaybook(c.demo.rules) } : null;
   const result = onEngine
-    ? (await callRuntime("query", { messages: c.messages, sessionId, channel: "eval", tier, demo })).result
-    : await runAgent({ messages: c.messages, sessionId, channel: "eval", withEvidence: true, tier, demo });
+    ? (await callRuntime("query", { messages: c.messages, sessionId, channel: "eval", tier, demo, ...(company && { ...company, backendToken: exam.token }) })).result
+    : await runAgent({ messages: c.messages, sessionId, channel: "eval", withEvidence: true, tier, demo, ...(company && { ...company, backend: exam.backend }) });
   const verdict = useJudge ? await judge(c, result).catch((e) => ({ faithfulness: null, relevance: null, reason: `judge failed: ${e.message}` })) : null;
   const s = scoreCase(c, result, verdict);
   results.push(result);
@@ -143,10 +204,13 @@ for (const c of cases) {
 
 const summary = summarizeRun(scored);
 const ops = summarizeAudits(results);
-const [previous] = await list(evalRuns.orderBy("runAt", "desc").limit(1));
+const bar = asCompany ? checkBar(scored) : null;
+const [previous] = await previousRuns(1);
 const diff = compareRuns(previous, scored);
 const saved = await evalRuns.add({
   runAt: new Date().toISOString(),
+  set: SET,
+  bar: bar && { ...bar, limits: PASS_BAR },
   sessionId,
   models: { simple: TIERS.simple.model, complex: TIERS.complex.model },
   tier: tier || "routed",
@@ -163,6 +227,7 @@ const saved = await evalRuns.add({
 console.log(`\n${summary.passed}/${summary.cases} passed (${Math.round(summary.passRate * 100)}%), tool selection ${summary.toolSelection ?? "n/a"}`);
 for (const [cat, c] of Object.entries(summary.byCategory)) console.log(`  ${cat.padEnd(20)} ${c.passed}/${c.cases}`);
 console.log(`latency p50 ${(ops.latencyMs.p50 / 1000).toFixed(1)}s p95 ${(ops.latencyMs.p95 / 1000).toFixed(1)}s · ${ops.perAnswer.promptTokens} prompt tokens/answer · revised ${Math.round(ops.revisionRate * 100)}%`);
+if (bar) console.log(bar.met ? "Pass bar met" : `Pass bar missed:\n  ${bar.failures.join("\n  ")}`);
 if (previous) {
   console.log(`vs eval_runs/${previous.id} of ${previous.runAt} (policy ${previous.policyVersion}): ${diff.regressions.length} regressions, ${diff.fixed.length} fixed`);
   if (diff.regressions.length) console.log(`  regressions: ${diff.regressions.join(", ")}`);
