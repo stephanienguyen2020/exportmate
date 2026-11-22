@@ -1,0 +1,40 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,500;9..40,700&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; padding: 40px; background: #e9ece4; font-family: "DM Sans", system-ui, sans-serif; display: grid; gap: 32px; justify-items: start; }
+  .logo { display: inline-flex; align-items: center; gap: 22px; padding: 36px 48px; }
+  .logo svg { width: 96px; height: 96px; }
+  .word { font-size: 64px; letter-spacing: -1.5px; line-height: 1; }
+  .word b { font-weight: 700; }
+  .word span { font-weight: 500; }
+  #light { background: #fafbf7; }
+  #light .word b { color: #243d33; }
+  #light .word span { color: #4f7a62; }
+  #dark { background: #243d33; }
+  #dark .word b { color: #fafbf7; }
+  #dark .word span { color: #d6ecad; }
+  #dark svg rect { fill: #2f4f43; }
+  .mark { padding: 24px; background: transparent; }
+  .mark svg { width: 256px; height: 256px; display: block; }
+</style>
+</head>
+<body>
+  <div class="logo" id="light"><svg viewBox="0 0 64 64"><use href="#m"/></svg><div class="word"><b>Export</b><span>Mate</span></div></div>
+  <div class="logo" id="dark"><svg viewBox="0 0 64 64"><use href="#m"/></svg><div class="word"><b>Export</b><span>Mate</span></div></div>
+  <div class="mark" id="mark"><svg viewBox="0 0 64 64"><use href="#m"/></svg></div>
+  <svg width="0" height="0" style="position:absolute">
+    <defs>
+      <g id="m">
+        <rect width="64" height="64" rx="16" fill="#243d33"/>
+        <g fill="none" stroke="#d6ecad" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M19 17v30"/><path d="M19 17h17"/><path d="M19 47h17"/><path d="M19 32h27"/><path d="M39 24l8 8-8 8"/>
+        </g>
+        <circle cx="44" cy="17" r="3.6" fill="#d6ecad"/><circle cx="44" cy="47" r="3.6" fill="#d6ecad"/>
+      </g>
+    </defs>
+  </svg>
+</body>
+</html>

@@ -2,9 +2,9 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from conftest import add_member, import_orders, onboard
-from sqlalchemy import delete
+from sqlalchemy import delete, update
 
-from app.database.models import AnalysisReport, Role
+from app.database.models import AnalysisReport, MarketRequirement, Role
 from app.database.queries import users as user_queries
 from app.database.session import open_session
 from app.schemas.analysis import CostLineOut, ReportContentOut
@@ -84,6 +84,16 @@ def test_an_import_analyses_its_orders(client):
 
 
 def test_run_reports_each_order(client, lan):
+    # The seeded Section 232 rate changes on a real date (1 Jan 2027). Once that is under 60 days
+    # away it falls before PO-2 ships and the duty is listed unpriced; this test is about pricing a
+    # duty in force, so the change moves a year out.
+    with open_session() as db:
+        db.execute(
+            update(MarketRequirement)
+            .where(MarketRequirement.requirement_key == "tariff")
+            .values(changes_on=TODAY + timedelta(days=365))
+        )
+        db.commit()
     data = run(client, lan)
     assert data["status"] == "done"
     assert [s["name"] for s in data["steps"]] == [

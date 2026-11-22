@@ -240,7 +240,7 @@ Everything runs in one project, defined in [`infra/terraform`](infra/terraform/)
 | Agent Platform: RAG Engine | search over stock, articles, alerts, sources and help guides |
 | Agent Platform: Evaluation | golden-set runs scored by managed judges |
 | Agent Identity, Agent Registry, Agent Gateway, Model Armor | the agents' identity, the endpoints they may call, their egress, prompt-injection screening |
-| Cloud Run | the AI service (`exportmate-ai`), the backend (`exportmate-backend`, including the Graph query API and the graph sync endpoint), the link weights job, and a job for seeding, indexing, scans and evals |
+| Cloud Run | the website (`exportmate-web`), the AI service (`exportmate-ai`), the backend (`exportmate-backend`, including the Graph query API and the graph sync endpoint), the link weights job, and a job for seeding, indexing, scans and evals |
 | Cloud SQL (Postgres + pgvector) | company data, the trade map, regulations, the knowledge graph's source of truth and chain versions, HS code vectors |
 | Pub/Sub | change events that keep Neo4j in step with Postgres (a push subscription to the graph sync endpoint) |
 | Firestore | news, alerts, stock, chat audits, the answer cache |
@@ -250,8 +250,7 @@ Everything runs in one project, defined in [`infra/terraform`](infra/terraform/)
 | Cloud Build, Artifact Registry | building and storing the images |
 | Cloud Logging and Monitoring | JSON logs, log-based metrics, alerts and dashboards |
 
-Outside Google Cloud: **Neo4j AuraDB** holds the graph read model, the frontend is a React app on
-Vercel, and Firebase Auth signs people in.
+Outside Google Cloud: **Neo4j AuraDB** holds the graph read model, and Firebase Auth signs people in.
 
 ---
 

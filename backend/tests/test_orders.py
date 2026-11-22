@@ -1,11 +1,21 @@
+from datetime import UTC, datetime, timedelta
+
 from conftest import import_orders, onboard
 from sqlalchemy import update
 
 from app.database.models import Order, OrderStatus
 from app.database.session import open_session
 
+TODAY = datetime.now(UTC).date()
+
+
+def ship_in(days: int) -> str:
+    return (TODAY + timedelta(days=days)).isoformat()
+
+
+# PO-01 to PO-07 ship 1 to 7 days from today, so they stay upcoming whenever the tests run.
 MANY_ORDERS_CSV = "id,product,supplier,destination,value,shipDate,hsCode\n" + "".join(
-    f"PO-{i:02d},Plywood {i},Binh Phu,NL,{100 + i},2026-11-{i:02d},4412.33\n" for i in range(1, 8)
+    f"PO-{i:02d},Plywood {i},Binh Phu,NL,{100 + i},{ship_in(i)},4412.33\n" for i in range(1, 8)
 )
 
 
@@ -82,4 +92,4 @@ def test_overview(client):
         "needs_data": 0,
     }
     assert data["valueAtRiskByCurrency"] == {"USD": (103 + 105) * 100}
-    assert data["nearestAffectedShipDate"] == "2026-11-03"
+    assert data["nearestAffectedShipDate"] == ship_in(3)

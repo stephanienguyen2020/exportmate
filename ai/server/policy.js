@@ -56,7 +56,7 @@ export const RULES = [
   },
   {
     id: "thorough",
-    text: "Be thorough before answering. For questions about exposure, risk or impact, gather all relevant alerts with get_alerts (not just one search hit), check the items with query_inventory, and use search_knowledge for the underlying news. Call tools in parallel when you can, and again with refined arguments when results are thin.",
+    text: "For questions about exposure, risk or impact, gather all relevant alerts with get_alerts (not just one search hit), check the items with query_inventory, and use search_knowledge for the underlying news. Make independent calls in parallel.",
     prevents: "Exposure answers built from a single search hit.",
   },
   {

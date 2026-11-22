@@ -14,14 +14,16 @@ ports (seed_data/us_furniture_company.json). As with an import, the orders are a
 the suppliers are loaded, so statuses and reports (and supplier messages drafted from them)
 come from the analysis. A user belongs to one company, so each company needs its own email.
 Shared reference data (markets, checklists, ...) is loaded first. Running it again changes
-nothing, except that it analyses orders that have never been analysed.
+nothing, except that it analyses orders that have never been analysed. The demo company's ship
+dates count from the day it runs, as the browser demo's do, so a new database never starts with
+orders that have already shipped.
 """
 
 import argparse
 import logging
 import uuid
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
 
@@ -82,6 +84,11 @@ _OTHER_DESTINATIONS = [
 ]
 
 
+def ship_date_in(days: int) -> date:
+    """A ship date counted from today, as the browser demo's are (frontend/src/data.ts)."""
+    return date.today() + timedelta(days=days)
+
+
 def build_demo_orders() -> list[dict]:
     orders = [
         {
@@ -90,7 +97,7 @@ def build_demo_orders() -> list[dict]:
             "supplier": "Binh Phu Wood",
             "destination": "Rotterdam, NL",
             "value": 24000,
-            "ship_date": date(2026, 10, 27),
+            "ship_date": ship_date_in(12),
             "hs_code": "4412.33",
         },
         {
@@ -99,18 +106,19 @@ def build_demo_orders() -> list[dict]:
             "supplier": "Binh Phu Wood",
             "destination": "Hamburg, DE",
             "value": 18000,
-            "ship_date": date(2026, 10, 30),
+            "ship_date": ship_date_in(15),
             "hs_code": "4412.33",
         },
-        # Ships to the US: Section 232 raises the tariff on kitchen cabinets on 1 January 2027,
-        # inside Rule watch's window, and a later ship date in "What if" changes the rate.
+        # Ships to the US: Section 232 raises the tariff on kitchen cabinets on 1 January 2027.
+        # While that date is ahead, Rule watch shows it and a later ship date in "What if"
+        # changes the rate.
         {
             "external_id": "PO-2320",
             "product": "Kitchen cabinet set",
             "supplier": "Binh Phu Wood",
             "destination": "Long Beach, US",
             "value": 54300,
-            "ship_date": date(2026, 12, 18),
+            "ship_date": ship_date_in(27),
             "hs_code": "9403.40",
         },
     ]
@@ -123,7 +131,7 @@ def build_demo_orders() -> list[dict]:
                 "supplier": "Mekong Timber" if odd else "An Cuong Wood",
                 "destination": destination,
                 "value": 12000 + i * 1500,
-                "ship_date": date(2026, 11, i + 2),
+                "ship_date": ship_date_in(18 + i),
                 "hs_code": "4412.32" if odd else "4418.99",
             }
         )
