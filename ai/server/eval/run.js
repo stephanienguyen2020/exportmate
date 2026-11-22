@@ -148,7 +148,7 @@ const diff = compareRuns(previous, scored);
 const saved = await evalRuns.add({
   runAt: new Date().toISOString(),
   sessionId,
-  models: { simple: TIERS.simple.model, complex: TIERS.complex.model },
+  models: Object.fromEntries(Object.entries(TIERS).map(([tier, t]) => [tier, t.model])),
   tier: tier || "routed",
   policyVersion: POLICY_VERSION,
   judge: useJudge ? JUDGE_MODEL : null,

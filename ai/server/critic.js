@@ -13,7 +13,8 @@ import { GEMINI_LOCATION, TIERS, thinkingConfig } from "./models.js";
 import { PROJECT } from "./db.js";
 
 const MAX_PROBLEMS = 5;
-const MODEL = TIERS.complex.model;
+// One structured check per answer at LOW thinking: the mid-size model is enough.
+const MODEL = TIERS.standard.model;
 const THINKING = "LOW";
 
 const SCHEMA = {

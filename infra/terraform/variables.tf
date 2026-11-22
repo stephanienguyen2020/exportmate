@@ -82,8 +82,14 @@ variable "gemini_model_simple" {
   default     = "gemini-3.5-flash-lite"
 }
 
+variable "gemini_model_standard" {
+  description = "Gemini model for questions the router sends to the standard tier (the analyst's everyday work): follow-ups, one judgement, trade rules, connections, pasted text, refusals, and revisions the auditor asks for. Also the critic's model."
+  type        = string
+  default     = "gemini-3.5-flash"
+}
+
 variable "gemini_model_complex" {
-  description = "Gemini model for questions the router sends to the complex tier: follow-ups, arithmetic, trade rules, judgement, pasted text."
+  description = "Gemini model for questions the router sends to the complex tier: heavy ones only, arithmetic with another substantive signal or three substantive signals."
   type        = string
   default     = "gemini-4-argon"
 }

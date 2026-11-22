@@ -3,8 +3,8 @@
 //
 //   exportmate_assistant   RoutedAgent: router.js picks the answering agent, no model call
 //   ├─ quick_answer        simple tier; every read tool, for single lookups and how-tos
-//   └─ analyst             complex tier; delegates to the specialists, does the arithmetic,
-//      │                   writes the cited answer
+//   └─ analyst             standard or complex tier (the router's choice); delegates to the
+//      │                   specialists, does the arithmetic, writes the cited answer
 //      ├─ stock_specialist      query_inventory, calculate
 //      ├─ news_specialist       get_alerts, get_scan_status, search_knowledge
 //      ├─ company_specialist    get_company_profile, query_orders, get_playbook (when offered)
@@ -20,7 +20,7 @@ import { GatewayTool } from "./tools.js";
 import { analystInstruction, specialistInstruction, system } from "./instructions.js";
 
 export const ROOT = "exportmate_assistant";
-export const ANSWERING = { simple: "quick_answer", complex: "analyst" };
+export const ANSWERING = { simple: "quick_answer", standard: "analyst", complex: "analyst" };
 
 export const SPECIALISTS = [
   {
@@ -91,21 +91,27 @@ class SpecialistTool extends AgentTool {
  * The agent tree for one turn. `session` is { company, orders, playbook } (agent.js), `declarations` are the tools this turn may use (gateway scopes),
  * `runTool(name, args, agent)` runs one through the gateway, `plugins` go to every runner,
  * `hooks.before/after` wrap every model call, `onReport` records each specialist's report and
- * `routeTo()` returns "simple" or "complex" for the current message.
+ * `routeTo()` returns "simple", "standard" or "complex" for the current message.
  */
 export function buildAssistant({ session, declarations, runTool, plugins, hooks, onReport, routeTo }) {
   const available = new Map(declarations.map((d) => [d.name, d]));
   const toolsFor = (names) => names.filter((n) => available.has(n)).map((n) => new GatewayTool(available.get(n), runTool));
-  const common = (tier) => ({
-    model: gemini,
-    // No transfers: the routed agent and the analyst decide who works, which also keeps ADK's
-    // transfer preamble out of the versioned prompts.
-    disallowTransferToParent: true,
-    disallowTransferToPeers: true,
-    generateContentConfig: { maxOutputTokens: 4096 },
-    beforeModelCallback: ({ context, request }) => hooks.before({ context, request, tier }),
-    afterModelCallback: ({ context, response }) => hooks.after({ context, response, tier }),
-  });
+  // `tier` is a tier name, or a function read at each model call (the analyst's tier is the turn's).
+  const common = (tier) => {
+    const tierNow = typeof tier === "function" ? tier : () => tier;
+    return {
+      model: gemini,
+      // No transfers: the routed agent and the analyst decide who works, which also keeps ADK's
+      // transfer preamble out of the versioned prompts.
+      disallowTransferToParent: true,
+      disallowTransferToPeers: true,
+      generateContentConfig: { maxOutputTokens: 4096 },
+      beforeModelCallback: ({ context, request }) => hooks.before({ context, request, tier: tierNow() }),
+      afterModelCallback: ({ context, response }) => hooks.after({ context, response, tier: tierNow() }),
+    };
+  };
+  // The analyst never runs on the small model: a turn routed simple reaches it only by escalation.
+  const analystTier = () => (routeTo() === "simple" ? "standard" : routeTo());
 
   const team = SPECIALISTS.map((s) => ({ ...s, tools: s.tools.filter((n) => available.has(n)) })).filter((s) => s.tools.length);
   const specialists = team.map(
@@ -127,7 +133,7 @@ export function buildAssistant({ session, declarations, runTool, plugins, hooks,
     tools: toolsFor([...available.keys()]),
   });
   const analyst = new LlmAgent({
-    ...common("complex"),
+    ...common(analystTier),
     name: ANSWERING.complex,
     description: "Answers questions that need several facts, arithmetic or judgement by delegating to specialists, with citations.",
     instruction: () => analystInstruction(session, team),

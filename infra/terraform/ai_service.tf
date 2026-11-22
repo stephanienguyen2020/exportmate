@@ -20,6 +20,7 @@ locals {
     GOOGLE_CLOUD_LOCATION = "global" # Vertex AI endpoint for Gemini and the embedding model
     GEMINI_MODEL          = var.gemini_model
     GEMINI_MODEL_SIMPLE   = var.gemini_model_simple
+    GEMINI_MODEL_STANDARD = var.gemini_model_standard
     GEMINI_MODEL_COMPLEX  = var.gemini_model_complex
     ALLOWED_ORIGINS       = var.allowed_origins
     BACKEND_URL           = google_cloud_run_v2_service.backend.uri

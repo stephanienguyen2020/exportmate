@@ -49,7 +49,7 @@ setLogger({
 
 // Answer cache (answer-cache.js). Help guides change only with a deploy, so their hash is fixed.
 const GUIDES_VERSION = fingerprint(GUIDES);
-const MODELS = { simple: TIERS.simple.model, complex: TIERS.complex.model };
+const MODELS = Object.fromEntries(Object.entries(TIERS).map(([tier, t]) => [tier, t.model]));
 let scanSeen;
 
 // Everything the tools read for this caller, as one hash: stock, the sources as this company
@@ -158,7 +158,7 @@ export async function runAgent({
 
   const route = routeQuestion(messages, { force: tier });
   // The tier answering this message: a simple-tier draft the auditor sends back is revised by the
-  // analyst on the complex tier.
+  // analyst on the standard tier (a revision is small work; the biggest model is kept for heavy questions).
   let current = route.tier;
   const refs = makeRefs();
   // query_inventory's category and market filters list the turn's own stock.
@@ -275,7 +275,7 @@ export async function runAgent({
       push({ kind: "draft", latencyMs, thought, tokens, ...meta, excerpt: text.slice(0, 800) });
       push({ kind: "review", by, problems: found });
       if (current === "simple") {
-        current = "complex";
+        current = "standard";
         audit.route.escalated = true;
       }
       revision = ask;

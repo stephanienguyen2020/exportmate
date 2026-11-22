@@ -1,12 +1,15 @@
 // Model router: each chat turn goes to the cheapest tier that can answer it well.
 // - simple (small fast model): one lookup or explanation, e.g. a SKU's supplier, a count,
 //   which items carry a certification, when the scan ran, how to use the app, a decline.
-// - complex (bigger model): anything that needs the conversation so far, arithmetic over
-//   several records, judgement about rules, risk or exposure, how orders connect to materials and
-//   origins (the knowledge graph), or text pasted from someone
-//   else (a bigger model is better at not following instructions hidden in it).
+// - standard (mid-size model, the analyst): anything that needs the conversation so far, one
+//   judgement about rules, risk or exposure, how orders connect to materials and origins (the
+//   knowledge graph), several SKUs, text pasted from someone else, instructions aimed at the
+//   assistant, or a long question.
+// - complex (biggest model, the analyst): heavy questions only, ones that combine arithmetic with
+//   another substantive signal (several SKUs, judgement, trade rules, connections), or that carry
+//   three substantive signals at once.
 // Rules, not a classifier call: free, instant and testable against the golden set. A simple-
-// tier draft the auditor sends back is revised on the complex tier (agent.js).
+// tier draft the auditor sends back is revised on the standard tier (agent.js).
 import { findInjection } from "./guard.js";
 
 const SKU = /\b[A-Z]{2,5}-\d{2,4}\b/gi;
@@ -35,14 +38,23 @@ const SIGNALS = [
   ["long question", (q) => q.length > LONG],
 ];
 
+// Signals about what the question asks, as opposed to its shape (follow-up, pasted, long, injected).
+const SUBSTANTIVE = new Set(["several SKUs", "arithmetic", "judgement", "trade rules", "connections"]);
+
+/** Heavy enough for the biggest model: arithmetic plus another substantive signal, or three of them. */
+function heavy(reasons) {
+  const substantive = reasons.filter((r) => SUBSTANTIVE.has(r));
+  return (substantive.includes("arithmetic") && substantive.length >= 2) || substantive.length >= 3;
+}
+
 /**
  * The tier for a conversation ({role, text} messages ending with the user's question)
- * and the signals that chose it. `force` ("simple" | "complex") overrides, e.g. for evals.
+ * and the signals that chose it. `force` ("simple" | "standard" | "complex") overrides, e.g. for evals.
  */
 export function routeQuestion(messages, { force } = {}) {
   if (force) return { tier: force, reasons: ["forced"] };
   const question = String(messages.at(-1)?.text ?? "").normalize("NFC");
   const history = messages.slice(0, -1);
   const reasons = SIGNALS.filter(([, test]) => test(question, history)).map(([name]) => name);
-  return { tier: reasons.length ? "complex" : "simple", reasons };
+  return { tier: !reasons.length ? "simple" : heavy(reasons) ? "complex" : "standard", reasons };
 }

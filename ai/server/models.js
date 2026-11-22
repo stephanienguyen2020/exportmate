@@ -1,6 +1,9 @@
 // Which Gemini model does what. The assistant answers each question on a tier chosen by
-// router.js: a small fast model for lookups, the bigger latest model for questions that
-// need reasoning. The news scan and the eval judge use GEMINI_MODEL.
+// router.js: a small fast model for lookups, a mid-size model for the analyst's everyday work
+// (follow-ups, one judgement, refusals, revisions), and the biggest model only for questions that
+// combine arithmetic with reasoning. Gemini 4's shared capacity answered about half of our calls
+// with 429 in November 2026, so it is kept for the questions that need it.
+// The news scan and the eval judge use GEMINI_MODEL.
 // Models are given a thinking level, not a budget: Gemini 4 rejects thinking budgets. Gemini 2.x
 // models reject a level (400 "thinking_level is not supported"), so they get none and think
 // dynamically; GEMINI_MODEL set to gemini-2.5-flash stopped every scan that way.
@@ -11,6 +14,7 @@
 // flash-lite calls sometimes stalled for 70-90 s while their usual time is 1-5 s.
 export const TIERS = {
   simple: { model: process.env.GEMINI_MODEL_SIMPLE || "gemini-3.5-flash-lite", thinkingLevel: process.env.GEMINI_THINKING_SIMPLE || "LOW", timeoutMs: 25_000 },
+  standard: { model: process.env.GEMINI_MODEL_STANDARD || "gemini-3.5-flash", thinkingLevel: process.env.GEMINI_THINKING_STANDARD || "LOW", timeoutMs: 45_000 },
   complex: { model: process.env.GEMINI_MODEL_COMPLEX || "gemini-4-argon", thinkingLevel: process.env.GEMINI_THINKING_COMPLEX || "MEDIUM", timeoutMs: 90_000 },
 };
 

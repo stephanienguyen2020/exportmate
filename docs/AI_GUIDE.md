@@ -229,7 +229,8 @@ Articles Gemini couldn't assess aren't recorded, so the next scan tries them aga
 | Job | Default model | Setting |
 | --- | --- | --- |
 | Assistant, simple questions | `gemini-3.5-flash-lite`, thinking LOW | `GEMINI_MODEL_SIMPLE`, `GEMINI_THINKING_SIMPLE` |
-| Assistant, complex questions | `gemini-4-argon`, thinking MEDIUM | `GEMINI_MODEL_COMPLEX`, `GEMINI_THINKING_COMPLEX` |
+| Assistant, standard questions (follow-ups, one judgement, refusals, revisions) and the graph critic | `gemini-3.5-flash`, thinking LOW | `GEMINI_MODEL_STANDARD`, `GEMINI_THINKING_STANDARD` |
+| Assistant, heavy questions (arithmetic with another signal, or three signals) | `gemini-4-argon`, thinking MEDIUM | `GEMINI_MODEL_COMPLEX`, `GEMINI_THINKING_COMPLEX` |
 | News scan and eval judge | `gemini-3.5-flash`, thinking MEDIUM | `GEMINI_MODEL`, `GEMINI_THINKING_SCAN` |
 | Search embeddings (RAG Engine) | `text-multilingual-embedding-002` | `RAG_EMBED_MODEL` |
 | Memory Bank (writing memories) | `gemini-3.5-flash` | `MEMORY_MODEL` (in `platform/runtime.py`) |

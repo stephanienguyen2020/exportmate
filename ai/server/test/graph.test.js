@@ -104,7 +104,7 @@ test("the critic reads the answer against the paths, fenced as data", async () =
   assert.deepEqual(await critique({ answer: "PO-1 uses acacia from Laos [2].", paths, generate }), {
     supported: false,
     problems: ["PO-1: Says Laos; the path says Vietnam."],
-    model: (await import("../models.js")).TIERS.complex.model,
+    model: (await import("../models.js")).TIERS.standard.model,
   });
   // No paths, nothing to judge; a judge that fails leaves the answer to the auditor.
   assert.equal((await critique({ answer: "x", paths: [], generate })).skipped, true);
@@ -130,6 +130,6 @@ test("graph questions get the graph rule and the analyst", () => {
   assert.ok(!rulesFor({}).some((r) => r.id === "graph-paths"));
   assert.ok(RULES.find((r) => r.id === "graph-paths").prevents);
   for (const q of ["Which orders depend on acacia from Laos?", "What if Vietnam restricts acacia log exports?", "Which of my orders use plywood?"])
-    assert.equal(routeQuestion([{ role: "user", text: q }]).tier, "complex", q);
+    assert.notEqual(routeQuestion([{ role: "user", text: q }]).tier, "simple", q); // the analyst's tiers
   assert.equal(routeQuestion([{ role: "user", text: "How do I add a news source?" }]).tier, "simple");
 });
