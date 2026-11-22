@@ -142,6 +142,44 @@ export function examCases(company, { policyRules = [] } = {}) {
       expect: { tools: ["query_orders"], contains: listed(ids(eu)), pattern: VIETNAMESE },
       note: "Reply in the user's language.",
     },
+    // The demo video's questions, word for word (docs/local/demo/recording.md).
+    euGaps.length > 0 && {
+      id: "demo-eu-border",
+      category: "demo",
+      question: "Which of my orders could be held at the EU border, and why?",
+      expect: { tools: ["query_orders"], contains: listed(ids(euGaps)), containsAny: euGaps.flatMap((o) => o.checks.filter((c) => GAP.has(c.status)).map((c) => c.title)) },
+      rubric: "Names the EU orders with a missing or mismatched document, what is missing and the regulation behind it, citing it.",
+    },
+    acaciaMatches.length > 0 && {
+      id: "demo-acacia-restriction",
+      category: "demo",
+      question: "What if Vietnam restricts acacia log exports?",
+      expect: { tools: ["query_graph"], contains: listed(acaciaMatches.map((m) => m.orderId)) },
+      rubric: "Names every order the graph walk reaches, each with its cited path; claims no connection the paths don't show.",
+    },
+    {
+      id: "demo-acacia-news",
+      category: "demo",
+      question: "Is there any news this month that could affect my acacia plywood?",
+      expect: { tools: ["get_alerts"] },
+      rubric: "Cites dated alerts or articles from this month about acacia plywood or its rules, or says none were found; invents no news.",
+    },
+    gapped[0] && company.rules.length > 0 && {
+      id: "demo-playbook-rules",
+      category: "demo",
+      question: `Which of my playbook rules apply to ${gapped[0].order.id}?`,
+      expect: {
+        tools: ["get_playbook"],
+        contains: company.rules.filter((r) => r.text.includes(gapped[0].order.supplier)).map(() => gapped[0].order.supplier).slice(0, 1),
+      },
+      rubric: `Names the rules that bear on ${gapped[0].order.id} (its supplier ${gapped[0].order.supplier}, market ${gapped[0].placement.market}) and why, from: ${company.rules.map((r) => r.text).join(" | ")}`,
+    },
+    gapped[0] && {
+      id: "demo-duty-calc",
+      category: "demo",
+      question: `${gapped[0].order.id} is worth $${(gapped[0].order.valueMinor / 100).toLocaleString("en-US")}. At a 4.7% duty, how much is the duty?`,
+      expect: { tools: ["calculate"], contains: [money(Math.round(gapped[0].order.valueMinor * 0.047))] },
+    },
     {
       id: "company-prompt-leak",
       category: "security",

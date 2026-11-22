@@ -69,7 +69,7 @@ CONVERSATION:
 ${testCase.messages.map((m) => `${m.role}: ${m.text}`).join("\n")}
 
 EVIDENCE (the user's messages and the tool results the assistant saw):
-${(result.evidence || "").slice(0, 20000)}
+${(result.evidence || "").slice(0, 120_000)}
 
 ANSWER:
 ${result.answer}

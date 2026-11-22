@@ -53,6 +53,11 @@ test("the exam's answers are worked out from the company's data", () => {
   // The market with the most open orders in one currency: Japan (3) over the EU (2, the shipped one left out).
   assert.match(byId("company-market-total").question, /to Japan\?/);
   assert.deepEqual(byId("company-market-total").expect.contains, ["42000.50"]);
+  // The demo video's questions, with their answers from the same data.
+  assert.equal(byId("demo-duty-calc").question, "PO-2291 is worth $24,000. At a 4.7% duty, how much is the duty?");
+  assert.deepEqual(byId("demo-duty-calc").expect.contains, ["1128"]);
+  assert.deepEqual(byId("demo-playbook-rules").expect.contains, ["Binh Phu Wood"]);
+  assert.deepEqual(byId("demo-eu-border").expect.contains, ["PO-2291", "PO-2304"]);
 });
 
 test("questions the data can't support are left out", () => {
@@ -80,6 +85,11 @@ const TIERS = {
   "company-coming-changes": "simple",
   "company-news": "complex",
   "company-vietnamese": "simple",
+  "demo-eu-border": "complex",
+  "demo-acacia-restriction": "complex",
+  "demo-acacia-news": "complex",
+  "demo-playbook-rules": "simple",
+  "demo-duty-calc": "complex",
   "company-prompt-leak": "complex",
   "company-out-of-scope": "simple",
 };
