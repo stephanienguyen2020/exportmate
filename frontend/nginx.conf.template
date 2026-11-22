@@ -1,0 +1,60 @@
+# The website's nginx (Dockerfile). ${PORT}, ${BACKEND_HOST} and ${AI_HOST} are filled in when the
+# container starts; nginx's own $variables are left alone (only set environment variables are).
+
+# The caller's request ID, or a new one, as the Vercel proxy did (api/backend.ts).
+map $http_x_request_id $forward_request_id {
+    ""      $request_id;
+    default $http_x_request_id;
+}
+
+server {
+    listen ${PORT};
+    root /usr/share/nginx/html;
+    server_tokens off;
+    # Uploads are capped at 4 MB by the backend; the rest is room for the multipart envelope.
+    client_max_body_size 5m;
+    gzip on;
+    gzip_types text/css application/javascript application/json image/svg+xml;
+
+    # The company backend (FastAPI). Cookies aren't used and aren't passed on.
+    location /api/v1/ {
+        proxy_pass https://${BACKEND_HOST};
+        proxy_set_header Host ${BACKEND_HOST};
+        proxy_ssl_server_name on;
+        proxy_set_header Cookie "";
+        proxy_set_header X-Request-ID $forward_request_id;
+        # Above the backend's longest step: two Gemini attempts of 25 s.
+        proxy_read_timeout 60s;
+        add_header Cache-Control "no-store" always;
+        error_page 502 504 = @backend_unavailable;
+    }
+
+    location @backend_unavailable {
+        default_type application/json;
+        add_header Cache-Control "no-store" always;
+        return 502 '{"error":{"code":"backend_unavailable","message":"The company backend could not be reached. Please try again.","requestId":"$forward_request_id"}}';
+    }
+
+    # The AI service: chat answers stream (NDJSON) for up to a few minutes.
+    location /api/ {
+        proxy_pass https://${AI_HOST};
+        proxy_set_header Host ${AI_HOST};
+        proxy_ssl_server_name on;
+        proxy_set_header Cookie "";
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        proxy_read_timeout 300s;
+    }
+
+    # Built files carry a content hash in their names.
+    location /assets/ {
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        try_files $uri =404;
+    }
+
+    # Routing is in the URL hash, so every page is index.html.
+    location / {
+        add_header Cache-Control "no-cache";
+        try_files $uri /index.html;
+    }
+}

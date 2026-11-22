@@ -3,6 +3,11 @@ output "backend_url" {
   value       = google_cloud_run_v2_service.backend.uri
 }
 
+output "web_url" {
+  description = "The website on Cloud Run (frontend/deploy.sh)."
+  value       = google_cloud_run_v2_service.web.uri
+}
+
 output "ai_url" {
   description = "Base URL of the AI service. vercel.json rewrites /api/* here."
   value       = local.ai_url
