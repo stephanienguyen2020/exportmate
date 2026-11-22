@@ -107,7 +107,13 @@ variable "neo4j_uri" {
 }
 
 variable "neo4j_username" {
-  description = "Neo4j user."
+  description = "Neo4j user (NEO4J_USERNAME in the instance's credentials file): neo4j on older AuraDB instances, the instance ID on newer ones."
+  type        = string
+  default     = "neo4j"
+}
+
+variable "neo4j_database" {
+  description = "Neo4j database (NEO4J_DATABASE in the instance's credentials file): neo4j on older AuraDB instances, the instance ID on newer ones."
   type        = string
   default     = "neo4j"
 }
