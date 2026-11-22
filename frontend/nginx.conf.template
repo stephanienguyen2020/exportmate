@@ -1,7 +1,7 @@
 # The website's nginx (Dockerfile). ${PORT}, ${BACKEND_HOST} and ${AI_HOST} are filled in when the
 # container starts; nginx's own $variables are left alone (only set environment variables are).
 
-# The caller's request ID, or a new one, as the Vercel proxy did (api/backend.ts).
+# The caller's request ID, or a new one; the backend tags its log lines and error bodies with it.
 map $http_x_request_id $forward_request_id {
     ""      $request_id;
     default $http_x_request_id;

@@ -34,9 +34,9 @@ variable "db_tier" {
 }
 
 variable "allowed_origins" {
-  description = "Comma-separated CORS origins for the backend and the AI service."
+  description = "Comma-separated CORS origins for the backend and the AI service. The website needs none: its nginx serves both on its own origin."
   type        = string
-  default     = "https://exportmate.vercel.app,http://127.0.0.1:5173,http://localhost:5173"
+  default     = "http://127.0.0.1:5173,http://localhost:5173"
 }
 
 variable "resend_enabled" {
@@ -52,9 +52,9 @@ variable "report_email_from" {
 }
 
 variable "auth_domains" {
-  description = "Domains allowed to use Firebase sign-in (besides the project's own)."
+  description = "Domains allowed to use Firebase sign-in, besides the project's own and the website's (firebase.tf)."
   type        = list(string)
-  default     = ["localhost", "127.0.0.1", "exportmate.vercel.app"]
+  default     = ["localhost", "127.0.0.1"]
 }
 
 variable "google_oauth_client_id" {

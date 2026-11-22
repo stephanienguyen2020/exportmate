@@ -5,8 +5,7 @@ const LOCAL_BACKEND = "http://127.0.0.1:8000";
 const LOCAL_AI_SERVICE = "http://127.0.0.1:8080";
 
 export default defineConfig(({ mode, command }) => {
-  // BACKEND_URL is the same variable the Vercel /api/v1 proxy (api/backend.ts) reads,
-  // so .env.local can point local development at the deployed backend.
+  // BACKEND_URL in .env.local points local development at the deployed backend.
   const env = loadEnv(mode, process.cwd(), "");
   // Dev sign-in tokens ("dev:<email>") are only accepted by a local backend with
   // AUTH_MODE=dev, so dev auth always talks to the local backend.

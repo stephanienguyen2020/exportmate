@@ -19,7 +19,6 @@
   "include": [
     "src",
     "ai/chat",
-    "ai/news",
-    "api"
+    "ai/news"
   ]
 }

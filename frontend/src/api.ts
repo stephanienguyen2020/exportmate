@@ -1177,7 +1177,7 @@ export const api = {
       (r) => r.data,
     ),
   // `analysedOrderIds` defaults to none: a backend deployed before it was added doesn't
-  // send it (Vercel deploys the frontend first).
+  // send it (the website can be deployed before the backend).
   createSupplier: (supplier: SupplierInput) =>
     request<SupplierRecord>("/suppliers", {
       method: "POST",

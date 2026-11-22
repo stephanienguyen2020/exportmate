@@ -1,6 +1,6 @@
 # Infra (Terraform)
 
-Creates everything ExportMate runs on Google Cloud (backend and AI service) in one GCP project. Only the frontend is hosted elsewhere (Vercel), and it calls these services.
+Creates everything ExportMate runs on Google Cloud (website, backend and AI service) in one GCP project.
 
 | Resource | Name |
 | --- | --- |
@@ -22,13 +22,16 @@ Creates everything ExportMate runs on Google Cloud (backend and AI service) in o
 | Model Armor template | `exportmate-untrusted-text` (prompt injection and jailbreak at medium confidence and above, malicious links, any language), screens each new news article; set on the service as `MODEL_ARMOR_TEMPLATE`. In `us-central1` (`model_armor_region`): `asia-southeast1` lacks the malicious-link filter and multi-language detection, and only public news articles are sent to it |
 | Cloud Scheduler | `exportmate-daily-news-scan`, 07:00 Asia/Ho_Chi_Minh, `POST <ai_url>/api/scan` |
 | Log-based metrics | `exportmate_ai/chat_answers` (by status, policy version), `chat_latency`, `guard_withheld`, `armor_failures`, `scan_failures` |
+| **Website** (`web_service.tf`) | |
+| Service account | `exportmate-web` (no roles) |
+| Cloud Run service (public) | `exportmate-web`, URL printed as `web_url`: nginx serves the Vite build and forwards `/api/v1` to the backend and `/api` to the AI service (`frontend/nginx.conf.template`) |
 | **Builds** (`build.tf`) | |
 | Service account | `exportmate-builder` (pushes to the image registry, writes build logs) |
 | Bucket | `<project>-builds`, uploaded build sources, deleted after 30 days |
 
-Terraform creates the services and jobs with a placeholder image. `backend/deploy.sh` builds the backend image, runs migrations and rolls it out; `ai/server/deploy.sh` builds the AI image on Cloud Build and rolls it out.
+Terraform creates the services and jobs with a placeholder image. `backend/deploy.sh` builds the backend image, runs migrations and rolls it out; `ai/server/deploy.sh` builds the AI image on Cloud Build and rolls it out; `frontend/deploy.sh` does the same for the website.
 
-`terraform apply` needs the project **Owner**: it creates the Firestore database, grants roles and makes the services public. Editors can run `terraform plan` and both deploy scripts.
+`terraform apply` needs the project **Owner**: it creates the Firestore database, grants roles and makes the services public. Editors can run `terraform plan` and the deploy scripts.
 
 ## First time
 
@@ -90,8 +93,8 @@ On `skilful-scarab-511320-q9` it was turned on in the Firebase console (Authenti
 
 On a new project, do the same in the console, or create the client yourself and let Terraform enable the provider:
 
-1. Cloud console › Google Auth Platform › Branding: set up the consent screen (External, app name ExportMate, support email, the `exportmate.vercel.app` home page and the privacy and terms pages). Under Audience, publish the app; while it is in testing, only listed test users can sign in.
-2. Clients › Create client › Web application. Authorized JavaScript origins: `https://exportmate.vercel.app`, `http://localhost:5173`, `http://127.0.0.1:5173`. Authorized redirect URI: `https://$PROJECT_ID.firebaseapp.com/__/auth/handler`.
+1. Cloud console › Google Auth Platform › Branding: set up the consent screen (External, app name ExportMate, support email, the website (`terraform output web_url`) as the home page and its privacy and terms pages). Under Audience, publish the app; while it is in testing, only listed test users can sign in.
+2. Clients › Create client › Web application. Authorized JavaScript origins: the website's URL (`web_url`), `http://localhost:5173`, `http://127.0.0.1:5173`. Authorized redirect URI: `https://$PROJECT_ID.firebaseapp.com/__/auth/handler`.
 3. Put the client ID and secret in `terraform.tfvars` (`google_oauth_client_id`, `google_oauth_client_secret`) and `terraform apply`. If the provider was already turned on in the console, import it first: `terraform import 'google_identity_platform_default_supported_idp_config.google[0]' projects/$PROJECT_ID/defaultSupportedIdpConfigs/google.com`.
 
 The button shows whenever Firebase is configured and `VITE_AUTH_MODE` isn't `dev`. Until the provider is on, it answers "Google sign-in isn't turned on yet". Someone who already has a password for the same email is asked to sign in with it (one account per email); a Gmail address is the exception, since Google vouches for it and Firebase links it to the existing account.
@@ -101,6 +104,7 @@ The button shows whenever Firebase is configured and `VITE_AUTH_MODE` isn't `dev
 ```sh
 PROJECT_ID=skilful-scarab-511320-q9 backend/deploy.sh
 PROJECT_ID=skilful-scarab-511320-q9 ai/server/deploy.sh
+PROJECT_ID=skilful-scarab-511320-q9 frontend/deploy.sh
 ```
 
 ## AI service tasks
