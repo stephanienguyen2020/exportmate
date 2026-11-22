@@ -8,8 +8,11 @@
 //        npm run eval -- --vertex           also create an evaluation run on Agent Platform (Gen AI evaluation:
 //                                           tool use, hallucination, response quality, safety; platform/evaluate.py, needs uv)
 //        npm run exam                       the company exam (exam.js) on the deployed agents, signed in as the
-//                                           demo company's owner: EXAM_PASSWORD, FIREBASE_API_KEY and BACKEND_URL
-//                                           (the deployed backend); EXAM_EMAIL defaults to lan@example.com
+//                                           exam user (EXAM_EMAIL, default exam@example.com, and EXAM_PASSWORD, in
+//                                           .env), with FIREBASE_API_KEY and BACKEND_URL (the deployed backend). The
+//                                           exam user is a Firebase user with a verified email and its own copy of
+//                                           the demo company: python -m app.seed_demo_data --email exam@example.com
+//                                           --firebase-uid <uid> (infra/terraform/README.md, "First time")
 //        npm run exam -- --history          the exam's scoreboard: its recent runs, one line each
 // On GCP: gcloud run jobs execute exportmate-ai-task --args="node eval/run.js --judge" --wait
 // Each run is stored in the Firestore `eval_runs` collection and compared with the
@@ -145,7 +148,7 @@ if (arg("history") !== undefined) {
 // answers are worked out from, with the same token the agents then use.
 async function companyExam() {
   const { EXAM_PASSWORD, FIREBASE_API_KEY, BACKEND_URL } = process.env;
-  const email = process.env.EXAM_EMAIL || "lan@example.com";
+  const email = process.env.EXAM_EMAIL || "exam@example.com";
   if (!EXAM_PASSWORD || !FIREBASE_API_KEY || !BACKEND_URL) throw new Error("--company needs EXAM_PASSWORD, FIREBASE_API_KEY and BACKEND_URL");
   const signIn = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`, {
     method: "POST",
