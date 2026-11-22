@@ -9,7 +9,7 @@ output "web_url" {
 }
 
 output "ai_url" {
-  description = "Base URL of the AI service. vercel.json rewrites /api/* here."
+  description = "Base URL of the AI service. The website forwards /api/* here."
   value       = local.ai_url
 }
 

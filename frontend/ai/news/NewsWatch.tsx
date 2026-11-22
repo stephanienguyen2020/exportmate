@@ -108,8 +108,8 @@ async function api<T>(path: string, init?: Omit<RequestInit, "headers">): Promis
   return data as T;
 }
 
-// A scan runs inside its POST and can outlast the website's proxy (Vercel gives up on the AI
-// service after 120 s with a 502 or 504) while it carries on in the AI service. "Scan now" then
+// A scan runs inside its POST and can outlast the website's proxy (its nginx gives up on the AI
+// service after 300 s with a 504) while it carries on in the AI service. "Scan now" then
 // follows the scan record until it ends, for as long as Cloud Run lets a request run.
 const SCAN_POLL_MS = 10_000;
 const SCAN_FOLLOW_MS = 10 * 60_000;

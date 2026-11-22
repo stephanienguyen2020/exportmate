@@ -21,7 +21,7 @@ const PORT = Number(process.env.PORT || 8080);
 const MODELS = { simple: TIERS.simple.model, complex: TIERS.complex.model, scan: SCAN_MODEL };
 const ALLOWED_ORIGINS = (
   process.env.ALLOWED_ORIGINS ||
-  "https://exportmate.vercel.app,http://127.0.0.1:5173,http://localhost:5173"
+  "http://127.0.0.1:5173,http://localhost:5173"
 ).split(",");
 const MAX_MESSAGES = 20;
 const MAX_CHARS = 4000;
@@ -126,9 +126,10 @@ async function companyEditor(req, action) {
   return { error: [503, { error: "This can't be changed right now. Please try again later." }] };
 }
 
-// The caller's address. Vercel replaces X-Forwarded-For with the visitor's address and Cloud Run
-// appends the hop it saw, so the first entry is the visitor. A caller going straight to Cloud Run
-// can fake it; the per-instance cap still bounds what they can spend.
+// The caller's address. The website's nginx passes X-Forwarded-For on and Cloud Run appends the
+// hops it saw, so the first entry is the visitor unless they sent the header themselves. A caller
+// can fake it, through the website or straight to Cloud Run; the per-instance cap still bounds
+// what they can spend.
 function clientAddress(req) {
   return (req.headers["x-forwarded-for"] || "").split(",")[0].trim() || req.socket.remoteAddress || "unknown";
 }

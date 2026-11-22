@@ -20,7 +20,6 @@ jobs:
         working-directory: frontend
     steps:
       - uses: actions/checkout@v7
-      # The Vercel proxy test imports api/backend.ts directly, which needs Node's type stripping.
       - uses: actions/setup-node@v7
         with:
           node-version: 24

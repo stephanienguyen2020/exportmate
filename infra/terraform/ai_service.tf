@@ -224,7 +224,7 @@ resource "google_cloud_run_v2_service" "ai" {
   ]
 }
 
-# Public API (Vercel rewrites /api/* here): chat is anonymous or carries the user's Firebase
+# Public API (the website forwards /api/* here): chat is anonymous or carries the user's Firebase
 # token, source changes are checked against the backend, and POST /api/scan needs the
 # scheduler's OIDC token or an owner/editor token.
 resource "google_cloud_run_v2_service_iam_member" "ai_public" {
