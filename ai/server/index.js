@@ -252,9 +252,11 @@ async function streamChat(req, res, body, origin, requestId) {
       const token = company ? req.headers.authorization.replace(/^Bearer /, "") : undefined;
       // The request's trace goes along too, so the agents' spans and logs join this request's trace.
       for await (const event of streamTurn({ ...turn, backendToken: token, traceparent: traceparentFrom(req.headers) })) {
-        write(event);
+        const { errorStatus, ...forClient } = event;
+        write(forClient);
         if (event.type === "done") logChat(event.audit, trace);
-        if (event.type === "error") log("ERROR", "chat.agents_error", { requestId, trace, auditId: event.auditId });
+        // errorStatus: the model's HTTP status (429 capacity, 404 model); agent.failed in the same trace has the message.
+        if (event.type === "error") log("ERROR", "chat.agents_error", { requestId, trace, auditId: event.auditId, errorStatus });
       }
     } else {
       const result = await runAgent({

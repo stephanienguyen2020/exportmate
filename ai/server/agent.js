@@ -352,6 +352,7 @@ export async function runAgent({
     log("ERROR", "agent.failed", { requestId, error: String(e?.message || e), status: e?.status });
     audit.status = "error";
     audit.error = String(e?.message || e);
+    if (e?.status) audit.errorStatus = e.status; // the model's HTTP status: 429 is capacity, 404 a wrong model
   }
 
   const retrieved = refs.all();

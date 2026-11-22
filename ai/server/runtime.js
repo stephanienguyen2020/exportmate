@@ -79,7 +79,8 @@ async function stream(input, res) {
   try {
     // Inside the chat request's trace (index.js sends its traceparent): ADK's spans and these logs join it.
     const result = await inRequestTrace(input.traceparent, () => runAgent({ ...chatInput(input), onStep: (step) => write({ type: "step", step: publicStep(step) }) }));
-    if (result.status === "error") write({ type: "error", error: "The assistant is unavailable right now.", auditId: result.id });
+    // errorStatus is for index.js's log line (chat.agents_error); it doesn't reach the browser.
+    if (result.status === "error") write({ type: "error", error: "The assistant is unavailable right now.", auditId: result.id, errorStatus: result.errorStatus });
     else write({ type: "done", reply: result.answer, citations: result.citations, audit: publicAudit(result) });
   } catch (e) {
     log("ERROR", "runtime.stream_failed", { error: String(e?.message || e) });

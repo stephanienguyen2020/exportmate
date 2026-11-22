@@ -67,3 +67,10 @@ test("without a trace the turn runs as before, and an explicit header still wins
   assert.equal(explicit["logging.googleapis.com/trace"], `projects/${PROJECT}/traces/${"b".repeat(32)}`);
   assert.equal(await inRequestTrace("garbage", async () => "ran"), "ran");
 });
+
+test("a failed model call is labelled on its span by HTTP status or kind, with a bounded message", async () => {
+  const { errorAttributes } = await import("../agents/model.js");
+  assert.deepEqual(errorAttributes(Object.assign(new Error("Resource exhausted."), { status: 429 })), { "error.type": "429", "error.message": "Resource exhausted." });
+  assert.equal(errorAttributes(Object.assign(new Error("Model call took over 45s"), { name: "TimeoutError" }))["error.type"], "TimeoutError");
+  assert.equal(errorAttributes(new Error("x".repeat(1000)))["error.message"].length, 300);
+});
