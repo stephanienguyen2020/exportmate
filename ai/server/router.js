@@ -1,7 +1,7 @@
 // Router: picks which agent answers each chat turn (both use the same model, models.js).
 // - simple → quick_answer: one lookup or explanation, e.g. a SKU's supplier, a count,
 //   which items carry a certification, when the scan ran, how to use the app, a decline.
-// - complex → the analyst and its specialists: anything that needs the conversation so far,
+// - complex → the analyst: anything that needs the conversation so far,
 //   arithmetic over several records, judgement about rules, risk or exposure, how orders connect
 //   to materials and origins (the knowledge graph), or text pasted from someone else.
 // Rules, not a classifier call: free, instant and testable against the golden set. A quick
@@ -16,7 +16,7 @@ const JUDGEMENT =
 const RULES =
   /\b(anti-?dumping|countervailing|dut(y|ies)|tariffs?|quotas?|sanctions?|embargo(es)?|bans?|banned|regulations?|regulat(ed|es)|directives?|requirements?|requir(e|es|ed)|complian(ce|t)|comply|due diligence|legal|law)\b|thuế|chống bán phá giá|quy định/i;
 // Questions about how things connect (orders, suppliers, materials, origins): the knowledge
-// graph's paths, which the analyst's graph specialist walks and the critic checks.
+// graph's paths, which the analyst walks with query_graph and the critic checks.
 const CONNECTIONS =
   /\b(depends?|depending|dependen(t|cy|cies)|connected|connections?|made (from|of)|comes? from|sourced( from)?|sourcing|supply chains?|upstream|downstream|restricts?|restrictions?|which (of my |our )?orders?)\b|phụ thuộc|chuỗi cung ứng/i;
 const QUOTED = /["“'‘][^"”'’]{40,}["”'’]/;

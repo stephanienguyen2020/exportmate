@@ -1,5 +1,5 @@
 // What each agent is told. The assistant's prompt is built from policy.js's versioned rules;
-// specialists get a narrow brief and the rules that apply to gathering facts.
+// the analyst's adds how to work through a question with several parts.
 import { rulesFor } from "../policy.js";
 import { asData } from "../guard.js";
 import { STOCK_PROFILE } from "../seed/inventory.js";

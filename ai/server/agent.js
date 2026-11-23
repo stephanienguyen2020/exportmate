@@ -296,8 +296,6 @@ export async function runAgent({
     if (final) audit.status = "max_steps";
   }
 
-  // What each specialist told the analyst (the analyst's tool result).
-
   const plugins = [new UnknownToolPlugin(runTool)];
   const { root, agents } = buildAssistant({ session, declarations: gateway.declarations(), runTool, hooks, routeTo: () => current });
 
