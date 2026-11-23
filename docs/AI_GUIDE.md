@@ -14,7 +14,7 @@ Alerts and answers are AI assessments, not legal advice. Legal and regulatory co
 
 **Open it.** The round chat button at the bottom right of the landing page and every workspace page opens the assistant. The expand icon in its header opens the full-screen view at `#/chat`, which adds the audit trail for the whole conversation.
 
-**Ask.** Type a question and press Enter (Shift+Enter starts a new line). A new conversation shows four suggested questions to start from. While the assistant works, it shows each step as it happens: which agent is working, "Searched the knowledge base", "Queried stock in Firestore", a specialist's report, and so on. A question that needs several lookups takes longer than a single lookup, and the app gives up after two minutes.
+**Ask.** Type a question and press Enter (Shift+Enter starts a new line). A new conversation shows four suggested questions to start from. While the assistant works, it shows each step as it happens: which agent is working, "Searched the knowledge base", "Queried stock in Firestore", and so on. A question that needs several lookups takes longer than a single lookup, and the app gives up after two minutes.
 
 **Follow up.** You can say "those items" or "that alert" and the assistant works out what you mean. It looks the facts up again each time instead of trusting its earlier answers. It replies in the language you write in.
 
@@ -101,10 +101,9 @@ A draft that fails goes back to the model once with the problems listed. If the 
 
 The audit also lists every step:
 
-- **Which agent**: every step carries the name of the agent that made it: *Quick answer* for simple lookups, *Analyst* for questions that need several facts, and the specialists the analyst asks (*Stock*, *News*, *Company* and *Knowledge specialist*).
+- **Which agent**: every step carries the name of the agent that made it: *Quick answer* for simple lookups, *Analyst* for questions that need several facts. (Answers from before 23 Nov 2026 also show the specialists the analyst asked then.)
 - **Recalled memories**: what the assistant remembered about you before answering (company workspaces).
-- **Planned next step**: which tools (or specialists) the agent chose and with what arguments.
-- **Specialist reported**: what the analyst asked a specialist and the specialist's report.
+- **Planned next step**: which tools the agent chose and with what arguments.
 - **Tool calls**: the arguments, the results with their reference numbers, similarity scores for searches, the age of news, and any error (for example "arguments rejected" or "timed out").
 - **Withheld passages**: text from a news feed that tried to give the assistant instructions is replaced with `[removed: …]` before the model sees it, and the audit says where.
 - **Drafted an answer / Auditor sent the draft back**: when a draft was revised, the draft and the problems found.
@@ -178,14 +177,14 @@ Viewers can read solutions and notes but not change them. The browser-only demo 
 3. The service passes the question to the agents on Agent Runtime (`runtime.js`) and relays each step back to your browser as it happens. Your token goes along only so the agents can read your orders and playbook with it; it is never stored.
 4. If the same question was answered against the same data today, that answer is reused (`answer-cache.js`).
 5. The assistant continues your Agent Platform session, and in a company workspace recalls what Memory Bank remembers about you that bears on the question.
-6. The **router** (`router.js`) picks the agent. Both use the same model (`GEMINI_MODEL`). Lookups and how-to questions go to *Quick answer*, which has every tool. A question goes to the *Analyst*, which hands parts of it to specialists, if it:
+6. The **router** (`router.js`) picks the agent. Both use the same model (`GEMINI_MODEL`). Lookups and how-to questions go to *Quick answer*, which has every tool. A question goes to the *Analyst*, which also has every tool and works through questions with several parts, if it:
    - is a follow-up or names several SKUs;
    - asks for a total, average, percentage or exposure;
    - asks for judgement (why, should, compare, risk, impact);
    - is about trade rules (EUDR, duties, tariffs, anti-dumping);
    - contains pasted text or instructions aimed at the assistant;
    - or is longer than 300 characters.
-7. The agent (Google ADK) plans, calls tools, reads the results and repeats. The *Analyst* doesn't call data tools itself: it asks the **specialists** (stock, news, company, knowledge), each a smaller agent with only its own tools, then does the arithmetic and writes the answer. Each answering agent gets at most six rounds (16 tool calls in all, across the team) before tools are switched off and it has to answer; a specialist gets three per request.
+7. The agent (Google ADK) plans, calls tools, reads the results and repeats. Both agents call the tools themselves; the *Analyst* also does any arithmetic with the calculator. Each gets at most six rounds (16 tool calls in all) before tools are switched off and it has to answer.
 8. Every tool call, by any agent, goes through the **gateway** (`gateway.js`). The gateway checks the arguments against the tool's declared format, refuses tools this workspace doesn't have (the company profile outside a company workspace, for example), enforces the per-question budget, times out after 15 seconds and retries once on a temporary failure.
 9. Text written by third parties (articles, alerts, custom feed names) is screened by the **guard** (`guard.js`). Passages addressed to the assistant are withheld. All the agents' traffic also passes Agent Gateway, where Model Armor screens it for prompt injection.
 10. The **auditor** (`review.js`) checks the draft. A draft that fails goes back once, to the *Analyst*.
@@ -207,7 +206,7 @@ The assistant's instructions are a list of rules in `policy.js`. Each rule names
 | `get_playbook` | The playbook rules switched on, from `GET /api/v1/playbook/rules` with your token, or the rules the browser demo sent | Company workspace, or a demo with rules |
 | `query_graph` | The knowledge graph (GraphRAG): from a material, origin country, HS code or market to the orders it reaches through your suppliers' sourcing and the material chain, with every link's official text (`GET /api/v1/knowledge-graph/query` with your token). The same walk News watch uses for an article | Company workspace |
 
-**Connections.** RAG Engine finds text similar to a question; it can't follow connections across records ("which orders depend on wood from Laos?"). `query_graph` walks them: the graph specialist asks the backend, which walks from what the question names through your suppliers' sourcing and the material chain to your orders, the same walk as News watch, so the answer is code's, not the model's. Each order it reaches is cited as a **graph path** and each link's source as an **official text**. Before the answer is shown, the auditor checks every order named from the graph cites its path, and a critic (Gemini) compares, order by order, what the answer says connects it with its path; a draft that adds a supplier, a country or a step goes back once, and one that still does is marked **Needs review**.
+**Connections.** RAG Engine finds text similar to a question; it can't follow connections across records ("which orders depend on wood from Laos?"). `query_graph` walks them: the agent asks the backend, which walks from what the question names through your suppliers' sourcing and the material chain to your orders, the same walk as News watch, so the answer is code's, not the model's. Each order it reaches is cited as a **graph path** and each link's source as an **official text**. Before the answer is shown, the auditor checks every order named from the graph cites its path, and a critic (Gemini) compares, order by order, what the answer says connects it with its path; a draft that adds a supplier, a country or a step goes back once, and one that still does is marked **Needs review**.
 
 **Search.** `search_knowledge` asks Agent Platform RAG Engine for the records nearest in meaning to the query, in the corpora for the types it wants (articles, alerts, stock items, sources, guides): three times as many as needed. The embeddings are multilingual, so a question in Vietnamese finds English news. It then drops anything your company may not see, before any agent reads it, and reranks the rest with BM25, so exact codes and names such as `PLY-101` or `4412` count. Each scan adds its new articles and alerts to the index; `npm run index` rebuilds it.
 

@@ -248,7 +248,7 @@ async function streamChat(req, res, body, origin, requestId) {
     };
     if (AGENTS_AT) {
       // The agents run on Agent Runtime (agents/remote.js): relay their events. The user's token
-      // goes along only so the company specialist can read orders and playbook with it.
+      // goes along only so the agents can read the company's orders and playbook with it.
       const token = company ? req.headers.authorization.replace(/^Bearer /, "") : undefined;
       for await (const event of streamTurn({ ...turn, backendToken: token })) {
         write(event);

@@ -109,15 +109,15 @@ The assistant is a multi-agent team built with **Google ADK** and running on **A
 Runtime**.
 
 1. **Router**
-   - Picks the model for each question: a **quick-answer agent** on a small Gemini model, or an
-     **analyst** on a larger one. Connection questions ("depends on", "made from", "which orders",
-     "restricts") go to the analyst.
+   - Picks the agent for each question: a **quick-answer agent** for lookups, or an **analyst** for
+     questions with several parts. Both use the same Gemini model. Connection questions ("depends
+     on", "made from", "which orders", "restricts") go to the analyst.
 
-2. **Specialists**
-   - The analyst delegates to specialists, each with its own read-only tools: **company** (orders,
-     checklists and playbook, read with the user's own token), **news** (alerts and scans), **stock**,
-     **knowledge** (search over **RAG Engine**, then a BM25 rerank) and **graph** (`query_graph`, the
-     knowledge graph's paths from material to order).
+2. **Tools**
+   - Both agents call read-only tools themselves: **orders** (checklists, read with the user's own
+     token), **playbook**, **company profile**, **news** (alerts and scans), **stock**, **search**
+     (**RAG Engine**, then a BM25 rerank) and **graph** (`query_graph`, the knowledge graph's paths
+     from material to order).
 
 3. **Auditor**
    - Checks every draft: citations resolve, figures appear in what the tools returned, news carries its
@@ -212,8 +212,8 @@ doubtful links for a person.
 
 #### 🧠 4. Assistant (GraphRAG)
 
-- The router sends a connection question to the analyst, which hands it to the **graph specialist**.
-- Its `query_graph` call goes through **Agent Gateway** and **Model Armor** to the **Graph query API**
+- The router sends a connection question to the analyst.
+- The analyst's `query_graph` call goes through **Agent Gateway** and **Model Armor** to the **Graph query API**
   on Cloud Run, which reads what the question names (materials, countries, HS codes, markets), walks
   the graph for the user's company with a **Cypher** query on **Neo4j AuraDB**, and returns each order
   with its cited path and what it did and didn't recognise.
