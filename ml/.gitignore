@@ -1,2 +1,7 @@
 # Training data stays local (later in a GCS bucket), never in git.
 data/
+# Trained models and their reports (models/<date>/).
+models/
+# Python caches and the uv environment.
+__pycache__/
+.venv/

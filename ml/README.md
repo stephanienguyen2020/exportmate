@@ -7,16 +7,47 @@ Nothing here runs in the app yet.
 
 ```
 ml/
-  data/          # git-ignored: downloaded and prepared data
-    raw/         # files exactly as downloaded, one folder per source
-      gta/       # Global Trade Alert "GTA entries" CSV exports
+  pyproject.toml  # uv project
+  src/
+    prepare.py    # GTA CSV + Firestore articles/alerts → data/interim/*.parquet
+    collect.py    # past trade headlines (Google News, Federal Register, GDELT) → training only
+    sources.py    # the scan's articles (test set) and the collected ones (training) in one shape
+    sample.py     # pick what to rate → labels/to_rate.csv
+    extract.py    # Gemini reads each article into GTA's fields (measure type, countries, dates…)
+    embed.py      # text embeddings (text-multilingual-embedding-002)
+    features.py   # the one feature function, same for a GTA measure and an article
+    evaluate.py   # every candidate vs Gemini, cross-validated on rated articles → models/<date>/
+    measure_types.py  # the closed list of measure types both sources map onto
+  labels/
+    RUBRIC.md     # what high, medium, low mean
+    rated.csv     # the labels; GTA and collected rows keep only their ID (their text stays in data/)
+  data/           # git-ignored: raw/ as downloaded, interim/ prepared
+  models/         # git-ignored: reports and trained models by date
 ```
 
-Later folders (add when needed): `notebooks/` for exploration, `src/` for data
-preparation and training code, `models/` (git-ignored) for trained weights.
+Run (needs `gcloud auth application-default login`; reads Firestore, calls Gemini and embeddings
+in `skilful-scarab-511320-q9`):
+
+```sh
+cd ml
+uv run python src/prepare.py
+uv run python src/collect.py --source=google    # also google_vi, fedreg, gdelt; reruns add only new ones
+uv run python src/sample.py      # only new items; rate them into labels/rated.csv
+uv run python src/extract.py
+uv run python src/embed.py
+uv run python src/features.py
+uv run python src/evaluate.py    # prints and writes models/<date>/report.md
+```
+
+Design and plan: `docs/local/SEVERITY_MODEL.md`.
 
 `data/` is never committed. Each person downloads the files themselves.
-Check each source's terms before training on it.
+Check each source's terms before training on it. GTA (checked 22 Nov 2026): a free account holds
+"Internal Use" only; we train on it for development and demo, never commit or show its data, and need
+a Derived Use grant from SGEPT (or articles-only training) before a GTA-trained model serves customers.
+Collected headlines: Google News feeds are for personal, non-commercial use, GDELT asks for
+attribution ("GDELT Project"), the Federal Register is public domain; we keep headline, link, date and
+publisher only, in `data/`, never committed.
 
 ## What we have
 
