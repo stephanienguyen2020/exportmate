@@ -5,7 +5,7 @@
 // - gateway.js: every tool call is validated, scoped, budgeted, timed out and retried;
 // - guard.js: third-party text in tool results is treated as data (injection removed);
 // - review.js: an auditor checks the draft (citations, figures, links) and sends it back once;
-// - router.js: each question goes to a small fast model or the bigger one (models.js);
+// - router.js: each question goes to quick_answer or the analyst (one model for both, models.js);
 // - answer-cache.js: a question already answered against the same data isn't answered again.
 // Every step is streamed and stored in an audit document (`audits` collection).
 import { FieldValue } from "@google-cloud/firestore";
@@ -97,7 +97,7 @@ async function cachedAnswer(key, companyId = null) {
  * ending with the user's question. `onStep` receives audit steps as they happen.
  * `channel` says where the turn came from ("chat" or "eval"); `withEvidence` also
  * returns the tool-result text the answer was checked against (not stored). `tier` forces
- * a model tier (router.js); `useCache` reuses and stores answers (answer-cache.js).
+ * the answering agent (router.js); `useCache` reuses and stores answers (answer-cache.js).
  */
 export async function runAgent({
   messages,

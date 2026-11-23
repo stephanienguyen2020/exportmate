@@ -60,7 +60,7 @@ npm test                               # unit tests, no GCP needed (also in CI)
 npm run eval                           # golden set against Gemini + Firestore; saves eval/results/<time>.json
 npm run eval -- --only=latest-scan     # selected cases
 npm run eval -- --judge                # add the LLM judge (JUDGE_MODEL, default GEMINI_MODEL)
-npm run eval -- --tier=simple          # every case on one tier, e.g. to see what the small model can handle
+npm run eval -- --tier=simple          # every case to one agent, e.g. to see what quick_answer can handle
 npm run eval:vertex                    # also create an evaluation run on Agent Platform › Evaluation (managed judges)
 npm run ops                            # last 7 days of chats; --days=1, --eval, --json
 npm run eval:scan                      # news scan relevance on labeled articles; saves to scan_eval_runs

@@ -287,7 +287,7 @@ across records ("which of my orders depend on wood from Laos?"); the graph can.
   "which orders") to the analyst; the `graph-paths` policy rule has it name each order with its
   path and add no links the path doesn't show.
 - **Auditor** (`review.js`): an order the walk reached that the answer names must cite its path.
-- **Critic** (`critic.js`): Gemini (the complex tier's model at LOW thinking) compares, order by
+- **Critic** (`critic.js`): Gemini (the assistant's model at LOW thinking) compares, order by
   order, what the answer says connects the order with its path, given the order's own facts.
   Restating or shortening is fine; a supplier, country or chain step the path doesn't show, or a
   contradiction, sends the draft back once; still failing marks the answer `needs_review`.

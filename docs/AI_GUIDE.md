@@ -178,7 +178,7 @@ Viewers can read solutions and notes but not change them. The browser-only demo 
 3. The service passes the question to the agents on Agent Runtime (`runtime.js`) and relays each step back to your browser as it happens. Your token goes along only so the agents can read your orders and playbook with it; it is never stored.
 4. If the same question was answered against the same data today, that answer is reused (`answer-cache.js`).
 5. The assistant continues your Agent Platform session, and in a company workspace recalls what Memory Bank remembers about you that bears on the question.
-6. The **router** (`router.js`) picks the agent. Lookups and how-to questions go to *Quick answer*, on the small fast model, which has every tool. A question goes to the *Analyst*, on the bigger model, if it:
+6. The **router** (`router.js`) picks the agent. Both use the same model (`GEMINI_MODEL`). Lookups and how-to questions go to *Quick answer*, which has every tool. A question goes to the *Analyst*, which hands parts of it to specialists, if it:
    - is a follow-up or names several SKUs;
    - asks for a total, average, percentage or exposure;
    - asks for judgement (why, should, compare, risk, impact);
