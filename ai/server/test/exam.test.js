@@ -20,7 +20,7 @@ const company = {
   orders: [
     order("PO-2291", { checks: [check("geolocation", "missing", "Plot geolocation"), check("legality", "on_file")] }),
     order("PO-2304", { shipDate: "2026-12-13", checks: [check("geolocation", "missing", "Plot geolocation")] }),
-    order("PO-2320", { market: "US", shipDate: "2026-12-25", value: 5430000 }),
+    order("PO-2320", { market: "US", shipDate: "2026-12-25", supplier: "An Cuong Wood", value: 5430000 }),
     order("PO-2311", { market: "JP", shipDate: "2026-12-05", supplier: "Mekong Timber", value: 1350000 }),
     order("PO-2313", { market: "JP", shipDate: "2026-12-08", supplier: "Mekong Timber", value: 1650050 }),
     order("PO-2315", { market: "JP", shipDate: "2026-12-09", supplier: "Mekong Timber", value: 1200000 }),
@@ -66,6 +66,16 @@ test("the exam's answers are worked out from the company's data", () => {
   assert.equal(byId("company-follow-up-total").messages.length, 3);
   assert.deepEqual(byId("company-follow-up-total").expect.contains, ["48000"]);
   assert.equal(byId("company-follow-up-why").question, "Why is the first one missing them?");
+  // By level. Open orders by ship date: PO-2311, 2313, 2315 (JP), 2291, 2304 (EU), 2320 (US).
+  assert.deepEqual(byId("easy-open-count").expect.contains, ["6"]);
+  assert.deepEqual(byId("easy-order-supplier").expect.contains, ["Mekong Timber"]);
+  assert.deepEqual(byId("easy-order-hs").expect.contains, ["4412.33"]);
+  assert.deepEqual(byId("medium-largest-order").expect.contains, ["PO-2320", "54300"]);
+  assert.deepEqual(byId("medium-busiest-supplier").expect.contains, ["Mekong Timber", "3"]);
+  assert.deepEqual(byId("medium-follow-up-first").expect.contains, ["PO-2311"]);
+  assert.deepEqual(byId("hard-due-soon-gaps").expect.contains, ["PO-2291", "PO-2304"]);
+  assert.deepEqual(byId("hard-supplier-risk").expect.contains, ["PO-2291", "PO-2304", "48000"]);
+  assert.deepEqual(byId("hard-market-compare").expect.contains, ["48000", "54300"]);
 });
 
 test("questions the data can't support are left out", () => {

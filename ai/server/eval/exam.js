@@ -45,6 +45,21 @@ export function examCases(company, { policyRules = [] } = {}) {
   const onFile = open.find((o) => o.checks.some((c) => c.status === "on_file"));
   const otherMarket = gapped[0] && company.markets?.find((m) => m.code !== gapped[0].placement.market);
   const euTotal = new Set(eu.map((o) => o.order.currency)).size === 1 ? eu.reduce((sum, o) => sum + o.order.valueMinor, 0) : null;
+  // For the questions by level (easy, medium, hard).
+  const total = (orders) => (new Set(orders.map((o) => o.order.currency)).size === 1 ? orders.reduce((sum, o) => sum + o.order.valueMinor, 0) : null);
+  const daysAway = (iso) => (Date.parse(iso) - Date.parse(company.today)) / 86_400_000;
+  const withHs = open.find((o) => o.order.hsCode);
+  const clear = open.filter((o) => o.order.status === "clear");
+  const byValue = [...open].sort((a, b) => b.order.valueMinor - a.order.valueMinor);
+  const largest = byValue.length > 1 && byValue[0].order.valueMinor > byValue[1].order.valueMinor ? byValue[0] : byValue.length === 1 ? byValue[0] : null;
+  const bySupplier = {};
+  for (const o of open) (bySupplier[o.order.supplier] ||= []).push(o);
+  const supplierCounts = Object.entries(bySupplier).sort((a, b) => b[1].length - a[1].length);
+  const busiest = supplierCounts.length && (supplierCounts.length === 1 || supplierCounts[0][1].length > supplierCounts[1][1].length) ? supplierCounts[0] : null;
+  const jp = byMarket.JP || [];
+  const dueSoonGaps = open.filter((o) => daysAway(o.order.shipDate) <= 14 && o.gapCount > 0);
+  const atRisk = gapped[0] ? open.filter((o) => o.order.supplier === gapped[0].order.supplier && o.gapCount > 0) : [];
+  const us = byMarket.US || [];
 
   const cases = [
     {
@@ -206,6 +221,92 @@ export function examCases(company, { policyRules = [] } = {}) {
       ],
       expect: { tools: ["query_orders"], contains: [gapped[0].order.id], containsAny: gapTitles([gapped[0]]) },
       rubric: `Explains ${gapped[0].order.id}'s missing documents and the rule behind each.`,
+    },
+    // Easy: one lookup.
+    {
+      id: "easy-open-count",
+      category: "easy",
+      question: "How many open orders do I have?",
+      expect: { tools: ["query_orders"], contains: [String(open.length)] },
+    },
+    open[0] && {
+      id: "easy-order-supplier",
+      category: "easy",
+      question: `Who supplies ${open[0].order.id}?`,
+      expect: { tools: ["query_orders"], contains: [open[0].order.supplier] },
+    },
+    withHs && {
+      id: "easy-order-hs",
+      category: "easy",
+      question: `What HS code is on ${withHs.order.id}?`,
+      expect: { tools: ["query_orders"], contains: [withHs.order.hsCode] },
+    },
+    {
+      id: "easy-how-import",
+      category: "easy",
+      question: "How do I import my orders from a spreadsheet?",
+      expect: { tools: ["search_knowledge"], containsAny: ["CSV", "csv"] },
+      rubric: "Explains the CSV import from the help guide (the columns it needs, checking rows, committing), citing the guide.",
+    },
+    // Medium: filter, rank or follow up.
+    {
+      id: "medium-clear-orders",
+      category: "medium",
+      question: "Which of my open orders are in the clear?",
+      expect: { tools: ["query_orders"], contains: listed(ids(clear)) },
+      rubric: `Lists the open orders with status clear (${ids(clear).join(", ") || "none"}), and none of the others.`,
+    },
+    largest && {
+      id: "medium-largest-order",
+      category: "medium",
+      question: "What's my largest open order by value?",
+      expect: { tools: ["query_orders"], contains: [largest.order.id, money(largest.order.valueMinor)] },
+    },
+    busiest && {
+      id: "medium-busiest-supplier",
+      category: "medium",
+      question: "Which supplier has the most open orders, and how many?",
+      expect: { tools: ["query_orders"], contains: [busiest[0], String(busiest[1].length)] },
+    },
+    jp.length > 1 && {
+      id: "medium-follow-up-first",
+      category: "medium",
+      messages: [
+        { role: "user", text: "Which of my orders go to Japan?" },
+        { role: "model", text: `These orders go to Japan: ${ids(jp).join(", ")}.` },
+        { role: "user", text: "Which of them ships first, and when?" },
+      ],
+      expect: { tools: ["query_orders"], contains: [jp[0].order.id] },
+      rubric: `Names ${jp[0].order.id}, shipping ${jp[0].order.shipDate}.`,
+    },
+    // Hard: several steps, sums and judgement.
+    {
+      id: "hard-due-soon-gaps",
+      category: "hard",
+      question: "Which orders ship in the next 14 days and still have missing documents? What should I do first?",
+      expect: { tools: ["query_orders"], contains: listed(ids(dueSoonGaps)) },
+      rubric: `Names the open orders shipping by ${company.today} + 14 days with a missing or mismatched document (${ids(dueSoonGaps).join(", ") || "none"}), what each is missing, and puts the earliest ship date first; says so plainly if none.`,
+    },
+    atRisk.length > 0 && total(atRisk) !== null && {
+      id: "hard-supplier-risk",
+      category: "hard",
+      question: `If ${gapped[0].order.supplier} can't send the missing documents before shipping, which orders and how much value are at risk?`,
+      expect: { tools: ["query_orders", "calculate"], contains: [...listed(ids(atRisk)), money(total(atRisk))] },
+      note: "The total comes from calculate.",
+    },
+    eu.length > 0 && us.length > 0 && total(eu) !== null && total(us) !== null && {
+      id: "hard-market-compare",
+      category: "hard",
+      question: "Compare my EU and US orders: how many open orders and what total value in each market?",
+      expect: { tools: ["query_orders"], contains: [money(total(eu)), money(total(us))] },
+      rubric: `EU: ${eu.length} open orders, ${money(total(eu))}; US: ${us.length}, ${money(total(us))}. Totals from calculate or a tool, never mental arithmetic.`,
+    },
+    gapped[0] && {
+      id: "hard-unknown-rate",
+      category: "hallucination-trap",
+      question: `What anti-dumping duty rate applies to ${gapped[0].order.id}?`,
+      expect: { tools: ["query_orders"] },
+      rubric: `Says the order's records show no anti-dumping duty for ${gapped[0].order.id} (to ${gapped[0].placement.market}); invents no rate, and may point to the official source to check.`,
     },
     // The demo video's questions, word for word (docs/local/demo/recording.md).
     euGaps.length > 0 && {
