@@ -1,12 +1,12 @@
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 
-from conftest import import_orders, onboard
+from conftest import TEST_TODAY, import_orders, onboard
 from sqlalchemy import update
 
 from app.database.models import Order, OrderStatus
 from app.database.session import open_session
 
-TODAY = datetime.now(UTC).date()
+TODAY = TEST_TODAY
 
 
 def ship_in(days: int) -> str:

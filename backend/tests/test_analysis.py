@@ -1,7 +1,7 @@
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 
 import pytest
-from conftest import add_member, import_orders, onboard
+from conftest import TEST_TODAY, add_member, import_orders, onboard
 from sqlalchemy import delete, update
 
 from app.database.models import AnalysisReport, MarketRequirement, Role
@@ -12,7 +12,7 @@ from app.seed_demo_data import seed_company_map_data
 from app.seed_reference_data import seed_reference_data
 from app.services.analysis import audit_report
 
-TODAY = datetime.now(UTC).date()
+TODAY = TEST_TODAY
 
 
 def ship_in(days: int) -> str:
