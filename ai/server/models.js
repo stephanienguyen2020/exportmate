@@ -1,23 +1,19 @@
-// Which Gemini model does what. The assistant answers each question on a tier chosen by
-// router.js: a small fast model for lookups, the bigger latest model for questions that
-// need reasoning. The news scan and the eval judge use GEMINI_MODEL.
+// Which Gemini model does what: one model, GEMINI_MODEL, for the whole AI service (the
+// assistant's agents and critic, the news scan and the eval judge). Until 23 Nov 2026 the
+// assistant had two tiers (flash-lite for lookups, gemini-4-argon for harder questions); argon
+// answered most calls with 429 and the small model saved no time, so while we develop there is
+// one. router.js still picks which agent answers (quick_answer or the analyst).
 // Models are given a thinking level, not a budget: Gemini 4 rejects thinking budgets. Gemini 2.x
 // models reject a level (400 "thinking_level is not supported"), so they get none and think
 // dynamically; GEMINI_MODEL set to gemini-2.5-flash stopped every scan that way.
-// Complex runs at MEDIUM: in the golden set HIGH passed the same cases but made up to 13 tool
-// calls per answer (p95 91 s against 46 s).
+export const MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash";
 
-// timeoutMs: one model call taking longer is abandoned and retried. In the golden set single
-// flash-lite calls sometimes stalled for 70-90 s while their usual time is 1-5 s.
-export const TIERS = {
-  simple: { model: process.env.GEMINI_MODEL_SIMPLE || "gemini-3.5-flash-lite", thinkingLevel: process.env.GEMINI_THINKING_SIMPLE || "LOW", timeoutMs: 25_000 },
-  complex: { model: process.env.GEMINI_MODEL_COMPLEX || "gemini-4-argon", thinkingLevel: process.env.GEMINI_THINKING_COMPLEX || "MEDIUM", timeoutMs: 90_000 },
-};
+// The assistant thinks at LOW: the egress gateway ends Agent Runtime requests after 60 s.
+// timeoutMs: one model call taking longer is abandoned and retried (single calls sometimes stall
+// for over a minute while their usual time is a few seconds).
+export const ASSISTANT = { model: MODEL, thinkingLevel: process.env.GEMINI_THINKING_ASSISTANT || "LOW", timeoutMs: 45_000 };
 
-/** How long one call to `model` may take before it is retried. */
-export const timeoutFor = (model) => Object.values(TIERS).find((t) => t.model === model)?.timeoutMs ?? 90_000;
-
-export const SCAN_MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash";
+export const SCAN_MODEL = MODEL;
 export const SCAN_THINKING = process.env.GEMINI_THINKING_SCAN || "MEDIUM";
 
 // Where Gemini is called. The newest models are served from the global endpoint; Agent Runtime
@@ -30,5 +26,5 @@ export const thinkingConfig = (model, thinkingLevel, extra = {}) => ({
   ...extra,
 });
 
-/** The generation settings that go with a tier's model. */
-export const thinkingFor = (tier, includeThoughts = true) => thinkingConfig(TIERS[tier].model, TIERS[tier].thinkingLevel, { includeThoughts });
+/** The assistant's generation settings. */
+export const assistantThinking = (includeThoughts = true) => thinkingConfig(ASSISTANT.model, ASSISTANT.thinkingLevel, { includeThoughts });

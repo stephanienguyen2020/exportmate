@@ -27,9 +27,7 @@ gcloud run services update exportmate-ai --project "$PROJECT_ID" --region "$REGI
 
 # The agents on Agent Runtime run the same image (runtime.js). AGENTS=0 skips them. They stay behind
 # the egress Agent Gateway (infra/agent-platform/govern.sh) when the project has one, and reach the
-# backend's Cloud Run URL (registered by govern.sh); GATEWAY and BACKEND_URL override either. The
-# gateway ends requests after 60 s, so the complex tier thinks at LOW there (GEMINI_THINKING_COMPLEX
-# overrides): at MEDIUM one gemini-4-argon call can take longer.
+# backend's Cloud Run URL (registered by govern.sh); GATEWAY and BACKEND_URL override either.
 if [[ "${AGENTS:-1}" != 0 ]]; then
   echo "==> Updating the agents on Agent Runtime"
   GATEWAY_PATH="projects/$PROJECT_ID/locations/$REGION/agentGateways/exportmate-egress"
@@ -37,18 +35,12 @@ if [[ "${AGENTS:-1}" != 0 ]]; then
     GATEWAY="$GATEWAY_PATH"
   fi
   BACKEND_URL="${BACKEND_URL:-$(gcloud run services describe exportmate-backend --project "$PROJECT_ID" --region "$REGION" --format='value(status.url)' 2>/dev/null || true)}"
-  # The agents use the service's models (Terraform's gemini_model_*) unless the shell sets them.
-  service_env() {
-    gcloud run services describe exportmate-ai --project "$PROJECT_ID" --region "$REGION" \
-      --format=json | node -e "const s = JSON.parse(require('fs').readFileSync(0, 'utf8')); console.log((s.spec.template.spec.containers[0].env || []).find((e) => e.name === '$1')?.value || '')"
-  }
-  for name in GEMINI_MODEL_SIMPLE GEMINI_MODEL_COMPLEX; do
-    value="${!name:-$(service_env "$name")}"
-    if [[ -n "$value" ]]; then export "$name=$value"; fi
-  done
-  echo "    gateway: ${GATEWAY:-none}, backend: ${BACKEND_URL:-none}, models: ${GEMINI_MODEL_SIMPLE:-default} / ${GEMINI_MODEL_COMPLEX:-default}"
+  # The agents use the service's model (Terraform's gemini_model) unless the shell sets GEMINI_MODEL.
+  GEMINI_MODEL="${GEMINI_MODEL:-$(gcloud run services describe exportmate-ai --project "$PROJECT_ID" --region "$REGION" \
+    --format=json | node -e "const s = JSON.parse(require('fs').readFileSync(0, 'utf8')); console.log((s.spec.template.spec.containers[0].env || []).find((e) => e.name === 'GEMINI_MODEL')?.value || '')")}"
+  if [[ -n "$GEMINI_MODEL" ]]; then export GEMINI_MODEL; fi
+  echo "    gateway: ${GATEWAY:-none}, backend: ${BACKEND_URL:-none}, model: ${GEMINI_MODEL:-default}"
   GOOGLE_CLOUD_PROJECT="$PROJECT_ID" RAG_BUCKET="${RAG_BUCKET:-$PROJECT_ID-kb}" BACKEND_URL="$BACKEND_URL" \
-    GEMINI_THINKING_COMPLEX="${GEMINI_THINKING_COMPLEX:-LOW}" \
     uv run --project platform python platform/runtime.py deploy --image "$IMAGE" ${GATEWAY:+--gateway "$GATEWAY"}
 fi
 

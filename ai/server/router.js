@@ -1,12 +1,11 @@
-// Model router: each chat turn goes to the cheapest tier that can answer it well.
-// - simple (small fast model): one lookup or explanation, e.g. a SKU's supplier, a count,
+// Router: picks which agent answers each chat turn (both use the same model, models.js).
+// - simple → quick_answer: one lookup or explanation, e.g. a SKU's supplier, a count,
 //   which items carry a certification, when the scan ran, how to use the app, a decline.
-// - complex (bigger model): anything that needs the conversation so far, arithmetic over
-//   several records, judgement about rules, risk or exposure, how orders connect to materials and
-//   origins (the knowledge graph), or text pasted from someone
-//   else (a bigger model is better at not following instructions hidden in it).
-// Rules, not a classifier call: free, instant and testable against the golden set. A simple-
-// tier draft the auditor sends back is revised on the complex tier (agent.js).
+// - complex → the analyst and its specialists: anything that needs the conversation so far,
+//   arithmetic over several records, judgement about rules, risk or exposure, how orders connect
+//   to materials and origins (the knowledge graph), or text pasted from someone else.
+// Rules, not a classifier call: free, instant and testable against the golden set. A quick
+// answer the auditor sends back is revised by the analyst (agent.js).
 import { findInjection } from "./guard.js";
 
 const SKU = /\b[A-Z]{2,5}-\d{2,4}\b/gi;

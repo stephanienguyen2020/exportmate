@@ -2,7 +2,7 @@
 // Usage: npm run eval                       all cases
 //        npm run eval -- --only=latest-scan,unknown-sku
 //        npm run eval -- --judge            also grade answers with an LLM judge
-//        npm run eval -- --tier=complex     every case on one model tier instead of the router's choice
+//        npm run eval -- --tier=complex     every case to one agent (simple: quick_answer, complex: the analyst)
 //        npm run eval -- --engine           ask the deployed agents on Agent Runtime (AGENT_RUNTIME) instead
 //                                           of running them in this process
 //        npm run eval -- --vertex           also create an evaluation run on Agent Platform (Gen AI evaluation:
@@ -28,7 +28,7 @@ import { runtime } from "../agents/platform.js";
 import { callRuntime } from "../agents/remote.js";
 import { demoMapOrders, demoPlaybook } from "../orders.js";
 import { PROJECT, db, inventory, list } from "../db.js";
-import { GEMINI_LOCATION, SCAN_MODEL, TIERS } from "../models.js";
+import { ASSISTANT, GEMINI_LOCATION, SCAN_MODEL } from "../models.js";
 import { summarizeAudits } from "../metrics.js";
 import { POLICY_VERSION, RULES } from "../policy.js";
 import { examCases } from "./exam.js";
@@ -45,7 +45,7 @@ const onEngine = arg("engine") !== undefined;
 const asCompany = arg("company") !== undefined;
 const SET = asCompany ? "company" : "golden";
 if (onEngine && !runtime) throw new Error("--engine needs AGENT_RUNTIME (the deployed instance)");
-if (tier && !TIERS[tier]) throw new Error(`--tier must be one of ${Object.keys(TIERS).join(", ")}`);
+if (tier && !["simple", "complex"].includes(tier)) throw new Error("--tier must be simple or complex");
 const JUDGE_MODEL = process.env.JUDGE_MODEL || SCAN_MODEL;
 const ai = new GoogleGenAI({ vertexai: true, project: PROJECT, location: GEMINI_LOCATION });
 
@@ -168,7 +168,7 @@ const exam = asCompany ? await companyExam() : null;
 const cases = (exam ? exam.cases : goldenCases(await list(inventory), { rules: RULES })).filter((c) => !only || only.includes(c.id));
 const sessionId = `eval-${Date.now().toString(36)}`;
 console.log(
-  `${asCompany ? `Exam as ${exam.profile.company.name}` : "Eval"} ${sessionId}${onEngine ? ` on ${runtime.name}` : ""}: ${cases.length} cases, policy ${POLICY_VERSION}${tier ? `, all on ${tier} (${TIERS[tier].model})` : ""}${useJudge ? `, judge ${JUDGE_MODEL}` : ""}`,
+  `${asCompany ? `Exam as ${exam.profile.company.name}` : "Eval"} ${sessionId}${onEngine ? ` on ${runtime.name}` : ""}: ${cases.length} cases, policy ${POLICY_VERSION}${tier ? `, all on ${tier}` : ""}, model ${ASSISTANT.model}${useJudge ? `, judge ${JUDGE_MODEL}` : ""}`,
 );
 // A company case runs as a signed-in chat does (index.js): the profile, the company's view of the
 // news sources, and its backend read with the owner's own token.
@@ -203,7 +203,7 @@ const saved = await evalRuns.add({
   runAt: new Date().toISOString(),
   set: SET,
   sessionId,
-  models: { simple: TIERS.simple.model, complex: TIERS.complex.model },
+  models: { assistant: ASSISTANT.model },
   tier: tier || "routed",
   policyVersion: POLICY_VERSION,
   judge: useJudge ? JUDGE_MODEL : null,
