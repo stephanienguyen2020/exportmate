@@ -41,6 +41,9 @@ def load() -> tuple[pd.DataFrame, list[str], np.ndarray]:
         .merge(embeddings, on="item_id")
         .merge(articles, on="item_id", how="left")
     )
+    llm_path = INTERIM / "llm_ratings.parquet"
+    llm = pd.read_parquet(llm_path)[["item_id", "llm_severity"]] if llm_path.exists() else None
+    table = table.merge(llm, on="item_id", how="left") if llm is not None else table.assign(llm_severity=None)
     feature_columns = [c for c in features.columns if c not in ("item_id", "source", "group_id", "date")]
     vectors = np.vstack(table["embedding"].to_numpy())
     return table, feature_columns, vectors
@@ -119,6 +122,10 @@ TRAINING_SETS = {
     "GTA only": ("gta",),
 }
 SAME_STORY = 0.92
+# The cascade: the small model decides when it is this sure, else Gemini with the rubric (llm_rate.py).
+CASCADE_MODEL = "LightGBM (features + 16 embedding components)"
+CASCADE_TRAINING = "GTA + scan + archive"
+CASCADE_THRESHOLDS = (0.6, 0.7, 0.8, 0.9)
 
 
 def unlike(candidates: np.ndarray, test_index: np.ndarray, vectors: np.ndarray) -> np.ndarray:
@@ -169,6 +176,7 @@ def main() -> None:
         "Gemini (today's scan)": score(truth, table.loc[articles, "gemini_severity"].fillna("low").tolist()),
         "Rules (no training)": score(truth, [rules(table.loc[i]) for i in articles]),
     }
+    confidences = {}
     per_article = {
         "item_id": table.loc[articles, "item_id"].tolist(),
         "ours": truth,
@@ -190,6 +198,18 @@ def main() -> None:
                 predicted[test_index], confidence[test_index] = labels, sure
             results[f"{candidate.name}, {set_name}"] = score(truth, predicted.tolist(), confidence.tolist())
             per_article[f"{candidate.name}, {set_name}"] = predicted.tolist()
+            confidences[f"{candidate.name}, {set_name}"] = confidence.tolist()
+
+    llm = table.loc[articles, "llm_severity"]
+    if llm.notna().all():
+        results["Gemini with the rubric"] = score(truth, llm.tolist())
+        per_article["gemini_rubric"] = llm.tolist()
+        small = f"{CASCADE_MODEL}, {CASCADE_TRAINING}"
+        for threshold in CASCADE_THRESHOLDS:
+            sure = np.array(confidences[small]) >= threshold
+            mixed = np.where(sure, per_article[small], llm.to_numpy())
+            name = f"Cascade: small model when ≥{threshold}, else Gemini with the rubric ({1 - sure.mean():.0%} to Gemini)"
+            results[name] = score(truth, mixed.tolist())
 
     out = ML / "models" / date.today().isoformat()
     out.mkdir(parents=True, exist_ok=True)

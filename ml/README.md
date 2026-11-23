@@ -1,7 +1,17 @@
 # ML (offline models)
 
-Offline models for ExportMate, starting with news severity.
-Nothing here runs in the app yet.
+Offline models for ExportMate. Nothing here runs in the app yet.
+
+- **Trade defence risk model (next):** from annual trade figures, how likely a market is to open an
+  anti-dumping, anti-subsidy or safeguard case against an exporting country on a product next year,
+  and why. Design: `docs/local/TRADE_DEFENCE_RISK_MODEL.md`. Its code isn't here yet; the data is
+  below ("Trade defence risk data").
+- **Severity model (stopped 23 Nov 2026):** rated how serious a news story is. Gemini given a clear
+  rubric did nearly as well (macro-F1 0.79 against the best model's 0.75 on the 137 rated scan
+  articles), so we stopped; the rubric goes into the scan's prompt and the labels stay as its
+  evaluation set. Its code below is kept as it is; why we stopped: `docs/local/SEVERITY_MODEL.md`.
+
+## Severity model (stopped)
 
 ## Layout
 
@@ -17,6 +27,7 @@ ml/
     embed.py      # text embeddings (text-multilingual-embedding-002)
     features.py   # the one feature function, same for a GTA measure and an article
     evaluate.py   # every candidate vs Gemini, cross-validated on rated articles → models/<date>/
+    llm_rate.py   # Gemini with labels/RUBRIC.md rates the same articles (the baseline that won)
     measure_types.py  # the closed list of measure types both sources map onto
   labels/
     RUBRIC.md     # what high, medium, low mean
@@ -36,6 +47,7 @@ uv run python src/sample.py      # only new items; rate them into labels/rated.c
 uv run python src/extract.py
 uv run python src/embed.py
 uv run python src/features.py
+uv run python src/llm_rate.py    # Gemini with the rubric, for evaluate.py's comparison
 uv run python src/evaluate.py    # prints and writes models/<date>/report.md
 ```
 
@@ -90,6 +102,18 @@ Sources for the knowledge graph (phase 1: HS codes and the material chain) are i
 `backend/app/knowledge_graph/README.md`, section 3, with the graph's data.
 
 Kaggle: no dataset fits; downloading needs your own account token.
+
+## Trade defence risk data
+
+Downloaded 23 Nov 2026 into `data/raw/` (never committed):
+
+| File | What it is | Terms |
+| --- | --- | --- |
+| `data/raw/ttbd/` | World Bank **Temporary Trade Barriers Database** (Bown, Cieszkowsky, Erbahar, Signoret 2020), from https://www.worldbank.org/en/data/interactive/2021/03/02/temporary-trade-barriers-database ("All underlying data" zip). Anti-dumping and countervailing cases of ~30 importers, 1977–2024 (10,343 cases; 3,334 since 2010 with HS codes): importer, exporter, product, HS codes, dates, decisions, duties. One `.xls` per importer, sheets Master, Products, Domestic-Firms, Foreign-Firms | No licence on the page; public research data, cite the authors |
+| `data/raw/baci/BACI_HS12_V202601.zip` | CEPII **BACI**, HS 2012, version 202601 (1.3 GB), from https://www.cepii.fr/DATA_DOWNLOAD/baci/data/BACI_HS12_V202601.zip. Annual trade 2012–2024 by exporter, importer and HS 6-digit product: value (thousand USD) and quantity (tonnes) | Etalab Open Licence 2.0: any use, cite "CEPII BACI" |
+
+Reading the `.xls` files needs `xlrd` (`uv run --with xlrd …`). Monthly figures (UN Comtrade, US
+Census) need a free key each, signed up by a person; annual figures are enough for a year-ahead warning.
 
 ## Moving to GCP later
 
