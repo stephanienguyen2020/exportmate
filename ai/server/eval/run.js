@@ -84,11 +84,10 @@ ${testCase.rubric ? `RUBRIC: ${testCase.rubric}` : "RUBRIC: none (return rubric 
 
 // One golden case as Agent Platform agent data (types.evals.AgentData): every agent's config and
 // the conversation as ADK-style events, each attributed to the agent that made it, rebuilt from the
-// audit steps, the tool results and the specialists' reports.
+// audit steps and the tool results.
 const text = (role, author, t) => ({ author, content: { role, parts: [{ text: t }] } });
 function vertexCase(c, r, s) {
   const outputs = [...r.trace.toolResults];
-  const reports = [...r.trace.reports];
   const answering = r.route.agent;
   const turns = [];
   const history = c.messages.slice(0, -1);
@@ -100,10 +99,7 @@ function vertexCase(c, r, s) {
     if (step.kind === "plan")
       events.push({ author, content: { role: "model", parts: [...(step.note ? [{ text: step.note }] : []), ...step.calls.map((x) => ({ function_call: { name: x.name, args: x.args } }))] } });
     else if (step.kind === "tool") events.push({ author, content: { role: "user", parts: [{ function_response: { name: step.name, response: outputs.shift() } }] } });
-    else if (step.kind === "delegate") {
-      const { report } = reports.shift();
-      events.push({ author: "analyst", content: { role: "user", parts: [{ function_response: { name: step.agent, response: typeof report === "string" ? { result: report } : report } }] } });
-    } else if (step.kind === "draft") events.push(text("model", author, step.excerpt));
+    else if (step.kind === "draft") events.push(text("model", author, step.excerpt));
     else if (step.kind === "review") events.push(text("user", "auditor", `Auditor review of your draft: ${step.problems.join(" ")}`));
   }
   if (r.answer) events.push(text("model", r.route.answeredBy || answering, r.answer));
@@ -120,11 +116,6 @@ function vertexCase(c, r, s) {
     latency_s: r.latencyMs / 1000,
   };
 }
-
-const delegations = (r) => {
-  const used = [...new Set(r.steps.filter((x) => x.kind === "delegate").map((x) => x.agent.replace("_specialist", "")))];
-  return used.length ? ` (${used.join(", ")})` : "";
-};
 
 // This set's earlier runs, newest first (runs from before sets existed are the golden set's).
 async function previousRuns(limit) {
@@ -188,7 +179,7 @@ for (const c of cases) {
   scored.push(s);
   const failed = s.checks.filter((x) => !x.ok);
   console.log(
-    `${s.pass ? "PASS" : "FAIL"} ${c.id.padEnd(24)} ${(s.metrics.latencyMs / 1000).toFixed(1)}s ${s.metrics.toolCalls} tools, ${result.route.agent}${result.route.escalated ? "→analyst" : ""}${delegations(result)}${s.metrics.revised ? ", revised" : ""}` +
+    `${s.pass ? "PASS" : "FAIL"} ${c.id.padEnd(24)} ${(s.metrics.latencyMs / 1000).toFixed(1)}s ${s.metrics.modelCalls} model calls, ${s.metrics.toolCalls} tools, ${result.route.agent}${result.route.escalated ? "→analyst" : ""}${s.metrics.revised ? ", revised" : ""}` +
       (failed.length ? `\n     ${failed.map((x) => `${x.name}: ${x.detail}`).join("\n     ")}` : ""),
   );
   // The exam's answers are for people to read: we decide what is wrong, the checks only point at it.

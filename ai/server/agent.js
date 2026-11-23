@@ -31,7 +31,6 @@ import { APP, chatSession, memoryService, remembers, userKeyFor } from "./agents
 export { clearCaches };
 export const audits = db.collection("audits");
 const MAX_STEPS = 6; // model calls per answering agent per message
-const SPECIALIST_STEPS = 3; // per specialist request
 const TOOL_BUDGET = 16;
 
 // ADK's own log lines go through log.js (JSON on Cloud Run); its per-request info lines are dropped.
@@ -219,13 +218,12 @@ export async function runAgent({
   const hooks = {
     before({ context, request }) {
       const key = `${context.invocationId}/${context.agentName}`;
-      const answering = context.agentName === ANSWERING.simple || context.agentName === ANSWERING.complex;
-      const max = answering ? MAX_STEPS : SPECIALIST_STEPS;
+      const max = MAX_STEPS;
       const call = { step: (calls.get(key)?.step ?? -1) + 1, started: Date.now(), model: ASSISTANT.model, max };
       calls.set(key, call);
       // Past the last step (the model called a tool anyway): end that agent's work without an answer.
       if (call.step > max) {
-        if (answering) audit.status = "max_steps";
+        audit.status = "max_steps";
         return { content: { role: "model", parts: [{ text: "" }] } };
       }
       request.model = call.model;
@@ -265,8 +263,6 @@ export async function runAgent({
       push({ kind: "plan", latencyMs, thought, note: text || undefined, calls: fnCalls.map((c) => ({ name: c.name, args: c.args || {} })), tokens, ...meta });
       return;
     }
-    // A specialist's reply goes back to the analyst; its report step is recorded by onReport.
-    if (agent !== ANSWERING.simple && agent !== ANSWERING.complex) return;
     const usedTools = audit.steps.some((s) => s.kind === "tool");
     const { problems } = review({ answer: text, retrieved: refs.all(), evidence, usedTools });
     const sendBack = (by, found, ask) => {
@@ -301,14 +297,9 @@ export async function runAgent({
   }
 
   // What each specialist told the analyst (the analyst's tool result).
-  const reports = [];
-  const onReport = ({ agent, request, report, error, latencyMs }) => {
-    if (withEvidence) reports.push({ agent, report: report ?? { error } });
-    push({ kind: "delegate", agent, request, latencyMs, ...(error ? { error } : { excerpt: report.slice(0, 2000) }) });
-  };
 
   const plugins = [new UnknownToolPlugin(runTool)];
-  const { root, agents } = buildAssistant({ session, declarations: gateway.declarations(), runTool, plugins, hooks, onReport, routeTo: () => current });
+  const { root, agents } = buildAssistant({ session, declarations: gateway.declarations(), runTool, hooks, routeTo: () => current });
 
   try {
     // What Memory Bank remembers about this user that bears on the question: preferences and
@@ -395,6 +386,6 @@ export async function runAgent({
       })
       .catch((e) => log("WARNING", "memory.write_failed", { requestId, error: String(e?.message || e) }));
   // The eval also gets the instruction and tool declarations the model was given.
-  const trace = withEvidence ? { agents, toolResults, reports } : {};
+  const trace = withEvidence ? { agents, toolResults } : {};
   return { id: ref.id, ...audit, ...(withEvidence ? { evidence, trace } : {}) };
 }
