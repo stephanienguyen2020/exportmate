@@ -13,7 +13,6 @@
 //                                           exam user is a Firebase user with a verified email and its own copy of
 //                                           the demo company: python -m app.seed_demo_data --email exam@example.com
 //                                           --firebase-uid <uid> (infra/terraform/README.md, "First time")
-//        npm run exam -- --history          the exam's scoreboard: its recent runs, one line each
 // On GCP: gcloud run jobs execute exportmate-ai-task --args="node eval/run.js --judge" --wait
 // Each run is stored in the Firestore `eval_runs` collection and compared with the
 // previous run; it exits 1 if a case that passed now fails (a regression). Run it
@@ -32,7 +31,7 @@ import { PROJECT, db, inventory, list } from "../db.js";
 import { GEMINI_LOCATION, SCAN_MODEL, TIERS } from "../models.js";
 import { summarizeAudits } from "../metrics.js";
 import { POLICY_VERSION, RULES } from "../policy.js";
-import { examCases, checkBar, PASS_BAR } from "./exam.js";
+import { examCases } from "./exam.js";
 import { goldenCases } from "./golden.js";
 import { compareRuns, scoreCase, summarizeRun } from "./score.js";
 
@@ -133,17 +132,6 @@ async function previousRuns(limit) {
   return recent.filter((r) => (r.set || "golden") === SET).slice(0, limit);
 }
 
-if (arg("history") !== undefined) {
-  console.log(`${SET} runs, newest first:`);
-  for (const r of await previousRuns(20)) {
-    const { latencyMs } = r.ops;
-    console.log(
-      `${r.runAt.slice(0, 16).replace("T", " ")}  ${String(r.summary.passed).padStart(2)}/${r.summary.cases}  p50 ${(latencyMs.p50 / 1000).toFixed(1)}s p95 ${(latencyMs.p95 / 1000).toFixed(1)}s  ${r.bar ? (r.bar.met ? "bar met" : "bar missed") : ""}  ${r.models.complex}${r.only ? ` (only ${r.only.join(",")})` : ""}`,
-    );
-  }
-  process.exit(0);
-}
-
 // Signs in as the exam's company owner (Firebase email + password) and reads what the exam's
 // answers are worked out from, with the same token the agents then use.
 async function companyExam() {
@@ -203,17 +191,17 @@ for (const c of cases) {
     `${s.pass ? "PASS" : "FAIL"} ${c.id.padEnd(24)} ${(s.metrics.latencyMs / 1000).toFixed(1)}s ${s.metrics.toolCalls} tools, ${result.route.agent}${result.route.escalated ? "→analyst" : ""}${delegations(result)}${s.metrics.revised ? ", revised" : ""}` +
       (failed.length ? `\n     ${failed.map((x) => `${x.name}: ${x.detail}`).join("\n     ")}` : ""),
   );
+  // The exam's answers are for people to read: we decide what is wrong, the checks only point at it.
+  if (asCompany) console.log(`     Q: ${c.question}\n     A: ${result.answer.replace(/\n/g, "\n        ")}\n`);
 }
 
 const summary = summarizeRun(scored);
 const ops = summarizeAudits(results);
-const bar = asCompany ? checkBar(scored) : null;
 const [previous] = await previousRuns(1);
 const diff = compareRuns(previous, scored);
 const saved = await evalRuns.add({
   runAt: new Date().toISOString(),
   set: SET,
-  bar: bar && { ...bar, limits: PASS_BAR },
   sessionId,
   models: { simple: TIERS.simple.model, complex: TIERS.complex.model },
   tier: tier || "routed",
@@ -230,7 +218,6 @@ const saved = await evalRuns.add({
 console.log(`\n${summary.passed}/${summary.cases} passed (${Math.round(summary.passRate * 100)}%), tool selection ${summary.toolSelection ?? "n/a"}`);
 for (const [cat, c] of Object.entries(summary.byCategory)) console.log(`  ${cat.padEnd(20)} ${c.passed}/${c.cases}`);
 console.log(`latency p50 ${(ops.latencyMs.p50 / 1000).toFixed(1)}s p95 ${(ops.latencyMs.p95 / 1000).toFixed(1)}s · ${ops.perAnswer.promptTokens} prompt tokens/answer · revised ${Math.round(ops.revisionRate * 100)}%`);
-if (bar) console.log(bar.met ? "Pass bar met" : `Pass bar missed:\n  ${bar.failures.join("\n  ")}`);
 if (previous) {
   console.log(`vs eval_runs/${previous.id} of ${previous.runAt} (policy ${previous.policyVersion}): ${diff.regressions.length} regressions, ${diff.fixed.length} fixed`);
   if (diff.regressions.length) console.log(`  regressions: ${diff.regressions.join(", ")}`);

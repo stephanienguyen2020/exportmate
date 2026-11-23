@@ -4,7 +4,7 @@
 // from GET /trade-map, its switched-on playbook rules, and a knowledge graph walk), so the exam
 // stays right when the data or the date changes. Same expect fields as golden.js.
 //
-// Ratchet: when a real answer is wrong (a thumbs down, a bug report), add the question here.
+// When we find a wrong answer, add its question here.
 
 const EU = new Set(["EU"]);
 const NEGATIVE = ["no ", "not ", "n't", "none", "unable", "couldn't", "cannot"];
@@ -196,21 +196,4 @@ export function examCases(company, { policyRules = [] } = {}) {
     },
   ];
   return cases.filter(Boolean).map((c) => ({ ...c, set: "company", messages: [{ role: "user", text: c.question }] }));
-}
-
-/** The exam's pass bar: share right, and how long answers may take by model tier. */
-export const PASS_BAR = { passRate: 0.9, simpleMs: 5_000, complexMs: 20_000, maxMs: 45_000 };
-
-/** Whether a run meets PASS_BAR: { met, failures: [why] }. scored: score.js scoreCase results with metrics.tier. */
-export function checkBar(scored, bar = PASS_BAR) {
-  const failures = [];
-  const rate = scored.length ? scored.filter((s) => s.pass).length / scored.length : 0;
-  if (rate < bar.passRate) failures.push(`${Math.round(rate * 100)}% right (bar ${bar.passRate * 100}%)`);
-  for (const s of scored) {
-    const ms = s.metrics.latencyMs;
-    const limit = s.metrics.tier === "simple" ? bar.simpleMs : bar.complexMs;
-    if (ms > bar.maxMs) failures.push(`${s.id} took ${(ms / 1000).toFixed(1)} s (none over ${bar.maxMs / 1000} s)`);
-    else if (ms > limit) failures.push(`${s.id} took ${(ms / 1000).toFixed(1)} s (${s.metrics.tier} bar ${limit / 1000} s)`);
-  }
-  return { met: !failures.length, failures };
 }

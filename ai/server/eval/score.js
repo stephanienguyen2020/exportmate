@@ -69,9 +69,7 @@ export function scoreCase(testCase, result, verdict) {
     metrics: {
       status: result.status,
       latencyMs: result.latencyMs,
-      tier: result.route?.escalated ? "complex" : result.route?.tier,
       modelCalls: result.usage?.modelCalls,
-      tokens: result.usage ? { prompt: result.usage.promptTokens, output: result.usage.outputTokens, thinking: result.usage.thinkingTokens } : null,
       toolCalls: toolSteps.length,
       toolErrors: toolSteps.filter((s) => s.error).length,
       revised: (result.steps || []).some((s) => s.kind === "review"),

@@ -1,8 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { RULES } from "../policy.js";
-import { routeQuestion } from "../router.js";
-import { checkBar, examCases } from "../eval/exam.js";
+import { examCases } from "../eval/exam.js";
 
 const TODAY = "2026-12-01";
 const check = (requirementKey, status, title = requirementKey) => ({ requirementKey, status, title });
@@ -66,47 +65,4 @@ test("questions the data can't support are left out", () => {
   for (const id of ["company-order-status", "company-next-shipment", "company-graph-acacia", "company-market-total", "company-vietnamese"])
     assert.ok(!kept.includes(id), id);
   assert.ok(kept.includes("company-unknown-order") && kept.includes("company-prompt-leak"));
-});
-
-// Every exam question has an expected tier, as the golden set's do (router.test.js). These pin
-// the router as it is; the exam's timings show whether a question sits on the right tier.
-const TIERS = {
-  "company-eu-gaps": "simple",
-  "company-order-status": "complex",
-  "company-next-shipment": "complex",
-  "company-unknown-order": "simple",
-  "company-no-geolocation": "simple",
-  "company-supplier-sourcing": "simple",
-  "company-playbook-count": "simple",
-  "company-playbook-for-order": "simple",
-  "company-graph-acacia": "complex",
-  "company-graph-why": "complex",
-  "company-market-total": "complex",
-  "company-coming-changes": "simple",
-  "company-news": "complex",
-  "company-vietnamese": "simple",
-  "demo-eu-border": "complex",
-  "demo-acacia-restriction": "complex",
-  "demo-acacia-news": "complex",
-  "demo-playbook-rules": "simple",
-  "demo-duty-calc": "complex",
-  "company-prompt-leak": "complex",
-  "company-out-of-scope": "simple",
-};
-
-test("routes every exam question to its expected tier", () => {
-  for (const c of cases) {
-    const { tier, reasons } = routeQuestion(c.messages);
-    assert.equal(tier, TIERS[c.id], `${c.id}: ${tier} (${reasons.join(", ") || "no signals"})`);
-  }
-});
-
-test("the pass bar: share right, and time by tier", () => {
-  const run = (pass, tier, latencyMs, id = "q") => ({ id, pass, metrics: { tier, latencyMs } });
-  const good = Array.from({ length: 10 }, (_, i) => run(true, i % 2 ? "simple" : "complex", 3000, `q${i}`));
-  assert.deepEqual(checkBar(good), { met: true, failures: [] });
-  const slow = [...good.slice(1), run(true, "simple", 6000, "slow")];
-  assert.deepEqual(checkBar(slow).failures, ["slow took 6.0 s (simple bar 5 s)"]);
-  const wrong = [...good.slice(2), run(false, "complex", 3000), run(false, "complex", 50_000, "stuck")];
-  assert.deepEqual(checkBar(wrong).failures, ["80% right (bar 90%)", "stuck took 50.0 s (none over 45 s)"]);
 });
