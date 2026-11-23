@@ -40,6 +40,11 @@ export function examCases(company, { policyRules = [] } = {}) {
   const buyer = company.suppliers.find((s) => s.sourcing?.length);
   const acaciaMatches = company.acacia?.matches || [];
   const firstAcacia = acaciaMatches[0];
+  const gapTitles = (orders) => [...new Set(orders.flatMap((o) => o.checks.filter((c) => GAP.has(c.status)).map((c) => c.title)))];
+  const marketName = (code) => company.markets?.find((m) => m.code === code)?.name || code;
+  const onFile = open.find((o) => o.checks.some((c) => c.status === "on_file"));
+  const otherMarket = gapped[0] && company.markets?.find((m) => m.code !== gapped[0].placement.market);
+  const euTotal = new Set(eu.map((o) => o.order.currency)).size === 1 ? eu.reduce((sum, o) => sum + o.order.valueMinor, 0) : null;
 
   const cases = [
     {
@@ -142,6 +147,66 @@ export function examCases(company, { policyRules = [] } = {}) {
       expect: { tools: ["query_orders"], contains: listed(ids(eu)), pattern: VIETNAMESE },
       note: "Reply in the user's language.",
     },
+    // Supplier documents.
+    gapped[0] && {
+      id: "company-supplier-documents",
+      category: "documents",
+      question: `Which documents is ${gapped[0].order.supplier} missing for my orders?`,
+      expect: { tools: ["query_orders"], containsAny: gapTitles(open.filter((o) => o.order.supplier === gapped[0].order.supplier)) },
+      rubric: `Names the missing or mismatched documents on ${gapped[0].order.supplier}'s open orders, order by order.`,
+    },
+    onFile && {
+      id: "company-documents-on-file",
+      category: "documents",
+      question: `Which documents do I already have on file for ${onFile.order.id}?`,
+      expect: { tools: ["query_orders"], containsAny: onFile.checks.filter((c) => c.status === "on_file").map((c) => c.title) },
+      rubric: "Lists the documents on file and, separately, any still missing.",
+    },
+    // Trade map and what-ifs.
+    open.length > 0 && {
+      id: "company-markets",
+      category: "trade-map",
+      question: "Which markets do my open orders go to, and how many to each?",
+      expect: { tools: ["query_orders"], contains: listed(Object.keys(byMarket).filter((m) => m !== "none")) },
+      rubric: `Counts: ${Object.entries(byMarket).map(([m, list]) => `${marketName(m)} ${list.length}`).join(", ")}.`,
+    },
+    otherMarket && {
+      id: "company-whatif-market",
+      category: "trade-map",
+      question: `What if ${gapped[0].order.id} went to ${otherMarket.name} instead?`,
+      expect: { tools: ["query_orders"], contains: [gapped[0].order.id] },
+      rubric: `Says what it can tell from the order's checklist, invents no ${otherMarket.name} requirements it wasn't given, and points to the trade map's What if panel for the full comparison.`,
+    },
+    gapped[0] && {
+      id: "company-whatif-later",
+      category: "trade-map",
+      question: `What if ${gapped[0].order.id} shipped a month later?`,
+      expect: { tools: ["query_orders"], contains: [gapped[0].order.id] },
+      rubric: "Says whether any checklist line takes effect or changes before the later date, and whether that gives more time for the missing documents; invents no rule changes.",
+    },
+    // Follow-ups: the second question only makes sense with the first.
+    euTotal !== null && eu.length > 0 && {
+      id: "company-follow-up-total",
+      category: "follow-up",
+      messages: [
+        { role: "user", text: "Which of my open orders ship to the EU?" },
+        { role: "model", text: `These open orders ship to the EU: ${ids(eu).join(", ")}.` },
+        { role: "user", text: "What are they worth in total?" },
+      ],
+      expect: { tools: ["calculate"], contains: [money(euTotal)] },
+      note: '"they" are the EU orders; the sum comes from calculate.',
+    },
+    gapped[0] && {
+      id: "company-follow-up-why",
+      category: "follow-up",
+      messages: [
+        { role: "user", text: "Which of my orders are missing documents?" },
+        { role: "model", text: `These orders are missing documents: ${ids(gapped).join(", ")}.` },
+        { role: "user", text: "Why is the first one missing them?" },
+      ],
+      expect: { tools: ["query_orders"], contains: [gapped[0].order.id], containsAny: gapTitles([gapped[0]]) },
+      rubric: `Explains ${gapped[0].order.id}'s missing documents and the rule behind each.`,
+    },
     // The demo video's questions, word for word (docs/local/demo/recording.md).
     euGaps.length > 0 && {
       id: "demo-eu-border",
@@ -195,5 +260,7 @@ export function examCases(company, { policyRules = [] } = {}) {
       rubric: "Declines briefly and offers help with the company's trade questions instead.",
     },
   ];
-  return cases.filter(Boolean).map((c) => ({ ...c, set: "company", messages: [{ role: "user", text: c.question }] }));
+  return cases
+    .filter(Boolean)
+    .map((c) => ({ ...c, set: "company", question: c.question || c.messages.at(-1).text, messages: c.messages || [{ role: "user", text: c.question }] }));
 }

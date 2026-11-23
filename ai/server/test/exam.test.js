@@ -18,7 +18,7 @@ const company = {
   today: TODAY,
   markets: [{ code: "EU", name: "European Union" }, { code: "JP", name: "Japan" }],
   orders: [
-    order("PO-2291", { checks: [check("geolocation", "missing", "Plot geolocation"), check("legality", "ok")] }),
+    order("PO-2291", { checks: [check("geolocation", "missing", "Plot geolocation"), check("legality", "on_file")] }),
     order("PO-2304", { shipDate: "2026-12-13", checks: [check("geolocation", "missing", "Plot geolocation")] }),
     order("PO-2320", { market: "US", shipDate: "2026-12-25", value: 5430000 }),
     order("PO-2311", { market: "JP", shipDate: "2026-12-05", supplier: "Mekong Timber", value: 1350000 }),
@@ -38,7 +38,7 @@ const byId = (id) => cases.find((c) => c.id === id);
 
 test("the exam's answers are worked out from the company's data", () => {
   assert.equal(new Set(cases.map((c) => c.id)).size, cases.length);
-  for (const c of cases) assert.ok(c.set === "company" && c.messages[0].text === c.question && Object.keys(c.expect).length, c.id);
+  for (const c of cases) assert.ok(c.set === "company" && c.messages.at(-1).text === c.question && Object.keys(c.expect).length, c.id);
   // Open EU orders, and the shipped one left out.
   assert.deepEqual(byId("company-eu-gaps").expect.contains, ["PO-2291", "PO-2304", "PO-2291", "PO-2304"]);
   assert.match(byId("company-order-status").question, /PO-2291/);
@@ -57,6 +57,15 @@ test("the exam's answers are worked out from the company's data", () => {
   assert.deepEqual(byId("demo-duty-calc").expect.contains, ["1128"]);
   assert.deepEqual(byId("demo-playbook-rules").expect.contains, ["Binh Phu Wood"]);
   assert.deepEqual(byId("demo-eu-border").expect.contains, ["PO-2291", "PO-2304"]);
+  // Supplier documents, markets and what-ifs, and follow-ups.
+  assert.match(byId("company-supplier-documents").question, /Binh Phu Wood/);
+  assert.deepEqual(byId("company-supplier-documents").expect.containsAny, ["Plot geolocation"]);
+  assert.deepEqual(byId("company-documents-on-file").expect.containsAny, ["legality"]);
+  assert.deepEqual(byId("company-markets").expect.contains, ["JP", "EU", "US"]);
+  assert.match(byId("company-whatif-market").question, /PO-2291 went to Japan/);
+  assert.equal(byId("company-follow-up-total").messages.length, 3);
+  assert.deepEqual(byId("company-follow-up-total").expect.contains, ["48000"]);
+  assert.equal(byId("company-follow-up-why").question, "Why is the first one missing them?");
 });
 
 test("questions the data can't support are left out", () => {

@@ -1,13 +1,14 @@
 """The knowledge graph: seed data loaded, the downstream walk, and orders reached from what a
 news article names, through suppliers' sourcing and the material chain."""
 
-from datetime import date, timedelta
+from datetime import timedelta
 from types import SimpleNamespace
 
 import pytest
 from conftest import import_orders, onboard
 from sqlalchemy import func, select, update
 
+from app.core import clock
 from app.database.models import GraphEdge, GraphNode, GraphNodeKind, Order, SupplierSourcing
 from app.database.queries import knowledge_graph as graph_queries
 from app.database.queries import users as user_queries
@@ -22,7 +23,7 @@ from app.update_link_weights import update_link_weights
 
 
 def ships_in(days: int) -> str:
-    return (date.today() + timedelta(days=days)).isoformat()
+    return (clock.today() + timedelta(days=days)).isoformat()
 
 
 # Suppliers from the demo seed: Binh Phu Wood buys acacia logs from Vietnam, Savannakhet Timber
@@ -396,7 +397,7 @@ def test_hs_codes_markets_and_shipped_orders(client, lan):
         db.execute(
             update(Order)
             .where(Order.external_id == "PO-1")
-            .values(ship_date=date.today() - timedelta(days=1))
+            .values(ship_date=clock.today() - timedelta(days=1))
         )
         db.commit()
     assert {m["orderId"] for m in graph_query(client, lan, hsCode=["4412.33"])["matches"]} == {
