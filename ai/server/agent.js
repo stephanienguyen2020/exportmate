@@ -228,7 +228,18 @@ export async function runAgent({
       }
       request.model = call.model;
       request.config = { ...request.config, thinkingConfig: assistantThinking() };
-      if (call.step === max) request.config.toolConfig = { functionCallingConfig: { mode: FunctionCallingConfigMode.NONE } };
+      // The last step must answer. gemini-3.5-flash ignores functionCallingConfig NONE while tools
+      // are declared (it called a tool on its last step, and the answer came back empty), so the
+      // tools are taken out of the request and the model is told to answer from what it has.
+      if (call.step === max) {
+        request.config.toolConfig = { functionCallingConfig: { mode: FunctionCallingConfigMode.NONE } };
+        request.config.tools = [];
+        request.toolsDict = {};
+        request.contents = [
+          ...(request.contents || []),
+          { role: "user", parts: [{ text: "No more tool calls: answer the question now from the tool results above, citing them, and say what you could not find." }] },
+        ];
+      }
       return undefined;
     },
     async after({ context, response }) {
