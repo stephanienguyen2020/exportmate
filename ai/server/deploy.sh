@@ -35,11 +35,7 @@ if [[ "${AGENTS:-1}" != 0 ]]; then
     GATEWAY="$GATEWAY_PATH"
   fi
   BACKEND_URL="${BACKEND_URL:-$(gcloud run services describe exportmate-backend --project "$PROJECT_ID" --region "$REGION" --format='value(status.url)' 2>/dev/null || true)}"
-  # The agents use the service's model (Terraform's gemini_model) unless the shell sets GEMINI_MODEL.
-  GEMINI_MODEL="${GEMINI_MODEL:-$(gcloud run services describe exportmate-ai --project "$PROJECT_ID" --region "$REGION" \
-    --format=json | node -e "const s = JSON.parse(require('fs').readFileSync(0, 'utf8')); console.log((s.spec.template.spec.containers[0].env || []).find((e) => e.name === 'GEMINI_MODEL')?.value || '')")}"
-  if [[ -n "$GEMINI_MODEL" ]]; then export GEMINI_MODEL; fi
-  echo "    gateway: ${GATEWAY:-none}, backend: ${BACKEND_URL:-none}, model: ${GEMINI_MODEL:-default}"
+  echo "    gateway: ${GATEWAY:-none}, backend: ${BACKEND_URL:-none}"
   GOOGLE_CLOUD_PROJECT="$PROJECT_ID" RAG_BUCKET="${RAG_BUCKET:-$PROJECT_ID-kb}" BACKEND_URL="$BACKEND_URL" \
     uv run --project platform python platform/runtime.py deploy --image "$IMAGE" ${GATEWAY:+--gateway "$GATEWAY"}
 fi
