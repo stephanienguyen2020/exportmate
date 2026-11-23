@@ -27,6 +27,7 @@ from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
 
+from app.core import clock
 from app.core.config import get_settings
 from app.core.context import CompanyContext
 from app.core.errors import AppError
@@ -86,7 +87,7 @@ _OTHER_DESTINATIONS = [
 
 def ship_date_in(days: int) -> date:
     """A ship date counted from today, as the browser demo's are (frontend/src/data.ts)."""
-    return date.today() + timedelta(days=days)
+    return clock.today() + timedelta(days=days)
 
 
 def build_demo_orders() -> list[dict]:

@@ -5,7 +5,7 @@
 // - gateway.js: every tool call is validated, scoped, budgeted, timed out and retried;
 // - guard.js: third-party text in tool results is treated as data (injection removed);
 // - review.js: an auditor checks the draft (citations, figures, links) and sends it back once;
-// - router.js: each question goes to a small fast model or the bigger one (models.js);
+// - router.js: each question goes to quick_answer or the analyst (one model for both, models.js);
 // - answer-cache.js: a question already answered against the same data isn't answered again.
 // Every step is streamed and stored in an audit document (`audits` collection).
 import { FieldValue } from "@google-cloud/firestore";
@@ -19,7 +19,7 @@ import { review, stripRefs, toEvidence } from "./review.js";
 import { critique, graphPaths } from "./critic.js";
 import { log } from "./log.js";
 import { ANONYMOUS, presentSources } from "./access.js";
-import { TIERS, thinkingFor } from "./models.js";
+import { ASSISTANT, assistantThinking } from "./models.js";
 import { routeQuestion } from "./router.js";
 import { answerKey, cacheable, cachedAudit, fingerprint, CACHE_TTL_MS } from "./answer-cache.js";
 import { GUIDES } from "./seed/guides.js";
@@ -49,7 +49,7 @@ setLogger({
 
 // Answer cache (answer-cache.js). Help guides change only with a deploy, so their hash is fixed.
 const GUIDES_VERSION = fingerprint(GUIDES);
-const MODELS = { simple: TIERS.simple.model, complex: TIERS.complex.model };
+const MODELS = { assistant: ASSISTANT.model };
 let scanSeen;
 
 // Everything the tools read for this caller, as one hash: stock, the sources as this company
@@ -97,7 +97,7 @@ async function cachedAnswer(key, companyId = null) {
  * ending with the user's question. `onStep` receives audit steps as they happen.
  * `channel` says where the turn came from ("chat" or "eval"); `withEvidence` also
  * returns the tool-result text the answer was checked against (not stored). `tier` forces
- * a model tier (router.js); `useCache` reuses and stores answers (answer-cache.js).
+ * the answering agent (router.js); `useCache` reuses and stores answers (answer-cache.js).
  */
 export async function runAgent({
   messages,
@@ -157,8 +157,7 @@ export async function runAgent({
   }
 
   const route = routeQuestion(messages, { force: tier });
-  // The tier answering this message: a simple-tier draft the auditor sends back is revised by the
-  // analyst on the complex tier.
+  // The tier answering this message: a quick answer the auditor sends back is revised by the analyst.
   let current = route.tier;
   const refs = makeRefs();
   // query_inventory's category and market filters list the turn's own stock.
@@ -170,7 +169,7 @@ export async function runAgent({
     companyId,
     createdAt: new Date(started).toISOString(),
     question: messages.at(-1).text,
-    model: TIERS[current].model,
+    model: ASSISTANT.model,
     route: { tier: route.tier, reasons: route.reasons, agent: ANSWERING[route.tier] },
     embeddingModel: EMBED_MODEL,
     policyVersion: POLICY_VERSION,
@@ -218,11 +217,11 @@ export async function runAgent({
   // the call started and which model it used.
   const calls = new Map();
   const hooks = {
-    before({ context, request, tier }) {
+    before({ context, request }) {
       const key = `${context.invocationId}/${context.agentName}`;
       const answering = context.agentName === ANSWERING.simple || context.agentName === ANSWERING.complex;
       const max = answering ? MAX_STEPS : SPECIALIST_STEPS;
-      const call = { step: (calls.get(key)?.step ?? -1) + 1, started: Date.now(), model: TIERS[tier].model, max };
+      const call = { step: (calls.get(key)?.step ?? -1) + 1, started: Date.now(), model: ASSISTANT.model, max };
       calls.set(key, call);
       // Past the last step (the model called a tool anyway): end that agent's work without an answer.
       if (call.step > max) {
@@ -230,7 +229,7 @@ export async function runAgent({
         return { content: { role: "model", parts: [{ text: "" }] } };
       }
       request.model = call.model;
-      request.config = { ...request.config, thinkingConfig: thinkingFor(tier) };
+      request.config = { ...request.config, thinkingConfig: assistantThinking() };
       if (call.step === max) request.config.toolConfig = { functionCallingConfig: { mode: FunctionCallingConfigMode.NONE } };
       return undefined;
     },

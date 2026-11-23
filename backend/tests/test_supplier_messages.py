@@ -1,9 +1,9 @@
 import csv
 import io
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 
 import pytest
-from conftest import add_member, import_orders, onboard
+from conftest import TEST_TODAY, add_member, import_orders, onboard
 
 from app.api import audit_log as audit_api
 from app.core.config import get_settings
@@ -17,7 +17,7 @@ from app.seed_reference_data import seed_reference_data
 from app.services import audit_log as audit_service
 from app.services import supplier_messages as message_service
 
-SHIP = (datetime.now(UTC).date() + timedelta(days=60)).isoformat()
+SHIP = (TEST_TODAY + timedelta(days=60)).isoformat()
 # PO-1: Binh Phu Wood has no plot geolocation (exposed). PO-2: An Cuong Wood has it all (clear).
 ORDERS = (
     "id,product,supplier,destination,value,shipDate,hsCode\n"

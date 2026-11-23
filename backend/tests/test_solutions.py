@@ -1,7 +1,7 @@
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 
 import pytest
-from conftest import add_member, import_orders, onboard
+from conftest import TEST_TODAY, add_member, import_orders, onboard
 from sqlalchemy import select, update
 
 from app.database.models import MarketRequirement, RegulationDocument, Role, Solution
@@ -10,7 +10,7 @@ from app.database.session import open_session
 from app.seed_demo_data import seed_company_map_data
 from app.seed_reference_data import seed_reference_data
 
-TODAY = datetime.now(UTC).date()
+TODAY = TEST_TODAY
 SHIP = (TODAY + timedelta(days=60)).isoformat()
 # Binh Phu Wood has no plot geolocation on file: PO-1 and PO-3 have the same problem.
 ORDERS = (

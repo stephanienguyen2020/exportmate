@@ -2,8 +2,8 @@
 // close over the turn's gateway):
 //
 //   exportmate_assistant   RoutedAgent: router.js picks the answering agent, no model call
-//   ├─ quick_answer        simple tier; every read tool, for single lookups and how-tos
-//   └─ analyst             complex tier; delegates to the specialists, does the arithmetic,
+//   ├─ quick_answer        "simple" questions; every read tool, for single lookups and how-tos
+//   └─ analyst             "complex" questions; delegates to the specialists, does the arithmetic,
 //      │                   writes the cited answer
 //      ├─ stock_specialist      query_inventory, calculate
 //      ├─ news_specialist       get_alerts, get_scan_status, search_knowledge
@@ -11,7 +11,8 @@
 //      ├─ graph_specialist      query_graph (GraphRAG: orders a material, origin or product reaches, with paths)
 //      └─ knowledge_specialist  search_knowledge (help guides, the news archive)
 //
-// Specialists run on the simple tier as tools of the analyst (SpecialistTool). Every tool call
+// Every agent uses the one assistant model (models.js). Specialists run as tools of the analyst
+// (SpecialistTool). Every tool call
 // by any agent goes through the gateway (`runTool`), so the refs, the evidence the auditor
 // checks and the audit trail cover the whole team. `hooks` record each model call.
 import { AgentTool, InMemorySessionService, LlmAgent, RoutedAgent, Runner } from "@google/adk";
@@ -96,22 +97,22 @@ class SpecialistTool extends AgentTool {
 export function buildAssistant({ session, declarations, runTool, plugins, hooks, onReport, routeTo }) {
   const available = new Map(declarations.map((d) => [d.name, d]));
   const toolsFor = (names) => names.filter((n) => available.has(n)).map((n) => new GatewayTool(available.get(n), runTool));
-  const common = (tier) => ({
+  const common = () => ({
     model: gemini,
     // No transfers: the routed agent and the analyst decide who works, which also keeps ADK's
     // transfer preamble out of the versioned prompts.
     disallowTransferToParent: true,
     disallowTransferToPeers: true,
     generateContentConfig: { maxOutputTokens: 4096 },
-    beforeModelCallback: ({ context, request }) => hooks.before({ context, request, tier }),
-    afterModelCallback: ({ context, response }) => hooks.after({ context, response, tier }),
+    beforeModelCallback: ({ context, request }) => hooks.before({ context, request }),
+    afterModelCallback: ({ context, response }) => hooks.after({ context, response }),
   });
 
   const team = SPECIALISTS.map((s) => ({ ...s, tools: s.tools.filter((n) => available.has(n)) })).filter((s) => s.tools.length);
   const specialists = team.map(
     (s) =>
       new LlmAgent({
-        ...common("simple"),
+        ...common(),
         name: s.name,
         description: s.description,
         // Functions, not strings, so ADK doesn't read {braces} in the text as state placeholders.
@@ -120,14 +121,14 @@ export function buildAssistant({ session, declarations, runTool, plugins, hooks,
       }),
   );
   const quick = new LlmAgent({
-    ...common("simple"),
+    ...common(),
     name: ANSWERING.simple,
     description: "Answers single lookups and how-to questions directly with the read tools, with citations.",
     instruction: () => system(session),
     tools: toolsFor([...available.keys()]),
   });
   const analyst = new LlmAgent({
-    ...common("complex"),
+    ...common(),
     name: ANSWERING.complex,
     description: "Answers questions that need several facts, arithmetic or judgement by delegating to specialists, with citations.",
     instruction: () => analystInstruction(session, team),

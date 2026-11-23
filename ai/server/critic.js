@@ -4,16 +4,16 @@
 // path shows ("PO-2291 uses Lao acacia" when the path says Vietnam, or a supplier the path never
 // names), so the critic compares, order by order, what the answer says connects it with its path.
 // A draft it faults goes back once, like one the auditor faults. Only answers that used
-// query_graph are judged, on the complex tier's model at LOW thinking: a short judgement that
+// query_graph are judged, on the assistant's model at LOW thinking: a short judgement that
 // must not misread a path, well inside the egress gateway's 60 s.
 import { GoogleGenAI, Type } from "@google/genai";
 import { withRetry } from "./gateway.js";
 import { asData } from "./guard.js";
-import { GEMINI_LOCATION, TIERS, thinkingConfig } from "./models.js";
+import { ASSISTANT, GEMINI_LOCATION, thinkingConfig } from "./models.js";
 import { PROJECT } from "./db.js";
 
 const MAX_PROBLEMS = 5;
-const MODEL = TIERS.complex.model;
+const MODEL = ASSISTANT.model;
 const THINKING = "LOW";
 
 const SCHEMA = {

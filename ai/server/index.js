@@ -15,10 +15,10 @@ import { readJson, scanBlocked } from "./limits.js";
 import { deleteMemory, listMemories, memoryKeepDays, remembers, userKeyFor } from "./agents/platform.js";
 import { AGENTS_AT, callAgents, streamTurn } from "./agents/remote.js";
 import { demoMapOrders, demoPlaybook } from "./orders.js";
-import { SCAN_MODEL, TIERS } from "./models.js";
+import { ASSISTANT, SCAN_MODEL } from "./models.js";
 
 const PORT = Number(process.env.PORT || 8080);
-const MODELS = { simple: TIERS.simple.model, complex: TIERS.complex.model, scan: SCAN_MODEL };
+const MODELS = { assistant: ASSISTANT.model, scan: SCAN_MODEL };
 const ALLOWED_ORIGINS = (
   process.env.ALLOWED_ORIGINS ||
   "http://127.0.0.1:5173,http://localhost:5173"

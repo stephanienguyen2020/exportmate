@@ -5,10 +5,9 @@ what an article names, so "which orders depend on acacia from Laos?" and "if Vie
 acacia log exports" get the paths News watch would show. The walk decides; the assistant only
 explains the paths."""
 
-from datetime import date
-
 from sqlalchemy.orm import Session
 
+from app.core import clock
 from app.core.context import CompanyContext
 from app.database.queries import orders as order_queries
 from app.schemas.knowledge_graph import GraphQueryMatchOut, GraphQueryOut, GraphQueryUnderstoodOut
@@ -84,7 +83,7 @@ def query_graph(
         named_as="named in the question",
     )
     gazetteer = load_gazetteer(db)
-    today = date.today()
+    today = clock.today()
     orders = [
         o
         for o in order_queries.list_company_orders(db, ctx.company_id)

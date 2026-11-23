@@ -235,7 +235,7 @@ Everything runs in one project, defined in [`infra/terraform`](infra/terraform/)
 
 | Service | What ExportMate uses it for |
 | --- | --- |
-| Gemini | the assistant's two model tiers, news assessment, regulation drafting, certificate reading, solutions, supplier emails, the material chain builder |
+| Gemini | the assistant, news assessment, regulation drafting, certificate reading, solutions, supplier emails, the material chain builder |
 | Agent Platform: Agent Runtime, Sessions, Memory Bank | the ADK agents, each chat's session, per-user memories |
 | Agent Platform: RAG Engine | search over stock, articles, alerts, sources and help guides |
 | Agent Platform: Evaluation | golden-set runs scored by managed judges |

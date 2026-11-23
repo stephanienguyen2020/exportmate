@@ -178,7 +178,7 @@ Viewers can read solutions and notes but not change them. The browser-only demo 
 3. The service passes the question to the agents on Agent Runtime (`runtime.js`) and relays each step back to your browser as it happens. Your token goes along only so the agents can read your orders and playbook with it; it is never stored.
 4. If the same question was answered against the same data today, that answer is reused (`answer-cache.js`).
 5. The assistant continues your Agent Platform session, and in a company workspace recalls what Memory Bank remembers about you that bears on the question.
-6. The **router** (`router.js`) picks the agent. Lookups and how-to questions go to *Quick answer*, on the small fast model, which has every tool. A question goes to the *Analyst*, on the bigger model, if it:
+6. The **router** (`router.js`) picks the agent. Both use the same model (`GEMINI_MODEL`). Lookups and how-to questions go to *Quick answer*, which has every tool. A question goes to the *Analyst*, which hands parts of it to specialists, if it:
    - is a follow-up or names several SKUs;
    - asks for a total, average, percentage or exposure;
    - asks for judgement (why, should, compare, risk, impact);
@@ -228,8 +228,7 @@ Articles Gemini couldn't assess aren't recorded, so the next scan tries them aga
 
 | Job | Default model | Setting |
 | --- | --- | --- |
-| Assistant, simple questions | `gemini-3.5-flash-lite`, thinking LOW | `GEMINI_MODEL_SIMPLE`, `GEMINI_THINKING_SIMPLE` |
-| Assistant, complex questions | `gemini-4-argon`, thinking MEDIUM | `GEMINI_MODEL_COMPLEX`, `GEMINI_THINKING_COMPLEX` |
+| Assistant (every agent and the critic) | `gemini-3.5-flash`, thinking LOW | `GEMINI_MODEL`, `GEMINI_THINKING_ASSISTANT` |
 | News scan and eval judge | `gemini-3.5-flash`, thinking MEDIUM | `GEMINI_MODEL`, `GEMINI_THINKING_SCAN` |
 | Search embeddings (RAG Engine) | `text-multilingual-embedding-002` | `RAG_EMBED_MODEL` |
 | Memory Bank (writing memories) | `gemini-3.5-flash` | `MEMORY_MODEL` (in `platform/runtime.py`) |
