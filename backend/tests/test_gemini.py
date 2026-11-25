@@ -48,13 +48,11 @@ def test_stalled_and_transient_calls_are_tried_again(monkeypatch):
     monkeypatch.setenv("GEMINI_TIMEOUT_SECONDS", "30")
     monkeypatch.setenv("GEMINI_ATTEMPTS", "3")
     get_settings.cache_clear()
-    gemini._client.cache_clear()
     try:
-        gemini._client()
+        gemini._new_client()
     finally:
         monkeypatch.undo()
         get_settings.cache_clear()
-        gemini._client.cache_clear()
     options = made["http_options"]
     assert options.timeout == 30_000  # each attempt
     assert options.retry_options.attempts == 3
