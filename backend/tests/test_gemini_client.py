@@ -3,6 +3,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 from app.core import gemini
+from app.core.config import get_settings
 
 
 def test_threads_share_one_client(monkeypatch):
@@ -27,3 +28,17 @@ def test_threads_share_one_client(monkeypatch):
         clients = list(pool.map(ask, range(8)))
     assert len(made) == 1
     assert all(c is made[0] for c in clients)
+
+
+def test_gemini_project_overrides_the_cloud_project(monkeypatch):
+    """GEMINI_PROJECT sends Gemini calls to another project's quota; unset, the backend's own."""
+    made = []
+    monkeypatch.setattr(gemini.genai, "Client", lambda **kwargs: made.append(kwargs))
+    settings = get_settings().model_copy(
+        update={"google_cloud_project": "home", "gemini_project": ""}
+    )
+    monkeypatch.setattr(gemini, "get_settings", lambda: settings)
+    gemini._new_client()
+    settings.gemini_project = "other"
+    gemini._new_client()
+    assert [m["project"] for m in made] == ["home", "other"]

@@ -10,7 +10,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { withRetry } from "./gateway.js";
 import { asData } from "./guard.js";
 import { ASSISTANT, GEMINI_LOCATION, thinkingConfig } from "./models.js";
-import { PROJECT } from "./db.js";
+import { GEMINI_PROJECT } from "./db.js";
 
 const MAX_PROBLEMS = 5;
 const MODEL = ASSISTANT.model;
@@ -89,7 +89,7 @@ export function parseVerdict(text) {
 
 let ai;
 const defaultGenerate = (prompt) => {
-  ai ??= new GoogleGenAI({ vertexai: true, project: PROJECT, location: GEMINI_LOCATION });
+  ai ??= new GoogleGenAI({ vertexai: true, project: GEMINI_PROJECT, location: GEMINI_LOCATION });
   return withRetry(() =>
     ai.models.generateContent({
       model: MODEL,
