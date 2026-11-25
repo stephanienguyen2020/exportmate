@@ -23,7 +23,7 @@ MAX_LENGTHS = {"id": 100, "product": 300, "supplier": 300, "destination": 200}
 MAX_VALUE = Decimal(1000000000000)  # 1 trillion; anything above is a typo
 
 DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-# 1234 / 1234.56 / 123456 / 1234.56.00 — kept as text so "0401.10" keeps its zero.
+# 1234, 1234.56, 123456 or 1234.56.00. Kept as text so "0401.10" keeps its zero.
 HS_CODE_PATTERN = re.compile(r"^\d{4}(\.?\d{2}){0,3}$")
 
 

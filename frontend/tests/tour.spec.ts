@@ -1,4 +1,4 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Page } from "./coverage";
 
 // The first-visit workspace tour, in the browser-only demo.
 test.use({ storageState: { cookies: [], origins: [] } });

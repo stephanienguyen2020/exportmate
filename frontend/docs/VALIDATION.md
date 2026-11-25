@@ -12,7 +12,7 @@ Validated locally on 8 October 2026 with a production TypeScript/Vite build and 
 - CSV: missing-column validation; valid-row preview and import; imported orders await analysis.
 - Demo: all six visible steps complete, including auditor rejection and correction; two sample orders become exposed; imported data survives.
 - All six views checked for page overflow at 390 px; mobile overview visually reviewed.
-- Overview additionally checked at 360, 768, 1024 and 1280 px.
+- Overview also checked at 360, 768, 1024 and 1280 px.
 - Mobile navigation closes after changing page and selecting the current page.
 - Order detail desktop screenshot visually reviewed.
 - Zero uncaught browser errors in the exercised flows.
@@ -26,7 +26,7 @@ No backend, live agents, current legal verification, cross-browser matrix, scree
 - Landing checked at 360, 390, 768, 1024, 1440, and 1920 px without horizontal overflow.
 - Desktop landing, mobile landing, and desktop entry screen screenshots reviewed.
 - How-it-works and About dialogs, Escape dismissal, and focus restoration passed.
-- Login entry → demo workspace → orders → impact → public home navigation passed.
+- Navigation from the login entry to the demo workspace, orders, impact and the public home passed.
 - Photo pointer tilt verified; globe keyboard and pointer rotation verified by rendered output changes.
 - Reduced-motion disables the photo tilt and automatic globe movement. Mobile login has no horizontal overflow.
 - No uncaught browser errors in the landing/navigation test flow.
@@ -55,7 +55,7 @@ Verified on 12 October 2026 against a production build in headless Chrome (Playw
 - Market panel: EU lists its orders, flags Binh Phu Wood's missing plot-level geolocation for PO-2291 and PO-2304 (matching the sample scenario), and lists per-shipment documents.
 - Supplier and site panels, including deep link `map/supplier/Binh Phu Wood`.
 - Satellite layer: selecting a sample flood zooms to its extent, lists suppliers and sites within 25 km, drafts an editable check-in message (copy only, nothing sent) and marks the supplier's orders "Unconfirmed" without changing their status.
-- Market comparison from the order page (PO-2291, EU → US): reuse / re-evaluate / not-enough-information groups and the paperwork-only caveat; choosing the comparison market by clicking the map.
+- Market comparison from the order page (PO-2291, EU to US): reuse / re-evaluate / not-enough-information groups and the paperwork-only caveat; choosing the comparison market by clicking the map.
 - After importing `public/samples/exportmate-sample-orders.csv` (24 rows), all eight markets appear.
 - Connected session with mocked `/api/v1` responses: document records show as not connected, sample suppliers without orders are hidden, an unknown supplier and an unplaceable destination are listed under "Not on the map".
 - No horizontal overflow at 360, 390, 768, 1024 and 1440 px; desktop and mobile screenshots reviewed; no uncaught browser errors.
@@ -66,7 +66,7 @@ Supplier sites, document records, market checklists and flood observations are i
 
 Supersedes the fixture-based trade map checks above where they differ. Map data moved from the frontend into Postgres (Cloud SQL in production) behind `GET /api/v1/trade-map` and `GET /api/v1/trade-map/compare`.
 - Backend: `uv run pytest` 54 passed, including placement, document checks (missing / wrong standard / unknown supplier), HS scoping, company isolation (another company sees no suppliers, sites or orders; compare returns 404), comparison results and errors, idempotent reference seed, and log lines carrying the request ID without the token. Migration downgrades and upgrades cleanly.
-- Local stack (Vite dev auth → FastAPI → Postgres): the map's markets, EU document gap (Binh Phu Wood geolocation, PO-2291/PO-2304), supplier documents, flood proximity and check-in draft, and EU→US / EU→Japan comparisons all render from API responses; no browser errors; no overflow at 390 and 1024 px.
+- Local stack (Vite dev auth, FastAPI, Postgres): the map's markets, EU document gap (Binh Phu Wood geolocation, PO-2291/PO-2304), supplier documents, flood proximity and check-in draft, and EU to US / EU→Japan comparisons all render from API responses; no browser errors; no overflow at 390 and 1024 px.
 - A demo (browser-only) session shows a sign-in prompt instead of the map.
 - Vercel proxy test (`node --test tests/backend-proxy.test.mjs`, Node 22.6+): 3 passed.
 
@@ -86,7 +86,7 @@ Supersedes the fixture-based trade map checks above where they differ. Map data 
 ### Editable trade route (13 October 2026)
 
 - Backend: `uv run pytest` 68 passed. New: onboarding stores transit stops (trimmed, in order); `PATCH /company` replaces them, `[]` makes the route direct and omitting `transit` leaves it alone; null, blank stops, more than 3 stops and stops over 100 characters are rejected. Migration `ed13d3d0241c` upgrades, downgrades and re-upgrades cleanly; `alembic check` reports no drift.
-- Local stack (Playwright driving the installed Chrome, Vite dev server in dev-auth mode, throwaway account removed afterwards): onboarding step 2 starts at Vietnam → Singapore → European Union; adding a stop picks one not already used; the add button disappears at 3 stops; the review step and `POST /onboarding` carry the edited route. The sidebar (codes and sentence) and the Overview hero show the saved route. Account › About company edits send `transit` in `PATCH /company`, update the sidebar without a reload and survive a reload from the server; a save that doesn't change company fields sends no company request. A demo profile saved before transit existed keeps its places; a malformed one falls back to the default. No overflow at 390 px; no browser errors.
+- Local stack (Playwright driving the installed Chrome, Vite dev server in dev-auth mode, throwaway account removed afterwards): onboarding step 2 starts with the route Vietnam, Singapore, European Union; adding a stop picks one not already used; the add button disappears at 3 stops; the review step and `POST /onboarding` carry the edited route. The sidebar (codes and sentence) and the Overview hero show the saved route. Account › About company edits send `transit` in `PATCH /company`, update the sidebar without a reload and survive a reload from the server; a save that doesn't change company fields sends no company request. A demo profile saved before transit existed keeps its places; a malformed one falls back to the default. No overflow at 390 px; no browser errors.
 
 ### AI service access limits and CI (13 October 2026)
 

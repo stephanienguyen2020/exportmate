@@ -22,12 +22,12 @@ Check each source's terms before training on it.
 
 | File | What it is |
 | --- | --- |
-| `data/raw/gta/gta_interventions_wood_2020-2026.csv` | Global Trade Alert, downloaded 2026-10-15. 2,614 measures announced 2020-01-01 → 2026-10-12 affecting HS chapters 44, 45, 46, 47, 48, 94. Ratings: 1,753 red, 758 green, 103 amber. 19 columns (ID, URL, title, GTA evaluation, jurisdictions, intervention type, MAST chapter, sectors, HS products, dates, in force). No description column, only the title |
+| `data/raw/gta/gta_interventions_wood_2020-2026.csv` | Global Trade Alert, downloaded 2026-10-15. 2,614 measures announced from 2020-01-01 to 2026-10-12 affecting HS chapters 44, 45, 46, 47, 48, 94. Ratings: 1,753 red, 758 green, 103 amber. 19 columns (ID, URL, title, GTA evaluation, jurisdictions, intervention type, MAST chapter, sectors, HS products, dates, in force). No description column, only the title |
 
-How it was exported: globaltradealert.org/data-center → Tailor search →
+How it was exported: globaltradealert.org/data-center › Tailor search, with
 GTA Evaluations Any, Affected Products 44 45 46 47 48 94, Announcement Period
-2020-01-01 → today, both "keep interventions without … date" boxes ticked,
-everything else Any or empty → Export → GTA entries → CSV.
+from 2020-01-01 to today, both "keep interventions without … date" boxes ticked
+and everything else Any or empty, then Export › GTA entries › CSV.
 
 ### Notes before training
 
@@ -36,7 +36,7 @@ everything else Any or empty → Export → GTA entries → CSV.
   rarely matters to an exporter; an export ban almost always does. Use the rating
   as one feature next to the measure type and whether it hits the company's
   products and markets.
-- We need our own labels: a person rates ~200–300 measures high / medium / low for
+- We need our own labels: a person rates about 200 to 300 measures high / medium / low for
   a wood/furniture exporter (balanced mix of ratings and types). That is the answer
   key; GTA's rating is an input.
 - Amber is thin (103). Export 2 below adds more.

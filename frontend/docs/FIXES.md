@@ -1,4 +1,4 @@
-# ExportMate — Những thứ cần sửa
+# ExportMate: những thứ cần sửa
 
 Danh sách được lập ngày 13/10/2026 sau khi đọc code, chạy build/test và chụp màn hình ở 390 px, 1440 px và 1366×680. Cùng ngày, phần lớn các mục đã được sửa. Mục nào còn lại được ghi ở phần "Chưa làm" kèm lý do.
 
@@ -60,7 +60,7 @@ Ký hiệu: `[x]` là đã sửa, `[ ]` là chưa làm. **P0** = lỗi rõ ràng
 - [x] **Bộ lọc Orders bị giữ lại.** Vào Orders bằng sidebar hoặc menu mobile sẽ reset về "All orders".
 - [x] **Xóa playbook rule.** Phải bấm hai lần ("Delete?"), có toast xác nhận đã xóa.
 
-### P2 — accessibility
+### P2: accessibility
 
 - [x] Tab lọc có `aria-pressed`; ô tìm kiếm có `aria-label`.
 - [x] Focus trong modal không còn nhảy ở mỗi bước demo. Focus trap có thêm `a[href]` và `select`.
@@ -69,7 +69,7 @@ Ký hiệu: `[x]` là đã sửa, `[ ]` là chưa làm. **P0** = lỗi rõ ràng
 
 ---
 
-## 2. Frontend — logic
+## 2. Frontend logic
 
 ### P0
 
@@ -156,7 +156,7 @@ Các mục dưới đây cần quyết định, hạ tầng mới, hoặc là t�
 - [ ] **API mời thành viên / đổi role.** Đây là tính năng mới. Hiện production chỉ có role owner.
 - [ ] **Lưu file CSV trên Cloud Storage** thay vì Postgres. Cần thêm hạ tầng (kế hoạch Phase 2). Trước mắt đã có lệnh dọn import cũ.
 - [ ] **Chạy scan nền thay vì trong một request.** Trên Cloud Run, CPU bị giới hạn sau khi đã trả response, nên cần Cloud Tasks, Cloud Run Jobs, hoặc bật "CPU always allocated".
-- [ ] **Các tính năng còn thiếu theo REQUIREMENTS v1:** regulations/obligations, analysis runs và reports, actions (draft → approve → send), contact form.
+- [ ] **Các tính năng còn thiếu theo REQUIREMENTS v1:** regulations/obligations, analysis runs và reports, actions (draft, approve, send), contact form.
 - [ ] **Gộp các cảnh báo trùng sự kiện giữa các lần scan.** Hiện chỉ gộp được trong cùng một batch Gemini.
 - [ ] **Test Playwright cho trade map** (với API giả).
 - [ ] **Dữ liệu Firestore đã có** không được sửa:

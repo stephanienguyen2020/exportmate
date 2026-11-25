@@ -1,7 +1,7 @@
 // An order's next moves: the analysis report's buttons open the form that makes the change on
 // the order's page, and saving analyses the order again. The API is mocked; the supplier
 // record, the documents and the re-analysis come from the backend in a real session.
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Page } from "./coverage";
 
 const account = {
   user: {

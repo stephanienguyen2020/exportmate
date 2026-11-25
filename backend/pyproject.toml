@@ -24,6 +24,7 @@ dev = [
     "pytest>=8.3",
     "httpx>=0.28",
     "ruff>=0.8",
+    "pytest-cov>=7.1.0",
 ]
 
 [tool.pytest.ini_options]
@@ -32,3 +33,12 @@ pythonpath = ["."]
 
 [tool.ruff]
 line-length = 100
+
+[tool.coverage.run]
+# What the tests run of the backend: `uv run pytest --cov` (add --cov-report=html for htmlcov/).
+source = ["app", "scripts"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true

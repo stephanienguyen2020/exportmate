@@ -1,4 +1,4 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Page } from "./coverage";
 
 // The browser-only sample demo: no backend, so these run against the Vite server alone.
 async function openDemo(page: Page, hash = "#/workspace") {

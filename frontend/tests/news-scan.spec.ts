@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./coverage";
 
 const finished = new Date().toISOString();
 // A scan whose Gemini calls all failed (as on 15 October 2026, when GEMINI_MODEL named a model

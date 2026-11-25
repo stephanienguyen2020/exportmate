@@ -19,3 +19,10 @@ CLAUDE.md
 
 # Architecture diagrams and their sources: kept on each machine (the README's PNG is in docs/images/)
 docs/architecture/
+
+# Coverage reports (backend: pytest --cov; ai/server and frontend: npm run coverage)
+.coverage
+.coverage.*
+htmlcov/
+coverage/
+coverage.json

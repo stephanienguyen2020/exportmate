@@ -6,7 +6,7 @@ ExportMate has these AI features:
 - **News watch** reads approved news feeds every morning and raises alerts for the stock items each story could affect.
 - **Suggested solutions** (signed-in workspaces) propose how to fix each missing or wrong document an order's analysis found, and keep the answer, with your team's notes, for later orders with the same problem.
 
-Both come from one service ([`ai/server/`](../ai/server/)): its API runs on Google Cloud Run, and the assistant itself is a team of agents on Gemini Enterprise Agent Platform (Agent Runtime, with Agent Platform Sessions, Memory Bank and RAG Engine), using Gemini and Firestore. This guide covers how to use them, what they can see, and how they work. For the engineering controls (policy, gateway, auditor, evals) and how to improve them, see [AGENT_HARNESS.md](AGENT_HARNESS.md).
+The assistant and News watch come from one service ([`ai/server/`](../ai/server/)). Its API runs on Google Cloud Run, and the assistant itself is a team of agents on Gemini Enterprise Agent Platform (Agent Runtime, with Agent Platform Sessions, Memory Bank and RAG Engine), using Gemini and Firestore. This guide covers how to use them, what they can see, and how they work. For the engineering controls (policy, gateway, auditor, evals) and how to improve them, see [AGENT_HARNESS.md](AGENT_HARNESS.md).
 
 Alerts and answers are AI assessments, not legal advice. Legal and regulatory content in the prototype is illustrative, stock data is synthetic, and news is real.
 
@@ -288,4 +288,4 @@ When you change the AI:
 
 - **A tool or step shape:** update `AuditStep` in `frontend/ai/chat/agent-client.ts`, and the labels and renderer in `frontend/ai/chat/Audit.tsx`.
 - **The app itself:** update the help guide the assistant reads in `ai/server/seed/guides.js`, then `npm run index`.
-- **A wrong answer:** add a golden case that reproduces it, fix it at the right layer, and run `npm test` and `npm run eval` before deploying. The steps are in [AGENT_HARNESS.md](AGENT_HARNESS.md#working-with-the-harness).
+- **A wrong answer:** add a golden case that reproduces it, fix it at the right layer, and run `npm test` and `npm run eval` before deploying. The steps are in [AGENT_HARNESS.md](AGENT_HARNESS.md#testing-and-fixing-the-agents).

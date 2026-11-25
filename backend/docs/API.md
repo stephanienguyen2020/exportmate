@@ -1,4 +1,4 @@
-# ExportMate backend — API
+# ExportMate backend API
 
 What each endpoint does and where the app uses it. The live contract (exact field types) is the OpenAPI page at `/api/v1/docs`.
 
@@ -179,7 +179,7 @@ Who is calling and their company. On the first call it creates the user row from
 
 ### `PATCH /me`
 Body: any of `name` (1–200 chars), `alerts`, `digest`. Returns the same shape as `GET /me`.
-Account settings → Save calls it first, then `PATCH /company` if the owner changed company fields, then `GET /me`.
+Account settings › Save calls it first, then `PATCH /company` if the owner changed company fields, then `GET /me`.
 
 ### `POST /me/logout`
 Revokes the user's Firebase refresh tokens, which signs them out on every device. Returns `{"signedOut": true}`. Other instances honour it within 60 s (their revocation check is cached). In dev mode it does nothing.
@@ -203,7 +203,7 @@ Changes only the fields sent. Optional fields (`website`, `foundedYear`, `teamSi
 - `website` without a scheme gets `https://`. `foundedYear` is 1800 to this year. `teamSize` is `1-10` | `11-50` | `51-200` | `201-500` | `500+`.
 - Returns the company. Editors and viewers get `403 forbidden` and see these fields read-only.
 
-Account settings → About company. The frontend sends every field, with empty optional ones as `null`.
+Account settings › About company. The frontend sends every field, with empty optional ones as `null`.
 
 ### `GET /company/knowledge` (viewer)
 `{"company": {…same as GET /me…}, "sites": [{"name": "Cat Lai bonded warehouse", "kind": "warehouse", "place": "…"}]}`
@@ -218,29 +218,29 @@ Who belongs to the company and with which role (`services/members.py`). A compan
 `[{"userId": "…", "name": "Lan", "email": "lan@example.com", "role": "owner", "joinedAt": "…", "you": true}]`, oldest member first.
 
 ### `PATCH /company/members/{userId}` (owner)
-`{"role": "editor"}` → the member. `409 last_owner` when it would leave the company without an owner (an owner can step down once someone else is one). `404 member_not_found` for anyone outside the company. Memberships are locked while this runs, so two owners demoting each other at once can't both succeed.
+Send `{"role": "editor"}`; returns the member. `409 last_owner` when it would leave the company without an owner (an owner can step down once someone else is one). `404 member_not_found` for anyone outside the company. Memberships are locked while this runs, so two owners demoting each other at once can't both succeed.
 
 ### `DELETE /company/members/{userId}` (owner, or the member themselves)
-Removes the membership → `{"deleted": true}`. Anyone may remove themselves (leave); removing someone else needs `owner` (`403 forbidden`). `409 last_owner` for the only owner. The person keeps their sign-in; their next request gets `403 onboarding_required`, so they can onboard a company or accept another invitation. Their report drafts and audit entries stay.
+Removes the membership and returns `{"deleted": true}`. Anyone may remove themselves (leave); removing someone else needs `owner` (`403 forbidden`). `409 last_owner` for the only owner. The person keeps their sign-in; their next request gets `403 onboarding_required`, so they can onboard a company or accept another invitation. Their report drafts and audit entries stay.
 
 ### `GET /company/invites` (owner)
 `[{"id": "…", "email": "minh@example.com", "role": "editor", "invitedBy": {"id": "…", "name": "Lan"}, "createdAt": "…", "expiresAt": "…", "expired": false}]`, newest first, expired ones included.
 
 ### `POST /company/invites` (owner, rate limited)
-`{"email": "Minh@Example.com", "role": "editor"}` → `201`, the invitation plus `"sandbox": true|false`. The address is trimmed and lower-cased. Emails the address a link to `#/login` (`APP_URL`) through Resend, with the owner as reply-to; `sandbox: true` means nothing was sent (no `RESEND_API_KEY`) and the owner has to tell the person. Valid for `MEMBER_INVITE_DAYS` (14). Inviting the same address again renews it (new role, new expiry, email again). If the email fails, nothing is saved.
+Send `{"email": "Minh@Example.com", "role": "editor"}`; returns `201` with the invitation plus `"sandbox": true|false`. The address is trimmed and lower-cased. Emails the address a link to `#/login` (`APP_URL`) through Resend, with the owner as reply-to; `sandbox: true` means nothing was sent (no `RESEND_API_KEY`) and the owner has to tell the person. Valid for `MEMBER_INVITE_DAYS` (14). Inviting the same address again renews it (new role, new expiry, email again). If the email fails, nothing is saved.
 - `409 already_member` (already in this company), `409 too_many_invites` (50 open), `422` for anything that isn't one address. 30 per owner per hour (`MEMBER_INVITES_PER_HOUR`).
 
 ### `DELETE /company/invites/{id}` (owner)
-Withdraws it → `{"deleted": true}`.
+Withdraws it and returns `{"deleted": true}`.
 
 ### `GET /me/invites` (signed in)
 Invitations to the caller's verified email address that haven't expired: `[{"id": "…", "companyName": "Binh Duong Wood Co.", "role": "editor", "invitedBy": {"id": "…", "name": "Lan"}, "expiresAt": "…"}]`. Works before onboarding. Firebase has verified the address, so matching on it is what proves the invitation is theirs.
 
 ### `POST /me/invites/{id}/accept` (signed in, no company)
-Joins with the invitation's role and deletes it → the same body as `GET /me`. `409 already_in_company` if the caller already belongs to one; `404 invite_not_found` if it expired, was withdrawn, or is for another address. Locks the user row like onboarding, so accepting and onboarding at once can't both succeed.
+Joins with the invitation's role, deletes the invitation and returns the same body as `GET /me`. `409 already_in_company` if the caller already belongs to one; `404 invite_not_found` if it expired, was withdrawn, or is for another address. Locks the user row like onboarding, so accepting and onboarding at once can't both succeed.
 
 ### `DELETE /me/invites/{id}` (signed in)
-Declines it → `{"deleted": true}`.
+Declines it and returns `{"deleted": true}`.
 
 ## Orders
 
@@ -297,7 +297,7 @@ The fields that differ are saved and audited as `order.updated` (`{"supplier": {
 The order's page (owners and editors): "Edit order" turns its facts into a form with the same checks as the CSV in the browser; "Save changes" sends only the fields that changed.
 
 ### `DELETE /orders/{id}` (editor)
-Removes the order → `{"deleted": true}`. Its status history, analysis reports (with their supplier messages, report feedback and solution uses), HS code suggestions, saved what-ifs and news reviews go with it. Saved solutions stay in the knowledge base, without the report they were written from. Audited as `order.deleted`, with the order as it was (every field of `GET /orders` but `id`, which is the event's object). The id is free again, so importing the row again brings the order back as a new order. 404 for another company's order (or one already removed).
+Removes the order and returns `{"deleted": true}`. Its status history, analysis reports (with their supplier messages, report feedback and solution uses), HS code suggestions, saved what-ifs and news reviews go with it. Saved solutions stay in the knowledge base, without the report they were written from. Audited as `order.deleted`, with the order as it was (every field of `GET /orders` but `id`, which is the event's object). The id is free again, so importing the row again brings the order back as a new order. 404 for another company's order (or one already removed).
 The order's page (owners and editors): "Remove order", which says what goes with it, then "Remove <id>"; the workspace goes back to the Orders page.
 
 ### `PATCH /orders/{id}/status` (editor)
@@ -326,7 +326,7 @@ Every order status from the `order_statuses` table, in display order: its label,
 
 ## CSV import
 
-Upload screen, live session: choose file → `POST /imports` → `GET /imports/{id}` → show errors and preview → "Import" → `POST /imports/{id}/commit` → toast "N orders imported and analysed." with the count per status → workspace reload; the Orders page shows the import's run, with why each order needs data. The demo session parses the file in the browser instead (PapaParse, `frontend/src/order-csv.ts`, with the same checks).
+Upload screen, live session: the user chooses a file, the frontend calls `POST /imports` and then `GET /imports/{id}`, and shows the errors and a preview. "Import" calls `POST /imports/{id}/commit`, shows the toast "N orders imported and analysed." with the count per status and reloads the workspace. The Orders page shows the import's run, with why each order needs data. The demo session parses the file in the browser instead (PapaParse, `frontend/src/order-csv.ts`, with the same checks).
 
 ### `POST /imports` (editor, rate limited)
 `multipart/form-data` with `file`. `.csv` only, ≤4 MB, ≤10,000 rows. Columns: `id,product,supplier,destination,value,shipDate,hsCode` (+ optional `currency`, which defaults to the company's). An `hsCode` cell may be empty: analysis makes the order `exposed` with "Add the HS code" as its next step, and `POST /orders/{id}/hs-suggestions` suggests a code.
@@ -402,7 +402,7 @@ Everything the map draws, in one call when the page opens:
 | `markets` | `code` (`EU`), name, hub point, `countryIds` (ISO numeric, matching world-atlas), `searchTerms` |
 | `orders[]` | `order`, `placement` (city, country, market, location, `approximate` = placed at the country centre), `checks[]`, `gapCount` |
 | `orders[].checks[]` | `requirementKey`, `title`, `level` (`supplier` / `shipment` / `check`), `status` (`on_file` / `missing` / `mismatch` / `prepare` / `check` / `unknown`), `note`, `source`, `documentKind` (the supplier document that answers it, `null` for shipment paperwork and checks) and `acceptedStandards`. An analysis report's `findings[]` have the same shape; reports saved before `documentKind` was added don't carry it |
-| `checks[].source` | The shared regulation version behind the requirement and the sentence that requires it: `regulationTitle`, `officialId`, `documentId` (→ `GET /regulation-documents/{id}/file`), `versionNumber`, `sourceUrl`, `quote` |
+| `checks[].source` | The shared regulation version behind the requirement and the sentence that requires it: `regulationTitle`, `officialId`, `documentId` (for `GET /regulation-documents/{id}/file`), `versionNumber`, `sourceUrl`, `quote` |
 | `suppliers[]` | From orders (matched by trimmed, lower-case name) + the supplier list. `id`/`documents` are `null` when the supplier is only named on orders. A document has `kind`, `detail`, `standards`, `documentNumber`, `issuer`, `expiresOn` (typed in or read from an upload) and `fromUpload` |
 | `sites[]` | Factories, ports, warehouses. `isRouteOrigin` marks the company's route start |
 | `observations[]` | Satellite samples (`isSample: true`) with a GeoJSON `extent` and `nearby` suppliers/sites within `checkRadiusKm` (default 25). Order statuses never change because of them |
@@ -422,7 +422,7 @@ The assistant's `query_orders` tool (`ai/server/orders.js`) also reads this rout
 ### `GET /trade-map/compare` (viewer)
 One what-if at a time. Send exactly one of `market`, `shipDate`, or `via`.
 
-`?orderId=PO-2291&market=US` — another market. Paperwork only.
+`?orderId=PO-2291&market=US` compares another market. Paperwork only.
 ```json
 {"data": {"orderId": "PO-2291", "fromMarket": "EU", "toMarket": "US",
   "reuse":      [{"title": "FSC chain of custody", "note": "…", "tag": null}],
@@ -477,7 +477,7 @@ The company report's "Checklist changes coming up" section is built from the sam
 ### Suppliers and sites (editor)
 Editors enter them in the map's side panel, or a supplier from an order's analysis report (its next moves open the same form); viewers don't see the controls. The location comes from a click on the 2D map (which also suggests the country) or from typed `latitude, longitude`. After a save or delete the page reloads `GET /trade-map`, so order checks and flood proximity are recomputed. Each change writes an audit event (`supplier.created|updated|deleted`, `company_site.created|updated|deleted`).
 
-`POST /suppliers` → `201`:
+`POST /suppliers` returns `201`:
 ```json
 {"name": "Dong Nai Veneer", "place": "Bien Hoa, Dong Nai", "country": "VN",
  "location": {"latitude": 10.95, "longitude": 106.82}, "supplies": "Acacia veneer",
@@ -490,16 +490,16 @@ Only `name` (1–300) is required. `place` ≤200, `supplies` ≤1000 (blank is 
 
 `PATCH /suppliers/{id}` changes only the fields sent; `null` clears `place`, `country`, `location`, `supplies`. `documents` and `sourcing` each replace the whole list (send `[]` to clear it). `name`, `documents` and `sourcing` can't be `null`. Same errors as `POST`. Sending `documents`, or a `name` with another key, analyses again the orders that matched before and after (`analysedOrderIds`); a new place, contact or location runs nothing.
 
-`DELETE /suppliers/{id}` → `{"deleted": true, "analysedOrderIds": [...]}`. Its documents go with it, and the certificate files uploaded for it are deleted from Cloud Storage (kept 30 days as noncurrent versions); its orders stay, named on the order without a record (supplier checks become `unknown`), and are analysed again, so their next step is to add the supplier.
+`DELETE /suppliers/{id}` returns `{"deleted": true, "analysedOrderIds": [...]}`. Its documents go with it, and the certificate files uploaded for it are deleted from Cloud Storage (kept 30 days as noncurrent versions); its orders stay, named on the order without a record (supplier checks become `unknown`), and are analysed again, so their next step is to add the supplier.
 
-`POST /sites` → `201`:
+`POST /sites` returns `201`:
 ```json
 {"kind": "warehouse", "name": "Da Nang warehouse", "shortName": "Da Nang", "place": "Tien Sa port, Da Nang",
  "country": "VN", "location": {"latitude": 16.12, "longitude": 108.21}, "note": "", "isRouteOrigin": false}
 ```
 `kind` (`factory` / `port` / `warehouse`), `name` and `place` (1–200) and `location` are required. `shortName` (≤60, the map label) defaults to the name; `note` ≤1000. The `key` is made from the name (`da-nang-warehouse`, then `-2`, …) and never changes. At most one site is the route origin: `isRouteOrigin: true` moves it from any other site. Returns the site in the `sites[]` shape.
 
-`PATCH /sites/{id}` changes only the fields sent; only `country` can be `null`. `DELETE /sites/{id}` → `{"deleted": true}`; deleting the route origin leaves the map to start routes from the company profile's origin.
+`PATCH /sites/{id}` changes only the fields sent; only `country` can be `null`. `DELETE /sites/{id}` returns `{"deleted": true}`; deleting the route origin leaves the map to start routes from the company profile's origin.
 
 Both: `404` for another company's supplier or site.
 
@@ -533,8 +533,8 @@ A regulation has versions. Each version is one uploaded file. The list includes 
 
 ### `POST /regulation-documents` (editor, rate limited)
 `multipart/form-data`: `file` (`.pdf` / `.html` / `.htm` / `.txt`, ≤4 MB, a PDF must start with `%PDF-`), `title` (1–300), optional `sourceUrl` (http(s), ≤2000, kept as a reference and never fetched), and either:
-- no `regulationId` → a new regulation at version 1, with an optional `officialId` (≤100, e.g. `32023R1115`);
-- `regulationId` → the next version of that company regulation (send no `officialId`).
+- without `regulationId`: a new regulation at version 1, with an optional `officialId` (≤100, e.g. `32023R1115`);
+- with `regulationId`: the next version of that company regulation (send no `officialId`).
 
 Returns `201`:
 ```json
@@ -808,7 +808,7 @@ From an analysis report to an email to the order's supplier. English only for no
  "createdBy": {"id": "…", "name": "Lan"}, "createdAt": "…", "approvedBy": {"id": "…", "name": "Lan"},
  "approvedAt": "…", "approvedByAuthor": true, "sentAt": null, "sandbox": null, "error": null}
 ```
-`status`: `draft` → `approved` → `sent`, or `failed` (the email service refused it; it can be sent again). Delivery confirmation (`delivered`) needs a Resend webhook: later.
+`status` goes from `draft` to `approved` to `sent`, or to `failed` (the email service refused it; it can be sent again). Delivery confirmation (`delivered`) needs a Resend webhook: later.
 
 ### `POST /reports/{id}/review` (owner)
 `{"note": "Ask them today."}` (optional). Clears a report a playbook rule sent to the owner (`needs_human_review`) so a message can be drafted from it. Returns the report with `review`. `409 no_review_needed`, `409 already_reviewed`, `409 report_failed_checks` (a failed audit can't be reviewed away: run the analysis again).
@@ -869,7 +869,7 @@ The whole log with the same filters as a CSV attachment (`exportmate-activity-YY
 ## Contact
 
 ### `POST /contact` (no sign-in, rate limited per visitor IP)
-`{"name": "…", "email": "…", "company": "…", "message": "…", "website": ""}` → `202 {"received": true}`. Emailed to the ExportMate team (`CONTACT_INBOX`) with replies going to the visitor. `website` is a hidden field: when a bot fills it, nothing is sent but the answer is the same. `503 contact_unavailable` without `CONTACT_INBOX`; delivered only with `RESEND_API_KEY` (sandbox otherwise). 5 per IP per hour (`CONTACT_MESSAGES_PER_HOUR`).
+`{"name": "…", "email": "…", "company": "…", "message": "…", "website": ""}` returns `202 {"received": true}`. Emailed to the ExportMate team (`CONTACT_INBOX`) with replies going to the visitor. `website` is a hidden field: when a bot fills it, nothing is sent but the answer is the same. `503 contact_unavailable` without `CONTACT_INBOX`; delivered only with `RESEND_API_KEY` (sandbox otherwise). 5 per IP per hour (`CONTACT_MESSAGES_PER_HOUR`).
 
 ## Planned
 

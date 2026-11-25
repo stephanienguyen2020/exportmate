@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./coverage";
 
 test("real FastAPI/Postgres round trip: onboarding, import, persistence and playbook", async ({ page }) => {
   test.skip(process.env.TEST_REAL_BACKEND !== "1", "Run with TEST_REAL_BACKEND=1 and the local backend on :8000.");

@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./coverage";
 
 const affected = (sku: string, name: string) => ({ sku, name, reason: "r", stockValueUsd: 1 });
 const impact = {

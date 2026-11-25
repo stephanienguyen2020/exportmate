@@ -43,7 +43,7 @@ Replace the explicit demo entry screen with the Firebase sign-in flow. Public la
 
 The original informational dialogs are removed. Header links now use `#/?section=how`, `about`, or `contact` to scroll to designed sections beneath the hero. Each combines photography, scroll-linked parallax, and CSS perspective layers. The existing Three.js globe remains in the hero footer. Reduced-motion mode disables the spatial transitions.
 
-The hero copy is reduced to “Trade changes. Clear next steps.” The workspace introduction is “Order risks. Clear next steps.”
+The hero copy is reduced to "Trade changes. Clear next steps." The workspace introduction is "Order risks. Clear next steps."
 
 ### Additional generated assets
 

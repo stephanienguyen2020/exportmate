@@ -1,4 +1,4 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Page } from "./coverage";
 
 type Role = "owner" | "editor" | "viewer";
 const company = {

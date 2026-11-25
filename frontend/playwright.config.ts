@@ -3,6 +3,8 @@ export default defineConfig({
   testDir: "./tests",
   testMatch: "**/*.spec.ts",
   fullyParallel: true,
+  // `npm run coverage:e2e`: writes the coverage report of the app's code to coverage/e2e/.
+  globalSetup: process.env.COVERAGE === "1" ? "./tests/coverage-report.ts" : undefined,
   use: {
     baseURL: "http://127.0.0.1:5175",
     headless: true,

@@ -1,7 +1,7 @@
 # Knowledge graph
 
-How News watch finds the orders an article may hit by following links (material → products
-made from it → suppliers that buy it → their orders), not only by comparing HS codes.
+How News watch finds the orders an article may hit by following links from a material to
+the products made from it, the suppliers that buy it and their orders, not only by comparing HS codes.
 This file is the technical side: the data, how the walk works, what's built and what's next.
 
 Target architecture (the finished system; section 1 says what's built today):
@@ -210,7 +210,7 @@ Every rule and number the graph uses, with where it lives in code. Change both t
 
 ## 7. Building chains offline
 
-`build_chain.py`: a writer and a reviewer (generator–critic, like the assistant's auditor), with
+`build_chain.py`: a writer and a reviewer (a generator and a critic, like the assistant's auditor), with
 code checks between. Plain Gemini calls with fixed schemas (`core/gemini.py`), not agents: the
 steps are fixed, so it's cheaper, repeatable and testable (`tests/test_build_chain.py`, with
 `FakeGemini`).
@@ -291,10 +291,10 @@ across records ("which of my orders depend on wood from Laos?"); the graph can.
   order, what the answer says connects the order with its path, given the order's own facts.
   Restating or shortening is fine; a supplier, country or chain step the path doesn't show, or a
   contradiction, sends the draft back once; still failing marks the answer `needs_review`.
-- Gemini explains; the walk decides. Tested on the demo company: "what if Vietnam restricts acacia
+- Code walks the graph and decides which orders an answer names; Gemini only writes the answer. Tested on the demo company: "what if Vietnam restricts acacia
   log exports?" names its 9 orders through Binh Phu Wood and An Cuong Wood with each chain; the
   critic caught a planted wrong supplier, country and step and passed the correct answer.
-- Later: the company report's news → orders section and suggested solutions take paths too.
+- Later: the company report's section on news and the orders it reaches, and suggested solutions, show paths too.
 
 ## 9. Graph database (Neo4j): the read model
 
