@@ -7,6 +7,7 @@ from datetime import UTC, date, datetime
 from pydantic.alias_generators import to_camel
 from sqlalchemy.orm import Session
 
+from app.core import clock
 from app.core.config import get_settings
 from app.core.context import CompanyContext
 from app.core.errors import AppError, not_found_error
@@ -315,7 +316,7 @@ def change_order_statuses(
 def build_overview(db: Session, ctx: CompanyContext) -> OverviewOut:
     counts = {s.value: 0 for s in OrderStatus}
     counts.update(order_queries.count_orders_by_status(db, ctx.company_id))
-    today = datetime.now(UTC).date()
+    today = clock.today()
     return OverviewOut(
         total_orders=sum(counts.values()),
         counts_by_status=counts,

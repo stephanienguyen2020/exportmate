@@ -11,6 +11,9 @@ test("parses citations and figures", () => {
   assert.deepEqual(citedRefs("A [1] and B [1, 2]."), [1, 2]);
   assert.equal(stripRefs("Total USD 1,165,971 [1]."), "Total USD 1,165,971.");
   assert.deepEqual(figures("USD 1,165,971.00 across 12 items, a 25% duty [3]"), ["1165971", "25"]);
+  // Thousands written with dots (Vietnamese): 19.500 is 19,500; an HS code keeps its dots.
+  assert.deepEqual(figures("Trị giá: 19.500 USD, tổng 1.165.971 USD"), ["19500", "1165971"]);
+  assert.deepEqual(figures("HS 9403.30.00 and 4412.33"), ["9403.3", "4412.33"]);
 });
 
 test("passes an answer whose citations and figures trace to tool results", () => {

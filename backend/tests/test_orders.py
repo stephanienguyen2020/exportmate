@@ -1,19 +1,19 @@
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 
-from conftest import import_orders, onboard
+from conftest import TEST_TODAY, import_orders, onboard
 from sqlalchemy import update
 
 from app.database.models import Order, OrderStatus
 from app.database.session import open_session
 
-TODAY = datetime.now(UTC).date()
+TODAY = TEST_TODAY
 
 
 def ship_in(days: int) -> str:
     return (TODAY + timedelta(days=days)).isoformat()
 
 
-# Ship dates relative to today: the overview only counts orders that haven't shipped yet.
+# PO-01 to PO-07 ship 1 to 7 days from today, so they stay upcoming whenever the tests run.
 MANY_ORDERS_CSV = "id,product,supplier,destination,value,shipDate,hsCode\n" + "".join(
     f"PO-{i:02d},Plywood {i},Binh Phu,NL,{100 + i},{ship_in(i)},4412.33\n" for i in range(1, 8)
 )

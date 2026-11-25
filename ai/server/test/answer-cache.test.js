@@ -8,7 +8,7 @@ const base = {
   disabled: [],
   dataVersion: "d1",
   policyVersion: "p1",
-  models: { simple: "s", complex: "c" },
+  models: { assistant: "a" },
   day: "2026-10-14",
 };
 
@@ -27,7 +27,7 @@ test("anything the answer depends on changes the key", () => {
     { skipOld: false },
     { dataVersion: "d2" },
     { policyVersion: "p2" },
-    { models: { simple: "s2", complex: "c" } },
+    { models: { assistant: "a2" } },
     { day: "2026-10-15" },
     { messages: [{ role: "user", text: "Hi" }, { role: "model", text: "Hello" }, { role: "user", text: "Who supplies PLY-101?" }] },
   ])

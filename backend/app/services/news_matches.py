@@ -15,11 +15,12 @@ import re
 import uuid
 from collections import Counter
 from dataclasses import asdict
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from itertools import pairwise
 
 from sqlalchemy.orm import Session
 
+from app.core import clock
 from app.core.context import CompanyContext
 from app.core.errors import AppError, not_found_error
 from app.core.news_alerts import fetch_news_alerts, fetch_news_stock
@@ -136,7 +137,7 @@ def build_news_matches(
     orders = order_queries.list_company_orders(db, ctx.company_id)
     markets = {o.id: locate_destination(o.destination, gazetteer).market for o in orders}
     # Only orders that haven't shipped are suggested.
-    today = date.today()
+    today = clock.today()
     open_orders = [(o, markets[o.id]) for o in orders if o.ship_date >= today]
     orders_by_id = {o.id: o for o in orders}
     walker = GraphWalker(db, ctx.company_id)

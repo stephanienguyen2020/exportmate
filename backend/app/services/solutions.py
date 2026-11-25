@@ -35,7 +35,7 @@ from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
-from app.core import gemini
+from app.core import clock, gemini
 from app.core.config import get_settings
 from app.core.context import CompanyContext
 from app.core.errors import AppError, not_found_error
@@ -102,10 +102,6 @@ class Library:
     titles: dict[tuple[str, str], str]  # (market, requirement key) -> its title in force
     documents: dict[uuid.UUID, SolutionBasisOut]  # quote empty; the solution keeps its own
     people: dict[uuid.UUID, PersonOut]
-
-
-def _today() -> date:
-    return datetime.now(UTC).date()
 
 
 def _problem(market: str, finding: RequirementCheckOut) -> tuple[str, str, str]:
@@ -315,7 +311,7 @@ def _cases(
     gaps = [g for g in _gaps(content) if only_key is None or g.requirement_key == only_key]
     library = _load_library(db, ctx.company_id, [_problem(content.market, g) for g in gaps])
     chosen = _chosen(db, report.id)
-    today = _today()
+    today = clock.today()
     return [
         _case_out(report, order, content.market, g, library, chosen.get(g.requirement_key), today)
         for g in gaps
@@ -340,7 +336,7 @@ def list_company_solutions(db: Session, ctx: CompanyContext) -> list[SolutionPro
         dict.fromkeys((s.market_code, s.requirement_key, s.problem_status) for s in solutions)
     )
     library = _load_library(db, ctx.company_id, problems, solutions)
-    today = _today()
+    today = clock.today()
     order = {SolutionStatus.adopted: 0, SolutionStatus.suggested: 1, SolutionStatus.rejected: 2}
     grouped: dict[tuple[str, str, str], list[SolutionOut]] = {p: [] for p in problems}
     for solution in solutions:  # newest first, so the stable sort below keeps that
@@ -580,7 +576,7 @@ def suggest_solution(
     """AI writes a new solution to one problem in the report, from the company's notes on
     earlier ones."""
     case = _load_case(db, ctx, report_id, requirement_key)
-    today = _today()
+    today = clock.today()
     library, expired = _earlier(db, ctx, case, today)
     notes = [n for s in library.solutions for n in library.notes.get(s.id, [])]
     notes.sort(key=lambda n: n.created_at, reverse=True)
@@ -660,7 +656,7 @@ def write_solution(
     other, and the audit log names who wrote it."""
     summary, steps = tidy_written(summary, steps)
     case = _load_case(db, ctx, report_id, requirement_key)
-    today = _today()
+    today = clock.today()
     _, expired = _earlier(db, ctx, case, today)
     _add_solution(
         db,
@@ -695,7 +691,7 @@ def _refuse_expired(db: Session, ctx: CompanyContext, solution: Solution, doing:
         ctx.company_id,
         [(solution.market_code, solution.requirement_key, solution.problem_status)],
     )
-    reason = expired_reason(solution, library, _today())
+    reason = expired_reason(solution, library, clock.today())
     if reason:
         raise AppError(
             409,
@@ -710,7 +706,7 @@ def _one_solution_out(db: Session, ctx: CompanyContext, solution: Solution) -> S
         ctx.company_id,
         [(solution.market_code, solution.requirement_key, solution.problem_status)],
     )
-    return _solution_out(solution, library, _today())
+    return _solution_out(solution, library, clock.today())
 
 
 def use_solution(

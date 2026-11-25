@@ -19,8 +19,6 @@ locals {
     PROJECT_ID            = var.project_id
     GOOGLE_CLOUD_LOCATION = "global" # Vertex AI endpoint for Gemini and the embedding model
     GEMINI_MODEL          = var.gemini_model
-    GEMINI_MODEL_SIMPLE   = var.gemini_model_simple
-    GEMINI_MODEL_COMPLEX  = var.gemini_model_complex
     ALLOWED_ORIGINS       = var.allowed_origins
     BACKEND_URL           = google_cloud_run_v2_service.backend.uri
     SCHEDULER_SA          = google_service_account.scheduler.email
@@ -224,7 +222,7 @@ resource "google_cloud_run_v2_service" "ai" {
   ]
 }
 
-# Public API (Vercel rewrites /api/* here): chat is anonymous or carries the user's Firebase
+# Public API (the website forwards /api/* here): chat is anonymous or carries the user's Firebase
 # token, source changes are checked against the backend, and POST /api/scan needs the
 # scheduler's OIDC token or an owner/editor token.
 resource "google_cloud_run_v2_service_iam_member" "ai_public" {

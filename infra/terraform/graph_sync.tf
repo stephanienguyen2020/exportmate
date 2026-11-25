@@ -6,6 +6,8 @@
 # The AuraDB instance is made by hand (console.neo4j.io); its password goes in Secret Manager
 # by hand, never in Terraform state:
 #   printf %s "$PASSWORD" | gcloud secrets create neo4j-password --data-file=-
+# A replacement instance's password is a new version (`gcloud secrets versions add`), and its
+# credentials file gives neo4j_uri, neo4j_username and neo4j_database.
 # neo4j_uri empty: no Neo4j, the walk uses Postgres only.
 
 locals {
@@ -15,6 +17,7 @@ locals {
   graph_env = local.neo4j_enabled ? {
     NEO4J_URI           = var.neo4j_uri
     NEO4J_USERNAME      = var.neo4j_username
+    NEO4J_DATABASE      = var.neo4j_database
     GRAPH_EVENTS_TOPIC  = google_pubsub_topic.graph_changes.id
     GRAPH_SYNC_AUDIENCE = local.graph_sync_audience
     GRAPH_SYNC_INVOKER  = google_service_account.graph_push.email

@@ -56,7 +56,7 @@ export const RULES = [
   },
   {
     id: "thorough",
-    text: "Be thorough before answering. For questions about exposure, risk or impact, gather all relevant alerts with get_alerts (not just one search hit), check the items with query_inventory, and use search_knowledge for the underlying news. Call tools in parallel when you can, and again with refined arguments when results are thin.",
+    text: "For questions about exposure, risk or impact, gather all relevant alerts with get_alerts (not just one search hit), check the items with query_inventory, and use search_knowledge for the underlying news. Make independent calls in parallel.",
     prevents: "Exposure answers built from a single search hit.",
   },
   {
@@ -113,6 +113,11 @@ export const RULES = [
     id: "style",
     text: "Be concise: short paragraphs or bullets, money in USD (order values in their own currency). Reply in the user's language.",
     prevents: "Long answers, mixed currencies, replies in the wrong language.",
+  },
+  {
+    id: "self-check",
+    text: 'Before you reply, check your answer the way the auditor will: every news item you cite has its publication date right after it, e.g. "[4] (published 2026-11-16)"; every order you say is connected to a material, origin or product cites its query_graph path ref; every total, sum, average or percentage is a figure a tool returned or the result of a calculate call you made. Reply with the answer only: never mention drafts, reviews, corrections or the auditor.',
+    prevents: 'Drafts the auditor sends back (a quarter of the company exam on 23 Nov 2026: undated news, graph orders without their path, a total added up in the head), each costing another model round; "Here is the corrected final answer" shown to the user.',
   },
 ];
 

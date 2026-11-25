@@ -131,7 +131,7 @@ test("readJson keeps a body up to the limit and refuses one past it with 413", a
       const req = Readable.from(pieces.filter(Boolean).map((p) => Buffer.from(p)));
       const size = Buffer.byteLength(json);
       if (size <= max) assert.equal(await readJson(req, max), parts.join(""));
-      else await assert.rejects(readJson(req, max), (e) => e.status === 413);
+      else await assert.rejects(readJson(req, max), (e) => /** @type {any} */ (e).status === 413);
     }),
   );
 });

@@ -1,7 +1,7 @@
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 
 import pytest
-from conftest import add_member, import_orders, onboard
+from conftest import TEST_TODAY, add_member, import_orders, onboard
 from sqlalchemy import delete, update
 
 from app.database.models import AnalysisReport, MarketRequirement, Role
@@ -12,7 +12,7 @@ from app.seed_demo_data import seed_company_map_data
 from app.seed_reference_data import seed_reference_data
 from app.services.analysis import audit_report
 
-TODAY = datetime.now(UTC).date()
+TODAY = TEST_TODAY
 
 
 def ship_in(days: int) -> str:
@@ -84,8 +84,9 @@ def test_an_import_analyses_its_orders(client):
 
 
 def test_run_reports_each_order(client, lan):
-    # Keep the US tariff's stated rate change after every ship date here, so the duty is priced
-    # (on or after it, it is not: test_a_duty_whose_rate_changes_by_the_ship_date_is_not_priced).
+    # The seeded Section 232 rate changes on a real date (1 Jan 2027). Once that is under 60 days
+    # away it falls before PO-2 ships and the duty is listed unpriced; this test is about pricing a
+    # duty in force, so the change moves a year out.
     with open_session() as db:
         db.execute(
             update(MarketRequirement)

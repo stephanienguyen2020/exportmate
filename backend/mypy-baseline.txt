@@ -26,7 +26,6 @@ app/services/analysis.py: Item "None" of "date | None" has no attribute "isoform
 app/services/cost_settings.py: Incompatible types in assignment (expression has type "None", target has type "dict[str, object]")  [assignment]
 app/services/cost_settings.py: Need type annotation for "changes" (hint: "changes: dict[<type>, <type>] = ...")  [var-annotated]
 app/services/hs_suggestions.py: Argument 1 to "from_order" of "OrderOut" has incompatible type "Order | None"; expected "Order"  [arg-type]
-app/services/hs_suggestions.py: Invalid index type "str | None" for "dict[str, HsCodeSuggestion]"; expected type "str"  [index]
 app/services/hs_suggestions.py: Item "None" of "Order | None" has no attribute "external_id"  [union-attr]
 app/services/hs_suggestions.py: Item "None" of "Order | None" has no attribute "external_id"  [union-attr]
 app/services/hs_suggestions.py: Item "None" of "Order | None" has no attribute "external_id"  [union-attr]

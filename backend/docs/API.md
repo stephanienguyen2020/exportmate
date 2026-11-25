@@ -4,7 +4,7 @@ What each endpoint does and where the app uses it. The live contract (exact fiel
 
 ## Basics
 
-- Prefix: `/api/v1`. The frontend calls it via `frontend/src/api.ts` (`VITE_BACKEND_API_URL`, default `/api/v1`; Vercel and Vite route it to this service).
+- Prefix: `/api/v1`. The frontend calls it via `frontend/src/api.ts` (`VITE_BACKEND_API_URL`, default `/api/v1`; the website's nginx and the Vite dev server route it to this service).
 - Auth: `Authorization: Bearer <Firebase ID token>` on every route except `/health`. Locally with `AUTH_MODE=dev`: `Bearer dev:lan@example.com` (`dev-unverified:<email>` simulates an unverified email).
 - JSON is camelCase. Money is `valueMinor` (hundredths of the unit, for every currency: `2400000` = 24,000.00) + `currency`.
 - Success: `{"data": ..., "meta": {...}}`. Error:
@@ -35,6 +35,10 @@ What each endpoint does and where the app uses it. The live contract (exact fiel
 | --- | --- | --- |
 | **Account** | | |
 | `GET /health` | none | Uptime checks, `deploy.sh` |
+| `GET /benchmarks/hs-codes` | none | Measured accuracy of HS code suggestions |
+| `POST /mcp` | none | MCP server: HS code tools for AI agents ([MCP.md](MCP.md)) |
+| `GET /public/tariff-lines`, `POST /public/hs-suggestions` | none | Public REST API ([MCP.md](MCP.md)) |
+| `GET /public/openapi.json` | none | OpenAPI 3.1 of the public operations only |
 | `GET /me` | signed in | Sign-in, every workspace load, Account settings; `ai/server` |
 | `PATCH /me` | signed in | Account settings |
 | `POST /me/logout` | signed in | `#/logout` |
@@ -154,6 +158,18 @@ What each endpoint does and where the app uses it. The live contract (exact fiel
 
 ### `GET /health`
 Returns `{"data": {"status": "ok"}}`. No auth, no DB call. Logged at debug level only.
+
+## Benchmarks
+
+### `GET /benchmarks/hs-codes`
+No auth. The latest full run of HS code suggestions on held-out customs rulings (`app/hs_benchmark.py`,
+rulings in `seed_data/hs_benchmark.json`): `createdAt`, `model`, `embeddingModel`, `dataset` (source,
+licence, download date, rulings listed, sampled), `caseCount` and `metrics`. Each rate is
+`{right, of, rate, low, high}` with a 95% Wilson interval: `top1` (first suggestion is the ruled
+6-digit code), `top3`, `heading` (first suggestion in the ruled 4-digit heading), `retrieval` (the
+tariff search showed the ruled code to the AI) and `nearestLine` (baseline: closest tariff line by
+embedding, no AI); plus `noSuggestion` and `errors` counts. Runs with `--limit` aren't served. 404 before
+the first full run.
 
 ## Account
 

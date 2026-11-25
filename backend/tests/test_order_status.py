@@ -1,7 +1,7 @@
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 
 import pytest
-from conftest import add_member, import_orders, onboard
+from conftest import TEST_TODAY, add_member, import_orders, onboard
 from sqlalchemy import select, update
 
 from app.core.config import get_settings
@@ -19,7 +19,7 @@ from app.seed_data import load_seed_file
 from app.seed_demo_data import seed_company_map_data
 from app.seed_reference_data import seed_order_statuses, seed_reference_data
 
-TODAY = datetime.now(UTC).date()
+TODAY = TEST_TODAY
 # PO-1 to the EU, 10 days out, from a supplier without plot geolocation: exposed after analysis.
 ORDERS = (
     "id,product,supplier,destination,value,shipDate,hsCode\n"

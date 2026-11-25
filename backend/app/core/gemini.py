@@ -7,8 +7,8 @@ anything is saved, and a person reviews it before it counts. Tests replace `gene
 """
 
 import logging
+import threading
 import time
-from functools import lru_cache
 from typing import TypeVar
 
 from google import genai
@@ -30,8 +30,22 @@ EMBED_BATCH = 50
 RETRY_STATUS_CODES = [408, 429, 499, 500, 502, 503, 504]
 
 
-@lru_cache
+_client_lock = threading.Lock()
+_cached_client: genai.Client | None = None
+
+
 def _client() -> genai.Client:
+    """One client for the process, made under a lock: two threads making one each would leave
+    one unreferenced, and a garbage-collected client closes its connection while the other's
+    request is still using it ("the client has been closed")."""
+    global _cached_client
+    with _client_lock:
+        if _cached_client is None:
+            _cached_client = _new_client()
+        return _cached_client
+
+
+def _new_client() -> genai.Client:
     settings = get_settings()
     if not settings.google_cloud_project:
         raise AppError(503, "ai_not_configured", "AI is not set up on this server.")
@@ -79,7 +93,6 @@ def generate_json(
             model=settings.gemini_model,
             contents=contents,
             config=types.GenerateContentConfig(
-                temperature=0,
                 response_mime_type="application/json",
                 response_schema=schema,
                 thinking_config=_thinking(settings.gemini_model, settings.gemini_thinking_level),

@@ -104,7 +104,7 @@ test("the critic reads the answer against the paths, fenced as data", async () =
   assert.deepEqual(await critique({ answer: "PO-1 uses acacia from Laos [2].", paths, generate }), {
     supported: false,
     problems: ["PO-1: Says Laos; the path says Vietnam."],
-    model: (await import("../models.js")).TIERS.complex.model,
+    model: (await import("../models.js")).ASSISTANT.model,
   });
   // No paths, nothing to judge; a judge that fails leaves the answer to the auditor.
   assert.equal((await critique({ answer: "x", paths: [], generate })).skipped, true);
