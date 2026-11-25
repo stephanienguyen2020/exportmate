@@ -440,7 +440,7 @@ async function fixture(
       auth: request.headers().authorization,
       idempotencyKey: request.headers()["idempotency-key"],
     });
-    let data: unknown = {};
+    let data: unknown;
     let meta = {};
     if (path === "/me") {
       if (method === "PATCH") me.user = { ...me.user, ...body };
@@ -1966,7 +1966,7 @@ test("owners tick several orders and change their status with one note", async (
   const patch = requests.find((r) => r.method === "PATCH" && r.path === "/orders/status");
   expect(patch?.body.status).toBe("clear");
   expect(patch?.body.note).toBe("Buyer confirmed both by email.");
-  expect([...patch?.body.orderIds].sort()).toEqual(["IMPORTED-1", "SERVER-1"]);
+  expect([...(patch?.body.orderIds ?? [])].sort()).toEqual(["IMPORTED-1", "SERVER-1"]);
   expect(patch?.auth).toBe("Bearer dev:owner@example.com");
   await expect(bar).toHaveCount(0);
   await expect(page.getByRole("checkbox", { checked: true })).toHaveCount(0);

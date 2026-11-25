@@ -107,7 +107,7 @@ export function useNewsMatches(alerts: Alert[] | null, loadStock: () => Promise<
     }
   }, [alerts, live, loadStock]);
   useEffect(() => {
-    load();
+    void load();
   }, [load]);
 
   const review = async (impactId: string, orderId: string, verdict: NewsVerdict, note: string | null) => {

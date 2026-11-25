@@ -199,8 +199,8 @@ def propose_codes(
             if not code.reason.strip()
             else None
         )
-        if reason:
-            dropped[reason] = dropped.get(reason, 0) + 1
+        if reason or six is None:
+            dropped[reason or "not_a_code"] = dropped.get(reason or "not_a_code", 0) + 1
             continue
         kept[six] = ProposedCode(
             hs_code=six,

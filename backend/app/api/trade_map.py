@@ -61,6 +61,6 @@ def compare_order(
     elif ship_date is not None:
         result = trade_map_service.compare_ship_date(db, ctx, order_id, ship_date)
     else:
-        assert via is not None
+        assert via is not None  # noqa: S101 - narrowing; the query checks exactly one is set
         result = trade_map_service.compare_route(db, ctx, order_id, via)
     return success_response(result)

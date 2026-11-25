@@ -275,7 +275,7 @@ function Conversation({ autoFocus, onAudit }: { autoFocus?: boolean; onAudit?: (
   }, [messages, busy, steps]);
   const submit = (e?: React.FormEvent) => {
     e?.preventDefault();
-    ask(draft);
+    void ask(draft);
     setDraft("");
   };
   return (

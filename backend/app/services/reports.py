@@ -1072,7 +1072,7 @@ def create_report_draft(
     db: Session, ctx: CompanyContext, body: ReportCreateIn, authorization: str | None
 ) -> ReportDraftOut:
     if body.kind == ReportKind.order:
-        assert body.order_id is not None
+        assert body.order_id is not None  # noqa: S101 - narrowing; ReportCreateIn requires it
         content = build_order_report_content(db, ctx, body.order_id)
         scope = {"orderId": body.order_id}
     else:

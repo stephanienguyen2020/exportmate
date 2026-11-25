@@ -366,7 +366,7 @@ def km_from_extent(observation: SatelliteObservation, latitude: float, longitude
 
     def contains(ring: list[tuple[float, float]]) -> bool:
         inside = False
-        for (ax, ay), (bx, by) in zip(ring, ring[1:] + ring[:1]):
+        for (ax, ay), (bx, by) in zip(ring, ring[1:] + ring[:1], strict=True):
             if (ay > 0) != (by > 0) and 0 < ax + (bx - ax) * (-ay) / (by - ay):
                 inside = not inside
         return inside
@@ -375,7 +375,7 @@ def km_from_extent(observation: SatelliteObservation, latitude: float, longitude
         return 0.0
     nearest = math.inf
     for ring in rings:
-        for (ax, ay), (bx, by) in zip(ring, ring[1:] + ring[:1]):
+        for (ax, ay), (bx, by) in zip(ring, ring[1:] + ring[:1], strict=True):
             dx, dy = bx - ax, by - ay
             length_squared = dx * dx + dy * dy
             fraction = (

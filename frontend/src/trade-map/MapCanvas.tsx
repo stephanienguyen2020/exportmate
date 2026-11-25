@@ -127,7 +127,7 @@ export function MapCanvas({
       point[0] < W + 6 &&
       point[1] > -6 &&
       point[1] < H + 6
-      ? (point as [number, number])
+      ? point
       : null;
   };
   // Markers keep a constant on-screen size, so overlap depends on real width.
@@ -858,8 +858,8 @@ function spread(markers: Marker[], scale: number) {
           b = markers[j];
         if (a.kind === "flood" && b.kind === "flood") continue;
         const min = ((markerSize(a) + markerSize(b)) / 2 + 3) / scale;
-        let dx = b.x - a.x,
-          dy = b.y - a.y;
+        let dx = b.x - a.x;
+        const dy = b.y - a.y;
         if (!dx && !dy) dx = 0.01;
         const distance = Math.hypot(dx, dy);
         if (distance >= min) continue;

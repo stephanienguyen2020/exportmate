@@ -427,7 +427,7 @@ export function SupplierForm({
           }
         : {}),
     };
-    run(async () => {
+    void run(async () => {
       const saved = record
         ? await api.updateSupplier(record.id!, body)
         : await api.createSupplier(body);
@@ -703,7 +703,7 @@ export function SiteForm({
       note: note.trim(),
       isRouteOrigin: origin,
     };
-    run(async () => {
+    void run(async () => {
       const saved = site
         ? await api.updateSite(site.id, body)
         : await api.createSite(body);

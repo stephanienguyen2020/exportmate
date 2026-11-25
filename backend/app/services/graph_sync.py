@@ -28,7 +28,8 @@ log = logging.getLogger(__name__)
 
 def edges_fingerprint(edge_ids: list[uuid.UUID]) -> str:
     """The same as knowledge_graph.chain_fingerprint for these IDs."""
-    return hashlib.md5(",".join(str(i) for i in sorted(edge_ids)).encode()).hexdigest()
+    text = ",".join(str(i) for i in sorted(edge_ids))
+    return hashlib.md5(text.encode(), usedforsecurity=False).hexdigest()
 
 
 def sync_chain(db: Session, driver: Driver) -> dict[str, int]:

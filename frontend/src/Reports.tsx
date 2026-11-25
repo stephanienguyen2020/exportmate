@@ -320,7 +320,7 @@ function ReportEditor({
     setError("");
     try {
       if (dirty && !sent) {
-        const saved = await api.updateReport(id, content!);
+        const saved = await api.updateReport(id, content);
         setDraft(saved);
         setContent(saved.content);
       }

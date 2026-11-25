@@ -564,6 +564,7 @@ test("mobile missing-origin state and WebGL fallback stay usable", async ({
   await page.addInitScript(() => {
     const original = HTMLCanvasElement.prototype.getContext;
     HTMLCanvasElement.prototype.getContext = function (
+      this: HTMLCanvasElement,
       type: string,
       ...args: any[]
     ) {

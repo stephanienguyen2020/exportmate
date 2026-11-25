@@ -169,10 +169,11 @@ const scored = [];
 const results = [];
 for (const c of cases) {
   // A demo case's orders and playbook go through the same checks as a demo chat's (index.js).
-  const demo = c.demo ? { orders: demoMapOrders(c.demo.orders), playbook: demoPlaybook(c.demo.rules) } : null;
+  const caseDemo = /** @type {{ demo?: { orders: any[], rules: any[] } }} */ (c).demo;
+  const demo = caseDemo ? { orders: demoMapOrders(caseDemo.orders), playbook: demoPlaybook(caseDemo.rules) } : null;
   const result = onEngine
     ? (await callRuntime("query", { messages: c.messages, sessionId, channel: "eval", tier, demo, ...(company && { ...company, backendToken: exam.token }) })).result
-    : await runAgent({ messages: c.messages, sessionId, channel: "eval", withEvidence: true, tier, demo, ...(company && { ...company, backend: exam.backend }) });
+    : await runAgent({ messages: c.messages, sessionId, requestId: `eval-${c.id}`, channel: "eval", withEvidence: true, tier, demo, ...(company && { ...company, backend: exam.backend }) });
   const verdict = useJudge ? await judge(c, result).catch((e) => ({ faithfulness: null, relevance: null, reason: `judge failed: ${e.message}` })) : null;
   const s = scoreCase(c, result, verdict);
   results.push(result);

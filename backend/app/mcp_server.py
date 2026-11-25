@@ -106,5 +106,6 @@ def mcp_route(path: str) -> Route:
         transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
     )
     (route,) = app.routes  # one route, no middleware: it can join FastAPI's routes as is
-    assert isinstance(route, Route) and not app.user_middleware
+    if not isinstance(route, Route) or app.user_middleware:
+        raise RuntimeError("The MCP app is expected to be one route with no middleware.")
     return route

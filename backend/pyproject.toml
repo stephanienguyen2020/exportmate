@@ -25,6 +25,8 @@ dev = [
     "pytest>=8.3",
     "httpx>=0.28",
     "ruff>=0.8",
+    "hypothesis>=6.170.17",
+    "mypy>=2.4.1",
 ]
 
 [tool.pytest.ini_options]
@@ -33,3 +35,25 @@ pythonpath = ["."]
 
 [tool.ruff]
 line-length = 100
+
+[tool.ruff.lint]
+# Defaults (pyflakes, pycodestyle errors) plus bugbear (likely bugs) and bandit (security).
+extend-select = ["B", "S"]
+ignore = [
+    "B904",  # `raise AppError(...)` inside except: the API error is the message, not a chain
+    "S310",  # urlopen only reads URLs from settings or constants, never from a request
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106", "S108", "S311", "S324"]  # asserts, fake secrets, hashes
+"migrations/**" = ["S608"]
+
+[tool.mypy]
+# Static type check of app/. `scripts/mypy.sh` fails on errors not in mypy-baseline.txt, so
+# new code is checked fully while the errors from before this check are fixed over time.
+python_version = "3.12"
+files = ["app"]
+ignore_missing_imports = true
+check_untyped_defs = true
+plugins = ["pydantic.mypy"]
+
