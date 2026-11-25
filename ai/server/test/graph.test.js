@@ -111,6 +111,10 @@ test("the critic reads the answer against the paths, fenced as data", async () =
   assert.equal(asked, 1);
   const failed = await critique({ answer: "x", paths, generate: async () => Promise.reject(new Error("quota")) });
   assert.deepEqual([failed.supported, failed.error], [true, "quota"]);
+  // A judge that hangs is given up on, and its request cancelled, so the answer isn't held back.
+  let signal;
+  const hung = await critique({ answer: "x", paths, timeoutMs: 20, generate: (_, s) => ((signal = s), new Promise(() => {})) });
+  assert.deepEqual([hung.supported, hung.error, signal.aborted], [true, "no verdict within 0.02 s", true]);
 });
 
 test("the critic's verdict, order by order: malformed, or faulted without a reason, means supported", () => {
