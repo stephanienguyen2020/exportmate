@@ -111,6 +111,9 @@ test("the critic reads the answer against the paths, fenced as data", async () =
   assert.equal(asked, 1);
   const failed = await critique({ answer: "x", paths, generate: async () => Promise.reject(new Error("quota")) });
   assert.deepEqual([failed.supported, failed.error], [true, "quota"]);
+  // The judge's tokens (thinking included) and a retry are kept for the audit.
+  const counted = await critique({ answer: "x", paths, generate: async () => ({ text: "{}", tokens: { prompt: 900, output: 40, thinking: 2100 }, attempts: 2 }) });
+  assert.deepEqual([counted.supported, counted.tokens, counted.attempts], [true, { prompt: 900, output: 40, thinking: 2100 }, 2]);
   // A judge that hangs is given up on, and its request cancelled, so the answer isn't held back.
   let signal;
   const hung = await critique({ answer: "x", paths, timeoutMs: 20, generate: (_, s) => ((signal = s), new Promise(() => {})) });

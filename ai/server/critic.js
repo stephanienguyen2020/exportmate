@@ -91,15 +91,21 @@ export function parseVerdict(text) {
 }
 
 let ai;
-const defaultGenerate = (prompt, abortSignal) => {
+// Resolves to { text, tokens, attempts }: the tokens (thinking included) and tries go on the audit,
+// so a slow verdict shows whether the model thought for long or the call was retried.
+const defaultGenerate = async (prompt, abortSignal) => {
   ai ??= new GoogleGenAI({ vertexai: true, project: GEMINI_PROJECT, location: GEMINI_LOCATION });
-  return withRetry(() =>
-    ai.models.generateContent({
+  let attempts = 0;
+  const res = await withRetry(() => {
+    attempts++;
+    return ai.models.generateContent({
       model: MODEL,
       contents: prompt,
       config: { responseMimeType: "application/json", responseSchema: SCHEMA, maxOutputTokens: 4096, thinkingConfig: thinkingConfig(MODEL, THINKING), abortSignal },
-    }),
-  ).then((res) => res.text);
+    });
+  });
+  const u = res.usageMetadata || {};
+  return { text: res.text, tokens: { prompt: u.promptTokenCount, output: u.candidatesTokenCount, thinking: u.thoughtsTokenCount }, attempts };
 };
 
 /**
@@ -118,7 +124,10 @@ export async function critique({ answer, paths, generate = defaultGenerate, time
     }, timeoutMs);
   });
   try {
-    return { ...parseVerdict(await Promise.race([generate(criticPrompt(answer, paths), stop.signal), timedOut])), model: MODEL };
+    const out = await Promise.race([generate(criticPrompt(answer, paths), stop.signal), timedOut]);
+    // generate resolves to the verdict's text, or to { text, tokens, attempts }.
+    const { text, tokens, attempts } = typeof out === "string" ? { text: out } : out;
+    return { ...parseVerdict(text), model: MODEL, ...(tokens && { tokens }), ...(attempts > 1 && { attempts }) };
   } catch (e) {
     return { supported: true, problems: [], error: String(e?.message || e) };
   } finally {
