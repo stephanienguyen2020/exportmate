@@ -1586,3 +1586,36 @@ export async function fetchHsBenchmark(
   if (!response.ok) throw await responseError(response);
   return ((await response.json()) as Envelope<HsBenchmark>).data;
 }
+
+// The public MCP server (backend app/mcp_server.py), at /api/v1/mcp on this site.
+export type McpTool = {
+  name: string;
+  description?: string;
+  inputSchema: {
+    properties?: Record<string, { type?: string; default?: unknown }>;
+    required?: string[];
+  };
+  annotations?: { readOnlyHint?: boolean };
+};
+export function mcpUrl(): string {
+  return new URL(base + "/mcp", location.origin).href;
+}
+// tools/list, as an MCP client asks it (stateless server: no initialize needed).
+export async function listMcpTools(signal?: AbortSignal): Promise<McpTool[]> {
+  const response = await fetch(base + "/mcp", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json, text/event-stream",
+    },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+    signal: signal
+      ? AbortSignal.any([signal, AbortSignal.timeout(15000)])
+      : AbortSignal.timeout(15000),
+  });
+  if (!response.ok) throw await responseError(response);
+  const body = await response.json();
+  if (!Array.isArray(body?.result?.tools))
+    throw new Error("The MCP server sent no tool list.");
+  return body.result.tools as McpTool[];
+}

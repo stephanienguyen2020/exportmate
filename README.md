@@ -94,6 +94,12 @@ trade map, News watch and the assistant with the knowledge graph. Please don't c
 - **Memory:** remembers a signed-in user's preferences and work; Account › What the assistant remembers
   lists them and forgets any on request.
 
+### 🔌 MCP server
+
+- **HS code tools for AI agents** (Claude, Cursor, your own) at `/api/v1/mcp`: search the official
+  tariff lines, get the app's HS code suggestions, and read their measured accuracy. Read-only, no
+  sign-in. Docs on the website at `#/mcp` and in [backend/docs/MCP.md](backend/docs/MCP.md).
+
 ### 👥 Team and accounts
 
 - Sign-in with **Firebase Auth** (email or Google), company workspaces, invites, and owner, editor and

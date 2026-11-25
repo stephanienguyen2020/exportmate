@@ -1,0 +1,205 @@
+.mcp-page {
+  --mcp-ink: #22342e;
+  --mcp-muted: #5f6f63;
+  --mcp-rule: #c8d0bf;
+  --mcp-paper: #fafbf7;
+  --mcp-panel: #f5f3e9;
+  --mcp-code: #22342e;
+  --mcp-code-ink: #eef0da;
+  min-height: 100vh;
+  background: var(--mcp-paper);
+  color: var(--mcp-ink);
+  padding: 0 3.4vw 80px;
+}
+.mcp-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 76px;
+  border-bottom: 2px solid var(--mcp-ink);
+}
+.mcp-wordmark {
+  font:
+    700 24px Georgia,
+    "Times New Roman",
+    serif;
+  color: inherit;
+  text-decoration: none;
+}
+.mcp-wordmark span {
+  font-size: 0.5em;
+  vertical-align: super;
+}
+.mcp-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: inherit;
+  font-size: 14px;
+  text-decoration: none;
+}
+.mcp-back:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.mcp-main {
+  max-width: 920px;
+  margin: 0 auto;
+  padding-top: 56px;
+}
+.mcp-kicker,
+.mcp-note,
+.mcp-code figcaption,
+.mcp-tool h3 span {
+  font:
+    10px "DM Mono",
+    monospace;
+  letter-spacing: 1.2px;
+  color: var(--mcp-muted);
+}
+.mcp-main h1 {
+  margin: 18px 0 0;
+  font-size: clamp(40px, 5vw, 76px);
+  font-weight: 400;
+  letter-spacing: -0.06em;
+  line-height: 1.04;
+}
+.mcp-main h1 strong {
+  font-weight: 750;
+}
+.mcp-lede {
+  max-width: 36em;
+  margin: 24px 0 0;
+  font-size: clamp(16px, 1.2vw, 19px);
+  line-height: 1.55;
+  color: var(--mcp-muted);
+}
+.mcp-main section {
+  margin-top: 56px;
+  padding-top: 22px;
+  border-top: 1px solid var(--mcp-ink);
+}
+.mcp-main h2 {
+  margin: 0 0 18px;
+  font-size: 28px;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+}
+.mcp-note {
+  margin: -10px 0 18px;
+}
+.mcp-code {
+  margin: 0 0 16px;
+  background: var(--mcp-code);
+  color: var(--mcp-code-ink);
+}
+.mcp-code figcaption {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #3c5048;
+  color: #a5b49b;
+}
+.mcp-code button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid #526754;
+  background: transparent;
+  color: var(--mcp-code-ink);
+  font: inherit;
+  cursor: pointer;
+}
+.mcp-code button:hover {
+  background: #2f453d;
+}
+.mcp-code pre {
+  margin: 0;
+  padding: 14px;
+  overflow-x: auto;
+  font:
+    13px/1.55 "DM Mono",
+    ui-monospace,
+    monospace;
+}
+.mcp-status {
+  margin: 0;
+  padding: 20px;
+  border: 1px dashed var(--mcp-rule);
+  color: var(--mcp-muted);
+}
+.mcp-status strong {
+  color: var(--mcp-ink);
+}
+.mcp-tools {
+  display: grid;
+  gap: 14px;
+}
+.mcp-tool {
+  padding: 18px 20px;
+  background: var(--mcp-panel);
+  border: 1px solid var(--mcp-rule);
+}
+.mcp-tool h3 {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  font-size: 17px;
+}
+.mcp-tool h3 span {
+  padding: 2px 6px;
+  border: 1px solid var(--mcp-rule);
+}
+.mcp-tool p {
+  margin: 10px 0 0;
+  line-height: 1.55;
+}
+.mcp-tool dl {
+  display: grid;
+  gap: 6px;
+  margin: 14px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--mcp-rule);
+}
+.mcp-tool dl > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 14px;
+}
+.mcp-tool dt {
+  font-weight: 600;
+}
+.mcp-tool dd {
+  margin: 0;
+  color: var(--mcp-muted);
+}
+.mcp-list {
+  margin: 0;
+  padding-left: 20px;
+  line-height: 1.6;
+}
+.mcp-list li + li {
+  margin-top: 10px;
+}
+.mcp-main a {
+  color: inherit;
+  text-underline-offset: 3px;
+}
+.mcp-main code {
+  font-family: "DM Mono", ui-monospace, monospace;
+  font-size: 0.92em;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 760px) {
+  .mcp-page {
+    padding: 0 16px 56px;
+  }
+  .mcp-main {
+    padding-top: 36px;
+  }
+}
