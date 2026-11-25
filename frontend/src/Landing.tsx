@@ -170,8 +170,8 @@ export default function Landing({ section = "" }: { section?: string }) {
             {link("Accuracy", "accuracy")}
             {link("About us", "about")}
             {link("Get in touch", "contact")}
-            <a className="lp-nav-link" href="#/mcp">
-              <span>MCP</span>
+            <a className="lp-nav-link" href="#/developers">
+              <span>API · MCP</span>
             </a>
           </nav>
           <a className="lp-login" href="#/login">

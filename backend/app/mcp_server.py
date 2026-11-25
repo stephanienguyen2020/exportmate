@@ -1,20 +1,15 @@
 """ExportMate's MCP server, at /api/v1/mcp (Streamable HTTP, stateless, JSON responses).
 
-Public and read-only: HS code tools that touch no company's data, so an agent can classify a
-product, look up the official tariff lines, and see how accurate the suggestions measured.
+Public and read-only HS code tools that touch no company's data. They call the same service as
+the public REST API (services/public_hs.py), so both answer alike and share one set of limits.
 Company tools (orders, reports) need personal access tokens first; sign-in tokens last an hour,
 which MCP clients can't refresh.
 
-- search_tariff_lines: the official 6-digit lines closest in meaning (one embedding call).
-- suggest_hs_codes: the same path as the app's suggestions and the benchmark
-  (services/hs_suggestions.py propose_codes), as a company with no past orders. Each call is
-  an AI call, so it's limited per caller and in total (settings mcp_*).
-- get_hs_benchmark: the latest full run of the benchmark (app/hs_benchmark.py).
-
-Docs for people: backend/docs/MCP.md and the website's #/mcp page.
+Argument descriptions and examples come from schemas/public.py; the developer docs (#/developers)
+read them from tools/list. Docs for people: backend/docs/MCP.md.
 """
 
-from typing import Any
+from typing import Annotated
 
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
@@ -23,16 +18,11 @@ from mcp.types import ToolAnnotations
 from starlette.requests import Request
 from starlette.routing import Route
 
-from app.core.config import get_settings
 from app.core.errors import AppError
-from app.core.rate_limit import RateLimiter
 from app.database.session import open_session
 from app.hs_benchmark import latest_run
-from app.services import hs_suggestions as hs_service
-
-MAX_PRODUCT_CHARS = 2000
-MAX_TARIFF_RESULTS = 25
-NOT_A_RULING = "Not a ruling. Confirm a code with customs or a licensed broker before you ship."
+from app.schemas.public import DESTINATION, LIMIT, PRODUCT
+from app.services import public_hs
 
 server = MCPServer(
     name="ExportMate",
@@ -42,73 +32,45 @@ server = MCPServer(
         "to say how often suggestions measured right."
     ),
 )
-per_caller = RateLimiter("MCP HS code suggestions")
-everyone = RateLimiter("MCP HS code suggestions from all callers")
 READ_ONLY = ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=False)
 
 
-def _caller(ctx: Context) -> str:
-    """The caller's address: the first X-Forwarded-For entry (set by the website's proxy and
-    Cloud Run's front end), else the peer. Good enough to share a limit fairly; the total
-    limit holds whatever a caller sends."""
-    request = ctx.request_context.request
-    if not isinstance(request, Request):
-        return "unknown"
-    forwarded = request.headers.get("x-forwarded-for", "")
-    return forwarded.split(",")[0].strip() or (request.client.host if request.client else "unknown")
-
-
-def _clean(text: str) -> str:
-    text = " ".join((text or "").split())
-    if not text:
-        raise ToolError("Describe the product: what it is, what it's made of, what it's for.")
-    return text[:MAX_PRODUCT_CHARS]
+def _tool_error(error: AppError) -> ToolError:
+    """An expected failure, which the agent reads (any other exception is a crash it can't)."""
+    return ToolError(error.message)
 
 
 @server.tool(annotations=READ_ONLY)
-def search_tariff_lines(query: str, limit: int = 10) -> dict[str, Any]:
+def search_tariff_lines(query: Annotated[str, PRODUCT], limit: Annotated[int, LIMIT] = 10) -> dict:
     """Find the official 6-digit HS subheadings closest in meaning to a product description.
 
     Searches the Harmonized System lines (from the US Harmonized Tariff Schedule; the first
     6 digits are international). Use it to see the candidate codes and their official wording.
     """
-    limit = max(1, min(limit, MAX_TARIFF_RESULTS))
-    with open_session() as db:
-        headings, method = hs_service.candidate_headings(db, _clean(query), limit)
-    return {
-        "lines": [{"code": h.code, "description": h.description} for h in headings],
-        "search": method,  # "embedding" (by meaning) or "words" (shared words)
-    }
+    try:
+        return public_hs.search(query, limit).model_dump(by_alias=True)
+    except AppError as error:
+        raise _tool_error(error) from error
 
 
-@server.tool(annotations=READ_ONLY)
-def suggest_hs_codes(product: str, ctx: Context, destination: str = "") -> dict:
+@server.tool(annotations=READ_ONLY, meta={"rateLimit": public_hs.limits()})
+def suggest_hs_codes(
+    product: Annotated[str, PRODUCT],
+    ctx: Context,
+    destination: Annotated[str, DESTINATION] = "",
+) -> dict:
     """Suggest up to 3 HS codes (6 digits) for a product, most likely first, each with a reason
     and the official tariff lines it relied on.
 
     The same suggestions as ExportMate's app, made with no company history. A suggestion is an
     AI assessment, not a ruling: check it against the official wording before you use it.
     """
-    settings = get_settings()
+    request = ctx.request_context.request
+    caller = public_hs.caller_address(request if isinstance(request, Request) else None)
     try:
-        per_caller.check(_caller(ctx), settings.mcp_hs_suggestions_per_hour)
-        everyone.check("all", settings.mcp_hs_suggestions_total_per_hour)
-        with open_session() as db:
-            proposal = hs_service.propose_codes(db, _clean(product), destination.strip(), [])
+        return public_hs.suggest(product, destination, caller).model_dump(by_alias=True)
     except AppError as error:
-        raise ToolError(error.message) from error
-    return {
-        "suggestions": [
-            {
-                "hsCode": c.hs_code,
-                "officialDescription": c.heading.description if c.heading else None,
-                "reason": c.reason,
-                "basedOn": [b.ref for b in c.based_on],
-            }
-            for c in proposal.codes
-        ],
-        "note": NOT_A_RULING,
-    }
+        raise _tool_error(error) from error
 
 
 @server.tool(annotations=READ_ONLY)

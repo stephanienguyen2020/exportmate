@@ -87,10 +87,10 @@ class Settings(BaseSettings):
     supplier_message_drafts_per_hour: int = 30
     requirement_drafts_per_hour: int = 20
     hs_suggestions_per_hour: int = 60
-    # The public MCP server's suggest_hs_codes (app/mcp_server.py): per caller address, and in
-    # total, since anyone can call it and each call is an AI call.
-    mcp_hs_suggestions_per_hour: int = 20
-    mcp_hs_suggestions_total_per_hour: int = 300
+    # Public HS code suggestions, REST and MCP together (services/public_hs.py): per caller
+    # address, and in total, since anyone can call them and each call is an AI call.
+    public_hs_suggestions_per_hour: int = 20
+    public_hs_suggestions_total_per_hour: int = 300
     scenario_suggestions_per_hour: int = 30
     solution_suggestions_per_hour: int = 30
     analysis_runs_per_hour: int = 60

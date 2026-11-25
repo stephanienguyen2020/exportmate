@@ -25,6 +25,7 @@ from app.api import (
     news_matches,
     orders,
     playbook,
+    public,
     regulations,
     reports,
     scenarios,
@@ -132,6 +133,7 @@ def create_app() -> FastAPI:
     for module in (
         health,
         benchmarks,
+        public,
         account,
         orders,
         imports,
@@ -142,7 +144,6 @@ def create_app() -> FastAPI:
         company_sites,
         regulations,
         reports,
-        regulations,
         cost_settings,
         analysis,
         supplier_documents,

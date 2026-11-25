@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import "./styles.css";
 import Landing from "./Landing";
 import AccountPage from "./Account";
-import McpDocs from "./McpDocs";
+import Developers from "./Developers";
 import { hasSession } from "./account-store";
 import ChatPage, { ChatWidget } from "../ai/chat/Chat";
 import ErrorBoundary from "./ErrorBoundary";
@@ -53,8 +53,15 @@ function Root() {
       <ErrorBoundary resetKey={path}>
         {path === "" ? (
           <Landing section={section} />
-        ) : path === "mcp" ? (
-          <McpDocs />
+        ) : path === "developers" || path === "mcp" ? (
+          <Developers
+            tab={
+              path === "developers" &&
+              new URLSearchParams(fullPath.split("?")[1] || "").get("tab") === "api"
+                ? "api"
+                : "mcp"
+            }
+          />
         ) : workspace ? (
           hasSession() ? (
             <Workspace />

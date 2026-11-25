@@ -5,10 +5,10 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from app import mcp_server
 from app.database.session import open_session
 from app.main import create_app
 from app.seed_reference_data import seed_hs_headings
+from app.services import public_hs
 
 HEADERS = {
     "Accept": "application/json, text/event-stream",
@@ -60,6 +60,10 @@ def test_lists_three_read_only_tools(mcp):
     assert all(t["annotations"]["readOnlyHint"] for t in tools.values())
     # The caller never sees the injected context.
     assert "ctx" not in tools["suggest_hs_codes"]["inputSchema"]["properties"]
+    # What the developer docs show: descriptions, an example, and the limits.
+    product = tools["suggest_hs_codes"]["inputSchema"]["properties"]["product"]
+    assert product["description"] and product["examples"]
+    assert tools["suggest_hs_codes"]["_meta"]["rateLimit"]["perCallerPerHour"] > 0
 
 
 def test_search_tariff_lines(mcp):
@@ -76,9 +80,9 @@ def test_suggest_hs_codes_uses_the_app_path_and_is_limited(mcp, fake_gemini, mon
             {"hs_code": "9999.99", "reason": "Not a tariff line.", "based_on": []},
         ]
     }
-    monkeypatch.setattr(mcp_server, "per_caller", mcp_server.RateLimiter("test"))
-    monkeypatch.setattr(mcp_server, "everyone", mcp_server.RateLimiter("test all"))
-    monkeypatch.setenv("MCP_HS_SUGGESTIONS_PER_HOUR", "1")
+    monkeypatch.setattr(public_hs, "per_caller", public_hs.RateLimiter("test"))
+    monkeypatch.setattr(public_hs, "everyone", public_hs.RateLimiter("test all"))
+    monkeypatch.setenv("PUBLIC_HS_SUGGESTIONS_PER_HOUR", "1")
     from app.core.config import get_settings
 
     get_settings.cache_clear()
