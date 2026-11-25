@@ -1,4 +1,4 @@
-# MCP server
+# MCP server and public API
 
 ExportMate serves a [Model Context Protocol](https://modelcontextprotocol.io) server so AI agents
 (Claude, Cursor, your own) can classify products with the same HS code suggestions the app makes.
@@ -7,7 +7,12 @@ ExportMate serves a [Model Context Protocol](https://modelcontextprotocol.io) se
   backend's own Cloud Run URL works too.
 - **Transport:** Streamable HTTP, stateless, JSON responses (no SSE stream needed).
 - **Auth:** none. Every tool is read-only and touches no company's data.
-- **Code:** `app/mcp_server.py`, mounted in `app/main.py`. Tests: `tests/test_mcp_server.py`.
+- **Code:** `app/mcp_server.py` (served at the exact path by `app/main.py`). It calls the same
+  service as the public REST API (`services/public_hs.py`, `api/public.py`), so both answer
+  alike and share one set of limits. Tests: `tests/test_mcp_server.py`, `tests/test_public_api.py`.
+- **Docs for people:** the website's `#/developers` page (MCP and REST tabs). It reads the tool
+  list (`tools/list`) and the public OpenAPI spec from the server, and its Run buttons call the
+  real server.
 
 ## Connect
 
@@ -47,11 +52,25 @@ agent to show the reason and the official wording with each code.
 
 ## Limits
 
-`suggest_hs_codes` is an AI call, so it is limited in memory per backend instance:
-`MCP_HS_SUGGESTIONS_PER_HOUR` per caller address (default 20) and
-`MCP_HS_SUGGESTIONS_TOTAL_PER_HOUR` for everyone (default 300). Past a limit the tool returns
+`suggest_hs_codes` (and `POST /public/hs-suggestions`, which shares the limit) is an AI call,
+so it is limited in memory per backend instance: `PUBLIC_HS_SUGGESTIONS_PER_HOUR` per caller
+address (default 20) and `PUBLIC_HS_SUGGESTIONS_TOTAL_PER_HOUR` for everyone (default 300). Past a limit the tool returns
 an error saying when to try again. The caller address is the first `X-Forwarded-For` entry,
 which a caller can set, so the per-caller limit is about fairness; the total limit is the cap.
+
+## REST API
+
+The same tools over plain HTTP, no sign-in, in the usual `{"data": ...}` envelope:
+
+| Endpoint | Same as |
+| --- | --- |
+| `GET /public/tariff-lines?query=…&limit=10` | `search_tariff_lines` |
+| `POST /public/hs-suggestions` `{"product": "…", "destination": "…"}` | `suggest_hs_codes` |
+| `GET /benchmarks/hs-codes` | `get_hs_benchmark` (404 before the first full run) |
+
+`GET /public/openapi.json` is an OpenAPI 3.1 spec of only these operations and the schemas they
+use, with each limit (`x-rate-limit`) and error (429 over the limit, 503 AI step failed). Tag a
+route `public` to add it.
 
 ## Errors
 
