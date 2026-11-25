@@ -57,6 +57,7 @@ export type TradeMapProps = {
   focus: string;
   toneOf: (order: Order) => Tone;
   renderStatus: (order: Order) => React.ReactNode;
+  statusLabel: (code: string) => string; // an order status as the database names it
   onNavigate: (path: string) => void;
   signature: string;
   companyOrigin: string;
@@ -151,6 +152,7 @@ function TradeMapView({
   focus,
   toneOf,
   renderStatus,
+  statusLabel,
   onNavigate,
   signature,
   companyOrigin,
@@ -475,6 +477,7 @@ function TradeMapView({
     <ScenarioPanel
       rows={rows}
       markets={markets}
+      hubs={data.routeHubs}
       scenario={scenario}
       renderStatus={renderStatus}
       onChange={setScenario}
@@ -693,13 +696,14 @@ function TradeMapView({
           />
           <ul className="tm-legend" aria-label="Map legend">
             <li>
-              <i className="tm-key market tone-red" /> Action needed
+              <i className="tm-key market tone-red" /> {statusLabel("exposed")}
             </li>
             <li>
-              <i className="tm-key market tone-amber" /> Awaiting analysis
+              <i className="tm-key market tone-amber" />{" "}
+              {statusLabel("awaiting_analysis")}
             </li>
             <li>
-              <i className="tm-key market tone-green" /> In the clear
+              <i className="tm-key market tone-green" /> {statusLabel("clear")}
             </li>
             <li>
               <i className="tm-key supplier" /> Supplier

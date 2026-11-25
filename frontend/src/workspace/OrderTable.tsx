@@ -8,15 +8,7 @@ export function OrderStatus({ order, ws }: { order: Order; ws: Workspace }) {
   return (
     <span className={`status ${option ? option.tone : ws.tone(order)}`}>
       <i />
-      {option
-        ? option.label
-        : order.risk
-          ? "Action needed"
-          : ws.isClear(order)
-            ? "In the clear"
-            : order.status === "needs_data"
-              ? "Needs data"
-              : "Awaiting analysis"}
+      {ws.statusLabel(order.status)}
     </span>
   );
 }

@@ -1,0 +1,53 @@
+{
+  "_note": "The country code each destination names, as the backend reads it (trade_map.parse_destination) and the browser demo does (frontend/src/data.ts destinationCountry). Both test suites read this file.",
+  "cases": [
+    {
+      "destination": "Rotterdam, NL",
+      "country": "NL"
+    },
+    {
+      "destination": "Rotterdam NL",
+      "country": "NL"
+    },
+    {
+      "destination": "Rotterdam, nl",
+      "country": "NL"
+    },
+    {
+      "destination": "NL",
+      "country": "NL"
+    },
+    {
+      "destination": "London, UK",
+      "country": "GB"
+    },
+    {
+      "destination": "London UK",
+      "country": "GB"
+    },
+    {
+      "destination": "Dubai AE",
+      "country": "AE"
+    },
+    {
+      "destination": "Rotterdam, NL,",
+      "country": "NL"
+    },
+    {
+      "destination": "  Antwerp ,  BE ",
+      "country": "BE"
+    },
+    {
+      "destination": "Hamburg, Germany",
+      "country": null
+    },
+    {
+      "destination": "Somewhere",
+      "country": null
+    },
+    {
+      "destination": "",
+      "country": null
+    }
+  ]
+}

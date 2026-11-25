@@ -251,6 +251,7 @@ export type Solution = {
   market: string;
   requirementKey: string;
   problemStatus: string;
+  problemLabel: string; // how every screen words problemStatus
   summary: string;
   steps: string[];
   status: "suggested" | "adopted" | "rejected";
@@ -284,6 +285,7 @@ export type SolutionCase = {
   requirementKey: string;
   title: string;
   problemStatus: string;
+  problemLabel: string; // how every screen words problemStatus
   note: string;
   default: Solution | null;
   inUse: boolean;
@@ -296,6 +298,7 @@ export type SolutionProblem = {
   market: string;
   requirementKey: string;
   problemStatus: string;
+  problemLabel: string; // how every screen words problemStatus
   title: string;
   inChecklist: boolean;
   // Valid before expired; adopted, then suggested, then rejected; newest first.
@@ -512,6 +515,10 @@ export type RequirementCheck = {
   title: string;
   level: "supplier" | "shipment" | "check";
   status: CheckStatus;
+  // From the backend's one list of check statuses: whether it is a gap in the order's
+  // documents, and what the status is called on every screen.
+  gap: boolean;
+  statusLabel: string;
   note: string;
   // The supplier document that answers it and the standards it accepts. Absent from
   // analysis reports saved before the backend added them.
@@ -623,8 +630,11 @@ export type SatelliteObservation = {
   sourceUrl: string | null;
   nearby: NearbyPlace[];
 };
+// A port the route what-if can go through (ports.transit_hub); `code` is its country.
+export type RouteHub = { code: string; name: string };
 export type TradeMap = {
   markets: MapMarket[];
+  routeHubs: RouteHub[];
   orders: MapOrder[];
   suppliers: MapSupplier[];
   sites: MapSite[];
@@ -1029,10 +1039,9 @@ export const api = {
     request<OrderDetail>(`/orders/${encodeURIComponent(id)}`).then(
       (r) => r.data,
     ),
+  // Public: the same for every company, so the browser demo words statuses with it too.
   orderStatuses: (signal?: AbortSignal) =>
-    request<OrderStatusOption[]>("/order-statuses", { signal }).then(
-      (r) => r.data,
-    ),
+    publicRequest<OrderStatusOption[]>("/order-statuses", signal),
   changeOrderStatus: (id: string, status: ApiOrder["status"], note: string) =>
     request<OrderDetail>(`/orders/${encodeURIComponent(id)}/status`, {
       method: "PATCH",
@@ -1529,6 +1538,17 @@ export const api = {
   declineInvite: (id: string) =>
     request(`/me/invites/${encodeURIComponent(id)}`, { method: "DELETE" }),
 };
+
+// A public endpoint: no sign-in, so no token.
+async function publicRequest<T>(path: string, signal?: AbortSignal): Promise<T> {
+  const response = await fetch(base + path, {
+    signal: signal
+      ? AbortSignal.any([signal, AbortSignal.timeout(30000)])
+      : AbortSignal.timeout(30000),
+  });
+  if (!response.ok) throw await responseError(response);
+  return (await response.json()).data;
+}
 
 // The public contact form: no sign-in, so no token.
 export async function sendContactMessage(message: ContactMessage) {

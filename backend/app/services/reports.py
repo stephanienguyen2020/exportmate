@@ -17,19 +17,17 @@ decides statuses and costs, and this report repeats them for a reader outside th
 
 import html
 import logging
-import re
 import uuid
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
-from pathlib import Path
 
-from fpdf import FPDF, FontFace
 from sqlalchemy.orm import Session
 
 from app.core.context import CompanyContext
 from app.core.email import EmailAttachment, OutgoingEmail, get_email_sender
 from app.core.errors import AppError, not_found_error
+from app.core.money import format_money, format_totals
 from app.core.news_alerts import fetch_news_alerts
 from app.database.models import ReportDraft, ReportKind
 from app.database.queries import analysis as analysis_queries
@@ -45,36 +43,24 @@ from app.schemas.reports import (
     ReportCreateIn,
     ReportDraftOut,
     ReportDraftSummaryOut,
-    ReportEditsOut,
     ReportEmailOut,
     ReportRow,
     ReportSection,
 )
-from app.schemas.trade_map import MapOrderOut, RequirementSourceOut
+from app.schemas.trade_map import GAP_STATUSES, MapOrderOut, RequirementSourceOut
 from app.services import trade_map as trade_map_service
+from app.services.report_edits import compare_report, validate_report_update
+from app.services.report_pdf import RenderedReport, render_report_pdf
+from app.services.report_text import (
+    DISCLAIMER,
+    format_day,
+    join_limited,
+    plural,
+    report_filename,
+)
 
-FONT_DIR = Path(__file__).resolve().parents[1] / "assets" / "fonts"
-FONT = "NotoSans"
-STATUS_LABELS = {
-    "on_file": "On file",
-    "missing": "Missing",
-    "mismatch": "Wrong standard",
-    "prepare": "Prepare per shipment",
-    "check": "Check",
-    "unknown": "No supplier record",
-}
-GAP_STATUSES = {"missing", "mismatch"}
-TONE_COLORS = {"gap": (176, 32, 32), "warn": (150, 92, 0)}
-EDITED_FILL = (255, 243, 205)
-KIND_LABELS = {ReportKind.order: "ORDER COMPLIANCE REPORT", ReportKind.company: "COMPANY REPORT"}
 NEWS_LIMIT = 30
 DRAFT_LIST_LIMIT = 30
-DISCLAIMER = (
-    "Checks compare the supplier documents on file with each market's checklist; they do not "
-    "verify the documents themselves. News alerts are matched to stock items by an AI model. "
-    "Illustrative guidance, not legal advice. Confirm with the official text and your customs "
-    "broker before shipping."
-)
 
 log = logging.getLogger(__name__)
 
@@ -86,47 +72,11 @@ def today_utc() -> date:
     return datetime.now(UTC).date()
 
 
-def format_day(day: date) -> str:
-    return day.strftime("%d %b %Y")
-
-
-def format_order_value(value_minor: int, currency: str) -> str:
-    # Every currency is stored in hundredths, JPY and VND too.
-    return f"{value_minor / 100:,.2f} {currency}"
-
-
 def format_values_by_currency(orders: list[OrderOut]) -> str:
     totals: dict[str, int] = defaultdict(int)
     for order in orders:
         totals[order.currency] += order.value_minor
-    return " + ".join(format_order_value(v, c) for c, v in sorted(totals.items())) or "no value"
-
-
-def join_limited(items: list[str], limit: int = 6) -> str:
-    if len(items) <= limit:
-        return ", ".join(items)
-    return f"{', '.join(items[:limit])} and {len(items) - limit} more"
-
-
-def plural(count: int, word: str, many: str | None = None) -> str:
-    return f"{count} {word if count == 1 else many or word + 's'}"
-
-
-_TRAILING_URL = re.compile(r"^(.*)\n(https?://\S+)\s*$", re.DOTALL)
-
-
-def cell_link(text: str) -> tuple[str, str | None]:
-    """'Publisher\nhttps://…' renders as 'Publisher ›' linking to the URL, so long feed URLs
-    don't swell a table row. Any other text is shown as written."""
-    match = _TRAILING_URL.match(text)
-    if not match or not match.group(1).strip():
-        return text, None
-    return f"{match.group(1).strip()} ›", match.group(2)
-
-
-def report_filename(title: str) -> str:
-    safe = re.sub(r"[^A-Za-z0-9._-]+", "-", title).strip("-.")[:80] or "report"
-    return f"exportmate-{safe}.pdf"
+    return format_totals(totals, " + ") or "no value"
 
 
 class _Citations:
@@ -180,7 +130,7 @@ def _check_rows(checklist: MapOrderOut, citations: _Citations) -> list[ReportRow
             id=f"check-{check.requirement_key}",
             cells=[
                 check.title,
-                STATUS_LABELS.get(check.status, check.status),
+                check.status_label,
                 check.note,
                 citations.cite(check.source, check.title),
             ],
@@ -188,10 +138,6 @@ def _check_rows(checklist: MapOrderOut, citations: _Citations) -> list[ReportRow
         )
         for check in checklist.checks
     ]
-
-
-def money_text(amount_minor: int, currency: str) -> str:
-    return f"{currency} {amount_minor / 100:,.2f}"
 
 
 def _analysis_sections(db: Session, order, checklist: MapOrderOut) -> list[ReportSection]:
@@ -207,7 +153,7 @@ def _analysis_sections(db: Session, order, checklist: MapOrderOut) -> list[Repor
         now = {c.requirement_key: c.status for c in checklist.checks}
         if then != now:
             note += " The checklist has changed since; run the analysis again."
-        totals = ", ".join(money_text(v, c) for c, v in sorted(analysis.cost_totals.items()))
+        totals = format_totals(analysis.cost_totals)
         rows = [
             ReportRow(id="analysis-next", cells=["Next step", analysis.suggested_action.text]),
             ReportRow(id="analysis-cost", cells=["Estimated cost", totals or "None"]),
@@ -239,7 +185,7 @@ def _analysis_sections(db: Session, order, checklist: MapOrderOut) -> list[Repor
                 cells=[
                     line.label,
                     line.formula,
-                    money_text(line.amount_minor, line.currency),
+                    format_money(line.amount_minor, line.currency),
                     ", ".join(b.label for b in line.basis),
                 ],
             )
@@ -337,7 +283,7 @@ def build_order_report_content(db: Session, ctx: CompanyContext, order_id: str) 
                         ("market", "Market", where),
                         ("hs", "HS code", out.hs_code),
                         ("ship", "Ship date", format_day(out.ship_date)),
-                        ("value", "Value", format_order_value(out.value_minor, out.currency)),
+                        ("value", "Value", format_money(out.value_minor, out.currency)),
                         ("status", "Status", out.status.value.replace("_", " ")),
                     ]
                 ],
@@ -600,7 +546,7 @@ def build_company_report_content(
             entry["orders"].append(m.order.id)
             entry["unknown"] |= unknown
             for c in gaps:
-                entry["gaps"][c.title] = STATUS_LABELS[c.status]
+                entry["gaps"][c.title] = c.status_label
         if m.order.ship_date <= until:
             facts.window_orders += 1
             facts.window_gap_orders += bool(gaps)
@@ -614,8 +560,8 @@ def build_company_report_content(
                     m.order.id,
                     format_day(m.order.ship_date),
                     market_names.get(m.placement.market or "", m.order.destination),
-                    format_order_value(m.order.value_minor, m.order.currency),
-                    "; ".join(f"{c.title}: {STATUS_LABELS[c.status]}" for c in gaps),
+                    format_money(m.order.value_minor, m.order.currency),
+                    "; ".join(f"{c.title}: {c.status_label}" for c in gaps),
                     m.order.supplier,
                     ", ".join(citations.cite(c.source, c.title) for c in gaps),
                 ],
@@ -766,254 +712,6 @@ def build_company_report_content(
 
 
 # Edits ------------------------------------------------------------------------------------
-
-
-@dataclass
-class SectionEdits:
-    text: bool = False  # heading, note, empty text or column labels
-    edited: set[str] = field(default_factory=set)
-    added: set[str] = field(default_factory=set)
-    removed: int = 0
-
-    @property
-    def has_edits(self) -> bool:
-        return bool(self.text or self.edited or self.added or self.removed)
-
-
-def validate_report_update(original: ReportContent, content: ReportContent) -> None:
-    """Text and rows can change; the report's structure can't."""
-
-    def refuse(message: str) -> AppError:
-        return AppError(422, "invalid_report", message)
-
-    if [s.id for s in content.sections] != [s.id for s in original.sections]:
-        raise refuse("Sections can be edited or left out, not added, removed or reordered.")
-    for before, after in zip(original.sections, content.sections, strict=True):
-        if (before.layout, before.widths, before.tone_column) != (
-            after.layout,
-            after.widths,
-            after.tone_column,
-        ) or len(before.columns) != len(after.columns):
-            raise refuse(f"The layout of section {before.id} can't change.")
-        missing = {r.id for r in before.rows} - {r.id for r in after.rows}
-        if missing:
-            raise refuse(
-                f"Leave lines out with included=false instead of deleting them ({before.id})."
-            )
-
-
-def compare_report(
-    original: ReportContent, content: ReportContent
-) -> tuple[ReportEditsOut, dict[str, SectionEdits]]:
-    per_section: dict[str, SectionEdits] = {}
-    sections_removed = 0
-    for before, after in zip(original.sections, content.sections, strict=False):
-        edits = SectionEdits(
-            text=(before.heading, before.note, before.empty, before.columns)
-            != (after.heading, after.note, after.empty, after.columns)
-        )
-        old_rows = {r.id: r for r in before.rows}
-        for row in after.rows:
-            old = old_rows.get(row.id)
-            if old is None:
-                if row.included:
-                    edits.added.add(row.id)
-            elif old.included and not row.included:
-                edits.removed += 1
-            elif row.included and (row.cells, row.tone) != (old.cells, old.tone):
-                edits.edited.add(row.id)
-        per_section[after.id] = edits
-        sections_removed += before.included and not after.included
-    summary = ReportEditsOut(
-        header=(original.title, original.subtitle, original.summary)
-        != (content.title, content.subtitle, content.summary),
-        sections=sum(e.text for e in per_section.values()),
-        rows_edited=sum(len(e.edited) for e in per_section.values()),
-        rows_added=sum(len(e.added) for e in per_section.values()),
-        rows_removed=sum(e.removed for e in per_section.values()) + sections_removed,
-    )
-    return summary, per_section
-
-
-# PDF --------------------------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class RenderedReport:
-    kind: ReportKind
-    content: ReportContent
-    original: ReportContent
-    company_name: str
-    prepared_by: str
-    generated_at: datetime
-
-
-class _ReportPdf(FPDF):
-    def __init__(self, report: RenderedReport, edited: bool):
-        super().__init__(format="A4")
-        self.report = report
-        self.edited = edited
-        self.add_font(FONT, "", str(FONT_DIR / "NotoSans-Regular.ttf"))
-        self.add_font(FONT, "B", str(FONT_DIR / "NotoSans-Bold.ttf"))
-        self.set_auto_page_break(auto=True, margin=18)
-        self.set_margins(16, 16, 16)
-        self.set_title(report.content.title)
-        self.set_author(report.company_name)
-        self.set_creator("ExportMate")
-
-    def footer(self):
-        self.set_y(-12)
-        self.set_font(FONT, "", 7.5)
-        self.set_text_color(120)
-        stamp = self.report.generated_at.strftime("%Y-%m-%d %H:%M UTC")
-        left = f"ExportMate · {self.report.company_name} · generated {stamp}"
-        if self.edited:
-            left += f" · contains edits by {self.report.prepared_by}"
-        self.cell(0, 5, left, align="L")
-        self.cell(0, 5, f"Page {self.page_no()}/{{nb}}", align="R")
-
-    def heading(self, text: str):
-        if self.get_y() > self.h - 50:  # keep a heading with the start of its section
-            self.add_page()
-        self.ln(4)
-        self.set_font(FONT, "B", 11.5)
-        self.set_text_color(20)
-        self.multi_cell(0, 7, text, align="L", new_x="LMARGIN", new_y="NEXT")
-        self.set_draw_color(210)
-        self.line(self.l_margin, self.get_y(), self.w - self.r_margin, self.get_y())
-        self.ln(2)
-
-    def paragraph(self, text: str, size: float = 9.5, color: int = 40, fill: bool = False):
-        self.set_font(FONT, "", size)
-        self.set_text_color(color)
-        self.set_fill_color(*EDITED_FILL)
-        self.multi_cell(0, size * 0.55, text, align="L", fill=fill, new_x="LMARGIN", new_y="NEXT")
-
-    def section_rows(self, section: ReportSection, edits: SectionEdits):
-        rows = [r for r in section.rows if r.included]
-        if not rows:
-            self.paragraph(section.empty or "Nothing to report.", size=9, color=90)
-            return
-        if section.layout == "sources":
-            for row in rows:
-                fill = row.id in edits.edited or row.id in edits.added
-                ref, title, link, quotes = (row.cells + ["", "", "", ""])[:4]
-                self.set_font(FONT, "B", 9)
-                self.set_text_color(25)
-                self.set_fill_color(*EDITED_FILL)
-                self.multi_cell(
-                    0,
-                    5,
-                    f"{ref} {title}".strip(),
-                    align="L",
-                    fill=fill,
-                    new_x="LMARGIN",
-                    new_y="NEXT",
-                )
-                if link:
-                    self.paragraph(link, size=8, color=90, fill=fill)
-                if quotes:
-                    self.paragraph(quotes, size=8.5, color=60, fill=fill)
-                self.ln(1.5)
-            return
-        facts = section.layout == "facts"
-        self.set_font(FONT, "", 8.5 if not facts else 9)
-        self.set_text_color(25)
-        # A table's cells start from the current fill colour; only edited rows get one.
-        self.set_fill_color(255)
-        with self.table(
-            col_widths=tuple(section.widths),
-            text_align="LEFT",
-            line_height=4.8 if not facts else 5.4,
-            borders_layout="NONE" if facts else "ALL",
-            first_row_as_headings=not facts,
-            headings_style=FontFace(family=FONT, emphasis="BOLD", fill_color=(242, 242, 242)),
-        ) as table:
-            if not facts:
-                table.row(tuple(section.columns))
-            for row in rows:
-                shaded = row.id in edits.edited or row.id in edits.added
-                cells = list(row.cells)
-                if row.id in edits.added:
-                    cells[0] = f"+ {cells[0]}"
-                out = table.row()
-                for i, text in enumerate(cells):
-                    toned = row.tone and i == section.tone_column
-                    style = FontFace(
-                        emphasis="BOLD" if toned else None,
-                        color=TONE_COLORS[row.tone]
-                        if toned
-                        else (110 if facts and i == 0 else None),
-                        fill_color=EDITED_FILL if shaded else None,
-                    )
-                    shown, link = cell_link(text)
-                    out.cell(shown, style=style, link=link)
-
-    def edit_note(self, section: ReportSection, edits: SectionEdits):
-        parts = []
-        if edits.edited:
-            parts.append(f"{plural(len(edits.edited), 'line')} changed")
-        if edits.added:
-            parts.append(f"{len(edits.added)} added (+)")
-        if edits.removed:
-            parts.append(f"{edits.removed} left out")
-        if edits.text:
-            parts.append("heading or note reworded")
-        self.ln(1)
-        self.paragraph(
-            f"Edited by {self.report.prepared_by} after the report was generated: "
-            f"{', '.join(parts)}. Shaded lines differ from the generated report.",
-            size=7.5,
-            color=110,
-        )
-
-
-def render_report_pdf(report: RenderedReport) -> bytes:
-    content = report.content
-    summary, per_section = compare_report(report.original, content)
-    pdf = _ReportPdf(report, summary.has_edits)
-    pdf.add_page()
-
-    pdf.set_font(FONT, "", 8.5)
-    pdf.set_text_color(110)
-    pdf.cell(0, 5, KIND_LABELS[report.kind], new_x="LMARGIN", new_y="NEXT")
-    pdf.set_font(FONT, "B", 18)
-    pdf.set_text_color(15)
-    pdf.multi_cell(0, 9, content.title, align="L", new_x="LMARGIN", new_y="NEXT")
-    byline = f"Prepared by {report.prepared_by} · {format_day(report.generated_at.date())}"
-    pdf.paragraph(" · ".join(p for p in (content.subtitle, byline) if p), size=9, color=90)
-    if content.summary:
-        pdf.ln(3)
-        pdf.paragraph(content.summary, size=10, color=30, fill=summary.header)
-    if summary.header:
-        pdf.paragraph(
-            f"Title, subtitle or summary edited by {report.prepared_by}.", size=7.5, color=110
-        )
-
-    for section in content.sections:
-        if not section.included:
-            continue
-        edits = per_section.get(section.id, SectionEdits())
-        pdf.heading(section.heading)
-        if section.note:
-            pdf.paragraph(section.note, size=8.5, color=90)
-            pdf.ln(1.5)
-        pdf.section_rows(section, edits)
-        if edits.has_edits:
-            pdf.edit_note(section, edits)
-
-    left_out = [
-        s.heading
-        for s, o in zip(content.sections, report.original.sections, strict=False)
-        if o.included and not s.included
-    ]
-    pdf.ln(5)
-    if left_out:
-        pdf.paragraph(
-            f"Left out by {report.prepared_by}: {', '.join(left_out)}.", size=7.5, color=110
-        )
-    pdf.paragraph(DISCLAIMER, size=7.5, color=110)
-    return bytes(pdf.output())
 
 
 # Drafts -----------------------------------------------------------------------------------

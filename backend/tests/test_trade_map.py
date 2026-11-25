@@ -6,6 +6,7 @@ from app.database.models import MarketRequirement, SatelliteObservation, Supplie
 from app.database.queries import trade_map as map_queries
 from app.database.queries import users as user_queries
 from app.database.session import open_session
+from app.seed_data import load_seed_file
 from app.seed_demo_data import seed_company_map_data
 from app.seed_reference_data import seed_reference_data
 from app.services.trade_map import km_from_extent, nearby_places, parse_destination
@@ -282,6 +283,17 @@ def test_compare_route_names_what_to_recheck_and_not_a_freight_quote(client, ref
     unknown = client.get("/api/v1/trade-map/compare?orderId=PO-1&via=XX", headers=headers)
     assert unknown.status_code == 422
     assert unknown.json()["error"]["code"] == "unknown_route"
+
+
+def test_the_route_stops_are_the_seeded_transit_hubs(client, reference):
+    headers = onboard(client, "lan@example.com")
+    seed_company("lan@example.com")
+    hubs = client.get("/api/v1/trade-map", headers=headers).json()["data"]["routeHubs"]
+    seeded = [p for p in load_seed_file("reference.json")["ports"] if p.get("transitHub")]
+    assert hubs == sorted(
+        ({"code": p["country"], "name": p["name"]} for p in seeded), key=lambda h: h["name"]
+    )
+    assert len({h["code"] for h in hubs}) == len(hubs)  # one hub per country: `via` is its code
 
 
 @pytest.mark.parametrize("query", ["via=direct", "shipDate=2027-01-15"])

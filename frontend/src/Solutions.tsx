@@ -209,7 +209,7 @@ function SolutionCaseView({
     <article className="sol-case" aria-label={item.title}>
       <h3>
         {item.title}
-        <small>{item.problemStatus === "missing" ? "Missing" : "Wrong"}</small>
+        <small>{item.problemLabel}</small>
       </h3>
       <p>{item.note}</p>
       {item.default ? (

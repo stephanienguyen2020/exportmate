@@ -25,8 +25,8 @@ test("the console playground's message runs as the demo", () => {
   const turn = chatInput({ message: "Which items have no geolocation?", user_id: "someone", session_id: "abc" });
   assert.deepEqual(turn.messages, [{ role: "user", text: "Which items have no geolocation?" }]);
   assert.match(turn.sessionId, /^playground-/); // "abc" is not a valid session id
-  assert.equal(turn.company, undefined);
-  assert.equal(turn.access.companyId, null);
+  assert.equal(turn.workspace.kind, "anonymous");
+  assert.equal(turn.workspace.access.companyId, null);
 });
 
 test("the user's backend token only reaches the backend reader, never the turn's data", () => {
@@ -37,10 +37,11 @@ test("the user's backend token only reaches the backend reader, never the turn's
     user: { id: "u-1" },
     backendToken: "secret-token-value",
   });
-  assert.equal(typeof turn.backend, "function");
+  assert.equal(turn.workspace.kind, "company");
+  assert.equal(typeof turn.workspace.backend, "function");
   assert.doesNotMatch(JSON.stringify(turn), /secret-token-value/);
   // Without a company there is no backend to read.
-  assert.equal(chatInput({ messages: [{ role: "user", text: "hi" }], sessionId: "session-1234", backendToken: "x" }).backend, null);
+  assert.equal(chatInput({ messages: [{ role: "user", text: "hi" }], sessionId: "session-1234", backendToken: "x" }).workspace.backend, undefined);
 });
 
 test("traces are filed under the Agent Runtime instance, and only there", () => {

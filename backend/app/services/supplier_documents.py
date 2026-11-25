@@ -186,30 +186,38 @@ def upload_supplier_document(
     return _upload_out(upload)
 
 
+def _document_fields(payload: SupplierDocumentConfirmIn) -> dict:
+    """The supplier document fields a confirmation saves, tidied."""
+    return {
+        "kind": payload.kind,
+        "detail": payload.detail.strip(),
+        "standards": [s.strip() for s in payload.standards if s.strip()],
+        "document_number": (payload.document_number or "").strip() or None,
+        "issuer": (payload.issuer or "").strip() or None,
+        "expires_on": payload.expires_on,
+    }
+
+
 def confirm_supplier_document(
     db: Session, ctx: CompanyContext, upload_id: uuid.UUID, payload: SupplierDocumentConfirmIn
 ) -> ConfirmedSupplierDocumentOut:
     upload = document_queries.get_company_supplier_document_upload(db, ctx.company_id, upload_id)
     if not upload:
         raise not_found_error("Upload")
+    fields = _document_fields(payload)
     if upload.status != SupplierDocumentUploadStatus.draft:
+        # Confirmed already with these fields (a retry): the same document. Other fields are a
+        # different decision about a confirmed upload, so that stays a conflict.
+        saved = document_queries.get_upload_document(db, upload.id)
+        if saved and all(getattr(saved, key) == value for key, value in fields.items()):
+            return ConfirmedSupplierDocumentOut.model_validate(saved)
         raise AppError(409, "already_confirmed", "This document was already confirmed.")
     if payload.kind not in {k.kind for k in map_queries.list_document_kinds(db)}:
         raise AppError(
             422, "invalid_input", "Some fields are invalid.", {"kind": "Unknown document kind"}
         )
     document_id = map_queries.upsert_supplier_document(
-        db,
-        {
-            "supplier_id": upload.supplier_id,
-            "kind": payload.kind,
-            "detail": payload.detail.strip(),
-            "standards": [s.strip() for s in payload.standards if s.strip()],
-            "document_number": (payload.document_number or "").strip() or None,
-            "issuer": (payload.issuer or "").strip() or None,
-            "expires_on": payload.expires_on,
-            "upload_id": upload.id,
-        },
+        db, {**fields, "supplier_id": upload.supplier_id, "upload_id": upload.id}
     )
     if payload.sourcing:
         kind_label = next(

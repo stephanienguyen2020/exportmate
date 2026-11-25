@@ -15,6 +15,7 @@ from app.database.session import open_session
 from app.schemas.reports import ReportContent
 from app.seed_reference_data import seed_reference_data
 from app.services import news_matches as news_service
+from app.services import report_edits, report_pdf, report_text
 from app.services import reports as report_service
 from app.services import trade_map as trade_map_service
 
@@ -300,7 +301,7 @@ def test_compare_report_marks_only_real_changes():
     edited.sections[0].rows.append(
         edited.sections[0].rows[0].model_copy(update={"id": "new", "included": False})
     )
-    summary, per_section = report_service.compare_report(original, edited)
+    summary, per_section = report_edits.compare_report(original, edited)
     assert not summary.has_edits
     assert not per_section["s"].has_edits
 
@@ -449,15 +450,15 @@ def test_report_emails_are_rate_limited(client, lan, outbox, monkeypatch):
 
 
 def test_report_filename_is_safe():
-    assert report_service.report_filename("PO-2291 · Acacia") == "exportmate-PO-2291-Acacia.pdf"
-    assert report_service.report_filename('a"/\\b') == "exportmate-a-b.pdf"
-    assert report_service.report_filename("···") == "exportmate-report.pdf"
+    assert report_text.report_filename("PO-2291 · Acacia") == "exportmate-PO-2291-Acacia.pdf"
+    assert report_text.report_filename('a"/\\b') == "exportmate-a-b.pdf"
+    assert report_text.report_filename("···") == "exportmate-report.pdf"
 
 
 def test_a_trailing_url_renders_as_a_link():
-    assert report_service.cell_link("HKTDC Research\nhttps://news.example/a?b=1") == (
+    assert report_pdf.cell_link("HKTDC Research\nhttps://news.example/a?b=1") == (
         "HKTDC Research ›",
         "https://news.example/a?b=1",
     )
-    assert report_service.cell_link("See https://x.example") == ("See https://x.example", None)
-    assert report_service.cell_link("\nhttps://x.example") == ("\nhttps://x.example", None)
+    assert report_pdf.cell_link("See https://x.example") == ("See https://x.example", None)
+    assert report_pdf.cell_link("\nhttps://x.example") == ("\nhttps://x.example", None)

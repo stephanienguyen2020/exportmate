@@ -15,6 +15,8 @@ import { readJson, scanBlocked } from "./limits.js";
 import { deleteMemory, listMemories, memoryKeepDays, remembers, userKeyFor } from "./agents/platform.js";
 import { AGENTS_AT, callAgents, streamTurn } from "./agents/remote.js";
 import { demoMapOrders, demoPlaybook } from "./orders.js";
+import { BACKEND_URL } from "./backend.js";
+import { turnWorkspace } from "./workspace.js";
 import { SCAN_MODEL, TIERS } from "./models.js";
 
 const PORT = Number(process.env.PORT || 8080);
@@ -32,9 +34,6 @@ const MAX_SOURCES = 100;
 const SCHEDULER_SA = process.env.SCHEDULER_SA || "";
 const SCAN_AUDIENCE = process.env.SCAN_AUDIENCE || "";
 const authClient = new OAuth2Client();
-// Company backend (FastAPI) origin, for the signed-in company's profile and role. This service
-// never reads its database; it calls the API with the user's own token.
-const BACKEND_URL = (process.env.BACKEND_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
 // Each chat makes several Gemini calls and the API is public, so chats are capped per client and
 // per instance (Cloud Run runs at most 3). Counts live in memory and restart with the instance.
 const envCount = (name, fallback) => (/^\d+$/.test(process.env[name] || "") ? Number(process.env[name]) : fallback);
@@ -256,10 +255,16 @@ async function streamChat(req, res, body, origin, requestId) {
         if (event.type === "error") log("ERROR", "chat.agents_error", { requestId, trace, auditId: event.auditId });
       }
     } else {
+      const { messages: turnMessages, sessionId, requestId: turnRequestId, ...whose } = turn;
       const result = await runAgent({
-        ...turn,
-        // The company's orders and playbook are read with the caller's own token (query_orders, get_playbook).
-        backend: company ? (path) => backendGet(path, req.headers.authorization) : null,
+        messages: turnMessages,
+        sessionId,
+        requestId: turnRequestId,
+        workspace: turnWorkspace({
+          ...whose,
+          // The company's orders and playbook are read with the caller's own token (query_orders, get_playbook).
+          backend: company ? (path) => backendGet(path, req.headers.authorization) : null,
+        }),
         onStep: (step) => write({ type: "step", step: publicStep(step) }),
       });
       logChat(result, trace);

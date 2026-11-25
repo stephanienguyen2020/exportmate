@@ -82,7 +82,7 @@ def create_app() -> FastAPI:
         trace_header = request.headers.get("X-Cloud-Trace-Context", "")
         trace_id = trace_header.split("/")[0]
         project = settings.google_cloud_project or settings.firebase_project_id
-        set_trace(f"projects/{project}/traces/{trace_id}" if trace_id else None)
+        set_trace(f"projects/{project}/traces/{trace_id}" if trace_id and project else None)
 
         started = time.perf_counter()
         # Unhandled exceptions are logged with their traceback by the 500 handler in errors.py.

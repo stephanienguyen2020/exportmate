@@ -1,0 +1,113 @@
+{
+  "_note": "The browser demo's CSV checks (frontend/src/order-csv.ts) must give exactly the backend's errors (backend/app/services/order_csv.py) for each file. Both test suites read this file.",
+  "cases": [
+    {
+      "case": "a valid row",
+      "csv": "id,product,supplier,destination,value,shipDate,hsCode,currency\nPO-1,Acacia plywood,Binh Phu Wood,\"Rotterdam, NL\",24000,2027-03-01,4412.33,USD\n",
+      "errors": []
+    },
+    {
+      "case": "a value with a thousands comma",
+      "csv": "id,product,supplier,destination,value,shipDate,hsCode,currency\nPO-1,Acacia plywood,Binh Phu Wood,\"Rotterdam, NL\",\"24,000.50\",2027-03-01,4412.33,USD\n",
+      "errors": []
+    },
+    {
+      "case": "a value that isn't a number",
+      "csv": "id,product,supplier,destination,value,shipDate,hsCode,currency\nPO-1,Acacia plywood,Binh Phu Wood,\"Rotterdam, NL\",abc,2027-03-01,4412.33,USD\n",
+      "errors": [
+        "Row 2: value must be a positive number with at most 2 decimals."
+      ]
+    },
+    {
+      "case": "a value with three decimals",
+      "csv": "id,product,supplier,destination,value,shipDate,hsCode,currency\nPO-1,Acacia plywood,Binh Phu Wood,\"Rotterdam, NL\",19.999,2027-03-01,4412.33,USD\n",
+      "errors": [
+        "Row 2: value must be a positive number with at most 2 decimals."
+      ]
+    },
+    {
+      "case": "a zero value",
+      "csv": "id,product,supplier,destination,value,shipDate,hsCode,currency\nPO-1,Acacia plywood,Binh Phu Wood,\"Rotterdam, NL\",0,2027-03-01,4412.33,USD\n",
+      "errors": [
+        "Row 2: value must be a positive number with at most 2 decimals."
+      ]
+    },
+    {
+      "case": "a date that doesn't exist",
+      "csv": "id,product,supplier,destination,value,shipDate,hsCode,currency\nPO-1,Acacia plywood,Binh Phu Wood,\"Rotterdam, NL\",24000,2027-02-30,4412.33,USD\n",
+      "errors": [
+        "Row 2: use a valid YYYY-MM-DD ship date."
+      ]
+    },
+    {
+      "case": "a date in another format",
+      "csv": "id,product,supplier,destination,value,shipDate,hsCode,currency\nPO-1,Acacia plywood,Binh Phu Wood,\"Rotterdam, NL\",24000,01/03/2027,4412.33,USD\n",
+      "errors": [
+        "Row 2: use a valid YYYY-MM-DD ship date."
+      ]
+    },
+    {
+      "case": "an HS code with a dash",
+      "csv": "id,product,supplier,destination,value,shipDate,hsCode,currency\nPO-1,Acacia plywood,Binh Phu Wood,\"Rotterdam, NL\",24000,2027-03-01,44-12,USD\n",
+      "errors": [
+        "Row 2: hsCode must look like 1234.56 (digits, optional dots)."
+      ]
+    },
+    {
+      "case": "an empty HS code",
+      "csv": "id,product,supplier,destination,value,shipDate,hsCode,currency\nPO-1,Acacia plywood,Binh Phu Wood,\"Rotterdam, NL\",24000,2027-03-01,,USD\n",
+      "errors": []
+    },
+    {
+      "case": "an HS code of digits only",
+      "csv": "id,product,supplier,destination,value,shipDate,hsCode,currency\nPO-1,Acacia plywood,Binh Phu Wood,\"Rotterdam, NL\",24000,2027-03-01,441233,USD\n",
+      "errors": []
+    },
+    {
+      "case": "a missing product",
+      "csv": "id,product,supplier,destination,value,shipDate,hsCode,currency\nPO-1,,Binh Phu Wood,\"Rotterdam, NL\",24000,2027-03-01,4412.33,USD\n",
+      "errors": [
+        "Row 2: product is required."
+      ]
+    },
+    {
+      "case": "a lowercase currency",
+      "csv": "id,product,supplier,destination,value,shipDate,hsCode,currency\nPO-1,Acacia plywood,Binh Phu Wood,\"Rotterdam, NL\",24000,2027-03-01,4412.33,usd\n",
+      "errors": []
+    },
+    {
+      "case": "a two-letter currency",
+      "csv": "id,product,supplier,destination,value,shipDate,hsCode,currency\nPO-1,Acacia plywood,Binh Phu Wood,\"Rotterdam, NL\",24000,2027-03-01,4412.33,US\n",
+      "errors": [
+        "Row 2: currency must be a 3-letter code like USD."
+      ]
+    },
+    {
+      "case": "no currency (the company's)",
+      "csv": "id,product,supplier,destination,value,shipDate,hsCode,currency\nPO-1,Acacia plywood,Binh Phu Wood,\"Rotterdam, NL\",24000,2027-03-01,4412.33,\n",
+      "errors": []
+    },
+    {
+      "case": "an id over 100 characters",
+      "csv": "id,product,supplier,destination,value,shipDate,hsCode,currency\nPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP,Acacia plywood,Binh Phu Wood,\"Rotterdam, NL\",24000,2027-03-01,4412.33,USD\n",
+      "errors": [
+        "Row 2: id is longer than 100 characters."
+      ]
+    },
+    {
+      "case": "the same id twice",
+      "csv": "id,product,supplier,destination,value,shipDate,hsCode,currency\nPO-1,Acacia plywood,Binh Phu Wood,\"Rotterdam, NL\",24000,2027-03-01,4412.33,USD\nPO-1,Acacia plywood,Binh Phu Wood,\"Rotterdam, NL\",24000,2027-03-01,4412.33,USD\n",
+      "errors": [
+        "Row 3: order PO-1 already exists."
+      ]
+    },
+    {
+      "case": "two problems in one row",
+      "csv": "id,product,supplier,destination,value,shipDate,hsCode,currency\nPO-1,Acacia plywood,Binh Phu Wood,\"Rotterdam, NL\",abc,soon,4412.33,USD\n",
+      "errors": [
+        "Row 2: value must be a positive number with at most 2 decimals.",
+        "Row 2: use a valid YYYY-MM-DD ship date."
+      ]
+    }
+  ]
+}

@@ -15,9 +15,13 @@ from dataclasses import dataclass
 from neo4j import Driver, ManagedTransaction, RoutingControl
 
 from app.core.neo4j import neo4j_database
+from app.database.models import GraphRelation
 from app.database.queries.knowledge_graph import GraphWalkRow
 
-RELATION_TYPES = {"used_to_make": "USED_TO_MAKE", "by_product": "BY_PRODUCT"}
+# Each chain relation (GraphRelation) as a Neo4j relationship type: what is synced, cleared and
+# walked, so a relation added to the enum is walked here as it is in the Postgres walk.
+RELATION_TYPES = {relation.value: relation.value.upper() for relation in GraphRelation}
+CHAIN_RELATIONSHIPS = "|".join(RELATION_TYPES.values())  # "USED_TO_MAKE|BY_PRODUCT"
 NODE_LABELS = {"product": "Product", "material": "Material", "commodity": "Commodity"}
 
 
@@ -53,7 +57,7 @@ def _replace_chain(
             "n.aliases = row.aliases",
             nodes=[n for n in nodes if n["kind"] == kind],
         )
-    tx.run("MATCH (:GraphNode)-[r:USED_TO_MAKE|BY_PRODUCT]->(:GraphNode) DELETE r")
+    tx.run(f"MATCH (:GraphNode)-[r:{CHAIN_RELATIONSHIPS}]->(:GraphNode) DELETE r")
     for relation, rel_type in RELATION_TYPES.items():
         tx.run(
             "UNWIND $edges AS row "
@@ -147,7 +151,7 @@ WALK = (
     "WITH state.fingerprint AS fingerprint "
     "UNWIND $starts AS start "
     "OPTIONAL MATCH (s:GraphNode {{key: start}}) "
-    "OPTIONAL MATCH p = (s)-[:USED_TO_MAKE|BY_PRODUCT*0..{depth}]->(n:GraphNode) "
+    "OPTIONAL MATCH p = (s)-[:{relationships}*0..{depth}]->(n:GraphNode) "
     "WHERE ALL(x IN nodes(p) WHERE single(y IN nodes(p) WHERE y = x)) "
     "RETURN fingerprint, start, n.key AS node, length(p) AS depth, "
     "[r IN relationships(p) | r.id] AS edges"
@@ -158,7 +162,7 @@ def walk_downstream(driver: Driver, start_keys: set[str], max_depth: int) -> Neo
     """The Postgres walk (knowledge_graph.walk_downstream) as Cypher, with the fingerprint of the
     chain Neo4j holds, read in the same query."""
     records = driver.execute_query(
-        WALK.format(depth=int(max_depth)),
+        WALK.format(relationships=CHAIN_RELATIONSHIPS, depth=int(max_depth)),
         starts=sorted(start_keys),
         database_=neo4j_database(),
         routing_=RoutingControl.READ,

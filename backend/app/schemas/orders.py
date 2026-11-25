@@ -5,6 +5,7 @@ from typing import Annotated, Literal
 from pydantic import Field, StringConstraints, field_validator, model_validator
 
 from app.core.currencies import is_currency
+from app.core.money import to_minor
 from app.database.models import Order, OrderStatus, OrderStatusDefinition
 from app.schemas.common import CamelCaseModel
 from app.services.order_csv import HS_CODE_PATTERN, MAX_LENGTHS, MAX_VALUE
@@ -56,7 +57,7 @@ class OrderUpdate(CamelCaseModel):
     supplier: OrderSupplier | None = None
     destination: OrderDestination | None = None
     # Hundredths of the currency unit, as OrderOut gives it.
-    value_minor: int | None = Field(default=None, gt=0, lt=int(MAX_VALUE * 100))
+    value_minor: int | None = Field(default=None, gt=0, lt=to_minor(MAX_VALUE))
     currency: str | None = None
     ship_date: date | None = None
     hs_code: str | None = None  # "" clears it: analysis then asks for the code

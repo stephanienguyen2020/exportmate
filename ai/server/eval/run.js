@@ -21,6 +21,7 @@ import { runAgent } from "../agent.js";
 import { runtime } from "../agents/platform.js";
 import { callRuntime } from "../agents/remote.js";
 import { demoMapOrders, demoPlaybook } from "../orders.js";
+import { turnWorkspace } from "../workspace.js";
 import { PROJECT, db, inventory, list } from "../db.js";
 import { GEMINI_LOCATION, SCAN_MODEL, TIERS } from "../models.js";
 import { summarizeAudits } from "../metrics.js";
@@ -129,7 +130,7 @@ for (const c of cases) {
   const demo = c.demo ? { orders: demoMapOrders(c.demo.orders), playbook: demoPlaybook(c.demo.rules) } : null;
   const result = onEngine
     ? (await callRuntime("query", { messages: c.messages, sessionId, channel: "eval", tier, demo })).result
-    : await runAgent({ messages: c.messages, sessionId, channel: "eval", withEvidence: true, tier, demo });
+    : await runAgent({ messages: c.messages, sessionId, channel: "eval", withEvidence: true, tier, workspace: turnWorkspace({ demo }) });
   const verdict = useJudge ? await judge(c, result).catch((e) => ({ faithfulness: null, relevance: null, reason: `judge failed: ${e.message}` })) : null;
   const s = scoreCase(c, result, verdict);
   results.push(result);

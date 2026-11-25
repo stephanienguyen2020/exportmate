@@ -20,9 +20,9 @@ from app.schemas.analysis import (
     ReportFeedbackOut,
     ReportReviewOut,
 )
+from app.schemas.trade_map import GAP_STATUSES
 
 log = logging.getLogger(__name__)
-GAP_STATUSES = {"missing", "mismatch"}
 
 
 def message_blocked_reason(db: Session, report: AnalysisReport) -> str | None:

@@ -511,7 +511,7 @@ export function MarketPanel({
                 className={`status ${check.status === "missing" ? "red" : "amber"}`}
               >
                 <i />
-                {check.status === "missing" ? "Missing" : "Wrong standard"}
+                {check.statusLabel}
               </span>
               <b>{check.title}</b>
               <p>

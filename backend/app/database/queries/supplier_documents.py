@@ -29,3 +29,8 @@ def get_company_supplier_document_upload(
 
 def get_supplier_document(db: Session, document_id: uuid.UUID) -> SupplierDocument | None:
     return db.get(SupplierDocument, document_id)
+
+
+def get_upload_document(db: Session, upload_id: uuid.UUID) -> SupplierDocument | None:
+    """The supplier document an upload's confirmation saved, while no later upload replaced it."""
+    return db.scalar(select(SupplierDocument).where(SupplierDocument.upload_id == upload_id))

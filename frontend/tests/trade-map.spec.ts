@@ -59,6 +59,13 @@ const mapData: TradeMap = {
       searchTerms: [],
     },
   ],
+  routeHubs: [
+    { code: "LK", name: "Colombo" },
+    { code: "HK", name: "Hong Kong" },
+    { code: "AE", name: "Jebel Ali" },
+    { code: "MY", name: "Port Klang" },
+    { code: "SG", name: "Singapore" },
+  ],
   orders: [
     {
       order,

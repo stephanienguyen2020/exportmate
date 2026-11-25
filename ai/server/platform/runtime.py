@@ -28,7 +28,8 @@ import sys
 import agentplatform
 from agentplatform import types
 
-PROJECT = os.environ.get("GOOGLE_CLOUD_PROJECT", "skilful-scarab-511320-q9")
+# No default: the project is always named (deploy.sh sets it), never assumed.
+PROJECT = os.environ.get("GOOGLE_CLOUD_PROJECT") or sys.exit("Set GOOGLE_CLOUD_PROJECT.")
 LOCATION = os.environ.get("AGENT_LOCATION", "asia-southeast1")
 MEMORY_MODEL = os.environ.get("MEMORY_MODEL", "gemini-3.5-flash")
 MEMORY_TTL = f"{180 * 86400}s"

@@ -30,7 +30,7 @@ import Orders, { type OrderFilter } from "./Orders";
 import Overview from "./Overview";
 import PlaybookPage from "./PlaybookPage";
 import RuleWatchPage from "./RuleWatchPage";
-import { useWorkspace, type Workspace as WorkspaceData } from "./store";
+import { ALL_ORDERS, useWorkspace, type Workspace as WorkspaceData } from "./store";
 import {
   Button,
   Loading,
@@ -144,6 +144,7 @@ const routes: Record<string, Page> = {
         focus={sub}
         toneOf={ws.tone}
         renderStatus={(o) => <OrderStatus order={o} ws={ws} />}
+        statusLabel={ws.statusLabel}
         onNavigate={go}
         signature={`${ws.profile.name} · ${ws.profile.company || "Your company"}`}
         companyOrigin={ws.profile.origin}
@@ -253,7 +254,7 @@ export default function Workspace() {
   const [touring, setTouring] = useState(false);
   const [dialog, setDialog] = useState<DemoDialog | null>(null);
   const [orderView, setOrderView] = useState<OrderFilter>({
-    filter: "All orders",
+    filter: ALL_ORDERS,
     search: "",
   });
   const showOrders = (filter: string) => {
@@ -339,7 +340,7 @@ export default function Workspace() {
               data-tour={"nav-" + path}
               onClick={() =>
                 path === "orders" &&
-                setOrderView((v) => ({ ...v, filter: "All orders" }))
+                setOrderView((v) => ({ ...v, filter: ALL_ORDERS }))
               }
             >
               <Icon size={18} />
@@ -489,7 +490,7 @@ export default function Workspace() {
                 onClick={() => {
                   setMobile(false);
                   if (p === "orders")
-                    setOrderView((v) => ({ ...v, filter: "All orders" }));
+                    setOrderView((v) => ({ ...v, filter: ALL_ORDERS }));
                 }}
               >
                 {l}

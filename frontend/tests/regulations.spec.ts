@@ -351,9 +351,10 @@ test("API errors offer retry, and download storage failures stay visible", async
 test("browser demo shows a sign-in gate without requesting company documents", async ({
   page,
 }) => {
+  // The public status list is the demo's one backend read; company documents are never asked for.
   let calls = 0;
   await page.route("**/api/v1/**", (route) => {
-    calls++;
+    if (!route.request().url().endsWith("/api/v1/order-statuses")) calls++;
     return route.abort();
   });
   await page.addInitScript(() => sessionStorage.setItem("em-session", "demo"));

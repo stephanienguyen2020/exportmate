@@ -7,24 +7,19 @@ import {
   Loader2,
 } from "lucide-react";
 import { date, type Order } from "../data";
-import { api, type MapMarket, type MarketComparison } from "../api";
+import { api, type MapMarket, type MarketComparison, type RouteHub } from "../api";
 import { errorMessage } from "../auth";
 import { type Row, type Scenario, type ScenarioMode } from "./model";
 import ScenarioNotes from "../ScenarioNotes";
 import { PanelHead } from "./panels";
 
-const ROUTE_OPTIONS = [
-  { code: "direct", label: "Direct" },
-  { code: "SG", label: "Singapore" },
-  { code: "MY", label: "Port Klang" },
-  { code: "HK", label: "Hong Kong" },
-  { code: "AE", label: "Jebel Ali" },
-  { code: "LK", label: "Colombo" },
-];
+// The route without a stop; every other route goes through one of the trade map's hubs.
+const DIRECT = { code: "direct", name: "Direct" };
 
 export function ScenarioPanel({
   rows,
   markets,
+  hubs,
   scenario,
   renderStatus,
   onChange,
@@ -35,6 +30,7 @@ export function ScenarioPanel({
 }: {
   rows: Row[];
   markets: MapMarket[];
+  hubs: RouteHub[];
   scenario: Scenario;
   renderStatus: (order: Order) => React.ReactNode;
   onChange: (scenario: Scenario) => void;
@@ -210,14 +206,14 @@ export function ScenarioPanel({
         <>
           <span className="tm-field">Route via</span>
           <div className="tm-chips" role="group" aria-label="Route to compare">
-            {ROUTE_OPTIONS.map((stop) => (
+            {[DIRECT, ...hubs].map((stop) => (
               <button
                 key={stop.code}
                 aria-pressed={scenario.target === stop.code}
                 className={scenario.target === stop.code ? "selected" : ""}
                 onClick={() => onChange({ ...scenario, target: stop.code })}
               >
-                {stop.label}
+                {stop.name}
               </button>
             ))}
           </div>

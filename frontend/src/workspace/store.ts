@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  daysUntil,
   initialOrders,
   initialRules,
   makerCost,
@@ -26,7 +27,7 @@ import {
   type RuleFields,
 } from "../api";
 import { errorMessage } from "../auth";
-import { MAX_UPLOAD_MB, validateOrderCsv } from "../order-csv";
+import { MAX_UPLOAD_MB, checkOrderCsv } from "../order-csv";
 import type { Notify } from "./ui";
 
 // The workspace has two kinds of session: the browser-only demo keeps its
@@ -119,39 +120,15 @@ const demoSource: Source = {
   },
   deleteRule: async () => undefined,
   async checkImport(file, existingIds) {
-    const { default: Papa } = await import("papaparse");
-    return new Promise((resolve) =>
-      Papa.parse<Record<string, string | undefined>>(file, {
-        header: true,
-        skipEmptyLines: "greedy",
-        transformHeader: (h) => h.trim(),
-        complete: (r) => {
-          const result = validateOrderCsv(r.meta.fields, r.data, existingIds);
-          const errors = [
-            ...r.errors.map((e) => `CSV: ${e.message}`),
-            ...result.errors,
-          ];
-          const preview = errors.length ? [] : result.orders;
-          resolve({
-            id: null,
-            status: errors.length ? "invalid" : "validated",
-            rowCount: preview.length,
-            duplicateOfImportId: null,
-            preview,
-            errors,
-          });
-        },
-        error: (e) =>
-          resolve({
-            id: null,
-            status: "invalid",
-            rowCount: 0,
-            duplicateOfImportId: null,
-            preview: [],
-            errors: [e.message],
-          }),
-      }),
-    );
+    const { orders, errors } = await checkOrderCsv(file, existingIds);
+    return {
+      id: null,
+      status: errors.length ? "invalid" : "validated",
+      rowCount: orders.length,
+      duplicateOfImportId: null,
+      preview: orders,
+      errors,
+    };
   },
   // Every imported order is checked against the sample rule change.
   commitImport: async (checked) => ({
@@ -166,7 +143,8 @@ const demoSource: Source = {
   deleteOrder: async () => undefined,
 };
 
-// Risk is worked out again on load, so orders saved by older versions are checked too.
+// Risk and status are worked out again on load, so orders saved by older versions are
+// checked too.
 const savedDemoOrders = () =>
   readSaved(
     "em-orders",
@@ -204,6 +182,9 @@ const savedDemoRules = () =>
       ),
   );
 
+// The Orders filter that lists every order; the others are order status codes.
+export const ALL_ORDERS = "all";
+
 export type Workspace = ReturnType<typeof useWorkspace>;
 
 export function useWorkspace(notify: Notify) {
@@ -227,7 +208,8 @@ export function useWorkspace(notify: Notify) {
     ),
   );
   const [ruleFields, setRuleFields] = useState<RuleFields | null>(null);
-  // Signed in: each status's label, colour and whether it may be set by hand, from the database.
+  // Each status's label, colour and whether it may be set by hand, from the database (signed
+  // in or not: the list is public).
   const [statusOptions, setStatusOptions] = useState<OrderStatusOption[]>([]);
   // The analysis the last import ran, shown on the Orders page.
   const [importRun, setImportRun] = useState<AnalysisRun | null>(null);
@@ -256,19 +238,15 @@ export function useWorkspace(notify: Notify) {
         navigate("onboarding");
         return;
       }
-      const [nextOrders, nextRules, nextOverview, nextStatuses] =
-        await Promise.all([
-          api.orders(signal),
-          api.rules(signal),
-          api.overview(signal),
-          // Without them the workspace still works, with the built-in labels.
-          api.orderStatuses(signal).catch(() => []),
-        ]);
+      const [nextOrders, nextRules, nextOverview] = await Promise.all([
+        api.orders(signal),
+        api.rules(signal),
+        api.overview(signal),
+      ]);
       if (signal.aborted) return;
       setOrders(nextOrders);
       setRules(nextRules);
       setOverview(nextOverview);
-      setStatusOptions(nextStatuses);
     } catch (error) {
       if (signal.aborted) return;
       if (error instanceof ApiError && error.code === "onboarding_required")
@@ -305,6 +283,12 @@ export function useWorkspace(notify: Notify) {
     if (live) void refresh();
     return () => workspaceLoad.current?.abort();
   }, [live]);
+  // Without them the workspace still works; statuses are then shown by their codes.
+  useEffect(() => {
+    const controller = new AbortController();
+    api.orderStatuses(controller.signal).then(setStatusOptions, () => undefined);
+    return () => controller.abort();
+  }, []);
   useEffect(() => {
     if (!live) save("em-orders", orders);
   }, [orders, live]);
@@ -322,11 +306,26 @@ export function useWorkspace(notify: Notify) {
       ? api.overview().then(setOverview, () => undefined)
       : Promise.resolve();
 
-  // The demo checks every order against the sample rule change, so none waits for analysis.
-  const isClear = (o: Order) => (live ? o.status === "clear" : !o.risk);
-  const isPending = (o: Order) => live && o.status === "awaiting_analysis";
-  const statusOption = (code?: string) =>
-    live ? statusOptions.find((s) => s.code === code) : undefined;
+  const exposed = orders.filter((o) => o.risk);
+  // The soonest affected shipment: the backend's overview names its date when signed in; the
+  // demo takes its soonest exposed order still ahead (or the latest one, if all have sailed).
+  const nextAffected = (): { shipDate: string; order: Order | null } | null => {
+    if (live) {
+      const shipDate = overview?.nearestAffectedShipDate;
+      return shipDate
+        ? { shipDate, order: exposed.find((o) => o.shipDate === shipDate) ?? null }
+        : null;
+    }
+    const upcoming = [...exposed].sort((a, b) => a.shipDate.localeCompare(b.shipDate));
+    const order = upcoming.find((o) => daysUntil(o.shipDate) >= 0) || upcoming.at(-1);
+    return order ? { shipDate: order.shipDate, order } : null;
+  };
+  const isClear = (o: Order) => o.status === "clear";
+  const isPending = (o: Order) => o.status === "awaiting_analysis";
+  const statusOption = (code?: string) => statusOptions.find((s) => s.code === code);
+  // As the database names it; the code itself if the list couldn't be read.
+  const statusLabel = (code?: string) =>
+    statusOption(code)?.label ?? (code || "").replace(/_/g, " ");
   return {
     live,
     editable,
@@ -349,10 +348,13 @@ export function useWorkspace(notify: Notify) {
     isPending,
     statusOptions,
     statusOption,
+    statusLabel,
     importRun,
-    // The filter that lists exposed orders, named as the database names it when signed in.
-    actionFilter: statusOption("exposed")?.label || "Action needed",
-    exposed: orders.filter((o) => o.risk),
+    // The Orders filter that lists the orders needing action.
+    actionFilter: "exposed",
+    exposed,
+    totalOrders: live ? (overview?.totalOrders ?? orders.length) : orders.length,
+    nextAffected: nextAffected(),
     tone: (o: Order): "red" | "amber" | "green" =>
       o.risk ? "red" : isClear(o) ? "green" : "amber",
     // Without the fields, rules can still be written in words; the builder just stays hidden.

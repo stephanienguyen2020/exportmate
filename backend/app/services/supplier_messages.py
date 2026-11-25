@@ -92,7 +92,7 @@ def _prompt(
     contact_name: str | None,
     rules: list[str],
 ) -> str:
-    gaps = [f for f in content.findings if f.status in report_review.GAP_STATUSES]
+    gaps = [f for f in content.findings if f.gap]
     needed = "\n".join(
         f"- {f.title}: {f.note} (required by {f.source.regulation_title}"
         + (f", {f.source.source_url}" if f.source.source_url else "")

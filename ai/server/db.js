@@ -1,7 +1,9 @@
 import { Firestore } from "@google-cloud/firestore";
 
 // PROJECT_ID first: Agent Runtime sets GOOGLE_CLOUD_PROJECT itself (to the project number).
-export const PROJECT = process.env.PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT || "skilful-scarab-511320-q9";
+// No default: a run without either must not quietly read and write a real project. main.js
+// refuses to start without one; anything else fails as it loads (tests name a fake project).
+export const PROJECT = process.env.PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT || null;
 export const db = new Firestore({ projectId: PROJECT, ignoreUndefinedProperties: true });
 
 export const inventory = db.collection("inventory");

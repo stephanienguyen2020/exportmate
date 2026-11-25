@@ -37,12 +37,18 @@ def test_commit_keeps_the_orders_when_their_analysis_fails(client):
     assert detail["source"]["raw"]["destination"] == "Rotterdam, NL"
 
 
-def test_commit_twice_is_409(client):
+def test_commit_twice_gives_the_same_result_and_adds_nothing(client):
     headers = onboard(client, "lan@example.com")
-    uploaded = import_orders(client, headers)
-    again = client.post(f"/api/v1/imports/{uploaded['id']}/commit", headers=headers)
-    assert again.status_code == 409
-    assert again.json()["error"]["code"] == "already_committed"
+    uploaded = upload_csv(client, headers, VALID_CSV).json()["data"]
+    commit = f"/api/v1/imports/{uploaded['id']}/commit"
+    first = client.post(commit, headers=headers)
+    assert first.status_code == 200, first.text
+    orders = client.get("/api/v1/orders", headers=headers).json()["meta"]["total"]
+
+    again = client.post(commit, headers=headers)
+    assert again.status_code == 200, again.text
+    assert again.json()["data"] == first.json()["data"]
+    assert client.get("/api/v1/orders", headers=headers).json()["meta"]["total"] == orders
 
 
 def test_import_with_errors_cannot_be_committed(client):

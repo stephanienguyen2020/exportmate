@@ -2,11 +2,23 @@ import uuid
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 from app.database.models import SolutionStatus
 from app.schemas.analysis import PersonOut
 from app.schemas.common import CamelCaseModel
+from app.schemas.trade_map import check_status_label
+
+
+class _ProblemLabel(CamelCaseModel):
+    """A problem's status (missing, mismatch) as every screen words it (schemas/trade_map.py)."""
+
+    problem_status: str
+
+    @computed_field
+    @property
+    def problem_label(self) -> str:
+        return check_status_label(self.problem_status)
 
 
 class SolutionDraft(BaseModel):
@@ -59,7 +71,7 @@ class SolutionBasisOut(CamelCaseModel):
     quote: str
 
 
-class SolutionOut(CamelCaseModel):
+class SolutionOut(_ProblemLabel):
     id: uuid.UUID
     market: str
     requirement_key: str
@@ -83,7 +95,7 @@ class SolutionOut(CamelCaseModel):
     notes: list[SolutionNoteOut]  # oldest first
 
 
-class SolutionCaseOut(CamelCaseModel):
+class SolutionCaseOut(_ProblemLabel):
     """One problem in a report and the saved solutions for it."""
 
     requirement_key: str
@@ -100,7 +112,7 @@ class SolutionCaseOut(CamelCaseModel):
     needs_analysis: bool
 
 
-class SolutionProblemOut(CamelCaseModel):
+class SolutionProblemOut(_ProblemLabel):
     """One kind of problem in the company's knowledge base, with every solution saved for it."""
 
     market: str

@@ -363,7 +363,7 @@ export function SampleOrder({
       ) : (
         <section className="panel clear-panel">
           <ShieldCheck size={44} />
-          <h2>In the clear.</h2>
+          <h2>{ws.statusLabel("clear")}.</h2>
           <p>
             The sample rule change ({sampleObligation.title}) doesn't apply to
             this order, or its supplier's records cover it. The demo checks

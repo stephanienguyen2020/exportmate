@@ -109,6 +109,8 @@ const tradeMap = {
           title: "Plot-level geolocation",
           level: "supplier",
           status: "missing",
+          gap: true,
+          statusLabel: "Missing",
           note: "Not on file.",
           source: {
             regulationId: "reg-1",
@@ -125,6 +127,7 @@ const tradeMap = {
       gapCount: 1,
     },
   ],
+  routeHubs: [],
   suppliers: [],
   sites: [],
   observations: [],
@@ -151,6 +154,8 @@ const analysisReport = () => ({
       title: "Timber legality evidence",
       level: "supplier",
       status: "on_file",
+      gap: false,
+      statusLabel: "On file",
       note: "VNTLAS dossier",
       source: citation,
     },
@@ -318,6 +323,7 @@ function solution(id: string, extra: Record<string, unknown> = {}) {
     market: "EU",
     requirementKey: "eudr-geolocation",
     problemStatus: "missing",
+    problemLabel: "Missing",
     summary: "Get the harvest plot geolocation from Server Supplier.",
     steps: [
       "Server Supplier: send the geolocation of every plot.",
@@ -393,6 +399,7 @@ async function fixture(
       requirementKey: "eudr-geolocation",
       title: "Plot-level geolocation",
       problemStatus: "missing",
+      problemLabel: "Missing",
       note: "Server Supplier has no plot geolocation on file.",
       default: valid[0] ?? null,
       inUse: solutionInUse && !!valid[0],
@@ -684,6 +691,7 @@ async function fixture(
           market: "EU",
           requirementKey: "eudr-geolocation",
           problemStatus: "missing",
+          problemLabel: "Missing",
           title: "Plot-level geolocation",
           inChecklist: true,
           solutions: [...solutions].sort((x, y) => +x.expired - +y.expired),
@@ -966,8 +974,13 @@ test("loads paginated API data, preserves statuses/currency, and reads source ev
   await expect(page.getByText("Import import-1 · row 2")).toBeVisible();
   await expect(page.getByText("A documentation gap.")).toHaveCount(0);
   expect(requests.filter((r) => r.path === "/orders")).toHaveLength(2);
+  // Every company read carries the user's token; the status list is public, so it has none.
   expect(
-    requests.every((r) => r.auth === "Bearer dev:owner@example.com"),
+    requests.every(
+      (r) =>
+        r.auth === "Bearer dev:owner@example.com" ||
+        (r.path === "/order-statuses" && !r.auth),
+    ),
   ).toBeTruthy();
 });
 
@@ -1266,7 +1279,12 @@ test("new accounts onboard through the API and the sample demo stays local", asy
   await expect(
     page.getByRole("button", { name: "PO-2291", exact: true }),
   ).toBeVisible();
-  expect(requests.length).toBe(count);
+  // The demo reads nothing of the company's: only the public status list, with no token.
+  const demoReads = requests.slice(count);
+  expect(demoReads.length).toBeGreaterThan(0);
+  expect(
+    demoReads.every((r) => r.path === "/order-statuses" && !r.auth),
+  ).toBeTruthy();
 });
 
 // News sources live on the AI service and are shared by every workspace, so

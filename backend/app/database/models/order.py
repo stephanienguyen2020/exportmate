@@ -60,6 +60,10 @@ class Import(Base):
     created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = created_column()
     committed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # The analysis the commit started, so committing again returns the same result.
+    run_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("analysis_runs.id", ondelete="SET NULL")
+    )
 
 
 class ImportRow(Base):

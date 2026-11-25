@@ -63,9 +63,8 @@ from app.schemas.solutions import (
     SolutionOut,
     SolutionProblemOut,
 )
-from app.schemas.trade_map import RequirementCheckOut
+from app.schemas.trade_map import GAP_STATUSES, RequirementCheckOut
 from app.services import cost_settings as cost_service
-from app.services.report_review import GAP_STATUSES
 from app.services.trade_map import supplier_name_key
 
 log = logging.getLogger(__name__)

@@ -1,10 +1,13 @@
 import { test, expect, type Page } from "@playwright/test";
+import { serveOrderStatuses } from "./order-statuses";
 
-// The browser-only sample demo: no backend, so these run against the Vite server alone.
+// The browser-only sample demo: its orders stay in the browser; only the public status list
+// comes from the backend.
 async function openDemo(page: Page, hash = "#/workspace") {
   await page.route("**/api/impacts**", (route) =>
     route.fulfill({ json: { impacts: [], scan: null } }),
   );
+  await serveOrderStatuses(page);
   await page.goto("/");
   await page.evaluate(() => sessionStorage.setItem("em-session", "demo"));
   await page.goto("/" + hash);

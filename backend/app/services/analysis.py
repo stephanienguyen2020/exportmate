@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 
 from app.core.context import CompanyContext
 from app.core.errors import AppError, not_found_error
+from app.core.money import format_money, format_totals
 from app.database.models import (
     AnalysisReport,
     AnalysisRun,
@@ -60,19 +61,14 @@ from app.schemas.analysis import (
 )
 from app.schemas.cost_settings import CostSettingOut
 from app.schemas.orders import OrderOut
-from app.schemas.trade_map import RequirementCheckOut, RequirementSourceOut
+from app.schemas.trade_map import GAP_STATUSES, RequirementCheckOut, RequirementSourceOut
 from app.services import cost_settings as cost_service
 from app.services import report_review, rule_checks
 from app.services import trade_map as trade_map_service
 
 log = logging.getLogger(__name__)
 
-GAP_STATUSES = {"missing", "mismatch"}
 DAYS = "days"
-
-
-def money(amount_minor: int, currency: str) -> str:
-    return f"{currency} {amount_minor / 100:,.2f}"
 
 
 def _setting_basis(setting: CostSettingOut) -> CostBasisOut:
@@ -121,7 +117,7 @@ def price_problems(
                 rate_percent=None,
                 amount_minor=setting.value,
                 currency=setting.unit,
-                formula=f"1 × {money(setting.value, setting.unit)}",
+                formula=f"1 × {format_money(setting.value, setting.unit)}",
                 basis=[_setting_basis(setting)],
             )
         )
@@ -141,7 +137,7 @@ def price_problems(
                 rate_percent=None,
                 amount_minor=late_by * per_day.value,
                 currency=per_day.unit,
-                formula=f"{late_by} days × {money(per_day.value, per_day.unit)}",
+                formula=f"{late_by} days × {format_money(per_day.value, per_day.unit)}",
                 basis=[_setting_basis(settings["supplier_lead_days"]), _setting_basis(per_day)],
             )
         )
@@ -161,7 +157,7 @@ def price_problems(
                 amount_minor=amount,
                 currency=order.currency,
                 formula=f"{req.duty_rate_percent.normalize():f}% × "
-                f"{money(order.value_minor, order.currency)}",
+                f"{format_money(order.value_minor, order.currency)}",
                 basis=[CostBasisOut(type="regulation", label=req.title, source=check.source)],
             )
         )
@@ -250,7 +246,9 @@ def suggest_action(
             request_by=request_by,
         )
     duties = [
-        f"{d.label} adds {money(d.amount_minor, d.currency)}" for d in lines if d.kind == "duty"
+        f"{d.label} adds {format_money(d.amount_minor, d.currency)}"
+        for d in lines
+        if d.kind == "duty"
     ]
     duties += [f"{u.label}: {u.reason}" for u in unpriced]
     if duties:
@@ -419,9 +417,7 @@ def _run_steps(
         ),
         RunStepOut(
             name="cost",
-            summary="Estimated cost: "
-            + (", ".join(money(v, c) for c, v in sorted(totals.items())) or "none")
-            + ".",
+            summary="Estimated cost: " + (format_totals(totals) or "none") + ".",
         ),
         RunStepOut(
             name="playbook",

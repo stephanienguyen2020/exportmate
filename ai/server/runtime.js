@@ -21,9 +21,10 @@ import { deleteMemory, listMemories } from "./agents/platform.js";
 import { startTracing } from "./agents/telemetry.js";
 import { readJson } from "./limits.js";
 import { log } from "./log.js";
+import { BACKEND_URL } from "./backend.js";
+import { ANONYMOUS_WORKSPACE, turnWorkspace } from "./workspace.js";
 
 const PORT = Number(process.env.PORT || 8080);
-const BACKEND_URL = (process.env.BACKEND_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
 const SESSION = /^[A-Za-z0-9-]{8,64}$/;
 
 // GETs a backend path with the user's own token ({ status, body }), as index.js does.
@@ -40,18 +41,20 @@ const backendReader = (token) => async (path) => {
 export function chatInput(input = {}) {
   if (typeof input.message === "string") {
     const sessionId = SESSION.test(input.session_id || "") ? input.session_id : `playground-${randomUUID().slice(0, 8)}`;
-    return { messages: [{ role: "user", text: input.message.slice(0, 4000) }], sessionId, access: ANONYMOUS, requestId: randomUUID() };
+    return { messages: [{ role: "user", text: input.message.slice(0, 4000) }], sessionId, workspace: ANONYMOUS_WORKSPACE, requestId: randomUUID() };
   }
   if (!Array.isArray(input.messages) || !input.messages.length || !SESSION.test(input.sessionId || "")) throw Object.assign(new Error("Expected messages and a sessionId"), { status: 400 });
   return {
     messages: input.messages,
     sessionId: input.sessionId,
-    company: input.company ?? null,
-    user: input.user ?? null,
-    access: input.access ?? ANONYMOUS,
-    demo: input.demo ?? null,
+    workspace: turnWorkspace({
+      company: input.company ?? null,
+      user: input.user ?? null,
+      access: input.access ?? ANONYMOUS,
+      demo: input.demo ?? null,
+      backend: input.company && input.backendToken ? backendReader(input.backendToken) : null,
+    }),
     requestId: input.requestId || randomUUID(),
-    backend: input.company && input.backendToken ? backendReader(input.backendToken) : null,
     // The golden set run against this runtime (eval/run.js --engine): no cache, no memories,
     // and the evidence and trace come back with the result.
     ...(input.channel === "eval" ? { channel: "eval", withEvidence: true, tier: input.tier } : {}),

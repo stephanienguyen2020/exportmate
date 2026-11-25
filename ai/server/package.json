@@ -14,7 +14,7 @@
     "seed": "node seed.js",
     "scan": "node scan.js",
     "index": "node rag.js",
-    "test": "node --test test/*.test.js",
+    "test": "PROJECT_ID=exportmate-tests node --test test/*.test.js",
     "eval": "node eval/run.js",
     "eval:vertex": "node eval/run.js --vertex",
     "eval:scan": "node eval/scan-run.js",

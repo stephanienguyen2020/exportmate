@@ -77,9 +77,10 @@ def change_order_status(order_id: str, payload: OrderStatusChangeIn, ctx: Editor
 
 
 @router.get("/order-statuses", response_model=SuccessResponse[list[OrderStatusOut]])
-def list_order_statuses(ctx: ViewerContext, db: Db):
+def list_order_statuses(db: Db):
     """Every order status with its label, description and colour, from the database; `manual`
-    marks those a person may set by hand."""
+    marks those a person may set by hand. Public: it is the same for every company, and the
+    browser demo and the assistant word statuses with it too."""
     return success_response(order_service.list_order_statuses(db))
 
 

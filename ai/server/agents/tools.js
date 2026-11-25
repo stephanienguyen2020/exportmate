@@ -8,6 +8,7 @@ import { search, TYPES } from "../rag.js";
 import { evaluate } from "../calc.js";
 import { ToolError } from "../gateway.js";
 import { ORDER_STATUSES, matchOrders, presentOrder, totalsByCurrency } from "../orders.js";
+import { orderStatusLabels } from "../backend.js";
 import { createGuard } from "../guard.js";
 import { itemVisible, presentScan, presentSources, visibleItems } from "../access.js";
 
@@ -513,7 +514,7 @@ export const REGISTRY = {
     declaration: {
       name: "query_orders",
       description:
-        "The company's own orders (the Orders page), read live: order id (e.g. PO-2291), product, supplier, destination and market, value and currency, ship date, HS code, status (exposed is shown as \"Action needed\") and each order's document checklist: every line's status (on_file, missing, mismatch, prepare, check, unknown), a note and the official text it comes from (the browser demo has one sample check per order it covers, with no official text). Also returns the count and total value per currency of all matches. Filters combine with AND; with none, every order.",
+        "The company's own orders (the Orders page), read live: order id (e.g. PO-2291), product, supplier, destination and market, value and currency, ship date, HS code, status (with statusLabel, how the app words it) and each order's document checklist: every line's status (on_file, missing, mismatch, prepare, check, unknown), whether it is a gap, a note and the official text it comes from (the browser demo has one sample check per order it covers, with no official text). Also returns the count and total value per currency of all matches. Filters combine with AND; with none, every order.",
       parameters: {
         type: Type.OBJECT,
         properties: {
@@ -535,7 +536,8 @@ export const REGISTRY = {
         title: `Order query${filters ? ` (${filters})` : ""}: ${matching.length} orders, ${totalText}`,
         url: "#/workspace/orders",
       });
-      const orders = matching.slice(0, clamp(args.limit, 1, 30, 10)).map((m) => presentOrder(m, refs.cite));
+      const labels = await orderStatusLabels();
+      const orders = matching.slice(0, clamp(args.limit, 1, 30, 10)).map((m) => presentOrder(m, refs.cite, labels));
       return {
         output: { ref, matching: matching.length, totalValueByCurrency: totals, orders },
         audit: {

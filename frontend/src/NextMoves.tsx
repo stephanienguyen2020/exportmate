@@ -47,9 +47,7 @@ export default function NextMoves({
   const { order, findings } = report;
   const noRecord = findings.some((f) => f.status === "unknown");
   const documentGaps = findings.some(
-    (f) =>
-      f.level === "supplier" &&
-      (f.status === "missing" || f.status === "mismatch"),
+    (f) => f.level === "supplier" && f.gap,
   );
   // In the order the report lists what's missing, so the first matches its headline.
   const moves: Move[] = [];

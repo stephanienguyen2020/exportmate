@@ -93,12 +93,6 @@ const STATE: Record<ReportState, { label: string; tone: string }> = {
   rejected: { label: "Rejected by the auditor", tone: "red" },
   needs_human_review: { label: "Waiting for the owner's review", tone: "amber" },
 };
-const ORDER_STATUS: Record<string, string> = {
-  clear: "In the clear",
-  exposed: "Action needed",
-  needs_data: "Needs data",
-  awaiting_analysis: "Awaiting analysis",
-};
 const STEP_LABEL: Record<AnalysisRun["steps"][number]["name"], string> = {
   relevance: "Relevance",
   exposure: "Exposure",
@@ -112,7 +106,6 @@ const ACTION_LABEL: Record<string, string> = {
   owner_review: "Owner review",
   block: "Blocks supplier messages",
 };
-const GAPS = new Set(["missing", "mismatch"]);
 
 function StateBadge({ state }: { state: ReportState }) {
   return (
@@ -150,9 +143,11 @@ export function RunPanel({
   lastRun,
   onFinished,
   notify,
+  statusLabel,
 }: {
   editable: boolean;
   pending: number;
+  statusLabel: (code: string) => string; // an order status as the database names it
   // A run started elsewhere (the CSV import), shown until this panel starts its own.
   lastRun: AnalysisRun | null;
   onFinished: () => Promise<void>;
@@ -232,7 +227,7 @@ export function RunPanel({
                       </a>
                     </td>
                     <td>
-                      {ORDER_STATUS[report.orderStatus]}
+                      {statusLabel(report.orderStatus)}
                       {report.missingData.length > 0 && (
                         <ul className="an-missing">
                           {report.missingData.map((reason) => (
@@ -422,8 +417,8 @@ function ReportBody({
   notify: Notify;
   onReviewed: (report: AnalysisReport) => void;
 }) {
-  const problems = report.findings.filter((f) => GAPS.has(f.status));
-  const others = report.findings.filter((f) => !GAPS.has(f.status));
+  const problems = report.findings.filter((f) => f.gap);
+  const others = report.findings.filter((f) => !f.gap);
   return (
     <>
       <div className="an-meta">
@@ -465,7 +460,7 @@ function ReportBody({
             <li key={f.requirementKey}>
               <span className="status red">
                 <i />
-                {f.status === "missing" ? "Missing" : "Doesn't match"}
+                {f.statusLabel}
               </span>
               <div>
                 <b>{f.title}</b>

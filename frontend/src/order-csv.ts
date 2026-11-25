@@ -1,6 +1,7 @@
 // Orders CSV checks for the browser-only demo, also used by the form that edits one order.
 // Same rules as the backend (backend/app/services/order_csv.py, and its OrderUpdate schema),
 // so both accept and reject the same files and changes.
+import type { ParseResult } from "papaparse";
 import type { Order } from "./data";
 
 export const REQUIRED_COLUMNS = [
@@ -131,4 +132,32 @@ export function validateOrderCsv(
   });
   if (!rows.length) errors.push("The file has no order rows.");
   return { orders, errors };
+}
+
+type CsvRow = Record<string, string | undefined>;
+/** A CSV file, or its text, read the way the demo's import reads it and then checked:
+ * `orders` are the valid rows, `errors` one message per problem (none when it imports). */
+export async function checkOrderCsv(
+  input: File | string,
+  existingIds: Set<string>,
+): Promise<{ orders: Order[]; errors: string[] }> {
+  const { default: Papa } = await import("papaparse");
+  return new Promise((resolve) => {
+    const config = {
+      header: true,
+      skipEmptyLines: "greedy" as const,
+      transformHeader: (h: string) => h.trim(),
+      complete: (r: ParseResult<CsvRow>) => {
+        const result = validateOrderCsv(r.meta.fields, r.data, existingIds);
+        const errors = [...r.errors.map((e) => `CSV: ${e.message}`), ...result.errors];
+        resolve({ orders: errors.length ? [] : result.orders, errors });
+      },
+    };
+    if (typeof input === "string") Papa.parse<CsvRow>(input, config);
+    else
+      Papa.parse<CsvRow>(input, {
+        ...config,
+        error: (e) => resolve({ orders: [], errors: [e.message] }),
+      });
+  });
 }

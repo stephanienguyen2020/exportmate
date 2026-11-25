@@ -19,7 +19,9 @@ class Settings(BaseSettings):
         "postgresql+psycopg://exportmate:exportmate@127.0.0.1:5433/exportmate_test"
     )
     auth_mode: Literal["firebase", "dev"] = "firebase"
-    firebase_project_id: str = "skilful-scarab-511320-q9"
+    # Required with Firebase sign-in. No default: a missing setting must not quietly point a
+    # local run at a real project.
+    firebase_project_id: str | None = None
     allowed_origins: str = "http://127.0.0.1:5173,http://localhost:5173"
     # Uploads are capped at 4 MB; the website's nginx takes 5 MB, room for the multipart envelope.
     max_upload_bytes: int = 4 * 1024 * 1024
@@ -102,6 +104,8 @@ class Settings(BaseSettings):
     def no_dev_auth_in_production(self):
         if self.env == "production" and self.auth_mode != "firebase":
             raise ValueError("AUTH_MODE must be 'firebase' when ENV=production")
+        if self.auth_mode == "firebase" and not self.firebase_project_id:
+            raise ValueError("FIREBASE_PROJECT_ID must be set when AUTH_MODE=firebase")
         return self
 
     @property

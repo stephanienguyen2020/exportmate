@@ -151,7 +151,8 @@ def commit_order_import(db: Session, ctx: CompanyContext, import_id: uuid.UUID) 
     if not item:
         raise not_found_error("Import")
     if item.status == ImportStatus.committed:
-        raise AppError(409, "already_committed", "This import was already committed.")
+        # Committed already (a retry, or a second click): the same result, nothing added.
+        return _committed(db, ctx, item)
     if item.status == ImportStatus.invalid:
         raise AppError(422, "import_has_errors", "Fix the errors and upload the file again.")
 
@@ -217,4 +218,16 @@ def commit_order_import(db: Session, ctx: CompanyContext, import_id: uuid.UUID) 
         run = analysis_service.start_run(db, ctx, [o.external_id for o in orders])
     except AppError:
         run = None
+    if run is not None:
+        item.run_id = run.id
+        db.commit()
     return CommitOut(import_id=item.id, orders_created=len(orders), run=run)
+
+
+def _committed(db: Session, ctx: CompanyContext, item: Import) -> CommitOut:
+    run = analysis_service.get_run(db, ctx, item.run_id) if item.run_id else None
+    return CommitOut(
+        import_id=item.id,
+        orders_created=len(import_queries.list_import_rows(db, item.id)),
+        run=run,
+    )

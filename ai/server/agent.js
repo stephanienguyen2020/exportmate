@@ -18,7 +18,8 @@ import { POLICY_VERSION } from "./policy.js";
 import { review, stripRefs, toEvidence } from "./review.js";
 import { critique, graphPaths } from "./critic.js";
 import { log } from "./log.js";
-import { ANONYMOUS, presentSources } from "./access.js";
+import { presentSources } from "./access.js";
+import { ANONYMOUS_WORKSPACE } from "./workspace.js";
 import { TIERS, thinkingFor } from "./models.js";
 import { routeQuestion } from "./router.js";
 import { answerKey, cacheable, cachedAudit, fingerprint, CACHE_TTL_MS } from "./answer-cache.js";
@@ -102,22 +103,16 @@ async function cachedAnswer(key, companyId = null) {
 export async function runAgent({
   messages,
   sessionId,
-  company = null,
-  // Which news sources this company sees (access.js); defaults to none switched off.
-  access = company ? { companyId: company.company.id, disabled: [] } : ANONYMOUS,
+  // Whose data the turn answers from (workspace.js turnWorkspace): a company, the demo, or no one.
+  workspace = ANONYMOUS_WORKSPACE,
   requestId,
   channel = "chat",
   withEvidence = false,
   tier,
   useCache = channel === "chat",
-  // GETs a company backend path with the caller's own token ({ status, body }); company chats only.
-  backend = null,
-  // The signed-in user ({ id }, from GET /api/v1/me): their session and memories are their own.
-  user = null,
-  // The browser demo's own orders and playbook ({ orders, playbook }, from orders.js); demo chats only.
-  demo = null,
   onStep = () => {},
 }) {
+  const { company = null, access, user = null, backend = null, demo = null } = workspace;
   const started = Date.now();
   const companyId = company?.company.id;
   const readers = workspaceReaders(backend, company ? null : demo);

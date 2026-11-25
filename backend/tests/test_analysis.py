@@ -57,6 +57,25 @@ def reports_by_order(client, headers, run_data) -> dict[str, dict]:
     }
 
 
+def test_committing_again_returns_the_run_the_commit_started(client):
+    headers = onboard(client, "lan@example.com")
+    with open_session() as db:
+        seed_reference_data(db)
+        user = user_queries.get_user_by_firebase_uid(db, "dev:lan@example.com")
+        _, company = user_queries.get_user_company_membership(db, user.id)
+        seed_company_map_data(db, company.id)
+    uploaded = client.post(
+        "/api/v1/imports", headers=headers, files={"file": ("orders.csv", ORDERS, "text/csv")}
+    ).json()["data"]
+    commit = f"/api/v1/imports/{uploaded['id']}/commit"
+    first = client.post(commit, headers=headers).json()["data"]
+    assert first["run"]["status"] == "done"
+    again = client.post(commit, headers=headers)
+    assert again.status_code == 200, again.text
+    assert again.json()["data"]["run"]["id"] == first["run"]["id"]
+    assert again.json()["data"]["ordersCreated"] == first["ordersCreated"] == 4
+
+
 def test_an_import_analyses_its_orders(client):
     headers = onboard(client, "lan@example.com")
     with open_session() as db:

@@ -27,7 +27,8 @@ import pandas as pd
 from agentplatform import types
 from google.cloud import storage
 
-PROJECT = os.environ.get("GOOGLE_CLOUD_PROJECT", "skilful-scarab-511320-q9")
+# No default: the project is always named (deploy.sh sets it), never assumed.
+PROJECT = os.environ.get("GOOGLE_CLOUD_PROJECT") or sys.exit("Set GOOGLE_CLOUD_PROJECT.")
 LOCATION = os.environ.get("EVAL_LOCATION", "us-central1")
 EXPERIMENT = os.environ.get("EVAL_EXPERIMENT", "ExportMate assistant")
 METRICS = [

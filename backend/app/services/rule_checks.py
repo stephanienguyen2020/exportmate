@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.core.currencies import is_currency
+from app.core.money import format_money
 
 ACTIONS = {
     "flag": "Add a note to the report",
@@ -183,5 +184,5 @@ def describe_condition(condition: dict) -> str:
     if value is None:
         return f"{field.label} {op}"
     if field.type == "money":
-        value = f"{value['currency']} {value['amountMinor'] / 100:,.2f}"
+        value = format_money(value["amountMinor"], value["currency"])
     return f"{field.label} {op} {value}"

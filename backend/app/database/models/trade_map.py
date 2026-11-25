@@ -23,6 +23,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    false,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -94,6 +95,11 @@ class Port(Base):
     country_alpha2: Mapped[str] = mapped_column(ForeignKey("countries.alpha2"), nullable=False)
     latitude: Mapped[float] = mapped_column(Float, nullable=False)
     longitude: Mapped[float] = mapped_column(Float, nullable=False)
+    # A port an order can be routed through, offered as a "via" in the route what-if. At most
+    # one per country: the what-if names the stop by its country code.
+    transit_hub: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
     __table_args__ = (UniqueConstraint("name_key", "country_alpha2"),)
 
 

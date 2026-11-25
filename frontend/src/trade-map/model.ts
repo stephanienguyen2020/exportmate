@@ -232,8 +232,7 @@ export const productKey = (s: string) =>
 
 export const lonLat = (p: GeoPoint): LonLat => [p.longitude, p.latitude];
 
-export const isGap = (c: RequirementCheck) =>
-  c.status === "missing" || c.status === "mismatch";
+export const isGap = (c: RequirementCheck) => c.gap;
 
 export const rowOf = (o: MapOrder): Row => ({
   order: asOrder(o.order),

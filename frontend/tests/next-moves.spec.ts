@@ -88,6 +88,8 @@ const checks = (status: "unknown" | "on_file") =>
     title,
     level: "supplier",
     status,
+    gap: false,
+    statusLabel: status === "unknown" ? "No supplier record" : "On file",
     note:
       status === "unknown"
         ? "No document record for this supplier."

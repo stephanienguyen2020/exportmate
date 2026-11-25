@@ -191,6 +191,7 @@ def seed_reference_data(db: Session) -> dict[str, int]:
                 "country_alpha2": p["country"],
                 "longitude": p["at"][0],
                 "latitude": p["at"][1],
+                "transit_hub": p.get("transitHub", False),
             }
             for p in reference["ports"]
         ],

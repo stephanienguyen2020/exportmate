@@ -16,12 +16,14 @@ const mapOrder = (order, checks = []) => ({
   order: { product: "Acacia plywood · 18 mm", supplier: "Binh Phu Wood", destination: "Rotterdam, NL", valueMinor: 2400000, currency: "USD", shipDate: "2026-10-27", hsCode: "4412.33", status: "exposed", ...order },
   placement: { city: "Rotterdam", country: "NL", market: "EU", location: null, approximate: false },
   checks,
-  gapCount: checks.filter((c) => ["missing", "mismatch"].includes(c.status)).length,
+  gapCount: checks.filter((c) => c.gap).length,
 });
+// As GET /api/v1/order-statuses words them (backend.js orderStatusLabels).
+const LABELS = { exposed: "Action needed", clear: "In the clear", awaiting_analysis: "Awaiting analysis" };
 const orders = [
   mapOrder({ id: "PO-2291" }, [
-    { requirementKey: "eudr-dds", title: "EUDR due diligence statement", level: "shipment", status: "missing", note: "No geolocation on file.", source },
-    { requirementKey: "phyto", title: "Phytosanitary certificate", level: "shipment", status: "prepare", note: "Prepare per shipment.", source },
+    { requirementKey: "eudr-dds", title: "EUDR due diligence statement", level: "shipment", status: "missing", gap: true, note: "No geolocation on file.", source },
+    { requirementKey: "phyto", title: "Phytosanitary certificate", level: "shipment", status: "prepare", gap: false, note: "Prepare per shipment.", source },
   ]),
   mapOrder({ id: "PO-2302", product: "Oak dining chair", supplier: "Thanh Long", destination: "Tokyo, JP", valueMinor: 150000000, currency: "JPY", status: "clear" }),
   mapOrder({ id: "PO-2310", destination: "Hamburg, DE", valueMinor: 1050050, status: "awaiting_analysis" }),
@@ -50,9 +52,10 @@ test("presents an order with its status label, gaps and cited official texts", (
     if (!n) n = cited.push({ key, ...info });
     return n;
   };
-  const o = presentOrder(orders[0], cite);
+  const o = presentOrder(orders[0], cite, LABELS);
   assert.equal(o.value, 24000);
   assert.equal(o.statusLabel, "Action needed");
+  assert.equal(presentOrder(orders[0], cite).statusLabel, "exposed", "the code, without the backend's labels");
   assert.equal(o.market, "EU");
   assert.equal(o.gapCount, 1);
   assert.deepEqual(o.checks.map((c) => [c.status, c.gap]), [["missing", true], ["prepare", false]]);
@@ -86,7 +89,7 @@ test("the browser demo's orders become map orders the order tool can read", () =
   assert.equal(m.gapCount, 1);
   assert.deepEqual(matchOrders([m], { ids: ["po 9001"] }), [m]);
   const cited = [];
-  const o = presentOrder(m, (key, info) => cited.push({ key, ...info }));
+  const o = presentOrder(m, (key, info) => cited.push({ key, ...info }), LABELS);
   assert.equal(o.statusLabel, "Action needed");
   assert.deepEqual(o.checks.map((c) => [c.status, c.gap, c.source]), [["missing", true, undefined]]);
   assert.equal(cited[0].url, "#/workspace/orders/PO-9001", "the demo has no map, so orders link to their page");

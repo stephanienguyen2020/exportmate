@@ -77,6 +77,13 @@ def test_statuses_come_from_the_database(client, lan):
     assert labels["clear"] == "Ready to ship"
 
 
+def test_statuses_are_public_for_the_demo_and_the_assistant(client, lan):
+    signed_in = client.get("/api/v1/order-statuses", headers=lan).json()["data"]
+    response = client.get("/api/v1/order-statuses")
+    assert response.status_code == 200, response.text
+    assert response.json()["data"] == signed_in
+
+
 def test_manual_change_is_saved_with_its_note_and_audited(client, lan):
     response = change(client, lan, "clear", "  Buyer confirmed the documents by email.  ")
     assert response.status_code == 200, response.text

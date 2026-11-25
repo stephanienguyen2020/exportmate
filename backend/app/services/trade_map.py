@@ -12,7 +12,7 @@ import re
 import time
 import uuid
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from itertools import pairwise
 
@@ -54,6 +54,7 @@ from app.schemas.trade_map import (
     OrderPlacementOut,
     RequirementCheckOut,
     RequirementSourceOut,
+    RouteHubOut,
     SatelliteObservationOut,
     SiteOut,
     SupplierDocumentOut,
@@ -67,18 +68,10 @@ log = logging.getLogger(__name__)
 _DESTINATION = re.compile(r"^(.*?)[,\s]+([A-Za-z]{2})$")
 # ISO reserves "UK" for the United Kingdom, whose code is GB; people write both.
 _COUNTRY_ALIASES = {"UK": "GB"}
-_GAP_STATUSES = {"missing", "mismatch"}
 OBSERVATION_LIMIT = 100
 EARTH_RADIUS_KM = 6371.0
-# Intermediate stops a comparison can try. "direct" has no hub. Each hub is a seeded port.
-ROUTE_HUBS: dict[str, tuple[str, str] | None] = {
-    "direct": None,
-    "SG": ("Singapore", "SG"),
-    "MY": ("Port Klang", "MY"),
-    "HK": ("Hong Kong", "HK"),
-    "AE": ("Jebel Ali", "AE"),
-    "LK": ("Colombo", "LK"),
-}
+# The route what-if without a stop. Every other route is a transit hub (ports.transit_hub).
+DIRECT_ROUTE = "direct"
 
 SupplierDocs = dict[str, SupplierDocument]
 
@@ -96,6 +89,7 @@ class Gazetteer:
     countries: dict[str, Country]
     ports: dict[tuple[str, str], Port]  # (lower-case name, country alpha-2)
     ports_by_name: dict[str, Port]  # for destinations written without a country
+    hubs: dict[str, Port]  # transit hubs by country code, for the route what-if
 
     @classmethod
     def from_rows(
@@ -109,6 +103,7 @@ class Gazetteer:
             countries={c.alpha2: c for c in countries},
             ports={(p.name_key, p.country_alpha2): p for p in ports},
             ports_by_name=by_name,
+            hubs={p.country_alpha2: p for p in ports if p.transit_hub},
         )
 
 
@@ -524,7 +519,7 @@ def build_trade_map(db: Session, ctx: CompanyContext) -> TradeMapOut:
                 order=OrderOut.from_order(order),
                 placement=placement,
                 checks=checks,
-                gap_count=sum(c.status in _GAP_STATUSES for c in checks),
+                gap_count=sum(c.gap for c in checks),
             )
         )
 
@@ -615,6 +610,10 @@ def build_trade_map(db: Session, ctx: CompanyContext) -> TradeMapOut:
                 search_terms=m.search_terms,
             )
             for m in gazetteer.markets.values()
+        ],
+        route_hubs=[
+            RouteHubOut(code=code, name=port.name)
+            for code, port in sorted(gazetteer.hubs.items(), key=lambda item: item[1].name)
         ],
         orders=map_orders,
         suppliers=map_suppliers,
@@ -733,7 +732,7 @@ def build_order_checklist(
         order=OrderOut.from_order(order),
         placement=placement,
         checks=checks,
-        gap_count=sum(c.status in _GAP_STATUSES for c in checks),
+        gap_count=sum(c.gap for c in checks),
     )
     return checked, market
 
@@ -813,6 +812,50 @@ def _classify_unchanged(
         )
 
 
+@dataclass
+class _WhatIf:
+    """What every what-if on one order starts from: the order, where it ships, the checklist
+    lines of that market that cover its HS code, and its supplier's documents. Lines that the
+    what-if doesn't change are sorted into `reuse`, `reevaluate` and `unknown` by `unchanged`."""
+
+    ctx: CompanyContext
+    order: Order
+    gazetteer: Gazetteer
+    placement: OrderPlacementOut
+    requirements: list[MarketRequirement]
+    documents: SupplierDocs | None
+    reuse: list[ComparisonItemOut] = field(default_factory=list)
+    reevaluate: list[ComparisonItemOut] = field(default_factory=list)
+    unknown: list[ComparisonItemOut] = field(default_factory=list)
+
+    @classmethod
+    def load(cls, db: Session, ctx: CompanyContext, order: Order) -> "_WhatIf":
+        gazetteer = load_gazetteer(db)
+        placement = locate_destination(order.destination, gazetteer)
+        requirements = (
+            requirements_by_market(db, ctx.company_id).get(placement.market, [])
+            if placement.market
+            else []
+        )
+        return cls(
+            ctx=ctx,
+            order=order,
+            gazetteer=gazetteer,
+            placement=placement,
+            requirements=[r for r in requirements if applies_to(r, order.hs_code)],
+            documents=_supplier_documents(db, ctx, order),
+        )
+
+    def unchanged(self, req: MarketRequirement) -> None:
+        _classify_unchanged(
+            req, self.order, self.documents, self.reuse, self.reevaluate, self.unknown
+        )
+
+    def done(self, result: MarketComparisonOut) -> MarketComparisonOut:
+        _log_comparison(self.ctx, self.order, result, self.documents is not None)
+        return result
+
+
 def compare_ship_date(
     db: Session, ctx: CompanyContext, order_id: str, proposed: date
 ) -> MarketComparisonOut:
@@ -828,25 +871,16 @@ def compare_ship_date(
             f"{order.external_id} is already planned for {proposed.isoformat()}.",
             {"shipDate": "Pick a different date"},
         )
-    gazetteer = load_gazetteer(db)
-    placement = locate_destination(order.destination, gazetteer)
-    requirements = (
-        requirements_by_market(db, ctx.company_id).get(placement.market, [])
-        if placement.market
-        else []
-    )
-    current, reuse, reevaluate, evidence_unknown = order.ship_date, [], [], []
-    documents = _supplier_documents(db, ctx, order)
-    for req in requirements:
-        if not applies_to(req, order.hs_code):
-            continue
+    what_if = _WhatIf.load(db, ctx, order)
+    current = order.ship_date
+    for req in what_if.requirements:
         now, then = applies_on(req, current), applies_on(req, proposed)
         crosses = req.changes_on is not None and min(current, proposed) < req.changes_on <= max(
             current, proposed
         )
         if now != then:
             starting = then and not now
-            reevaluate.append(
+            what_if.reevaluate.append(
                 ComparisonItemOut(
                     title=req.title,
                     note=(
@@ -858,7 +892,7 @@ def compare_ship_date(
                 )
             )
         elif crosses and then:
-            reevaluate.append(
+            what_if.reevaluate.append(
                 ComparisonItemOut(
                     title=req.title,
                     note=req.change_note or req.why,
@@ -866,80 +900,74 @@ def compare_ship_date(
                 )
             )
         elif now:
-            _classify_unchanged(req, order, documents, reuse, reevaluate, evidence_unknown)
-    market = placement.market or ""
-    result = MarketComparisonOut(
-        order_id=order.external_id,
-        kind="ship_date",
-        from_market=placement.market,
-        to_market=market,
-        from_ship_date=current,
-        to_ship_date=proposed,
-        reuse=reuse,
-        reevaluate=reevaluate,
-        unknown=evidence_unknown
-        + [
-            ComparisonItemOut(
-                title="Buyer delivery window",
-                note="The contract date the buyer will accept is not in this dataset.",
-            ),
-            ComparisonItemOut(
-                title="Arrival date",
-                note="Transit time is not in this dataset, so this does not estimate when the goods arrive.",
-            ),
-        ],
-        dropped=[],
-        assumptions=[
-            "Only the checklist's effective dates and stated change dates are compared.",
-            "The destination market and the documents on file stay the same.",
-            "A date on a checklist is not a full legal calendar.",
-        ],
-    )
+            what_if.unchanged(req)
+    placement = what_if.placement
+    unknown = what_if.unknown + [
+        ComparisonItemOut(
+            title="Buyer delivery window",
+            note="The contract date the buyer will accept is not in this dataset.",
+        ),
+        ComparisonItemOut(
+            title="Arrival date",
+            note="Transit time is not in this dataset, so this does not estimate when the goods arrive.",
+        ),
+    ]
     if not placement.market:
-        result.unknown.insert(
+        unknown.insert(
             0,
             ComparisonItemOut(
                 title="No mapped market",
                 note=f"{order.destination} is not in a market on this map, so there is no checklist to date.",
             ),
         )
-    _log_comparison(ctx, order, result, _supplier_documents(db, ctx, order) is not None)
-    return result
+    return what_if.done(
+        MarketComparisonOut(
+            order_id=order.external_id,
+            kind="ship_date",
+            from_market=placement.market,
+            to_market=placement.market or "",
+            from_ship_date=current,
+            to_ship_date=proposed,
+            reuse=what_if.reuse,
+            reevaluate=what_if.reevaluate,
+            unknown=unknown,
+            dropped=[],
+            assumptions=[
+                "Only the checklist's effective dates and stated change dates are compared.",
+                "The destination market and the documents on file stay the same.",
+                "A date on a checklist is not a full legal calendar.",
+            ],
+        )
+    )
 
 
 def compare_route(db: Session, ctx: CompanyContext, order_id: str, via: str) -> MarketComparisonOut:
     """What a different routing changes in the checklist, plus the great-circle distance.
+    `via` is DIRECT_ROUTE or the country code of a transit hub (ports.transit_hub).
 
     Freight, sailing time and congestion are not in the dataset and stay unknown.
     """
     code = via.strip()
-    code = "direct" if code.casefold() == "direct" else code.upper()
-    if code not in ROUTE_HUBS:
-        raise AppError(422, "unknown_route", f"Unknown route: {via}.", {"via": "Unknown route"})
+    code = DIRECT_ROUTE if code.casefold() == DIRECT_ROUTE else code.upper()
     order = _load_order(db, ctx, order_id)
-    gazetteer = load_gazetteer(db)
-    placement = locate_destination(order.destination, gazetteer)
-    hub = ROUTE_HUBS[code]
-    if hub and placement.country == hub[1]:
+    what_if = _WhatIf.load(db, ctx, order)
+    placement = what_if.placement
+    hub = what_if.gazetteer.hubs.get(code)
+    if code != DIRECT_ROUTE and hub is None:
+        raise AppError(422, "unknown_route", f"Unknown route: {via}.", {"via": "Unknown route"})
+    if hub and placement.country == hub.country_alpha2:
         raise AppError(
             422,
             "same_route",
-            f"{hub[0]} is already in the destination country.",
+            f"{hub.name} is already in the destination country.",
             {"via": "Pick a stop that is not the destination"},
         )
-    requirements = (
-        requirements_by_market(db, ctx.company_id).get(placement.market, [])
-        if placement.market
-        else []
-    )
-    reuse, reevaluate, evidence_unknown = [], [], []
-    documents = _supplier_documents(db, ctx, order)
-    hub_name = "Direct" if hub is None else hub[0]
-    for req in requirements:
-        if not applies_to(req, order.hs_code) or not applies_on(req, order.ship_date):
+    hub_name = "Direct" if hub is None else hub.name
+    for req in what_if.requirements:
+        if not applies_on(req, order.ship_date):
             continue
         if req.route_sensitive and hub is not None:
-            reevaluate.append(
+            what_if.reevaluate.append(
                 ComparisonItemOut(
                     title=req.title,
                     note=f"A stop in {hub_name} can change the consignment rule for this proof. "
@@ -948,8 +976,8 @@ def compare_route(db: Session, ctx: CompanyContext, order_id: str, via: str) -> 
                 )
             )
         else:
-            _classify_unchanged(req, order, documents, reuse, reevaluate, evidence_unknown)
-    points = _route_points(db, ctx, gazetteer, placement, hub)
+            what_if.unchanged(req)
+    points = _route_points(db, ctx, what_if.gazetteer, placement, hub)
     distance = (
         round(
             sum(
@@ -960,7 +988,7 @@ def compare_route(db: Session, ctx: CompanyContext, order_id: str, via: str) -> 
         if points
         else None
     )
-    unknown = evidence_unknown + [
+    unknown = what_if.unknown + [
         ComparisonItemOut(
             title="Freight cost",
             note="No rate card is stored, so this does not estimate a price.",
@@ -991,24 +1019,23 @@ def compare_route(db: Session, ctx: CompanyContext, order_id: str, via: str) -> 
             + (f" via {hub_name}" if hub else "")
             + ". It is not a voyage and not a freight quote."
         )
-    market = placement.market or ""
-    result = MarketComparisonOut(
-        order_id=order.external_id,
-        kind="route",
-        from_market=placement.market,
-        to_market=market,
-        via=code,
-        via_name=hub_name,
-        distance_km=distance,
-        route_points=points,
-        reuse=reuse,
-        reevaluate=reevaluate,
-        unknown=unknown,
-        dropped=[],
-        assumptions=assumptions,
+    return what_if.done(
+        MarketComparisonOut(
+            order_id=order.external_id,
+            kind="route",
+            from_market=placement.market,
+            to_market=placement.market or "",
+            via=code,
+            via_name=hub_name,
+            distance_km=distance,
+            route_points=points,
+            reuse=what_if.reuse,
+            reevaluate=what_if.reevaluate,
+            unknown=unknown,
+            dropped=[],
+            assumptions=assumptions,
+        )
     )
-    _log_comparison(ctx, order, result, _supplier_documents(db, ctx, order) is not None)
-    return result
 
 
 def _route_points(
@@ -1016,17 +1043,14 @@ def _route_points(
     ctx: CompanyContext,
     gazetteer: Gazetteer,
     placement: OrderPlacementOut,
-    hub: tuple[str, str] | None,
+    hub: Port | None,
 ) -> list[GeoPoint]:
     origin = _origin_point(db, ctx, gazetteer)
     if origin is None or placement.location is None:
         return []
     points = [GeoPoint(latitude=origin[0], longitude=origin[1])]
     if hub:
-        port = gazetteer.ports.get((hub[0].lower(), hub[1]))
-        if port is None:
-            return []
-        points.append(GeoPoint(latitude=port.latitude, longitude=port.longitude))
+        points.append(GeoPoint(latitude=hub.latitude, longitude=hub.longitude))
     return [*points, placement.location]
 
 

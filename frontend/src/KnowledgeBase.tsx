@@ -198,7 +198,7 @@ export default function KnowledgeBase({
             <h3>
               {problem.market} · {problem.title}
               <small>
-                {problem.problemStatus === "missing" ? "Missing" : "Wrong"}
+                {problem.problemLabel}
               </small>
             </h3>
             {!problem.inChecklist && (

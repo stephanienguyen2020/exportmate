@@ -102,14 +102,22 @@ export function countryName(code: string) {
     return code;
   }
 }
-/** The ISO country code of a destination such as "Rotterdam, NL" or "Hamburg, Germany", if known. */
-export function destinationCountry(destination: string) {
-  const last = destination.split(",").pop()!.trim();
-  if (/^[A-Za-z]{2}$/.test(last)) return last.toUpperCase();
-  const name = last.toLowerCase();
-  for (const code of EU_COUNTRIES) if (countryName(code).toLowerCase() === name) return code;
-  return null;
+// "Rotterdam, NL", or "Rotterdam NL" as in the CSV template. ISO reserves "UK" for the United
+// Kingdom, whose code is GB; people write both. Read exactly as the backend reads it
+// (trade_map.parse_destination); shared/parity/destinations.json holds both to it.
+const DESTINATION = /^(.*?)[,\s]+([A-Za-z]{2})$/;
+const COUNTRY_ALIASES: Record<string, string> = { UK: "GB" };
+const countryCode = (code: string) => COUNTRY_ALIASES[code.toUpperCase()] ?? code.toUpperCase();
+/** "Rotterdam, NL" → ["Rotterdam", "NL"]; no country code gives [text, null]. */
+export function parseDestination(destination: string): [string, string | null] {
+  const text = destination.trim().replace(/,$/, "").trim();
+  const match = DESTINATION.exec(text);
+  if (match) return [match[1].trim().replace(/,$/, "").trim(), countryCode(match[2])];
+  if (/^[A-Za-z]{2}$/.test(text)) return ["", countryCode(text)];
+  return [text, null];
 }
+/** The ISO country code a destination names, if it names one: "Rotterdam, NL" → "NL". */
+export const destinationCountry = (destination: string) => parseDestination(destination)[1];
 /** The market an order ships to, as News watch's stock lists them: "EU", "UK", "US"… */
 export function destinationMarket(destination: string) {
   const code = destinationCountry(destination);
@@ -118,8 +126,7 @@ export function destinationMarket(destination: string) {
 }
 /** "Rotterdam, NL" → "Rotterdam, Netherlands". */
 export function placeName(destination: string) {
-  const code = destinationCountry(destination);
-  const city = destination.split(",").slice(0, -1).join(",").trim();
+  const [city, code] = parseDestination(destination);
   return code && city ? `${city}, ${countryName(code)}` : destination;
 }
 const hsDigits = (hs: string) => hs.replace(/\D/g, "");
@@ -149,7 +156,11 @@ export function sampleGap(o: OrderFacts) {
   return check?.status === "missing" ? check.note : null;
 }
 /** The order with its risk worked out from the sample rule change. */
-export const withSampleRisk = (o: Order): Order => ({ ...o, risk: Boolean(sampleGap(o)) });
+export const withSampleRisk = (o: Order): Order => {
+  const risk = Boolean(sampleGap(o));
+  // The demo checks every order on the spot, so each is exposed or clear, never waiting.
+  return { ...o, risk, status: risk ? "exposed" : "clear" };
+};
 
 const seedOrders: Omit<Order, "risk">[] = [
   {

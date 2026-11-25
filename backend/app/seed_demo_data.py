@@ -31,6 +31,7 @@ from app.core.config import get_settings
 from app.core.context import CompanyContext
 from app.core.errors import AppError
 from app.core.logging import configure_logging
+from app.core.money import to_minor
 from app.database.models import Order, OrderStatus
 from app.database.queries import analysis as analysis_queries
 from app.database.queries import knowledge_graph as graph_queries
@@ -333,7 +334,7 @@ def seed_demo_data(email: str, firebase_uid: str, company_key: str = "binh-duong
                 product=o["product"],
                 supplier=o["supplier"],
                 destination=o["destination"],
-                value_minor=round(o["value"] * 100),
+                value_minor=to_minor(o["value"]),
                 currency=company.currency,
                 ship_date=o["ship_date"],
                 hs_code=o["hs_code"],

@@ -6,28 +6,18 @@ import { ArrowUpRight, CalendarClock, FileText, Loader2 } from "lucide-react";
 import {
   api,
   type ChecklistChanges,
-  type CheckStatus,
   type RequirementCheck,
   type TradeMap,
 } from "./api";
 import { errorMessage } from "./auth";
 
-const GAPS = new Set<CheckStatus>(["missing", "mismatch"]);
-const LABELS: Record<CheckStatus, string> = {
-  on_file: "on file",
-  missing: "missing",
-  mismatch: "wrong standard",
-  prepare: "to prepare",
-  check: "to check",
-  unknown: "unknown",
-};
 
 type Requirement = {
   key: string;
   title: string;
   market: string;
   source?: RequirementCheck["source"];
-  orders: { id: string; status: CheckStatus }[];
+  orders: ({ id: string } & Pick<RequirementCheck, "status" | "gap" | "statusLabel">)[];
 };
 
 /** One entry per requirement and market, with every order it applies to. */
@@ -46,10 +36,15 @@ export function groupRequirements(map: TradeMap): Requirement[] {
           source: check.source,
           orders: [],
         });
-      byKey.get(key)!.orders.push({ id: order.id, status: check.status });
+      byKey.get(key)!.orders.push({
+        id: order.id,
+        status: check.status,
+        gap: check.gap,
+        statusLabel: check.statusLabel,
+      });
     }
   const gaps = (r: Requirement) =>
-    r.orders.filter((o) => GAPS.has(o.status)).length;
+    r.orders.filter((o) => o.gap).length;
   return [...byKey.values()].sort(
     (a, b) => gaps(b) - gaps(a) || a.title.localeCompare(b.title),
   );
@@ -230,10 +225,11 @@ export default function CompanyRuleWatch({
         <span className="eyebrow">{requirements.length} REQUIREMENTS</span>
       </div>
       {requirements.map((r) => {
-        const gaps = r.orders.filter((o) => GAPS.has(o.status));
+        const gaps = r.orders.filter((o) => o.gap);
         const counts = Object.entries(
           r.orders.reduce<Record<string, number>>((acc, o) => {
-            acc[LABELS[o.status]] = (acc[LABELS[o.status]] || 0) + 1;
+            const label = o.statusLabel.toLowerCase();
+            acc[label] = (acc[label] || 0) + 1;
             return acc;
           }, {}),
         );

@@ -38,16 +38,11 @@ export default function Overview({
   startDemo: () => void;
   showOrders: (filter: string) => void;
 }) {
-  const { live, orders, overview, exposed, profile } = ws;
+  const { live, orders, exposed, profile, nextAffected } = ws;
   const clearOrders = orders.filter(ws.isClear);
   const pendingOrders = orders.filter(ws.isPending);
   const risk = valueAtRisk(ws, buyer);
-  // The demo's soonest affected shipment still ahead (or the latest one, if all have sailed).
-  const upcoming = [...exposed].sort((a, b) =>
-    a.shipDate.localeCompare(b.shipDate),
-  );
-  const nextExposed =
-    upcoming.find((o) => daysUntil(o.shipDate) >= 0) || upcoming.at(-1);
+  const daysLeft = nextAffected && daysUntil(nextAffected.shipDate);
   const exposedSuppliers = [...new Set(exposed.map((o) => o.supplier))];
   const now = new Date();
   const todayLabel =
@@ -121,9 +116,7 @@ export default function Overview({
             OPEN ORDERS <Package size={15} />
           </span>
           <div className="metric-value">
-            {String(
-              live ? (overview?.totalOrders ?? orders.length) : orders.length,
-            ).padStart(2, "0")}
+            {String(ws.totalOrders).padStart(2, "0")}
             <span>across your corridor</span>
           </div>
           <div className="metric-note">
@@ -205,30 +198,28 @@ export default function Overview({
             NEXT AFFECTED SHIPMENT <Globe2 size={15} />
           </span>
           <div className="metric-value">
-            {live
-              ? overview?.nearestAffectedShipDate
-                ? date(overview.nearestAffectedShipDate)
-                : "—"
-              : nextExposed
-                ? Math.abs(daysUntil(nextExposed.shipDate))
-                : "—"}
+            {daysLeft === null ? "—" : Math.abs(daysLeft)}
             <span>
-              {live
-                ? "next affected ship date"
-                : !nextExposed
-                  ? "no action needed"
-                  : daysUntil(nextExposed.shipDate) >= 0
-                    ? daysUntil(nextExposed.shipDate) === 1
-                      ? "day to prepare"
-                      : "days to prepare"
-                    : "days since it shipped"}
+              {daysLeft === null
+                ? "no action needed"
+                : daysLeft >= 0
+                  ? daysLeft === 1
+                    ? "day to prepare"
+                    : "days to prepare"
+                  : "days since it shipped"}
             </span>
           </div>
           <div className="metric-note">
-            {live
-              ? "Reported by your workspace"
-              : nextExposed
-                ? `${date(nextExposed.shipDate)} · ${placeName(nextExposed.destination)} · ${nextExposed.id}`
+            {nextAffected
+              ? [
+                  date(nextAffected.shipDate),
+                  nextAffected.order && placeName(nextAffected.order.destination),
+                  nextAffected.order?.id,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")
+              : live
+                ? "No affected shipments"
                 : "No exposed shipments in this scenario"}
           </div>
         </div>

@@ -14,6 +14,7 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 
 from app.core.currencies import is_currency
+from app.core.money import has_valid_decimals, to_minor
 
 REQUIRED_COLUMNS = ["id", "product", "supplier", "destination", "value", "shipDate", "hsCode"]
 # The hsCode column must be there, but a cell may be empty: analysis then asks for the code (the
@@ -60,20 +61,17 @@ def hash_row(raw: dict[str, str]) -> str:
 
 
 def _parse_value_minor(text: str) -> int | None:
-    """'24000' → 2400000; '19.99' → 1999. None if not a positive amount with ≤ 2 decimals.
-
-    Hundredths of the currency unit for every currency, also JPY and VND (which have no
-    minor unit), so readers always divide by 100.
-    """
+    """'24000' → 2400000; '19.99' → 1999 (hundredths, see core/money.py). None if not a
+    positive amount with at most two decimals."""
     try:
         amount = Decimal(text.replace(",", ""))
     except InvalidOperation:
         return None
     if not amount.is_finite() or amount <= 0 or amount >= MAX_VALUE:
         return None
-    if amount.as_tuple().exponent < -2:
+    if not has_valid_decimals(amount):
         return None
-    return int(amount * 100)
+    return to_minor(amount)
 
 
 def _parse_date(text: str) -> date | None:

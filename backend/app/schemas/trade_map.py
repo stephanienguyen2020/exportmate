@@ -2,13 +2,34 @@ import uuid
 from datetime import date
 from typing import Annotated, Literal
 
-from pydantic import Field, StringConstraints, field_validator, model_validator
+from pydantic import Field, StringConstraints, computed_field, field_validator, model_validator
 
 from app.database.models import ObservationConfidence, RequirementLevel, SiteKind
 from app.schemas.common import CamelCaseModel, is_email_address
 from app.schemas.orders import OrderOut
 
 CheckStatus = Literal["on_file", "missing", "mismatch", "prepare", "check", "unknown"]
+# What each check status is called on every screen, report and assistant answer. The API sends
+# it with each check (`statusLabel`), so no client keeps its own copy.
+CHECK_STATUS_LABELS: dict[str, str] = {
+    "on_file": "On file",
+    "missing": "Missing",
+    "mismatch": "Wrong standard",
+    "prepare": "Prepare per shipment",
+    "check": "Check",
+    "unknown": "No supplier record",
+}
+# The statuses that are a gap in the order's documents: they count in `gapCount`, make an order
+# need action, and get a suggested solution. Sent with each check as `gap`.
+GAP_STATUSES: frozenset[str] = frozenset({"missing", "mismatch"})
+
+
+def is_gap(status: str) -> bool:
+    return status in GAP_STATUSES
+
+
+def check_status_label(status: str) -> str:
+    return CHECK_STATUS_LABELS.get(status, status)
 
 
 class GeoPoint(CamelCaseModel):
@@ -69,6 +90,16 @@ class RequirementCheckOut(CamelCaseModel):
     # for the right one. Absent from reports saved before they were added.
     document_kind: str | None = None
     accepted_standards: list[str] = Field(default_factory=list)
+
+    @computed_field
+    @property
+    def gap(self) -> bool:
+        return is_gap(self.status)
+
+    @computed_field
+    @property
+    def status_label(self) -> str:
+        return check_status_label(self.status)
 
 
 class MapOrderOut(CamelCaseModel):
@@ -173,8 +204,17 @@ class SatelliteObservationOut(CamelCaseModel):
     nearby: list[NearbyPlaceOut]
 
 
+class RouteHubOut(CamelCaseModel):
+    """A port the route what-if can send an order through: `code` is its country, the `via`
+    that GET /compare takes."""
+
+    code: str
+    name: str
+
+
 class TradeMapOut(CamelCaseModel):
     markets: list[MarketOut]
+    route_hubs: list[RouteHubOut] = Field(default_factory=list)  # besides "direct"
     orders: list[MapOrderOut]
     suppliers: list[MapSupplierOut]
     sites: list[SiteOut]

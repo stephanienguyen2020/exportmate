@@ -91,10 +91,20 @@ def test_uploaded_document_counts_only_once_confirmed(client, lan, fake_gemini, 
     assert confirmed.status_code == 200, confirmed.text
     assert confirmed.json()["data"]["uploadId"] == draft["id"]
     assert geolocation_status(client, headers) == "on_file"
+    # Confirming again with the same fields (a retry) gives the same document; other fields
+    # are a different decision about a confirmed upload.
     again = client.post(
         f"/api/v1/supplier-documents/{draft['id']}/confirm", headers=headers, json=confirm
     )
-    assert again.status_code == 409
+    assert again.status_code == 200, again.text
+    assert again.json()["data"] == confirmed.json()["data"]
+    changed = client.post(
+        f"/api/v1/supplier-documents/{draft['id']}/confirm",
+        headers=headers,
+        json={**confirm, "documentNumber": "GEO-2026-119"},
+    )
+    assert changed.status_code == 409
+    assert changed.json()["error"]["code"] == "already_confirmed"
 
 
 def test_a_document_expiring_before_the_ship_date_is_a_mismatch(client, lan, fake_gemini):

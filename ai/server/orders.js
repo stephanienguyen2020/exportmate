@@ -3,11 +3,9 @@
 // its market's document checklist and the official text behind each line. Pure, so it is
 // tested without the backend.
 
+// The order status codes the query_orders tool can filter by (the backend's OrderStatus); how
+// each is worded comes from the backend at run time (backend.js orderStatusLabels).
 export const ORDER_STATUSES = ["exposed", "needs_data", "awaiting_analysis", "clear"];
-// What the Orders page shows for each status (frontend/src/workspace/OrderTable.tsx).
-const STATUS_LABELS = { exposed: "Action needed", needs_data: "Needs data", awaiting_analysis: "Awaiting analysis", clear: "In the clear" };
-// Checklist lines that count as gaps (the backend's gapCount).
-const GAPS = new Set(["missing", "mismatch"]);
 const MAX_QUOTE = 300;
 
 // "po 2291", "PO-2291" and "po2291" name the same order.
@@ -33,10 +31,12 @@ export function totalsByCurrency(mapOrders) {
 }
 
 /**
- * One order for the model: its fields, status as the Orders page words it, and its checklist.
- * cite(key, info) returns a ref number; orders and the official texts behind checks are citable.
+ * One order for the model: its fields, status as the Orders page words it (`statusLabels`, from
+ * the backend; the code when it has none), and its checklist. Whether a check is a gap is the
+ * backend's `gap`. cite(key, info) returns a ref number; orders and the official texts behind
+ * checks are citable.
  */
-export function presentOrder(m, cite) {
+export function presentOrder(m, cite, statusLabels = {}) {
   const o = m.order;
   const ref = cite(`order:${o.id}`, {
     type: "order",
@@ -57,13 +57,13 @@ export function presentOrder(m, cite) {
     shipDate: o.shipDate,
     hsCode: o.hsCode,
     status: o.status,
-    statusLabel: STATUS_LABELS[o.status] || o.status,
+    statusLabel: statusLabels[o.status] || o.status,
     gapCount: m.gapCount,
     checks: (m.checks || []).map((c) => ({
       title: c.title,
       level: c.level,
       status: c.status,
-      gap: GAPS.has(c.status),
+      gap: Boolean(c.gap),
       note: c.note,
       source: c.source && {
         ref: cite(`regdoc:${c.source.documentId}`, {
@@ -86,7 +86,8 @@ export function presentOrder(m, cite) {
 export const MAX_DEMO_ORDERS = 200;
 export const MAX_DEMO_RULES = 50;
 const DEMO_STATUSES = new Set(["exposed", "clear"]);
-const CHECK_STATUSES = new Set(["missing", "on_file"]);
+// The demo's one sample check is missing (a gap) or on file; the backend's checks say `gap`.
+const DEMO_CHECK_GAPS = { missing: true, on_file: false };
 const text = (value, max) => (typeof value === "string" && value.trim() ? value.trim().slice(0, max) : null);
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -99,8 +100,8 @@ export function demoMapOrders(raw) {
     const id = text(o.id, 100);
     const value = Number(o.value);
     if (!id || !Number.isFinite(value) || value <= 0 || value >= 1e12 || !DAY.test(o.shipDate) || !DEMO_STATUSES.has(o.status)) continue;
-    const check = o.check && CHECK_STATUSES.has(o.check.status) && text(o.check.title, 200) ? o.check : null;
-    const checks = check ? [{ requirementKey: "sample", title: text(check.title, 200), level: "supplier", status: check.status, note: text(check.note, 300) || "" }] : [];
+    const check = o.check && Object.hasOwn(DEMO_CHECK_GAPS, o.check.status) && text(o.check.title, 200) ? o.check : null;
+    const checks = check ? [{ requirementKey: "sample", title: text(check.title, 200), level: "supplier", status: check.status, gap: DEMO_CHECK_GAPS[check.status], note: text(check.note, 300) || "" }] : [];
     orders.push({
       order: {
         id,
@@ -115,7 +116,7 @@ export function demoMapOrders(raw) {
       },
       placement: { market: typeof o.market === "string" && /^[A-Z]{2}$/.test(o.market) ? o.market : null },
       checks,
-      gapCount: checks.filter((c) => GAPS.has(c.status)).length,
+      gapCount: checks.filter((c) => c.gap).length,
       url: `#/workspace/orders/${encodeURIComponent(id)}`,
     });
   }

@@ -866,7 +866,8 @@
       "at": [
         103.84,
         1.26
-      ]
+      ],
+      "transitHub": true
     },
     {
       "name": "Sydney",
@@ -898,7 +899,8 @@
       "at": [
         101.39,
         3.0
-      ]
+      ],
+      "transitHub": true
     },
     {
       "name": "Hong Kong",
@@ -906,7 +908,8 @@
       "at": [
         114.17,
         22.29
-      ]
+      ],
+      "transitHub": true
     },
     {
       "name": "Jebel Ali",
@@ -914,7 +917,8 @@
       "at": [
         55.06,
         24.99
-      ]
+      ],
+      "transitHub": true
     },
     {
       "name": "Colombo",
@@ -922,7 +926,8 @@
       "at": [
         79.85,
         6.95
-      ]
+      ],
+      "transitHub": true
     }
   ],
   "requirements": {
