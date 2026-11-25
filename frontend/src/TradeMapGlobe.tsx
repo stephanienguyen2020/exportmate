@@ -426,7 +426,7 @@ export default function TradeMapGlobe(props: Props) {
       );
       const path = Array.from({ length: 129 }, (_, i) =>
         position(
-          interpolate(i / 128) as [number, number],
+          interpolate(i / 128),
           1.012 + Math.sin((Math.PI * i) / 128) * height,
         ),
       );

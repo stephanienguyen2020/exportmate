@@ -234,7 +234,7 @@ function TradeMapView({
     }
     if (kind === "order" && rows.some((r) => r.order.id === value))
       return {
-        scenario: { orderId: value, mode: "market", target: null } as Scenario,
+        scenario: { orderId: value, mode: "market", target: null } satisfies Scenario,
       };
     if (kind === "market" && marketByCode.has(value))
       return { selection: { kind: "market", code: value } as Selection };

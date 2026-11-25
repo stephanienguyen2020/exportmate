@@ -699,7 +699,7 @@ export default function AccountPage({ route }: { route: string }) {
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
-                    completeSignIn();
+                    void completeSignIn();
                   }}
                 >
                   <label className="ac-field">

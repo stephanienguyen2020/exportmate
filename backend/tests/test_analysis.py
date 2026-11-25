@@ -2,9 +2,9 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from conftest import add_member, import_orders, onboard
-from sqlalchemy import delete
+from sqlalchemy import delete, update
 
-from app.database.models import AnalysisReport, Role
+from app.database.models import AnalysisReport, MarketRequirement, Role
 from app.database.queries import users as user_queries
 from app.database.session import open_session
 from app.schemas.analysis import CostLineOut, ReportContentOut
@@ -84,6 +84,15 @@ def test_an_import_analyses_its_orders(client):
 
 
 def test_run_reports_each_order(client, lan):
+    # Keep the US tariff's stated rate change after every ship date here, so the duty is priced
+    # (on or after it, it is not: test_a_duty_whose_rate_changes_by_the_ship_date_is_not_priced).
+    with open_session() as db:
+        db.execute(
+            update(MarketRequirement)
+            .where(MarketRequirement.requirement_key == "tariff")
+            .values(changes_on=TODAY + timedelta(days=365))
+        )
+        db.commit()
     data = run(client, lan)
     assert data["status"] == "done"
     assert [s["name"] for s in data["steps"]] == [

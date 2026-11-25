@@ -22,6 +22,10 @@ OPTIONAL_VALUES = {"hsCode"}
 MAX_LENGTHS = {"id": 100, "product": 300, "supplier": 300, "destination": 200}
 MAX_VALUE = Decimal(1000000000000)  # 1 trillion; anything above is a typo
 
+# A decimal number in ASCII digits (optional + and exponent), once thousands commas are dropped.
+# Decimal() alone would also take "1_000", "NaN" and non-ASCII digits. The browser demo uses the
+# same pattern (frontend/src/order-csv.ts); testdata/order-values.json holds shared cases.
+DECIMAL_PATTERN = re.compile(r"^\+?([0-9]+(\.[0-9]*)?|\.[0-9]+)([eE][+-]?[0-9]+)?$")
 DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 # 1234 / 1234.56 / 123456 / 1234.56.00 — kept as text so "0401.10" keeps its zero.
 HS_CODE_PATTERN = re.compile(r"^\d{4}(\.?\d{2}){0,3}$")
@@ -65,13 +69,17 @@ def _parse_value_minor(text: str) -> int | None:
     Hundredths of the currency unit for every currency, also JPY and VND (which have no
     minor unit), so readers always divide by 100.
     """
+    cleaned = text.replace(",", "")
+    if not DECIMAL_PATTERN.fullmatch(cleaned):
+        return None
     try:
-        amount = Decimal(text.replace(",", ""))
+        amount = Decimal(cleaned)
     except InvalidOperation:
         return None
     if not amount.is_finite() or amount <= 0 or amount >= MAX_VALUE:
         return None
-    if amount.as_tuple().exponent < -2:
+    exponent = amount.as_tuple().exponent  # an int for a finite amount
+    if not isinstance(exponent, int) or exponent < -2:
         return None
     return int(amount * 100)
 

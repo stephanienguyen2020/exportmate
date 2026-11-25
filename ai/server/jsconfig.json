@@ -1,0 +1,16 @@
+{
+  // Static type check of the plain-JS service (`npm run typecheck`): TypeScript infers types
+  // from the code and the libraries' typings, and from JSDoc where a file has it.
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "checkJs": true,
+    "allowJs": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "strict": false,
+    "types": ["node"]
+  },
+  "include": ["*.js", "agents/**/*.js", "platform/**/*.js", "seed/**/*.js", "eval/**/*.js", "test/**/*.js"]
+}

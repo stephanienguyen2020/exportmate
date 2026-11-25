@@ -179,7 +179,7 @@ export function loadAtlas(detail: "110m" | "50m") {
       delete atlasCache[detail];
       throw error;
     });
-  return atlasCache[detail]!;
+  return atlasCache[detail];
 }
 
 export function projectionFor(view: View): GeoProjection {

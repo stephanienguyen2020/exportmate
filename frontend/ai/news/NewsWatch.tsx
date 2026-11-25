@@ -144,7 +144,7 @@ export function useImpacts() {
         return undefined;
       });
   useEffect(() => {
-    load();
+    void load();
   }, []);
   return { impacts, scan, error, load, setScan };
 }
@@ -578,7 +578,7 @@ function Sources({ locked }: { locked?: string }) {
       })
       .catch((e) => setError(e.message));
   useEffect(() => {
-    load();
+    void load();
   }, []);
   const change = (path: string, method: string, body?: unknown) =>
     api(path, { method, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -601,19 +601,19 @@ function Sources({ locked }: { locked?: string }) {
     setList((l) => l && l.map((x) => (x.id === s.id ? { ...x, enabled: !s.enabled } : x)));
     await change(`/sources/${s.id}`, "PATCH", { enabled: !s.enabled }).catch((e) => {
       setError(e.message);
-      load();
+      void load();
     });
   };
   const toggleSkipOld = async (r: NonNullable<ScanRules>) => {
     setRules({ ...r, skipOld: !r.skipOld });
     await change("/scan-rules", "PATCH", { skipOld: !r.skipOld }).catch((e) => {
       setError(e.message);
-      load();
+      void load();
     });
   };
   const remove = async (s: Source) => {
     await change(`/sources/${s.id}`, "DELETE").catch((e) => setError(e.message));
-    load();
+    void load();
   };
   if (!list) return error ? <div className="news-error">{error}</div> : <Loading />;
   return (

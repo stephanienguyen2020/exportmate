@@ -1,0 +1,5 @@
+{
+  "about": "Order value cells and whether they are valid. backend/app/services/order_csv.py and frontend/src/order-csv.ts must both give these answers; their tests read this file.",
+  "valid": ["24000", "24,000.50", "19.99", "0.01", ".5", "5.", "+5", "1e3", "1e-2", "1.5e-1", "999999999999.99", "1,000,000"],
+  "invalid": ["", "0", "0.00", "-5", "1.000", "0.001", "1.0000000001", "1000000000000", "1e12", "1e400", "1e-400", "0x10", "0b11", "1_000", "Infinity", "NaN", "abc", "1.2.3", "١٢٣", "1 000", "$5", "5%", "e5", "."]
+}

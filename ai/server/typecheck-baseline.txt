@@ -1,0 +1,77 @@
+agent.js: TS2339 Property 'companyId' does not exist on type '{ id: string; }'.
+agent.js: TS2339 Property 'error' does not exist on type 'never'.
+agent.js: TS2339 Property 'error' does not exist on type 'never'.
+agent.js: TS2339 Property 'model' does not exist on type 'never'.
+agent.js: TS2339 Property 'problems' does not exist on type 'never'.
+agent.js: TS2339 Property 'skipOld' does not exist on type 'Readonly<{ companyId: any; disabled: any[]; }>'.
+agent.js: TS2339 Property 'supported' does not exist on type 'never'.
+agent.js: TS2339 Property 'supported' does not exist on type 'never'.
+agent.js: TS2554 Expected 0 arguments, but got 1.
+agent.js: TS2554 Expected 0 arguments, but got 1.
+agent.js: TS2554 Expected 0-1 arguments, but got 2.
+agent.js: TS2554 Expected 0-1 arguments, but got 2.
+agents/tools.js: TS2339 Property 'articlesAnalysed' does not exist on type '{ id: string; }'.
+agents/tools.js: TS2339 Property 'finishedAt' does not exist on type '{ id: string; }'.
+agents/tools.js: TS2339 Property 'finishedAt' does not exist on type '{ id: string; }'.
+agents/tools.js: TS2339 Property 'status' does not exist on type '{ id: string; }'.
+agents/tools.js: TS2345 Argument of type 'string | any[]' is not assignable to parameter of type 'string'.
+agents/tools.js: TS2353 Object literal may only specify known properties, and 'types' does not exist in type '{ limit?: number; filter?: () => boolean; }'.
+armor.js: TS2339 Property 'sleep' does not exist on type '{ fetch?: { (input: URL | RequestInfo, init?: RequestInit): Promise<Response>; (input: string | URL | Request, init?: RequestInit): Promise<...>; }; getToken?: () => Promise<...>; }'.
+armor.js: TS2339 Property 'status' does not exist on type 'Error'.
+armor.js: TS2339 Property 'template' does not exist on type '{ fetch?: { (input: URL | RequestInfo, init?: RequestInit): Promise<Response>; (input: string | URL | Request, init?: RequestInit): Promise<...>; }; getToken?: () => Promise<...>; }'.
+armor.js: TS2353 Object literal may only specify known properties, and 'template' does not exist in type '{ fetch?: { (input: URL | RequestInfo, init?: RequestInit): Promise<Response>; (input: string | URL | Request, init?: RequestInit): Promise<...>; }; getToken?: () => Promise<...>; }'.
+eval/run.js: TS2345 Argument of type '{ messages: ({ role: string; text: string; sources?: undefined; } | { role: string; text: string; sources: any; })[]; sessionId: string; channel: string; withEvidence: true; tier: string; demo: { orders: { order: { ...; }; placement: { ...; }; checks: { ...; }[]; gapCount: number; url: string; }[]; playbook: { ...; ...' is not assignable to parameter of type '{ messages: any; sessionId: any; company?: any; access?: Readonly<{ companyId: any; disabled: any[]; }>; requestId: any; channel?: string; withEvidence?: boolean; tier: any; useCache?: boolean; backend?: any; user?: any; demo?: any; onStep?: () => void; }'.
+eval/run.js: TS2741 Property 'text' is missing in type '{ function_response: { name: any; response: any; }; }' but required in type '{ text: any; }'.
+eval/run.js: TS2741 Property 'text' is missing in type '{ function_response: { name: any; response: any; }; }' but required in type '{ text: any; }'.
+feeds.js: TS2339 Property 'address' does not exist on type 'string'.
+feeds.js: TS2339 Property 'family' does not exist on type 'string'.
+feeds.js: TS2339 Property 'some' does not exist on type 'string'.
+feeds.js: TS2345 Argument of type 'Date' is not assignable to parameter of type 'number'.
+feeds.js: TS2345 Argument of type 'string | number' is not assignable to parameter of type 'string'.
+feeds.js: TS2345 Argument of type 'string | number' is not assignable to parameter of type 'string'.
+gateway.js: TS2339 Property 'sleep' does not exist on type '{ maxCalls?: number; timeoutMs?: number; retries?: number; }'.
+gateway.js: TS2554 Expected 0 arguments, but got 2.
+index.js: TS2339 Property 'answer' does not exist on type '{ latencyMs: any; flags?: any; cache: { auditId: any; answeredAt: any; }; steps: any[]; usage: { promptTokens: number; outputTokens: number; thinkingTokens: number; modelCalls: number; }; status: string; ... 14 more ...; id: string; } | { ...; }'.
+index.js: TS2339 Property 'backfilledAt' does not exist on type 'DocumentData | Readonly<{ profile: any; items: any[]; }>'.
+index.js: TS2339 Property 'builtIn' does not exist on type '{ id: string; }'.
+index.js: TS2339 Property 'citations' does not exist on type '{ latencyMs: any; flags?: any; cache: { auditId: any; answeredAt: any; }; steps: any[]; usage: { promptTokens: number; outputTokens: number; thinkingTokens: number; modelCalls: number; }; status: string; ... 14 more ...; id: string; } | { ...; }'.
+index.js: TS2339 Property 'updatedAt' does not exist on type 'DocumentData | Readonly<{ profile: any; items: any[]; }>'.
+index.js: TS2345 Argument of type '{ backend: (path: any) => Promise<{ status: number; body: any; reason?: undefined; } | { status: number; body: {}; reason: any; }>; onStep: (step: any) => any; messages: { role: any; text: any; sources: any; }[]; ... 5 more ...; demo: { ...; }; }' is not assignable to parameter of type '{ messages: any; sessionId: any; company?: any; access?: Readonly<{ companyId: any; disabled: any[]; }>; requestId: any; channel?: string; withEvidence?: boolean; tier: any; useCache?: boolean; backend?: any; user?: any; demo?: any; onStep?: () => void; }'.
+index.js: TS2345 Argument of type '{ company: { company: any; }; user: any; }' is not assignable to parameter of type '{ company: any; user: any; sessionId: any; }'.
+log.js: TS2339 Property 'trace' does not exist on type '{}'.
+orders.js: TS2339 Property 'ids' does not exist on type '{}'.
+orders.js: TS2339 Property 'query' does not exist on type '{}'.
+orders.js: TS2339 Property 'status' does not exist on type '{}'.
+rag.js: TS2339 Property 'types' does not exist on type '{ limit?: number; filter?: () => boolean; }'.
+review.js: TS2345 Argument of type 'Date' is not assignable to parameter of type 'number'.
+router.js: TS2339 Property 'force' does not exist on type '{}'.
+router.js: TS2349 This expression is not callable.
+runtime.js: TS2339 Property 'answer' does not exist on type '{ latencyMs: any; flags?: any; cache: { auditId: any; answeredAt: any; }; steps: any[]; usage: { promptTokens: number; outputTokens: number; thinkingTokens: number; modelCalls: number; }; status: string; ... 14 more ...; id: string; } | { ...; }'.
+runtime.js: TS2339 Property 'answer' does not exist on type '{ latencyMs: any; flags?: any; cache: { auditId: any; answeredAt: any; }; steps: any[]; usage: { promptTokens: number; outputTokens: number; thinkingTokens: number; modelCalls: number; }; status: string; ... 14 more ...; id: string; } | { ...; }'.
+runtime.js: TS2339 Property 'channel' does not exist on type '{ messages: { role: string; text: any; }[]; sessionId: any; access: Readonly<{ companyId: any; disabled: any[]; }>; requestId: `${string}-${string}-${string}-${string}-${string}`; } | { channel?: string; withEvidence?: boolean; ... 8 more ...; backend: (path: any) => Promise<...>; }'.
+runtime.js: TS2339 Property 'citations' does not exist on type '{ latencyMs: any; flags?: any; cache: { auditId: any; answeredAt: any; }; steps: any[]; usage: { promptTokens: number; outputTokens: number; thinkingTokens: number; modelCalls: number; }; status: string; ... 14 more ...; id: string; } | { ...; }'.
+runtime.js: TS2339 Property 'citations' does not exist on type '{ latencyMs: any; flags?: any; cache: { auditId: any; answeredAt: any; }; steps: any[]; usage: { promptTokens: number; outputTokens: number; thinkingTokens: number; modelCalls: number; }; status: string; ... 14 more ...; id: string; } | { ...; }'.
+runtime.js: TS2339 Property 'evidence' does not exist on type '{ latencyMs: any; flags?: any; cache: { auditId: any; answeredAt: any; }; steps: any[]; usage: { promptTokens: number; outputTokens: number; thinkingTokens: number; modelCalls: number; }; status: string; ... 14 more ...; id: string; } | { ...; }'.
+runtime.js: TS2339 Property 'trace' does not exist on type '{ latencyMs: any; flags?: any; cache: { auditId: any; answeredAt: any; }; steps: any[]; usage: { promptTokens: number; outputTokens: number; thinkingTokens: number; modelCalls: number; }; status: string; ... 14 more ...; id: string; } | { ...; }'.
+runtime.js: TS2345 Argument of type '{ messages: { role: string; text: any; }[]; sessionId: any; access: Readonly<{ companyId: any; disabled: any[]; }>; requestId: `${string}-${string}-${string}-${string}-${string}`; } | { channel?: string; withEvidence?: boolean; ... 8 more ...; backend: (path: any) => Promise<...>; }' is not assignable to parameter of type '{ messages: any; sessionId: any; company?: any; access?: Readonly<{ companyId: any; disabled: any[]; }>; requestId: any; channel?: string; withEvidence?: boolean; tier: any; useCache?: boolean; backend?: any; user?: any; demo?: any; onStep?: () => void; }'.
+runtime.js: TS2345 Argument of type '{ onStep: (step: any) => any; messages: { role: string; text: any; }[]; sessionId: any; access: Readonly<{ companyId: any; disabled: any[]; }>; requestId: `${string}-${string}-${string}-${string}-${string}`; } | { ...; }' is not assignable to parameter of type '{ messages: any; sessionId: any; company?: any; access?: Readonly<{ companyId: any; disabled: any[]; }>; requestId: any; channel?: string; withEvidence?: boolean; tier: any; useCache?: boolean; backend?: any; user?: any; demo?: any; onStep?: () => void; }'.
+seed/inventory.js: TS2345 Argument of type 'number[]' is not assignable to parameter of type '[any, any]'.
+seed/inventory.js: TS2345 Argument of type 'number[]' is not assignable to parameter of type '[any, any]'.
+seed/inventory.js: TS2345 Argument of type 'number[]' is not assignable to parameter of type '[any, any]'.
+test/armor.test.js: TS2353 Object literal may only specify known properties, and 'template' does not exist in type '{ fetch?: { (input: URL | RequestInfo, init?: RequestInit): Promise<Response>; (input: string | URL | Request, init?: RequestInit): Promise<...>; }; getToken?: () => Promise<...>; }'.
+test/company-goods.test.js: TS2345 Argument of type '{ company: string; }' is not assignable to parameter of type '{ company: string; about: string; goodsTerms: string[]; otherGoods: string[]; }'.
+test/gateway.test.js: TS2353 Object literal may only specify known properties, and 'sleep' does not exist in type '{ maxCalls?: number; timeoutMs?: number; retries?: number; }'.
+test/gateway.test.js: TS2353 Object literal may only specify known properties, and 'sleep' does not exist in type '{ maxCalls?: number; timeoutMs?: number; retries?: number; }'.
+test/gateway.test.js: TS2353 Object literal may only specify known properties, and 'sleep' does not exist in type '{ maxCalls?: number; timeoutMs?: number; retries?: number; }'.
+test/gateway.test.js: TS2353 Object literal may only specify known properties, and 'sleep' does not exist in type '{ maxCalls?: number; timeoutMs?: number; retries?: number; }'.
+test/gateway.test.js: TS2353 Object literal may only specify known properties, and 'sleep' does not exist in type '{ maxCalls?: number; timeoutMs?: number; retries?: number; }'.
+test/gateway.test.js: TS2353 Object literal may only specify known properties, and 'sleep' does not exist in type '{ maxCalls?: number; timeoutMs?: number; retries?: number; }'.
+test/limits.test.js: TS2339 Property 'status' does not exist on type 'unknown'.
+test/limits.test.js: TS2339 Property 'status' does not exist on type 'unknown'.
+test/relevance.test.js: TS2345 Argument of type '{ goodsTerms: string[]; otherGoods: string[]; }' is not assignable to parameter of type '{ company: string; about: string; goodsTerms: string[]; otherGoods: string[]; }'.
+test/relevance.test.js: TS2345 Argument of type '{ goodsTerms: string[]; otherGoods: string[]; }' is not assignable to parameter of type '{ company: string; about: string; goodsTerms: string[]; otherGoods: string[]; }'.
+test/relevance.test.js: TS2345 Argument of type '{ goodsTerms: string[]; }' is not assignable to parameter of type '{ company: string; about: string; goodsTerms: string[]; otherGoods: string[]; }'.
+test/runtime.test.js: TS2339 Property 'backend' does not exist on type '{ messages: { role: string; text: any; }[]; sessionId: any; access: Readonly<{ companyId: any; disabled: any[]; }>; requestId: `${string}-${string}-${string}-${string}-${string}`; } | { channel?: string; withEvidence?: boolean; ... 8 more ...; backend: (path: any) => Promise<...>; }'.
+test/runtime.test.js: TS2339 Property 'backend' does not exist on type '{ messages: { role: string; text: any; }[]; sessionId: any; access: Readonly<{ companyId: any; disabled: any[]; }>; requestId: `${string}-${string}-${string}-${string}-${string}`; } | { channel?: string; withEvidence?: boolean; ... 8 more ...; backend: (path: any) => Promise<...>; }'.
+test/runtime.test.js: TS2339 Property 'company' does not exist on type '{ messages: { role: string; text: any; }[]; sessionId: any; access: Readonly<{ companyId: any; disabled: any[]; }>; requestId: `${string}-${string}-${string}-${string}-${string}`; } | { channel?: string; withEvidence?: boolean; ... 8 more ...; backend: (path: any) => Promise<...>; }'.
+test/runtime.test.js: TS2339 Property 'port' does not exist on type 'string | AddressInfo'.

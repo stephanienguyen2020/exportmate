@@ -45,11 +45,20 @@ const validDate = (text: string) =>
   !Number.isNaN(Date.parse(text)) &&
   new Date(text).toISOString().slice(0, 10) === text;
 
-const validValue = (n: number) =>
-  Number.isFinite(n) &&
-  n > 0 &&
-  n < 1e12 &&
-  Math.abs(n * 100 - Math.round(n * 100)) < 1e-6;
+// A decimal number as the backend reads it (ASCII digits, optional + and exponent), after the
+// thousands commas are dropped. testdata/order-values.json holds cases both sides must agree on.
+const DECIMAL = /^\+?(?:(\d+)(?:\.(\d*))?|\.(\d+))(?:[eE]([+-]?\d+))?$/;
+
+/** Whether a value cell is a positive amount below 1 trillion with at most 2 decimals. */
+export function validValueText(text: string) {
+  const match = DECIMAL.exec(text.replace(/,/g, ""));
+  if (!match) return false;
+  const fraction = match[2] ?? match[3] ?? "";
+  // The decimal exponent, as Python's Decimal counts it: "1.000" is -3, "1e-2" is -2.
+  if (Number(match[4] ?? 0) - fraction.length < -2) return false;
+  const n = parseValue(text);
+  return Number.isFinite(n) && n > 0 && n < 1e12;
+}
 
 /** What is wrong with one order's cells, column by column, in the order the backend checks. */
 export function orderCellErrors(
@@ -65,7 +74,7 @@ export function orderCellErrors(
   for (const [column, limit] of Object.entries(MAX_LENGTHS))
     if (cell(column).length > limit)
       fail(column, `${column} is longer than ${limit} characters.`);
-  if (cell("value") && !validValue(parseValue(cell("value"))))
+  if (cell("value") && !validValueText(cell("value")))
     fail("value", "value must be a positive number with at most 2 decimals.");
   const shipDate = cell("shipDate");
   if (shipDate && !validDate(shipDate))

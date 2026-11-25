@@ -41,7 +41,7 @@ export type OrderStatusOption = {
   code: ApiOrder["status"];
   label: string;
   description: string;
-  tone: "green" | "amber" | "red" | string;
+  tone: "green" | "amber" | "red" | (string & {}); // or another tone the backend adds
   manual: boolean; // an owner or editor may set it by hand
   retired: boolean; // no longer given to orders; only earlier status changes name it
 };
@@ -918,7 +918,7 @@ async function responseError(response: Response): Promise<ApiError> {
   const fields = body?.error?.fieldErrors;
   const details = fields
     ? Object.entries(fields)
-        .map(([key, value]) => `${key}: ${value}`)
+        .map(([key, value]) => `${key}: ${String(value)}`)
         .join("; ")
     : "";
   return new ApiError(
