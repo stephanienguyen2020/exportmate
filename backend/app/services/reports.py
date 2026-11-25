@@ -27,6 +27,7 @@ from pathlib import Path
 from fpdf import FPDF, FontFace
 from sqlalchemy.orm import Session
 
+from app.core import clock
 from app.core.context import CompanyContext
 from app.core.email import EmailAttachment, OutgoingEmail, get_email_sender
 from app.core.errors import AppError, not_found_error
@@ -80,10 +81,6 @@ log = logging.getLogger(__name__)
 
 
 # Formatting -------------------------------------------------------------------------------
-
-
-def today_utc() -> date:
-    return datetime.now(UTC).date()
 
 
 def format_day(day: date) -> str:
@@ -510,7 +507,7 @@ def _news_section(
 def build_company_report_content(
     db: Session, ctx: CompanyContext, days: int, authorization: str | None
 ) -> ReportContent:
-    today = today_utc()
+    today = clock.today()
     since, until = today - timedelta(days=days), today + timedelta(days=days)
     trade_map = trade_map_service.build_trade_map(db, ctx)
     market_names = {m.code: m.name for m in trade_map.markets}

@@ -34,9 +34,9 @@ variable "db_tier" {
 }
 
 variable "allowed_origins" {
-  description = "Comma-separated CORS origins for the backend and the AI service."
+  description = "Comma-separated CORS origins for the backend and the AI service. The website needs none: its nginx serves both on its own origin."
   type        = string
-  default     = "https://exportmate.vercel.app,http://127.0.0.1:5173,http://localhost:5173"
+  default     = "http://127.0.0.1:5173,http://localhost:5173"
 }
 
 variable "resend_enabled" {
@@ -52,9 +52,9 @@ variable "report_email_from" {
 }
 
 variable "auth_domains" {
-  description = "Domains allowed to use Firebase sign-in (besides the project's own)."
+  description = "Domains allowed to use Firebase sign-in, besides the project's own and the website's (firebase.tf)."
   type        = list(string)
-  default     = ["localhost", "127.0.0.1", "exportmate.vercel.app"]
+  default     = ["localhost", "127.0.0.1"]
 }
 
 variable "google_oauth_client_id" {
@@ -71,21 +71,9 @@ variable "google_oauth_client_secret" {
 }
 
 variable "gemini_model" {
-  description = "Gemini model on Vertex AI for the backend's AI features, the news scan and the eval judge (gemini-2.5-flash retires 2026-10-20)."
+  description = "Gemini model on Vertex AI for the backend's AI features, the assistant, the news scan and the eval judge (gemini-2.5-flash retires 2026-10-20)."
   type        = string
   default     = "gemini-3.5-flash"
-}
-
-variable "gemini_model_simple" {
-  description = "Gemini model for questions the router (ai/server/router.js) sends to the simple tier: single lookups and how-tos."
-  type        = string
-  default     = "gemini-3.5-flash-lite"
-}
-
-variable "gemini_model_complex" {
-  description = "Gemini model for questions the router sends to the complex tier: follow-ups, arithmetic, trade rules, judgement, pasted text."
-  type        = string
-  default     = "gemini-4-argon"
 }
 
 variable "agent_runtime" {
@@ -107,7 +95,13 @@ variable "neo4j_uri" {
 }
 
 variable "neo4j_username" {
-  description = "Neo4j user."
+  description = "Neo4j user (NEO4J_USERNAME in the instance's credentials file): neo4j on older AuraDB instances, the instance ID on newer ones."
+  type        = string
+  default     = "neo4j"
+}
+
+variable "neo4j_database" {
+  description = "Neo4j database (NEO4J_DATABASE in the instance's credentials file): neo4j on older AuraDB instances, the instance ID on newer ones."
   type        = string
   default     = "neo4j"
 }

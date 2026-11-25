@@ -21,12 +21,12 @@ class Settings(BaseSettings):
     auth_mode: Literal["firebase", "dev"] = "firebase"
     firebase_project_id: str = "skilful-scarab-511320-q9"
     allowed_origins: str = "http://127.0.0.1:5173,http://localhost:5173"
-    # Vercel's proxy function accepts bodies up to about 4.5 MB, so uploads are capped at 4 MB.
+    # Uploads are capped at 4 MB; the website's nginx takes 5 MB, room for the multipart envelope.
     max_upload_bytes: int = 4 * 1024 * 1024
     # Per user per hour (core/rate_limit.py).
     import_uploads_per_hour: int = 60
     regulation_document_uploads_per_hour: int = 60
-    # Official texts added by the seed don't pass through Vercel; a whole treaty can be 20+ MB.
+    # Official texts added by the seed don't pass through the website; a whole treaty can be 20+ MB.
     max_shared_document_bytes: int = 50 * 1024 * 1024
     max_import_rows: int = 10_000
     # Cloud Storage bucket for uploaded regulation texts and articles.
@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     contact_inbox: str = ""
     contact_messages_per_hour: int = 5  # per visitor IP, counted per instance
     # Team invitations (services/members.py): the link in the email, and how long it is valid.
-    app_url: str = "https://exportmate.vercel.app"
+    app_url: str = "https://exportmate-web-3v6cd2xhpq-as.a.run.app"
     member_invite_days: int = 14
     member_invites_per_hour: int = 30  # per owner
     # Who reviews and publishes material chain versions (shared by every company): emails,
@@ -87,6 +87,10 @@ class Settings(BaseSettings):
     supplier_message_drafts_per_hour: int = 30
     requirement_drafts_per_hour: int = 20
     hs_suggestions_per_hour: int = 60
+    # Public HS code suggestions, REST and MCP together (services/public_hs.py): per caller
+    # address, and in total, since anyone can call them and each call is an AI call.
+    public_hs_suggestions_per_hour: int = 20
+    public_hs_suggestions_total_per_hour: int = 300
     scenario_suggestions_per_hour: int = 30
     solution_suggestions_per_hour: int = 30
     analysis_runs_per_hour: int = 60

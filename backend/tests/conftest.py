@@ -8,6 +8,7 @@ import math
 import os
 import re
 from collections.abc import Iterator
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -17,7 +18,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 
 from app import seed_reference_data
-from app.core import gemini
+from app.core import clock, gemini
 from app.core.config import get_settings
 from app.core.errors import AppError
 from app.core.neo4j import get_neo4j_driver
@@ -148,6 +149,16 @@ class FakeGemini:
         if task not in self.answers:
             raise AppError(503, "ai_unavailable", "The AI step failed. Try again in a minute.")
         return schema.model_validate(self.answers[task](prompt, file))
+
+
+# The day the tests run on, whatever the calendar says: their fixed dates (ship dates, the
+# 1 Jan 2027 tariff change in reference.json) stay where they are relative to it.
+TEST_TODAY = date(2026, 11, 20)
+
+
+@pytest.fixture(autouse=True)
+def fixed_today(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(clock, "today", lambda: TEST_TODAY)
 
 
 @pytest.fixture(autouse=True)

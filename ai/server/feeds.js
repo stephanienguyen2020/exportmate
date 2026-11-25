@@ -116,7 +116,7 @@ function request(url) {
       {
         lookup: safeLookup,
         headers: {
-          "User-Agent": "ExportMateNewsWatch/1.0 (+https://exportmate.vercel.app)",
+          "User-Agent": "ExportMateNewsWatch/1.0 (+https://exportmate-web-3v6cd2xhpq-as.a.run.app)",
           Accept: "application/rss+xml, application/atom+xml, application/xml, text/xml",
           "Accept-Encoding": "gzip, deflate, br",
         },

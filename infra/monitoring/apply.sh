@@ -5,10 +5,10 @@
 #
 #   PROJECT_ID=skilful-scarab-511320-q9 PART=ai SERVICE=exportmate-ai ALERT_EMAIL=you@example.com ./apply.sh
 #   PROJECT_ID=skilful-scarab-511320-q9 PART=backend SERVICE=exportmate-backend \
-#     WEBSITE_HOST=exportmate.vercel.app ALERT_EMAIL=you@example.com ./apply.sh
+#     WEBSITE_HOST=exportmate-web-3v6cd2xhpq-as.a.run.app ALERT_EMAIL=you@example.com ./apply.sh
 #
 # The AI part's uptime check calls the Cloud Run service directly; the backend's goes through the
-# website (WEBSITE_HOST), so it also fails when Vercel or its /api/v1 proxy does. Needs
+# website (WEBSITE_HOST), so it also fails when the website or its /api/v1 forwarding does. Needs
 # monitoring and logging write access (Editor is enough). `npm run ops` in ai/server reads the
 # same picture from Firestore.
 set -euo pipefail

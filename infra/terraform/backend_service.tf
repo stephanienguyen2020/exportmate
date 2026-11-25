@@ -2,14 +2,8 @@
 # Terraform creates them with a placeholder image; backend/deploy.sh sets the real one.
 
 locals {
-  # The AI service the website talks to: the /api rewrite in frontend/vercel.json. News watch
+  # AI_SERVICE_URL is the AI service the website forwards /api to (web_service.tf). News watch
   # matches and company reports read their alerts there, so they name the alerts people see.
-  # At the cutover (README.md) vercel.json points at this project's service and this follows.
-  website_ai_url = trimsuffix(one([
-    for rewrite in jsondecode(file("${path.module}/../../frontend/vercel.json")).rewrites :
-    rewrite.destination if rewrite.source == "/api/:path*"
-  ]), "/api/:path*")
-
   backend_env = merge({
     ENV                        = "production"
     AUTH_MODE                  = "firebase"
@@ -17,7 +11,7 @@ locals {
     ALLOWED_ORIGINS            = var.allowed_origins
     REGULATION_DOCUMENT_BUCKET = google_storage_bucket.regulation_documents.name
     REPORT_EMAIL_FROM          = var.report_email_from
-    AI_SERVICE_URL             = local.website_ai_url
+    AI_SERVICE_URL             = local.ai_url
     GOOGLE_CLOUD_PROJECT       = var.project_id # Vertex AI project for Gemini
     GEMINI_MODEL               = var.gemini_model
     CONTACT_INBOX              = var.contact_inbox

@@ -96,8 +96,8 @@ export type Audit = {
   policyVersion?: string;
   requestId?: string;
   flags?: GuardFlag[];
-  // The router's choice: simple (small fast model) or complex, the signals behind it, and
-  // whether a simple-tier draft the auditor sent back was revised on the complex tier.
+  // The router's choice: simple (quick_answer) or complex (the analyst), the signals behind it,
+  // and whether a quick answer the auditor sent back was revised by the analyst.
   // agent: who the router chose; answeredBy: who wrote the answer (the analyst after an escalation).
   route?: { tier: "simple" | "complex"; reasons: string[]; escalated?: boolean; agent?: string; answeredBy?: string };
   usageByAgent?: Record<string, { promptTokens: number; outputTokens: number; thinkingTokens: number; modelCalls: number }>;

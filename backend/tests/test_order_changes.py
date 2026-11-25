@@ -1,7 +1,7 @@
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 
 import pytest
-from conftest import add_member, import_orders, onboard
+from conftest import TEST_TODAY, add_member, import_orders, onboard
 from sqlalchemy import func, select
 
 from app.database.models import (
@@ -18,7 +18,7 @@ from app.database.session import open_session
 from app.seed_demo_data import seed_company_map_data
 from app.seed_reference_data import seed_reference_data
 
-TODAY = datetime.now(UTC).date()
+TODAY = TEST_TODAY
 SHIP = (TODAY + timedelta(days=10)).isoformat()
 # PO-1 to the EU from a supplier without plot geolocation: exposed after the import's analysis.
 ORDERS = (

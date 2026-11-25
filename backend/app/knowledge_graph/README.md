@@ -37,7 +37,7 @@ Target architecture (the finished system; section 1 says what's built today):
 | 21 | Stronger sources, one research round for every industry: HS chapter notes (WCO), EU Ecolabel criteria (furniture, floor coverings), U.S. Commerce scope texts (wooden cabinets, millwork), a CBP ruling (glulam from sawn boards), U.S. rules (40 CFR 428 and 63.6015 for rubber goods, 21 CFR 801.437 for latex, 21 CFR 163 for cacao), EU Regulations 853/2004 (meat, offal) and 1069/2009 (hides), EPA AP-42 (leather tanning), Codex soy protein products, the International Coffee Agreement 2007. Cattle gained hides and leather (EUDR 4101, 4104, 4107). Every link quotes a text; the hand-curated links (`extraLinks`) are gone. 7 industries, 71 products, 85 links | `data/industries.json`, `data/industries/` |
 | 22 | Pipeline: a rebuild offers the writer the current links to keep when a source quotes them and lists those it lost (`linksNoLongerSourced`); a long document names what to keep when cut (`focus`); an API answer is read from one field (`jsonField`, CBP rulings); a failed quote check says which part failed, so the revision can fix it | `build_chain.py` |
 | 23 | News watch runs in `skilful-scarab`: alerts carry `mentions`, so live suggestions walk the graph (18 Oct) | `infra/terraform/README.md` |
-| 24 | GraphRAG in the assistant: `GET /knowledge-graph/query` runs the walk for what a question names; the `query_graph` tool and a graph specialist give the agents the paths; the auditor wants each order's path cited and a critic (Gemini) checks the answer's connections against the paths | `services/graph_query.py`, `ai/server/agents/tools.js`, `ai/server/critic.js` |
+| 24 | GraphRAG in the assistant: `GET /knowledge-graph/query` runs the walk for what a question names; the `query_graph` tool gives the agents the paths; the auditor wants each order's path cited and a critic (Gemini) checks the answer's connections against the paths | `services/graph_query.py`, `ai/server/agents/tools.js`, `ai/server/critic.js` |
 | 25 | Link weights job (nightly): every company's verdicts per link, with a weight, in `graph_link_weights`; walks read cross-company doubt and weights from it (a company's own verdicts stay live), and prefer higher-weight links between otherwise equal paths; Rules & news › Material chain shows them | `app/update_link_weights.py`, `services/graph_feedback.py`, `infra/terraform/backend_service.tf` |
 | 26 | Chain versions: each industry's chain in Postgres (`chain_versions`), the files in `data/industries/` as first published versions; a changed file (or, next, the pipeline) makes a draft; chain admins (`CHAIN_ADMIN_EMAILS`) see its changes and flags on Rules & news › Material chain and publish it (the graph is rebuilt) or reject it | `services/chain_versions.py`, `frontend/src/ChainReview.tsx` |
 | 27 | Neo4j (AuraDB Free) as the graph's read model: each commit that changes the graph is a change event (Pub/Sub, pushed to the backend), which copies it from Postgres into Neo4j; the chain walk runs as Cypher there while Neo4j holds the same chain as Postgres, else on Postgres (section 9) | `database/graph_changes.py`, `services/graph_sync.py`, `services/graph_store.py`, `database/queries/neo4j_graph.py`, `infra/terraform/graph_sync.tf` |
@@ -282,12 +282,12 @@ across records ("which of my orders depend on wood from Laos?"); the graph can.
   orders" isn't confused with "unknown word". Open orders unless `includeShipped`.
 - **`query_graph`** (`ai/server/agents/tools.js`, scope `graph`: company chats, read with the user's
   token, never the demo): each order is cited as a `path`, each link's official text as a
-  `chain_source`. Held by `graph_specialist` (the analyst delegates to it) and `quick_answer`.
+  `chain_source`. Held by `quick_answer` and the analyst.
   The router sends connection questions ("depends on", "made from", "supply chain", "restricts",
   "which orders") to the analyst; the `graph-paths` policy rule has it name each order with its
   path and add no links the path doesn't show.
 - **Auditor** (`review.js`): an order the walk reached that the answer names must cite its path.
-- **Critic** (`critic.js`): Gemini (the complex tier's model at LOW thinking) compares, order by
+- **Critic** (`critic.js`): Gemini (the assistant's model at LOW thinking) compares, order by
   order, what the answer says connects the order with its path, given the order's own facts.
   Restating or shortening is fine; a supplier, country or chain step the path doesn't show, or a
   contradiction, sends the draft back once; still failing marks the answer `needs_review`.
@@ -351,7 +351,7 @@ next step is the whole path in one Cypher query, then graph algorithms.
 | Neo4j (read model) | `database/queries/neo4j_graph.py` (Cypher), `database/graph_changes.py` (change events), `services/graph_events.py` (Pub/Sub or in-process), `services/graph_sync.py`, `services/graph_store.py` (Neo4j or Postgres), `api/graph_sync.py` (push), `app/sync_graph.py`, `core/neo4j.py`; `infra/terraform/graph_sync.tf` |
 | Walk, word matching, sourcing, feedback | `services/knowledge_graph.py`, `services/graph_words.py`, `services/supplier_sourcing.py`, `services/graph_feedback.py`; the nightly link weights job `app/update_link_weights.py` (Cloud Run job `exportmate-backend-link-weights`, Cloud Scheduler `exportmate-nightly-link-weights`, 01:30 Vietnam time) |
 | News watch, Material chain page | `services/news_matches.py` (`GET /news-matches`, `/news-matches/accuracy`), `services/material_chain.py` (`GET /knowledge-graph/chain`) |
-| GraphRAG | `services/graph_query.py` (`GET /knowledge-graph/query`); `ai/server/agents/tools.js` (`query_graph`), `agents/assistant.js` (`graph_specialist`), `review.js` (path check), `critic.js`, `policy.js` (`graph-paths`) |
+| GraphRAG | `services/graph_query.py` (`GET /knowledge-graph/query`); `ai/server/agents/tools.js` (`query_graph`), `agents/assistant.js`, `review.js` (path check), `critic.js`, `policy.js` (`graph-paths`) |
 | Loading, versions | `seed_reference_data.py` (versions from the files, then the graph), `services/chain_versions.py` (`sync_from_files`, `published_chain`, `rebuild_graph`, publish and reject), `knowledge_graph/__init__.py` (`layer_vocabulary`), `seed_demo_data.py` (sourcing) |
 | Building chains | `knowledge_graph/build_chain.py`, `knowledge_graph/__init__.py` (`load_chain`) |
 | Scan and eval | `ai/server/scan.js`, `ai/server/mentions.js`, `ai/server/eval/scan-*.js` |

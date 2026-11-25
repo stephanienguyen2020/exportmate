@@ -13,11 +13,12 @@ import time
 import uuid
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, timedelta
 from itertools import pairwise
 
 from sqlalchemy.orm import Session
 
+from app.core import clock
 from app.core.config import get_settings
 from app.core.context import CompanyContext
 from app.core.errors import AppError, not_found_error
@@ -636,10 +637,6 @@ def build_trade_map(db: Session, ctx: CompanyContext) -> TradeMapOut:
     )
 
 
-def today_utc() -> date:
-    return datetime.now(UTC).date()
-
-
 def list_checklist_changes(
     db: Session,
     company_id: uuid.UUID,
@@ -691,7 +688,7 @@ def build_checklist_changes(
     """Rule watch: what changes in the company's markets in the next `days` days (default
     RULE_WATCH_DAYS)."""
     days = days or get_settings().rule_watch_days
-    today = today_utc()
+    today = clock.today()
     until = today + timedelta(days=days)
     gazetteer = load_gazetteer(db)
     open_orders = [

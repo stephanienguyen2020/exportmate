@@ -1,17 +1,16 @@
-// The Gemini client every agent shares. Each call names its model and thinking level
-// (agents/assistant.js), so one client serves both tiers.
+// The Gemini client every agent shares. Each call names its model and thinking level (agent.js).
 import { Gemini } from "@google/adk";
 import { PROJECT } from "../db.js";
 import { withRetry } from "../gateway.js";
-import { GEMINI_LOCATION, TIERS, timeoutFor } from "../models.js";
+import { ASSISTANT, GEMINI_LOCATION } from "../models.js";
 
 // ADK's Gemini model, with transient errors (429, 503, timeouts) retried with backoff, and each
-// call bounded by its tier's timeout (a stalled call counts as a timeout and is retried).
+// call bounded by a timeout (a stalled call counts as a timeout and is retried).
 // The attempt count rides on the response so the audit can show retried steps.
 class RetryingGemini extends Gemini {
   async *generateContentAsync(request, stream, abortSignal) {
     let attempts = 0;
-    const ms = timeoutFor(request.model ?? this.model);
+    const ms = ASSISTANT.timeoutMs;
     const responses = await withRetry(async () => {
       attempts++;
       const attempt = new AbortController();
@@ -41,7 +40,7 @@ class RetryingGemini extends Gemini {
   }
 }
 export const gemini = new RetryingGemini({
-  model: TIERS.simple.model,
+  model: ASSISTANT.model,
   vertexai: true,
   project: PROJECT,
   location: GEMINI_LOCATION,

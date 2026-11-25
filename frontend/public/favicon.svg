@@ -1,1 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect width="40" height="40" rx="10" fill="#233d34"/><path d="M10 13h20M10 20h15M10 27h20M25 16l5 4-5 4" fill="none" stroke="#d5ebaa" stroke-width="3"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="ExportMate">
+  <rect width="64" height="64" rx="16" fill="#243d33"/>
+  <g fill="none" stroke="#d6ecad" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M19 17v30"/>
+    <path d="M19 17h17"/>
+    <path d="M19 47h17"/>
+    <path d="M19 32h27"/>
+    <path d="M39 24l8 8-8 8"/>
+  </g>
+  <circle cx="44" cy="17" r="3.6" fill="#d6ecad"/>
+  <circle cx="44" cy="47" r="3.6" fill="#d6ecad"/>
+</svg>

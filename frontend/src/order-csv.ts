@@ -23,7 +23,7 @@ export const MAX_LENGTHS: Record<string, number> = {
 // An order's currency when its row names none (the demo company's).
 export const DEFAULT_CURRENCY = "USD";
 export const MAX_IMPORT_ROWS = 10_000;
-// Vercel functions accept request bodies up to about 4.5 MB, so every layer uses 4 MB.
+// Uploads are capped at 4 MB in every layer (the backend's max_upload_bytes).
 export const MAX_UPLOAD_MB = 4;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 // 1234 / 1234.56 / 123456 / 1234.56.00, kept as text so "0401.10" keeps its zero.
