@@ -8,6 +8,7 @@ from sqlalchemy import select
 from test_trade_map import MAP_CSV, seed_company
 
 from app.api import reports as report_api
+from app.core import clock
 from app.core.config import get_settings
 from app.core.email import SandboxEmailSender
 from app.database.models import AuditEvent, Role
@@ -17,7 +18,6 @@ from app.seed_reference_data import seed_reference_data
 from app.services import news_matches as news_service
 from app.services import report_edits, report_pdf, report_text
 from app.services import reports as report_service
-from app.services import trade_map as trade_map_service
 
 TODAY = date(2026, 10, 15)
 # PO-6 ships after the US Section 232 change on 1 Jan 2027; PO-2 ships before it.
@@ -65,8 +65,7 @@ def fixed_world(monkeypatch: pytest.MonkeyPatch) -> dict:
         calls["auth"].append(authorization)
         return calls["news"]
 
-    monkeypatch.setattr(report_service, "today_utc", lambda: TODAY)
-    monkeypatch.setattr(trade_map_service, "today_utc", lambda: TODAY)
+    monkeypatch.setattr(clock, "today", lambda: TODAY)
     monkeypatch.setattr(report_service, "fetch_news_alerts", fake_news)
     report_api.report_email_limiter._hits.clear()
     return calls

@@ -1,7 +1,7 @@
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 
 import pytest
-from conftest import add_member, import_orders, onboard
+from conftest import TEST_TODAY, add_member, import_orders, onboard
 
 from app.database.models import Role
 from app.database.queries import hs_codes as hs_queries
@@ -10,7 +10,7 @@ from app.database.session import open_session
 from app.seed_demo_data import seed_company_map_data
 from app.seed_reference_data import seed_hs_headings, seed_reference_data
 
-SHIP = (datetime.now(UTC).date() + timedelta(days=60)).isoformat()
+SHIP = (TEST_TODAY + timedelta(days=60)).isoformat()
 # PO-1 has a code; PO-2 has a similar product name and no code; PO-3 is a new kind of product.
 ORDERS = (
     "id,product,supplier,destination,value,shipDate,hsCode\n"

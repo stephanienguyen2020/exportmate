@@ -1,7 +1,7 @@
 """ports: transit hubs for the route what-if
 
 Revision ID: 5c1e8a2f9b70
-Revises: 46a214bfa4e0
+Revises: 7c1e2b9d4a10
 Create Date: 2026-11-22 15:00:00
 
 """
@@ -13,7 +13,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "5c1e8a2f9b70"
-down_revision: str | Sequence[str] | None = "46a214bfa4e0"
+down_revision: str | Sequence[str] | None = "7c1e2b9d4a10"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

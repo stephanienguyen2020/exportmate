@@ -24,6 +24,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from app.core import clock
 from app.core.context import CompanyContext
 from app.core.errors import AppError, not_found_error
 from app.core.money import format_money, format_totals
@@ -573,7 +574,7 @@ def _analyse_orders(
     positions = order_queries.list_import_row_positions(
         db, [o.source_row_id for o in orders if o.source_row_id]
     )
-    today = datetime.now(UTC).date()
+    today = clock.today()
     analyses = []
     for order in orders:
         supplier = by_key.get(trade_map_service.supplier_name_key(order.supplier))

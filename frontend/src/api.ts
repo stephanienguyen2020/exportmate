@@ -1560,3 +1560,161 @@ export async function sendContactMessage(message: ContactMessage) {
   });
   if (!response.ok) throw await responseError(response);
 }
+
+// Measured accuracy of HS code suggestions (GET /benchmarks/hs-codes): the latest full run on
+// held-out customs rulings. Public, so no token. null until a full run exists.
+export type BenchmarkRate = {
+  right: number;
+  of: number;
+  rate: number | null;
+  low: number | null; // 95% interval
+  high: number | null;
+};
+export type HsBenchmark = {
+  createdAt: string;
+  model: string;
+  embeddingModel: string;
+  dataset: {
+    source: string;
+    sourceUrl: string;
+    licence: string;
+    licenceUrl: string;
+    downloadedOn: string;
+    rulingsListed: number;
+    sampled: number;
+  };
+  caseCount: number;
+  metrics: {
+    top1: BenchmarkRate;
+    top3: BenchmarkRate;
+    heading: BenchmarkRate;
+    retrieval: BenchmarkRate;
+    nearestLine: BenchmarkRate;
+    noSuggestion: number;
+    errors: number;
+  };
+};
+export async function fetchHsBenchmark(
+  signal?: AbortSignal,
+): Promise<HsBenchmark | null> {
+  const response = await fetch(base + "/benchmarks/hs-codes", {
+    signal: signal
+      ? AbortSignal.any([signal, AbortSignal.timeout(15000)])
+      : AbortSignal.timeout(15000),
+  });
+  if (response.status === 404) return null;
+  if (!response.ok) throw await responseError(response);
+  return ((await response.json()) as Envelope<HsBenchmark>).data;
+}
+
+// The public developer surface (backend app/mcp_server.py, app/api/public.py): an MCP server
+// and a REST API, both with no sign-in. The developer docs read both from the server.
+export type JsonSchema = {
+  type?: string;
+  description?: string;
+  default?: unknown;
+  examples?: unknown[];
+  minimum?: number;
+  maximum?: number;
+  maxLength?: number;
+  properties?: Record<string, JsonSchema>;
+  required?: string[];
+  $ref?: string;
+};
+export type McpTool = {
+  name: string;
+  description?: string;
+  inputSchema: JsonSchema;
+  annotations?: { readOnlyHint?: boolean };
+  _meta?: { rateLimit?: { perCallerPerHour: number; totalPerHour: number } };
+};
+export function absoluteApiUrl(path: string): string {
+  return new URL(base + path, location.origin).href;
+}
+export function mcpUrl(): string {
+  return absoluteApiUrl("/mcp");
+}
+async function mcpRequest(method: string, params: object, signal?: AbortSignal) {
+  const response = await fetch(base + "/mcp", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json, text/event-stream",
+    },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+    signal: signal
+      ? AbortSignal.any([signal, AbortSignal.timeout(60000)])
+      : AbortSignal.timeout(60000),
+  });
+  if (!response.ok) throw await responseError(response);
+  const body = await response.json();
+  if (body?.error) throw new Error(body.error.message || "The MCP server refused it.");
+  return body.result;
+}
+// tools/list, as an MCP client asks it (stateless server: no initialize needed).
+export async function listMcpTools(signal?: AbortSignal): Promise<McpTool[]> {
+  const result = await mcpRequest("tools/list", {}, signal);
+  if (!Array.isArray(result?.tools))
+    throw new Error("The MCP server sent no tool list.");
+  return result.tools as McpTool[];
+}
+// tools/call: the tool's structured output, or its error message (isError).
+export async function callMcpTool(
+  name: string,
+  args: Record<string, unknown>,
+): Promise<{ ok: boolean; output: unknown }> {
+  const result = await mcpRequest("tools/call", { name, arguments: args });
+  if (result?.isError)
+    return { ok: false, output: result.content?.[0]?.text ?? "The tool failed." };
+  return {
+    ok: true,
+    output:
+      result?.structuredContent ??
+      JSON.parse(result?.content?.[0]?.text ?? "null"),
+  };
+}
+// The public REST API's OpenAPI 3.1 spec (only the public operations).
+export type OpenApiOperation = {
+  summary?: string;
+  description?: string;
+  parameters?: {
+    name: string;
+    in: string;
+    required?: boolean;
+    description?: string;
+    schema?: JsonSchema;
+    examples?: unknown;
+  }[];
+  requestBody?: { content?: Record<string, { schema?: JsonSchema }> };
+  responses?: Record<string, { description?: string }>;
+  "x-rate-limit"?: { perCallerPerHour: number; totalPerHour: number };
+};
+export type OpenApiSpec = {
+  info: { title: string; version: string };
+  paths: Record<string, Record<string, OpenApiOperation>>;
+  components?: { schemas?: Record<string, JsonSchema> };
+};
+export const publicSpecPath = "/public/openapi.json";
+export async function fetchPublicSpec(signal?: AbortSignal): Promise<OpenApiSpec> {
+  const response = await fetch(base + publicSpecPath, {
+    signal: signal
+      ? AbortSignal.any([signal, AbortSignal.timeout(15000)])
+      : AbortSignal.timeout(15000),
+  });
+  if (!response.ok) throw await responseError(response);
+  return response.json();
+}
+// One public REST call as the docs' "Run" makes it: the real status and body.
+export async function callPublicEndpoint(
+  method: string,
+  url: string,
+  body?: unknown,
+): Promise<{ status: number; body: unknown }> {
+  const response = await fetch(url, {
+    method,
+    headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+    signal: AbortSignal.timeout(60000),
+  });
+  return { status: response.status, body: await response.json().catch(() => null) };
+}

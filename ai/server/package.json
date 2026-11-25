@@ -17,6 +17,7 @@
     "test": "PROJECT_ID=exportmate-tests node --test test/*.test.js",
     "eval": "node eval/run.js",
     "eval:vertex": "node eval/run.js --vertex",
+    "exam": "node eval/run.js --company --engine",
     "eval:scan": "node eval/scan-run.js",
     "ops": "node ops.js"
   },

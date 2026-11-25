@@ -1,12 +1,13 @@
 """News watch alerts matched to orders: suggestions, people's verdicts, and links they add."""
 
 import uuid
-from datetime import date, timedelta
+from datetime import timedelta
 
 import pytest
-from conftest import add_member, import_orders, onboard
+from conftest import TEST_TODAY, add_member, import_orders, onboard
 from sqlalchemy import select
 
+from app.core import clock
 from app.database.models import AuditEvent, Order, Role
 from app.database.session import open_session
 from app.seed_reference_data import seed_reference_data
@@ -15,7 +16,8 @@ from app.services.knowledge_graph import GraphWalker, hs_heading
 
 
 def ships_in(days: int) -> str:
-    return (date.today() + timedelta(days=days)).isoformat()
+    # TEST_TODAY, not clock.today(): NEWS_CSV is built at import, before the fixture fixes today.
+    return (TEST_TODAY + timedelta(days=days)).isoformat()
 
 
 # PO-1 is suggested for the plywood alert. PO-2 has another HS heading, PO-3 the right
@@ -133,7 +135,7 @@ def test_a_verdict_stays_after_the_order_ships(client, lan):
     review(client, lan, "PO-1", "relevant")
     with open_session() as db:
         order = db.scalar(select(Order).where(Order.external_id == "PO-1"))
-        order.ship_date = date.today() - timedelta(days=1)
+        order.ship_date = clock.today() - timedelta(days=1)
         db.commit()
     match = matches(client, lan)["article-1/PO-1"]
     assert match["suggested"] is True

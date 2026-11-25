@@ -2,11 +2,17 @@
 // Usage: npm run eval                       all cases
 //        npm run eval -- --only=latest-scan,unknown-sku
 //        npm run eval -- --judge            also grade answers with an LLM judge
-//        npm run eval -- --tier=complex     every case on one model tier instead of the router's choice
+//        npm run eval -- --tier=complex     every case to one agent (simple: quick_answer, complex: the analyst)
 //        npm run eval -- --engine           ask the deployed agents on Agent Runtime (AGENT_RUNTIME) instead
 //                                           of running them in this process
 //        npm run eval -- --vertex           also create an evaluation run on Agent Platform (Gen AI evaluation:
 //                                           tool use, hallucination, response quality, safety; platform/evaluate.py, needs uv)
+//        npm run exam                       the company exam (exam.js) on the deployed agents, signed in as the
+//                                           exam user (EXAM_EMAIL, default exam@example.com, and EXAM_PASSWORD, in
+//                                           .env), with FIREBASE_API_KEY and BACKEND_URL (the deployed backend). The
+//                                           exam user is a Firebase user with a verified email and its own copy of
+//                                           the demo company: python -m app.seed_demo_data --email exam@example.com
+//                                           --firebase-uid <uid> (infra/terraform/README.md, "First time")
 // On GCP: gcloud run jobs execute exportmate-ai-task --args="node eval/run.js --judge" --wait
 // Each run is stored in the Firestore `eval_runs` collection and compared with the
 // previous run; it exits 1 if a case that passed now fails (a regression). Run it
@@ -23,9 +29,10 @@ import { callRuntime } from "../agents/remote.js";
 import { demoMapOrders, demoPlaybook } from "../orders.js";
 import { turnWorkspace } from "../workspace.js";
 import { PROJECT, db, inventory, list } from "../db.js";
-import { GEMINI_LOCATION, SCAN_MODEL, TIERS } from "../models.js";
+import { ASSISTANT, GEMINI_LOCATION, SCAN_MODEL } from "../models.js";
 import { summarizeAudits } from "../metrics.js";
 import { POLICY_VERSION, RULES } from "../policy.js";
+import { examCases } from "./exam.js";
 import { goldenCases } from "./golden.js";
 import { compareRuns, scoreCase, summarizeRun } from "./score.js";
 
@@ -36,8 +43,10 @@ const useJudge = arg("judge") !== undefined;
 const tier = arg("tier") || undefined;
 const toVertex = arg("vertex") !== undefined;
 const onEngine = arg("engine") !== undefined;
+const asCompany = arg("company") !== undefined;
+const SET = asCompany ? "company" : "golden";
 if (onEngine && !runtime) throw new Error("--engine needs AGENT_RUNTIME (the deployed instance)");
-if (tier && !TIERS[tier]) throw new Error(`--tier must be one of ${Object.keys(TIERS).join(", ")}`);
+if (tier && !["simple", "complex"].includes(tier)) throw new Error("--tier must be simple or complex");
 const JUDGE_MODEL = process.env.JUDGE_MODEL || SCAN_MODEL;
 const ai = new GoogleGenAI({ vertexai: true, project: PROJECT, location: GEMINI_LOCATION });
 
@@ -60,7 +69,7 @@ CONVERSATION:
 ${testCase.messages.map((m) => `${m.role}: ${m.text}`).join("\n")}
 
 EVIDENCE (the user's messages and the tool results the assistant saw):
-${(result.evidence || "").slice(0, 20000)}
+${(result.evidence || "").slice(0, 120_000)}
 
 ANSWER:
 ${result.answer}
@@ -76,11 +85,10 @@ ${testCase.rubric ? `RUBRIC: ${testCase.rubric}` : "RUBRIC: none (return rubric 
 
 // One golden case as Agent Platform agent data (types.evals.AgentData): every agent's config and
 // the conversation as ADK-style events, each attributed to the agent that made it, rebuilt from the
-// audit steps, the tool results and the specialists' reports.
+// audit steps and the tool results.
 const text = (role, author, t) => ({ author, content: { role, parts: [{ text: t }] } });
 function vertexCase(c, r, s) {
   const outputs = [...r.trace.toolResults];
-  const reports = [...r.trace.reports];
   const answering = r.route.agent;
   const turns = [];
   const history = c.messages.slice(0, -1);
@@ -92,10 +100,7 @@ function vertexCase(c, r, s) {
     if (step.kind === "plan")
       events.push({ author, content: { role: "model", parts: [...(step.note ? [{ text: step.note }] : []), ...step.calls.map((x) => ({ function_call: { name: x.name, args: x.args } }))] } });
     else if (step.kind === "tool") events.push({ author, content: { role: "user", parts: [{ function_response: { name: step.name, response: outputs.shift() } }] } });
-    else if (step.kind === "delegate") {
-      const { report } = reports.shift();
-      events.push({ author: "analyst", content: { role: "user", parts: [{ function_response: { name: step.agent, response: typeof report === "string" ? { result: report } : report } }] } });
-    } else if (step.kind === "draft") events.push(text("model", author, step.excerpt));
+    else if (step.kind === "draft") events.push(text("model", author, step.excerpt));
     else if (step.kind === "review") events.push(text("user", "auditor", `Auditor review of your draft: ${step.problems.join(" ")}`));
   }
   if (r.answer) events.push(text("model", r.route.answeredBy || answering, r.answer));
@@ -113,15 +118,53 @@ function vertexCase(c, r, s) {
   };
 }
 
-const delegations = (r) => {
-  const used = [...new Set(r.steps.filter((x) => x.kind === "delegate").map((x) => x.agent.replace("_specialist", "")))];
-  return used.length ? ` (${used.join(", ")})` : "";
-};
+// This set's earlier runs, newest first (runs from before sets existed are the golden set's).
+async function previousRuns(limit) {
+  const recent = await list(evalRuns.orderBy("runAt", "desc").limit(limit * 4));
+  return recent.filter((r) => (r.set || "golden") === SET).slice(0, limit);
+}
 
-const items = await list(inventory);
-const cases = goldenCases(items, { rules: RULES }).filter((c) => !only || only.includes(c.id));
+// Signs in as the exam's company owner (Firebase email + password) and reads what the exam's
+// answers are worked out from, with the same token the agents then use.
+async function companyExam() {
+  const { EXAM_PASSWORD, FIREBASE_API_KEY, BACKEND_URL } = process.env;
+  const email = process.env.EXAM_EMAIL || "exam@example.com";
+  if (!EXAM_PASSWORD || !FIREBASE_API_KEY || !BACKEND_URL) throw new Error("--company needs EXAM_PASSWORD, FIREBASE_API_KEY and BACKEND_URL");
+  const signIn = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password: EXAM_PASSWORD, returnSecureToken: true }),
+  });
+  if (!signIn.ok) throw new Error(`Signing in as ${email} failed (${signIn.status})`);
+  const { idToken: token } = await signIn.json();
+  const backend = async (path) => {
+    const res = await fetch(`${BACKEND_URL.replace(/\/$/, "")}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+    return { status: res.status, body: await res.json().catch(() => ({})) };
+  };
+  const read = async (path) => {
+    const { status, body } = await backend(path);
+    if (status !== 200) throw new Error(`GET ${path}: ${status} ${body.error?.code || ""}`);
+    return body.data;
+  };
+  const [profile, map, rules, acacia] = await Promise.all([
+    read("/api/v1/company/knowledge"),
+    read("/api/v1/trade-map"),
+    read("/api/v1/playbook/rules"),
+    read("/api/v1/knowledge-graph/query?material=acacia&country=VN"),
+  ]);
+  const data = { markets: map.markets, orders: map.orders, suppliers: map.suppliers || [], rules: rules.filter((r) => r.enabled), acacia, today: new Date().toISOString().slice(0, 10) };
+  return { token, backend, profile, cases: examCases(data, { policyRules: RULES }) };
+}
+
+const exam = asCompany ? await companyExam() : null;
+const cases = (exam ? exam.cases : goldenCases(await list(inventory), { rules: RULES })).filter((c) => !only || only.includes(c.id));
 const sessionId = `eval-${Date.now().toString(36)}`;
-console.log(`Eval ${sessionId}${onEngine ? ` on ${runtime.name}` : ""}: ${cases.length} cases, policy ${POLICY_VERSION}${tier ? `, all on ${tier} (${TIERS[tier].model})` : ""}${useJudge ? `, judge ${JUDGE_MODEL}` : ""}`);
+console.log(
+  `${asCompany ? `Exam as ${exam.profile.company.name}` : "Eval"} ${sessionId}${onEngine ? ` on ${runtime.name}` : ""}: ${cases.length} cases, policy ${POLICY_VERSION}${tier ? `, all on ${tier}` : ""}, model ${ASSISTANT.model}${useJudge ? `, judge ${JUDGE_MODEL}` : ""}`,
+);
+// A company case runs as a signed-in chat does (index.js): the profile, the company's view of the
+// news sources, and its backend read with the owner's own token.
+const company = exam ? { company: exam.profile, access: { companyId: exam.profile.company.id, disabled: [] } } : null;
 
 const scored = [];
 const results = [];
@@ -129,27 +172,30 @@ for (const c of cases) {
   // A demo case's orders and playbook go through the same checks as a demo chat's (index.js).
   const demo = c.demo ? { orders: demoMapOrders(c.demo.orders), playbook: demoPlaybook(c.demo.rules) } : null;
   const result = onEngine
-    ? (await callRuntime("query", { messages: c.messages, sessionId, channel: "eval", tier, demo })).result
-    : await runAgent({ messages: c.messages, sessionId, channel: "eval", withEvidence: true, tier, workspace: turnWorkspace({ demo }) });
+    ? (await callRuntime("query", { messages: c.messages, sessionId, channel: "eval", tier, demo, ...(company && { ...company, backendToken: exam.token }) })).result
+    : await runAgent({ messages: c.messages, sessionId, channel: "eval", withEvidence: true, tier, workspace: turnWorkspace({ demo, ...(company && { ...company, backend: exam.backend }) }) });
   const verdict = useJudge ? await judge(c, result).catch((e) => ({ faithfulness: null, relevance: null, reason: `judge failed: ${e.message}` })) : null;
   const s = scoreCase(c, result, verdict);
   results.push(result);
   scored.push(s);
   const failed = s.checks.filter((x) => !x.ok);
   console.log(
-    `${s.pass ? "PASS" : "FAIL"} ${c.id.padEnd(24)} ${(s.metrics.latencyMs / 1000).toFixed(1)}s ${s.metrics.toolCalls} tools, ${result.route.agent}${result.route.escalated ? "→analyst" : ""}${delegations(result)}${s.metrics.revised ? ", revised" : ""}` +
+    `${s.pass ? "PASS" : "FAIL"} ${c.id.padEnd(24)} ${(s.metrics.latencyMs / 1000).toFixed(1)}s ${s.metrics.modelCalls} model calls, ${s.metrics.toolCalls} tools, ${result.route.agent}${result.route.escalated ? "→analyst" : ""}${s.metrics.revised ? ", revised" : ""}` +
       (failed.length ? `\n     ${failed.map((x) => `${x.name}: ${x.detail}`).join("\n     ")}` : ""),
   );
+  // The exam's answers are for people to read: we decide what is wrong, the checks only point at it.
+  if (asCompany) console.log(`     Q: ${c.question}\n     A: ${result.answer.replace(/\n/g, "\n        ")}\n`);
 }
 
 const summary = summarizeRun(scored);
 const ops = summarizeAudits(results);
-const [previous] = await list(evalRuns.orderBy("runAt", "desc").limit(1));
+const [previous] = await previousRuns(1);
 const diff = compareRuns(previous, scored);
 const saved = await evalRuns.add({
   runAt: new Date().toISOString(),
+  set: SET,
   sessionId,
-  models: { simple: TIERS.simple.model, complex: TIERS.complex.model },
+  models: { assistant: ASSISTANT.model },
   tier: tier || "routed",
   policyVersion: POLICY_VERSION,
   judge: useJudge ? JUDGE_MODEL : null,

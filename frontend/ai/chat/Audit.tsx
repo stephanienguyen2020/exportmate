@@ -249,7 +249,7 @@ export function AuditView({ audit }: { audit: Audit }) {
             <dd>
               {agentName(audit.route.agent || (audit.route.tier === "complex" ? "analyst" : "quick_answer"))} ({audit.route.tier}
               {audit.route.reasons.length > 0 && `: ${audit.route.reasons.join(", ")}`})
-              {audit.route.escalated && " · revised by the analyst on the complex model after the auditor's review"}
+              {audit.route.escalated && " · revised by the analyst after the auditor's review"}
             </dd>
           </>
         )}

@@ -10,10 +10,15 @@ export const citedRefs = (text) => [
 
 const normalise = (n) => n.replace(/,/g, "").replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
 
-/** Figures that must come from evidence: numbers of 3+ digits and every percentage, normalised ("1,165,971" -> "1165971"). */
+// Vietnamese and most of Europe write thousands with dots: "19.500 USD" is 19,500.
+const DOT_THOUSANDS = /^\d{1,3}(?:\.\d{3})+$/;
+
+/** Figures that must come from evidence: numbers of 3+ digits and every percentage, normalised ("1,165,971" and "1.165.971" -> "1165971"). */
 export const figures = (text) => {
   const plain = stripRefs(text);
-  const big = (plain.match(/\d[\d,]*(?:\.\d+)?/g) || []).map(normalise).filter((n) => n.replace(".", "").length >= 3);
+  const big = (plain.match(/\d{1,3}(?:\.\d{3})+(?![\d.])|\d[\d,]*(?:\.\d+)?/g) || [])
+    .map((n) => (DOT_THOUSANDS.test(n) ? n.replace(/\./g, "") : normalise(n)))
+    .filter((n) => n.replace(".", "").length >= 3);
   const percents = [...plain.matchAll(/(\d+(?:\.\d+)?)\s?(?:%|percent|per cent)/gi)].map((m) => normalise(m[1]));
   return [...new Set([...big, ...percents])];
 };

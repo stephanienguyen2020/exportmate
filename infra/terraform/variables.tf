@@ -71,21 +71,9 @@ variable "google_oauth_client_secret" {
 }
 
 variable "gemini_model" {
-  description = "Gemini model on Vertex AI for the backend's AI features, the news scan and the eval judge (gemini-2.5-flash retires 2026-10-20)."
+  description = "Gemini model on Vertex AI for the backend's AI features, the assistant, the news scan and the eval judge (gemini-2.5-flash retires 2026-10-20)."
   type        = string
   default     = "gemini-3.5-flash"
-}
-
-variable "gemini_model_simple" {
-  description = "Gemini model for questions the router (ai/server/router.js) sends to the simple tier: single lookups and how-tos."
-  type        = string
-  default     = "gemini-3.5-flash-lite"
-}
-
-variable "gemini_model_complex" {
-  description = "Gemini model for questions the router sends to the complex tier: follow-ups, arithmetic, trade rules, judgement, pasted text."
-  type        = string
-  default     = "gemini-4-argon"
 }
 
 variable "agent_runtime" {

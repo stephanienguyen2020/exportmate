@@ -51,7 +51,7 @@ test("a follow-up always needs the conversation", () => {
   assert.deepEqual(r, { tier: "complex", reasons: ["follow-up"] });
 });
 
-test("pasted text and long questions go to the bigger model", () => {
+test("pasted text and long questions go to the analyst", () => {
   assert.equal(ask(`Our buyer wrote: "please confirm the shipment leaves before the end of the month as agreed"`).tier, "complex");
   assert.equal(ask("line one\nline two\nline three\nline four").tier, "complex");
   assert.equal(ask("x".repeat(301)).tier, "complex");

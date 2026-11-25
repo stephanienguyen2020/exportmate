@@ -1,7 +1,7 @@
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 
 import pytest
-from conftest import add_member, import_orders, onboard
+from conftest import TEST_TODAY, add_member, import_orders, onboard
 
 from app.database.models import Role
 from app.database.queries import users as user_queries
@@ -9,7 +9,7 @@ from app.database.session import open_session
 from app.seed_demo_data import seed_company_map_data
 from app.seed_reference_data import seed_reference_data
 
-TODAY = datetime.now(UTC).date()
+TODAY = TEST_TODAY
 CERTIFICATE = b"%PDF-1.7 geolocation statement for plots in Binh Phuoc"
 PHOTO = b"\xff\xd8\xff\xe0 a phone photo of a certificate"
 ORDERS = (
