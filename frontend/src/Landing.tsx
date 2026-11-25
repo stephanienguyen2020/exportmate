@@ -9,7 +9,7 @@ import {
   Send,
   ArrowDown,
 } from "lucide-react";
-import { openDemo } from "./account-store";
+import { hasSession, openDemo } from "./account-store";
 import { sendContactMessage } from "./api";
 import { errorMessage } from "./auth";
 import "./landing.css";
@@ -48,6 +48,8 @@ export default function Landing({ section = "" }: { section?: string }) {
   const page = useRef<HTMLDivElement>(null);
   const photo = useRef<HTMLDivElement>(null);
   const [step, setStep] = useState(0);
+  // Someone already in a workspace (an account or the demo) is offered it, not a sign-in.
+  const signedIn = hasSession();
   const [sent, setSent] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
@@ -169,8 +171,8 @@ export default function Landing({ section = "" }: { section?: string }) {
             {link("About us", "about")}
             {link("Get in touch", "contact")}
           </nav>
-          <a className="lp-login" href="#/login">
-            Log in
+          <a className="lp-login" href={signedIn ? "#/workspace" : "#/login"}>
+            {signedIn ? "Open workspace" : "Log in"}
             <ArrowUpRight size={17} />
           </a>
         </header>
@@ -567,7 +569,11 @@ export default function Landing({ section = "" }: { section?: string }) {
           ExportMate<span>®</span>
         </a>
         <div>
-          <a href="#/login">Log in</a>
+          {signedIn ? (
+            <a href="#/workspace">Open workspace</a>
+          ) : (
+            <a href="#/login">Log in</a>
+          )}
           <a href="#/signup">Create account</a>
           <a href="#/privacy">Privacy</a>
           <a href="#/terms">Terms</a>

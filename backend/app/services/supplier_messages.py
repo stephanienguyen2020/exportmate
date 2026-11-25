@@ -21,7 +21,7 @@ from datetime import UTC, date, datetime
 from sqlalchemy.orm import Session
 
 from app.core import gemini
-from app.core.context import CompanyContext
+from app.core.context import CompanyContext, refuse_in_demo
 from app.core.email import OutgoingEmail, get_email_sender
 from app.core.errors import AppError, not_found_error
 from app.database.models import Order, SupplierMessage, SupplierMessageStatus, User
@@ -298,6 +298,7 @@ def approve_supplier_message(
 def send_supplier_message(
     db: Session, ctx: CompanyContext, message_id: uuid.UUID, idempotency_key: str | None
 ) -> SupplierMessageOut:
+    refuse_in_demo(ctx, "send supplier messages")
     # Locked until commit: a second click waits, then finds the message already sent.
     message = _load(db, ctx, message_id, for_update=True)
     if message.status == SupplierMessageStatus.sent:

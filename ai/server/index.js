@@ -15,6 +15,7 @@ import { readJson, scanBlocked } from "./limits.js";
 import { deleteMemory, listMemories, memoryKeepDays, remembers, userKeyFor } from "./agents/platform.js";
 import { AGENTS_AT, callAgents, streamTurn } from "./agents/remote.js";
 import { demoMapOrders, demoPlaybook } from "./orders.js";
+import { DEMO_NOTE, DEMO_QUESTIONS, demoQuestionsOnly, inDemo } from "./demo-questions.js";
 import { ASSISTANT, SCAN_MODEL } from "./models.js";
 
 const PORT = Number(process.env.PORT || 8080);
@@ -224,6 +225,11 @@ async function streamChat(req, res, body, origin, requestId) {
     log("WARNING", "chat.refused", { requestId, trace, reason: limited });
     return send(res, 429, { error: limited }, origin);
   }
+  const company = await companyKnowledge(req.headers.authorization);
+  if (inDemo(company) && !demoQuestionsOnly(messages)) {
+    log("INFO", "chat.demo_question_refused", { requestId, trace, companyId: company?.company.id ?? null });
+    return send(res, 403, { error: DEMO_NOTE, code: "demo_questions_only" }, origin);
+  }
   res.writeHead(200, {
     "Content-Type": "application/x-ndjson; charset=utf-8",
     "Cache-Control": "no-cache, no-transform",
@@ -232,7 +238,6 @@ async function streamChat(req, res, body, origin, requestId) {
   });
   const write = (event) => res.write(JSON.stringify(event) + "\n");
   try {
-    const company = await companyKnowledge(req.headers.authorization);
     const access = company ? await companyAccess(company.company.id) : ANONYMOUS;
     // The signed-in user: their Agent Platform session and Memory Bank memories are their own.
     const user = company ? (await callerAccount(req.headers.authorization)).body.data?.user ?? null : null;
@@ -423,6 +428,10 @@ async function setSkipOld(skipOld, editor) {
 }
 
 async function route(method, path, body, req, query) {
+  if (method === "GET" && path === "/api/chat/questions") {
+    const company = await companyKnowledge(req.headers.authorization);
+    return [200, { questions: DEMO_QUESTIONS, restricted: inDemo(company), note: DEMO_NOTE }];
+  }
   if (method === "GET" && path === "/api/audits") return sessionAudits(query, await readerAccess(req));
   const a = path.match(/^\/api\/audits\/([\w-]{1,40})$/);
   if (method === "GET" && a) return oneAudit(a[1], query, await readerAccess(req));

@@ -17,7 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { AccountSettings } from "../Account";
-import { placeCode, routeStops } from "../account-store";
+import { openDemo, placeCode, routeStops } from "../account-store";
 import ErrorBoundary from "../ErrorBoundary";
 import WorkspaceSearch from "../Search";
 import Tour, { tourDone } from "../Tour";
@@ -245,6 +245,8 @@ export default function Workspace() {
     setToastState(text ? { text, error } : null);
   const ws = useWorkspace(notify);
   const { live, profile, exposed } = ws;
+  // A demo visitor's own sandbox: connected, with every feature, on the demo company's data.
+  const sandbox = Boolean(ws.account?.company?.demoExpiresAt);
   const [route, setRoute] = useState(currentRoute);
   const [section, ...rest] = route.split("/");
   const sub = rest.join("/");
@@ -314,7 +316,8 @@ export default function Workspace() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <a className="brand" href="#/">
+        {/* The demo's logo leads to the landing page; an account's, to its overview. */}
+        <a className="brand" href={!live || sandbox ? "#/" : "#/workspace"}>
           <span className="brand-symbol">
             E<ArrowUpRight size={21} />
           </span>
@@ -424,7 +427,7 @@ export default function Workspace() {
               }}
             />
             <span className="demo-badge">
-              {live ? "CONNECTED WORKSPACE" : "DEMO WORKSPACE"}
+              {live && !sandbox ? "CONNECTED WORKSPACE" : "DEMO WORKSPACE"}
             </span>
             {!live && (
               <div
@@ -508,10 +511,16 @@ export default function Workspace() {
             <section className="panel" role="alert">
               <h2>Couldn’t load your workspace.</h2>
               <p>{ws.loadError}</p>
-              <Button onClick={() => void ws.refresh()}>Try again</Button>
-              <a className="text-link" href="#/login">
-                Sign in again
-              </a>
+              {ws.loadErrorCode === "demo_expired" ? (
+                <Button onClick={() => void openDemo()}>Open the demo again</Button>
+              ) : (
+                <>
+                  <Button onClick={() => void ws.refresh()}>Try again</Button>
+                  <a className="text-link" href="#/login">
+                    Sign in again
+                  </a>
+                </>
+              )}
             </section>
           ) : (
             <ErrorBoundary resetKey={route}>
@@ -546,7 +555,9 @@ export default function Workspace() {
             </span>
             <span>Trade, with perspective.</span>
             <span>
-              {live
+              {sandbox
+                ? "YOUR DEMO SANDBOX · FICTIONAL COMPANY, REAL ANALYSIS"
+                : live
                 ? "COMPANY DATA · ANALYSED AGAINST YOUR MARKET CHECKLISTS"
                 : "FICTIONAL DEMO DATA · NO LIVE MONITORING"}
             </span>

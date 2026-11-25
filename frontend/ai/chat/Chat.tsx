@@ -13,11 +13,13 @@ import {
 } from "lucide-react";
 import {
   askAgent,
+  chatQuestions,
   downloadJson,
   sessionAudits,
   sessionId,
   type Audit,
   type AuditStep,
+  type ChatQuestions,
   type Citation,
   type Message,
 } from "./agent-client";
@@ -39,12 +41,26 @@ export function clearChat() {
   sessionId(true);
   window.dispatchEvent(new Event(RESET_EVENT));
 }
-const suggestions = [
-  "Which orders need action, and why?",
-  "What did the latest news scan flag?",
-  "Which stock items have no origin trace on file?",
-  "How do I import my orders?",
-];
+// The suggested questions come from the AI service, which only takes these in the demo.
+function useChatQuestions() {
+  const [value, setValue] = useState<ChatQuestions | null>(null);
+  useEffect(() => {
+    let current = true;
+    const load = () =>
+      chatQuestions()
+        .then((v) => current && setValue(v))
+        // Without them the chat still works; the AI service refuses what the demo can't ask.
+        .catch(() => current && setValue({ questions: [], restricted: false, note: "" }));
+    load();
+    // Signing in or out changes what may be asked.
+    window.addEventListener(RESET_EVENT, load);
+    return () => {
+      current = false;
+      window.removeEventListener(RESET_EVENT, load);
+    };
+  }, []);
+  return value;
+}
 
 function load(): Message[] {
   try {
@@ -268,11 +284,22 @@ function useConversation(onAudit?: () => void) {
 
 function Conversation({ autoFocus, onAudit }: { autoFocus?: boolean; onAudit?: () => void }) {
   const { messages, busy, steps, error, ask } = useConversation(onAudit);
+  const chat = useChatQuestions();
+  const restricted = chat?.restricted ?? false;
   const [draft, setDraft] = useState("");
   const end = useRef<HTMLDivElement>(null);
   useEffect(() => {
     end.current?.scrollIntoView({ block: "end" });
   }, [messages, busy, steps]);
+  const suggest = (
+    <div className="chat-suggest">
+      {chat?.questions.map((q) => (
+        <button key={q} type="button" disabled={busy} onClick={() => ask(q)}>
+          {q}
+        </button>
+      ))}
+    </div>
+  );
   const submit = (e?: React.FormEvent) => {
     e?.preventDefault();
     ask(draft);
@@ -287,13 +314,7 @@ function Conversation({ autoFocus, onAudit }: { autoFocus?: boolean; onAudit?: (
               Ask about your stock, today's news alerts, export rules, or how to use ExportMate. Every answer cites its
               sources and comes with an audit trail.
             </p>
-            <div className="chat-suggest">
-              {suggestions.map((s) => (
-                <button key={s} type="button" onClick={() => ask(s)}>
-                  {s}
-                </button>
-              ))}
-            </div>
+            {!restricted && suggest}
           </div>
         )}
         {messages.map((m, i) =>
@@ -311,8 +332,15 @@ function Conversation({ autoFocus, onAudit }: { autoFocus?: boolean; onAudit?: (
             {error}
           </div>
         )}
+        {/* In the demo the questions stay offered after each answer: they're all it takes. */}
+        {restricted && !busy && suggest}
         <div ref={end} />
       </div>
+      {restricted ? (
+        <p className="chat-demo-note" role="note">
+          {chat?.note} <a href="#/login">Sign in</a> · <a href="#/signup">Create an account</a>
+        </p>
+      ) : (
       <form className="chat-input" onSubmit={submit}>
         <textarea
           value={draft}
@@ -327,10 +355,11 @@ function Conversation({ autoFocus, onAudit }: { autoFocus?: boolean; onAudit?: (
             if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) submit(e);
           }}
         />
-        <button type="submit" disabled={busy || !draft.trim()} aria-label="Send">
+        <button type="submit" disabled={busy || !chat || !draft.trim()} aria-label="Send">
           <Send size={17} />
         </button>
       </form>
+      )}
       <div className="chat-foot">
         <span>Gemini agent on Vertex AI · answers are logged for audit; verify rules.</span>
       </div>

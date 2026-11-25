@@ -38,6 +38,7 @@ per-market checklists, sample satellite observations) comes from `app/seed_data/
 ```sh
 uv run python -m app.seed_reference_data   # also run by seed_demo_data and by deploy.sh
 uv run python -m app.cleanup_imports --older-than-days 30   # delete uploads never committed (run daily)
+uv run python -m app.cleanup_demos   # delete expired demo sandboxes (run daily)
 ```
 
 The demo seed adds the demo company's suppliers, their documents and its sites

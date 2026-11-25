@@ -48,6 +48,8 @@ class Company(Base):
     website: Mapped[str | None] = mapped_column(String(300))
     founded_year: Mapped[int | None] = mapped_column(Integer)
     team_size: Mapped[str | None] = mapped_column(String(20))  # a band, e.g. "51-200"
+    # Set for a demo visitor's sandbox (services/demo.py): it is deleted after this time.
+    demo_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     created_at: Mapped[datetime] = created_column()
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False

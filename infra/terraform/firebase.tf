@@ -1,5 +1,5 @@
-# Firebase Auth (email + password, and Google once an OAuth client is set) and a web app whose
-# config the frontend uses.
+# Firebase Auth (email + password, anonymous for demo visitors, and Google once an OAuth client
+# is set) and a web app whose config the frontend uses.
 
 resource "google_firebase_project" "default" {
   provider = google-beta
@@ -25,6 +25,12 @@ resource "google_identity_platform_config" "auth" {
     email {
       enabled           = true
       password_required = true
+    }
+
+    # "Explore the demo": each visitor signs in anonymously and gets their own sandbox copy
+    # of the demo company (backend app/services/demo.py).
+    anonymous {
+      enabled = true
     }
   }
 

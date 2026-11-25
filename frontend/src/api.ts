@@ -26,6 +26,8 @@ export type Account = {
     website: string | null;
     foundedYear: number | null;
     teamSize: string | null;
+    // A demo visitor's sandbox, deleted after this time; null for a real company.
+    demoExpiresAt?: string | null;
     updatedAt: string;
   } | null;
   role: "owner" | "editor" | "viewer" | null;
@@ -974,6 +976,9 @@ export function cacheAccount(account: Account): Profile {
 export const api = {
   me: (signal?: AbortSignal) =>
     request<Account>("/me", { signal }).then((r) => r.data),
+  /** The demo visitor's own sandbox of the demo company, opened on the first call. */
+  openDemo: () =>
+    request<Account>("/demo", { method: "POST" }).then((r) => r.data),
   updateMe: (p: Pick<Profile, "name" | "alerts" | "digest">) =>
     request<Account>("/me", { method: "PATCH", body: JSON.stringify(p) }).then(
       (r) => r.data,

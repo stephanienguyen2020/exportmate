@@ -3,7 +3,14 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.core.auth import CurrentClaims, CurrentUser, OwnerContext, ViewerContext, revoke_sessions
+from app.core.auth import (
+    CurrentClaims,
+    CurrentUser,
+    OwnerContext,
+    VerifiedUser,
+    ViewerContext,
+    revoke_sessions,
+)
 from app.database.models import Company, Role, User
 from app.database.session import get_db
 from app.schemas.account import (
@@ -53,7 +60,7 @@ def logout_everywhere(claims: CurrentClaims):
 
 
 @router.post("/onboarding", response_model=SuccessResponse[AccountOut], status_code=201)
-def complete_onboarding(payload: OnboardingIn, user: CurrentUser, db: Db):
+def complete_onboarding(payload: OnboardingIn, user: VerifiedUser, db: Db):
     company, role = accounts.onboard_user(db, user, payload)
     return success_response(_account_response(user, company, role))
 

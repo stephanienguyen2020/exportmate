@@ -4,7 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.core.auth import CurrentUser, OwnerContext, ViewerContext
+from app.core.auth import CurrentUser, OwnerContext, VerifiedUser, ViewerContext
 from app.core.config import get_settings
 from app.core.rate_limit import RateLimiter
 from app.database.session import get_db
@@ -71,7 +71,7 @@ def list_received_invites(user: CurrentUser, db: Db):
 
 
 @router.post("/me/invites/{invite_id}/accept", response_model=SuccessResponse[AccountOut])
-def accept_invite(invite_id: uuid.UUID, user: CurrentUser, db: Db):
+def accept_invite(invite_id: uuid.UUID, user: VerifiedUser, db: Db):
     """Join the inviting company with the invitation's role, instead of onboarding."""
     company, role = member_service.accept_invite(db, user, invite_id)
     return success_response(
@@ -85,6 +85,6 @@ def accept_invite(invite_id: uuid.UUID, user: CurrentUser, db: Db):
 
 
 @router.delete("/me/invites/{invite_id}", response_model=SuccessResponse[dict])
-def decline_invite(invite_id: uuid.UUID, user: CurrentUser, db: Db):
+def decline_invite(invite_id: uuid.UUID, user: VerifiedUser, db: Db):
     member_service.decline_invite(db, user, invite_id)
     return success_response({"deleted": True})

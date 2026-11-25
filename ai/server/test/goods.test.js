@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { MAX_GOODS, aboutCompany, companyGoods, goodsFingerprint, goodsId, profileProducts } from "../goods.js";
+import { MAX_GOODS, aboutCompany, companyGoods, goodsFingerprint, goodsId, profileProducts, scanTargets } from "../goods.js";
 
 const company = {
   name: "Saigon Knit Co.",
@@ -69,4 +69,19 @@ test("goods are capped, and the same goods give the same fingerprint", () => {
 test("a sparse profile still describes the company", () => {
   assert.equal(aboutCompany({ businessRole: "", origin: "", destination: "" }), "a company");
   assert.deepEqual(companyGoods(null, []), { profile: { company: "", about: "" }, items: [] });
+});
+
+test("the scan reads real companies first and drops expired demo sandboxes", () => {
+  const now = Date.parse("2026-11-24T12:00:00Z");
+  const sandbox = { id: "s", demoExpiresAt: "2026-11-25T00:00:00Z" };
+  const expired = { id: "e", demoExpiresAt: "2026-11-24T00:00:00Z" };
+  const real = { id: "r" };
+  const { targets, expired: gone } = scanTargets([sandbox, expired, real], now);
+  assert.deepEqual(targets.map((g) => g.id), ["r", "s"]);
+  assert.deepEqual(gone.map((g) => g.id), ["e"]);
+});
+
+test("goods carry a demo sandbox's expiry", () => {
+  assert.equal(companyGoods({ name: "A", demoExpiresAt: "2026-11-25T00:00:00Z" }).demoExpiresAt, "2026-11-25T00:00:00Z");
+  assert.equal("demoExpiresAt" in companyGoods({ name: "A" }), false);
 });

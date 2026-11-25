@@ -12,6 +12,7 @@ from app.api import (
     audit_log,
     company_sites,
     cost_settings,
+    demo,
     graph_sync,
     health,
     hs_suggestions,
@@ -119,6 +120,7 @@ def create_app() -> FastAPI:
     for module in (
         health,
         account,
+        demo,
         orders,
         imports,
         playbook,

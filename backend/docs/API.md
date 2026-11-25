@@ -39,6 +39,7 @@ What each endpoint does and where the app uses it. The live contract (exact fiel
 | `PATCH /me` | signed in | Account settings |
 | `POST /me/logout` | signed in | `#/logout` |
 | `POST /onboarding` | signed in, no company | Onboarding wizard |
+| `POST /demo` | demo visitor (anonymous) | "Explore the demo" |
 | `PATCH /company` | owner | Account settings (About company) |
 | `GET /company/knowledge` | viewer | `ai/server` chat only |
 | **Team** | | |
@@ -197,6 +198,15 @@ Creates the company and makes the caller its `owner`. Returns `201` with the `GE
 - `409 already_onboarded` if the user already has a company. Double submits are safe: the user row is locked.
 
 Last step of the onboarding wizard (`frontend/src/Account.tsx`).
+
+### `POST /demo` (demo visitor)
+Opens the caller's own sandbox: a copy of the demo company (Binh Duong Wood Co.) with its profile, playbook rules, suppliers and sites, but no orders. The visitor imports the sample orders (`frontend/public/samples/exportmate-sample-orders.csv`) through `POST /imports`. Returns `201` with the `GET /me` shape; `company.demoExpiresAt` is when the sandbox is deleted (`DEMO_SANDBOX_HOURS`, default 24). Calling it again returns the same sandbox, or a new one once it has expired.
+- Only for a Firebase anonymous sign-in (locally, the token `dev-anonymous:<id>`). A signed-in account gets `409 not_demo_visitor`.
+- `429 rate_limited` after `DEMO_SANDBOXES_PER_HOUR` (default 10) new sandboxes from one address.
+- A demo visitor can use every other endpoint inside their sandbox as its owner, except: `POST /onboarding` and accepting or declining invites (`403 demo_visitor`), and anything that sends email (invites, report emails, supplier messages: `403 demo_no_email`). After it expires, every workspace call returns `401 demo_expired`.
+- Expired sandboxes are deleted a few at a time when a new one opens (`DEMO_CLEANUP_BATCH`), and all of them by `python -m app.cleanup_demos`.
+
+Called by `openDemo()` (`frontend/src/account-store.ts`). If it fails, the browser-only demo opens instead.
 
 ### `PATCH /company` (owner)
 Changes only the fields sent. Optional fields (`website`, `foundedYear`, `teamSize`, and `products`/`materials`/`certifications` with `""`) are cleared with `null`. Required fields (`name`, `businessRole`, `origin`, `transit`, `destination`, `description`) can't be set to `null`. `transit` replaces all stops.

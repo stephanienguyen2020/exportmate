@@ -28,7 +28,7 @@ from fpdf import FPDF, FontFace
 from sqlalchemy.orm import Session
 
 from app.core import clock
-from app.core.context import CompanyContext
+from app.core.context import CompanyContext, refuse_in_demo
 from app.core.email import EmailAttachment, OutgoingEmail, get_email_sender
 from app.core.errors import AppError, not_found_error
 from app.core.news_alerts import fetch_news_alerts
@@ -1179,6 +1179,7 @@ def email_report_draft(
     message: str | None,
     idempotency_key: str | None,
 ) -> ReportEmailOut:
+    refuse_in_demo(ctx, "email reports")
     # Locked until commit: a second click waits, then finds the report already sent.
     draft = _load_draft(db, ctx, draft_id, for_update=True)
     if draft.sent_at:

@@ -108,6 +108,23 @@
 .chat-suggest button:hover {
   border-color: #243d33;
 }
+.chat-suggest button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.chat-demo-note {
+  margin: 0;
+  padding: 12px 16px;
+  border-top: 1px solid #dde2d7;
+  background: #f4f6ef;
+  color: #243c32;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.chat-demo-note a {
+  color: inherit;
+  font-weight: 600;
+}
 .chat-msg {
   max-width: 88%;
   padding: 10px 13px;

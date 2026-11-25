@@ -95,6 +95,12 @@ class Settings(BaseSettings):
     solution_valid_days: int = 90
     # How far ahead Rule watch looks for checklist lines that take effect or change.
     rule_watch_days: int = 90
+    # Demo sandboxes (services/demo.py): each visitor gets a copy of the demo company for this
+    # long, and one address may open this many per hour (counted per instance).
+    demo_sandbox_hours: int = 24
+    demo_sandboxes_per_hour: int = 10
+    # Expired sandboxes deleted each time a new one opens; cleanup_demos.py deletes the rest.
+    demo_cleanup_batch: int = 20
     # The most orders one status change by hand may set at once (PATCH /orders/status).
     max_status_change_orders: int = 500
 

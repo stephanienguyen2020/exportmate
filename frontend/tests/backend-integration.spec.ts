@@ -353,6 +353,7 @@ async function fixture(
     viewer?: boolean;
     onboarding?: boolean;
     twoOrders?: boolean; // IMPORTED-1 is listed without an import first
+    demoFails?: boolean; // POST /demo can't open a sandbox
   } = {},
 ) {
   const requests: {
@@ -448,6 +449,25 @@ async function fixture(
     } else if (path === "/company") {
       me.company = { ...me.company, ...body };
       data = me.company;
+    } else if (path === "/demo") {
+      if (options.demoFails) {
+        await route.fulfill({
+          status: 429,
+          json: { error: { code: "rate_limited", message: "Too many demo sandboxes" } },
+        });
+        return;
+      }
+      me = {
+        user: { ...account.user, email: "", name: "Ms. Lan" },
+        role: "owner",
+        onboarded: true,
+        company: {
+          ...account.company,
+          name: "Binh Duong Wood Co.",
+          demoExpiresAt: "2999-01-01T00:00:00Z",
+        },
+      } as any;
+      data = me;
     } else if (path === "/onboarding") {
       me = {
         ...me,
@@ -1233,7 +1253,7 @@ test("API errors never fall back to sample orders; viewer mutations are disabled
   await expect(page.getByText("Only owners and editors can email reports.")).toBeVisible();
 });
 
-test("new accounts onboard through the API and the sample demo stays local", async ({
+test("new accounts onboard through the API, and the demo opens a sandbox", async ({
   page,
 }) => {
   const requests = await fixture(page, { onboarding: true });
@@ -1254,19 +1274,40 @@ test("new accounts onboard through the API and the sample demo stays local", asy
   await page.goto("/#/logout");
   await expect(page.getByText("Your workspace is saved.")).toBeVisible();
   expect(requests.some((r) => r.path === "/me/logout")).toBeTruthy();
-  const count = requests.length;
   await page.goto("/#/login");
   await page.getByRole("button", { name: /demo/i }).click();
   await expect(page.getByText("DEMO WORKSPACE")).toBeVisible();
-  // Signing out forgot the account's cached profile; the demo shows its own company.
-  expect(await page.evaluate(() => localStorage.getItem("em-profile"))).toBeNull();
+  // The demo is the visitor's own sandbox on the backend, opened as an anonymous visitor.
+  const opened = requests.find((r) => r.path === "/demo");
+  expect(opened?.method).toBe("POST");
+  expect(opened?.auth).toMatch(/^Bearer dev-anonymous:/);
   await expect(page.getByText("Binh Duong Wood Co.").first()).toBeVisible();
   await expect(page.getByText("New Company", { exact: true })).toHaveCount(0);
+});
+
+test("a demo visitor imports the sample orders into their sandbox", async ({ page }) => {
+  const requests = await fixture(page, { onboarding: true });
+  await page.goto("/#/login");
+  await page.getByRole("button", { name: /demo/i }).click();
+  await expect(page.getByText("DEMO WORKSPACE")).toBeVisible();
+  await page.goto("/#/workspace/data");
+  await page.getByRole("button", { name: "Import the sample orders" }).click();
+  await expect
+    .poll(() => requests.some((r) => r.path === "/imports" && r.method === "POST"))
+    .toBeTruthy();
+});
+
+test("the browser demo opens when a sandbox can't be", async ({ page }) => {
+  const requests = await fixture(page, { demoFails: true });
+  await page.goto("/#/login");
+  await page.getByRole("button", { name: /demo/i }).click();
+  await expect(page.getByText("DEMO WORKSPACE")).toBeVisible();
+  expect(requests.map((r) => r.path)).toEqual(["/demo"]);
   await page.goto("/#/workspace/orders");
   await expect(
     page.getByRole("button", { name: "PO-2291", exact: true }),
   ).toBeVisible();
-  expect(requests.length).toBe(count);
+  expect(requests.map((r) => r.path)).toEqual(["/demo"]);
 });
 
 // News sources live on the AI service and are shared by every workspace, so
@@ -1429,7 +1470,7 @@ test("Scan now keeps the proxy's error when no scan started", async ({ page }) =
   await expect(page.locator(".news-scanbar").getByRole("status")).toHaveText("Request failed (502)", { timeout: 20_000 });
 });
 
-test("viewers and the sample demo can't change news sources", async ({
+test("viewers can't change news sources, a demo visitor can", async ({
   page,
 }) => {
   await fixture(page, { viewer: true });
@@ -1452,16 +1493,13 @@ test("viewers and the sample demo can't change news sources", async ({
   await page.goto("/#/login");
   await page.getByRole("button", { name: /demo/i }).click();
   await expect(page.getByText("DEMO WORKSPACE")).toBeVisible();
+  expect(changes).toHaveLength(0);
+  // The demo is the visitor's own sandbox, which they own: they may change its sources.
   await openSources(page);
   await expect(
-    page.getByText(
-      "Sign in to a company workspace to add or switch off sources.",
-    ),
-  ).toBeVisible();
-  await expect(
     page.getByRole("checkbox", { name: "Read Timber news" }),
-  ).toBeDisabled();
-  expect(changes).toHaveLength(0);
+  ).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Add source" })).toBeVisible();
 });
 
 test("a failed change shows an error toast, not a success one", async ({
@@ -2541,4 +2579,51 @@ test("a chain admin reviews a draft chain version and publishes it", async ({ pa
   await expect(review).toContainText("No drafts waiting.");
   expect(publishBody).toEqual({ note: "Lecithin is in Codex." });
   await expect(page.getByRole("heading", { name: /Soya · version 2/ })).toBeVisible();
+});
+
+test("the demo's logo leads to the landing page, and back to the same sandbox", async ({ page }) => {
+  const requests = await fixture(page, { onboarding: true });
+  await page.goto("/#/login");
+  await page.getByRole("button", { name: /demo/i }).click();
+  await expect(page.getByText("DEMO WORKSPACE")).toBeVisible();
+  const visitor = requests.find((r) => r.path === "/demo")?.auth;
+  await page.locator("a.brand").click();
+  await expect(page).toHaveURL(/#\/$/);
+  // Still in the demo: the landing page offers the workspace, not a sign-in.
+  await expect(page.getByRole("link", { name: /Log in/ })).toHaveCount(0);
+  // Opening the demo again, the visitor keeps their sandbox.
+  await page.getByRole("button", { name: "Explore demo" }).click();
+  await expect(page.getByText("DEMO WORKSPACE")).toBeVisible();
+  const opened = requests.filter((r) => r.path === "/demo").map((r) => r.auth);
+  expect(new Set(opened)).toEqual(new Set([visitor]));
+});
+
+test("a signed-in account's logo leads to its overview", async ({ page }) => {
+  await fixture(page);
+  await login(page);
+  await expect(page.getByText("CONNECTED WORKSPACE")).toBeVisible();
+  await page.goto("/#/workspace/data");
+  await page.locator("a.brand").click();
+  await expect(page).toHaveURL(/#\/workspace$/);
+  await expect(page.getByText("CONNECTED WORKSPACE")).toBeVisible();
+});
+
+test("a signed-in company asks the assistant its own questions", async ({ page }) => {
+  await fixture(page);
+  const questions: (string | undefined)[] = [];
+  await page.route("**/api/chat/questions", (route) => {
+    questions.push(route.request().headers().authorization);
+    return route.fulfill({
+      json: { questions: ["How do I import my orders?"], restricted: false, note: "Demo note" },
+    });
+  });
+  await login(page);
+  await expect(page.getByText("CONNECTED WORKSPACE")).toBeVisible();
+  await page.getByRole("button", { name: "Open assistant" }).click();
+  const panel = page.getByRole("dialog", { name: "ExportMate assistant" });
+  await expect(panel.getByLabel("Message")).toBeVisible();
+  await expect(panel.getByRole("button", { name: "How do I import my orders?" })).toBeVisible();
+  await expect(panel.getByText("Demo note")).toHaveCount(0);
+  // The service decides from the caller's own token.
+  expect(questions[0]).toMatch(/^Bearer dev:/);
 });

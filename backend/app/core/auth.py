@@ -3,6 +3,7 @@
 import logging
 import threading
 import time
+from datetime import UTC, datetime
 from typing import Annotated
 
 import firebase_admin
@@ -32,8 +33,13 @@ log = logging.getLogger(__name__)
 
 
 def _verify_dev(token: str) -> TokenClaims:
-    # "dev:lan@example.com" → verified user; "dev-unverified:..." → unverified.
+    # "dev:lan@example.com" → verified user; "dev-unverified:..." → unverified;
+    # "dev-anonymous:<id>" → a demo visitor, as Firebase's anonymous sign-in.
     prefix, _, email = token.partition(":")
+    if prefix == "dev-anonymous" and email:
+        return TokenClaims(
+            uid=f"dev-anonymous:{email}", email="", email_verified=False, name="", anonymous=True
+        )
     if prefix not in ("dev", "dev-unverified") or "@" not in email:
         raise AppError(401, "unauthenticated", "Invalid dev token. Use 'dev:<email>'.")
     return TokenClaims(
@@ -89,6 +95,7 @@ def _verify_firebase(token: str) -> TokenClaims:
         email=decoded.get("email", ""),
         email_verified=bool(decoded.get("email_verified")),
         name=decoded.get("name", ""),
+        anonymous=decoded.get("firebase", {}).get("sign_in_provider") == "anonymous",
     )
 
 
@@ -113,7 +120,8 @@ def current_claims(authorization: Annotated[str | None, Header()] = None) -> Tok
     if scheme.lower() != "bearer" or not token:
         raise AppError(401, "unauthenticated", "Sign in required.")
     claims = verify_token(token)
-    if not claims.email_verified:
+    # A demo visitor has no email; current_context keeps them inside their sandbox.
+    if not claims.email_verified and not claims.anonymous:
         raise AppError(403, "email_not_verified", "Verify your email address first.")
     return claims
 
@@ -130,15 +138,32 @@ def current_user(
     return user
 
 
+def verified_user(
+    claims: Annotated[TokenClaims, Depends(current_claims)],
+    user: Annotated[User, Depends(current_user)],
+) -> User:
+    """A signed-in account, not a demo visitor (creating a company, accepting an invite)."""
+    if claims.anonymous:
+        raise AppError(403, "demo_visitor", "Create an account to do this.")
+    return user
+
+
 def current_context(
     request: Request,
+    claims: Annotated[TokenClaims, Depends(current_claims)],
     user: Annotated[User, Depends(current_user)],
     db: Annotated[Session, Depends(get_db)],
 ) -> CompanyContext:
     found = accounts.find_user_company_membership(db, user.id)
     if not found:
+        if claims.anonymous:
+            raise AppError(403, "demo_required", "Open the demo to start a sandbox.")
         raise AppError(403, "onboarding_required", "Finish onboarding to create your company.")
     membership, company = found
+    if company.demo_expires_at is not None and company.demo_expires_at <= datetime.now(UTC):
+        raise AppError(401, "demo_expired", "This demo has ended. Open the demo again.")
+    if claims.anonymous and company.demo_expires_at is None:  # never set up that way
+        raise AppError(403, "forbidden", "A demo visitor can only use a demo sandbox.")
     request.state.company_id = str(company.id)
     return CompanyContext(user=user, company=company, role=membership.role)
 
@@ -156,6 +181,7 @@ def require_role(role: Role):
 
 
 CurrentUser = Annotated[User, Depends(current_user)]
+VerifiedUser = Annotated[User, Depends(verified_user)]
 CurrentClaims = Annotated[TokenClaims, Depends(current_claims)]
 ViewerContext = Annotated[CompanyContext, Depends(require_role(Role.viewer))]
 EditorContext = Annotated[CompanyContext, Depends(require_role(Role.editor))]

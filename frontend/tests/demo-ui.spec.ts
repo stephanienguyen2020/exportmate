@@ -330,6 +330,21 @@ test("the demo never shows a signed-in account's profile", async ({ page }) => {
   await expect(page.getByText("Real Co")).toHaveCount(0);
 });
 
+// The AI service's chat questions: in the demo, the only ones it takes.
+const DEMO_QUESTIONS = [
+  "Which orders need action, and why?",
+  "What did the latest news scan flag?",
+  "Which stock items have no origin trace on file?",
+  "How do I import my orders?",
+];
+const DEMO_NOTE =
+  "In the demo you can ask the questions above. Sign in or create an account to ask your own.";
+async function demoChatQuestions(page: Page, restricted = true) {
+  await page.route("**/api/chat/questions", (route) =>
+    route.fulfill({ json: { questions: DEMO_QUESTIONS, restricted, note: DEMO_NOTE } }),
+  );
+}
+
 test("New chat clears the conversation and starts a new session", async ({ page }) => {
   const sent: any[] = [];
   await page.route("**/api/chat", async (route) => {
@@ -346,20 +361,18 @@ test("New chat clears the conversation and starts a new session", async ({ page 
     audits.push(new URL(route.request().url()).searchParams.get("session") || "");
     return route.fulfill({ json: { audits: [] } });
   });
+  await demoChatQuestions(page);
   await openDemo(page, "#/workspace/orders");
   await page.getByRole("button", { name: "Open assistant" }).click();
   const panel = page.getByRole("dialog", { name: "ExportMate assistant" });
-  await panel.getByLabel("Message").fill("First question");
-  await page.keyboard.press("Enter");
+  await panel.getByRole("button", { name: DEMO_QUESTIONS[0] }).click();
   await expect(panel.locator(".chat-msg.model")).toHaveText("Answer 1.");
 
   await panel.getByRole("button", { name: "New chat" }).click();
   await expect(panel.locator(".chat-msg")).toHaveCount(0);
-  await expect(panel.getByRole("button", { name: "How do I import my orders?" })).toBeVisible();
-  await panel.getByLabel("Message").fill("Second question");
-  await page.keyboard.press("Enter");
+  await panel.getByRole("button", { name: "How do I import my orders?" }).click();
   await expect(panel.locator(".chat-msg.model")).toHaveText("Answer 2.");
-  expect(sent[1].messages).toEqual([{ role: "user", text: "Second question" }]);
+  expect(sent[1].messages).toEqual([{ role: "user", text: "How do I import my orders?" }]);
   expect(sent[1].sessionId).not.toBe(sent[0].sessionId);
 
   // The full-screen page starts one too, and its audit trail follows the new session.
@@ -387,10 +400,10 @@ test("the assistant gets the demo's orders and playbook, and shows code", async 
         }) + "\n",
     });
   });
+  await demoChatQuestions(page);
   await openDemo(page, "#/workspace/orders");
   await page.getByRole("button", { name: "Open assistant" }).click();
-  await page.getByLabel("Message").fill("Why does PO-2291 need action?");
-  await page.keyboard.press("Enter");
+  await page.getByRole("button", { name: DEMO_QUESTIONS[0] }).click();
   await expect(page.locator(".chat-msg.model code")).toHaveText("hsCode");
   const po2291 = sent.demo.orders.find((o: any) => o.id === "PO-2291");
   expect(po2291).toMatchObject({ status: "exposed", market: "EU", check: { status: "missing" } });
@@ -401,6 +414,43 @@ test("the assistant gets the demo's orders and playbook, and shows code", async 
     "Supplier",
     "Watchlist",
   ]);
+});
+
+test("the demo's assistant takes only its questions and says to sign in for more", async ({ page }) => {
+  await demoChatQuestions(page);
+  let asked = 0;
+  await page.route("**/api/chat", async (route) => {
+    asked++;
+    await route.fulfill({
+      contentType: "application/x-ndjson",
+      body: JSON.stringify({ type: "done", reply: `Answer ${asked}.`, citations: [], audit: null }) + "\n",
+    });
+  });
+  await openDemo(page, "#/workspace");
+  await page.getByRole("button", { name: "Open assistant" }).click();
+  const panel = page.getByRole("dialog", { name: "ExportMate assistant" });
+  // No free text: the questions, and a note that an account asks its own.
+  await expect(panel.getByText(DEMO_NOTE)).toBeVisible();
+  await expect(panel.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "#/login");
+  await expect(panel.getByRole("link", { name: "Create an account" })).toHaveAttribute("href", "#/signup");
+  await expect(panel.getByLabel("Message")).toHaveCount(0);
+  await panel.getByRole("button", { name: DEMO_QUESTIONS[1] }).click();
+  await expect(panel.locator(".chat-msg.model")).toHaveText("Answer 1.");
+  // After an answer the questions are still there to ask.
+  await panel.getByRole("button", { name: DEMO_QUESTIONS[2] }).click();
+  await expect(panel.locator(".chat-msg.model").last()).toHaveText("Answer 2.");
+});
+
+test("the assistant shows the service's refusal of a question the demo can't ask", async ({ page }) => {
+  await demoChatQuestions(page);
+  await page.route("**/api/chat", (route) =>
+    route.fulfill({ status: 403, json: { error: DEMO_NOTE, code: "demo_questions_only" } }),
+  );
+  await openDemo(page, "#/workspace");
+  await page.getByRole("button", { name: "Open assistant" }).click();
+  const panel = page.getByRole("dialog", { name: "ExportMate assistant" });
+  await panel.getByRole("button", { name: DEMO_QUESTIONS[3] }).click();
+  await expect(panel.locator(".chat-error")).toHaveText(DEMO_NOTE);
 });
 
 test("news alerts filter by severity, text, source, stock item and date", async ({

@@ -8,8 +8,9 @@ of **Google ADK agents** on **Gemini Enterprise Agent Platform** answers questio
 for every fact; and a **knowledge graph** traces how a news story about a raw material reaches a
 finished order. 
 
-🔗 Live: [https://exportmate-web-3v6cd2xhpq-as.a.run.app/](https://exportmate-web-3v6cd2xhpq-as.a.run.app/). "Explore the demo" opens a sample
-workspace in the browser with no account; signing in opens a company workspace.
+🔗 Live: [https://exportmate-web-3v6cd2xhpq-as.a.run.app/](https://exportmate-web-3v6cd2xhpq-as.a.run.app/). "Explore the demo" opens your own
+sandbox copy of the demo company, with every feature and no account (import the sample orders from
+the Data room); signing in opens a company workspace.
 
 **Try it** with the demo company, Binh Duong Wood Co. (a Vietnamese plywood and furniture exporter):
 sign in at [https://exportmate-web-3v6cd2xhpq-as.a.run.app/#/login](https://exportmate-web-3v6cd2xhpq-as.a.run.app/#/login) with
@@ -99,7 +100,9 @@ trade map, News watch and the assistant with the knowledge graph. Please don't c
 - Sign-in with **Firebase Auth** (email or Google), company workspaces, invites, and owner, editor and
   viewer roles.
 - An **activity log** of every change, exportable as CSV.
-- **Browser demo:** the full workspace in the browser with sample orders, no account needed.
+- **Demo sandbox:** every visitor gets their own copy of the demo company for 24 hours, with every
+  feature and no account (anonymous sign-in); they import the sample orders to see them analysed.
+  If a sandbox can't be opened, the browser-only demo opens instead.
 
 ---
 

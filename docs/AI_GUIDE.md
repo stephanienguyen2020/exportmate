@@ -173,6 +173,7 @@ Viewers can read solutions and notes but not change them. The browser-only demo 
 ### One question to the assistant
 
 1. The browser sends the conversation to `POST /api/chat`, with your sign-in token if you're in a company workspace. The browser demo sends its orders and switched-on playbook rules instead; the service checks and trims them, and a company chat never uses them.
+   In the demo (signed out, or a demo visitor's sandbox) the assistant takes only the suggested questions (`ai/server/demo-questions.js`, served by `GET /api/chat/questions`); any other question gets `403` saying to sign in or create an account, and the chat shows the questions with that note instead of a text box.
 2. With a token, the Cloud Run service fetches your company profile from the company backend (`GET /api/v1/company/knowledge`) using that token, and who you are (`GET /api/v1/me`). The profile is how the assistant knows who it works for.
 3. The service passes the question to the agents on Agent Runtime (`runtime.js`) and relays each step back to your browser as it happens. Your token goes along only so the agents can read your orders and playbook with it; it is never stored.
 4. If the same question was answered against the same data today, that answer is reused (`answer-cache.js`).

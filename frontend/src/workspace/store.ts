@@ -233,6 +233,7 @@ export function useWorkspace(notify: Notify) {
   const [importRun, setImportRun] = useState<AnalysisRun | null>(null);
   const [loading, setLoading] = useState(live);
   const [loadError, setLoadError] = useState("");
+  const [loadErrorCode, setLoadErrorCode] = useState("");
   const [busy, setBusy] = useState(false);
   const mutationRef = useRef(false);
   const workspaceLoad = useRef<AbortController | null>(null);
@@ -247,6 +248,7 @@ export function useWorkspace(notify: Notify) {
     const signal = controller.signal;
     setLoading(true);
     setLoadError("");
+    setLoadErrorCode("");
     try {
       const me = await api.me(signal);
       if (signal.aborted) return;
@@ -273,6 +275,7 @@ export function useWorkspace(notify: Notify) {
       if (signal.aborted) return;
       if (error instanceof ApiError && error.code === "onboarding_required")
         navigate("onboarding");
+      setLoadErrorCode(error instanceof ApiError ? error.code : "");
       setLoadError(errorMessage(error));
     } finally {
       if (!signal.aborted) setLoading(false);
@@ -341,6 +344,7 @@ export function useWorkspace(notify: Notify) {
     ruleFields,
     loading,
     loadError,
+    loadErrorCode,
     busy,
     mutate,
     refresh,

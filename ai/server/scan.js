@@ -13,6 +13,7 @@ import { armor } from "./armor.js";
 import { cleanMentions } from "./mentions.js";
 import { version } from "./policy.js";
 import { log } from "./log.js";
+import { scanTargets } from "./goods.js";
 import { MAX_AGE_DAYS, isShared, itemVisible } from "./access.js";
 import { collectCandidates, companyReading, errorText } from "./candidates.js";
 import { decide } from "./relevance.js";
@@ -222,7 +223,9 @@ async function recentArticles() {
  * this scan's new articles, and on its first scan the recent stored ones too. Returns the alerts.
  */
 async function scanCompanies(scanId, fresh) {
-  const lists = (await list(goodsByCompany.orderBy("updatedAt", "desc").limit(MAX_COMPANIES))).filter((g) => g.items?.length);
+  const { targets, expired } = scanTargets(await list(goodsByCompany.orderBy("updatedAt", "desc").limit(MAX_COMPANIES)));
+  await Promise.all(expired.map((g) => goodsByCompany.doc(g.id).delete())).catch((e) => log("WARNING", "goods.expired_delete_failed", { error: String(e?.message || e) }));
+  const lists = targets.filter((g) => g.items?.length);
   if (!lists.length) return { companies: 0, found: [], failed: 0, error: null };
   const [allSources, settings] = await Promise.all([list(sources), list(companySources)]);
   const sourcesById = new Map(allSources.map((s) => [s.id, s]));

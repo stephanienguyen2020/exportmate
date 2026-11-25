@@ -172,6 +172,16 @@ export function demoWorkspace() {
   };
 }
 
+// The chat's suggested questions. In the demo (signed out, or a demo sandbox) they are the only
+// questions the assistant takes, and `note` says so.
+export type ChatQuestions = { questions: string[]; restricted: boolean; note: string };
+
+export async function chatQuestions(): Promise<ChatQuestions> {
+  const res = await fetch(`${API}/chat/questions`, { headers: await companyAuth() });
+  if (!res.ok) throw new Error(`Couldn't load the suggested questions (${res.status}).`);
+  return res.json();
+}
+
 export async function askAgent(
   messages: Message[],
   onStep: (step: AuditStep) => void,

@@ -14,7 +14,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.context import CompanyContext
+from app.core.context import CompanyContext, refuse_in_demo
 from app.core.email import OutgoingEmail, get_email_sender
 from app.core.errors import AppError
 from app.database.models import Company, CompanyInvite, Role, User
@@ -205,6 +205,7 @@ def _invite_email(ctx: CompanyContext, invite: CompanyInvite) -> OutgoingEmail:
 
 def invite_member(db: Session, ctx: CompanyContext, payload: InviteIn) -> InviteSentOut:
     """Invite an address, or renew (new role, new expiry, email again) an earlier invitation."""
+    refuse_in_demo(ctx, "invite your team")
     if member_queries.get_company_member_by_email(db, ctx.company_id, payload.email):
         raise AppError(409, "already_member", "This person is already in your company.")
     now = datetime.now(UTC)

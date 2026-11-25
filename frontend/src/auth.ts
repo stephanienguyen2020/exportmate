@@ -60,8 +60,24 @@ export async function signInWithGoogle() {
     throw error;
   }
 }
+/**
+ * A demo visitor, with no account: Firebase's anonymous sign-in (locally, a random id). The
+ * backend gives them their own sandbox copy of the demo company (POST /demo).
+ */
+export async function signInAsDemoVisitor() {
+  if (devAuth) {
+    sessionStorage.removeItem("em-dev-email");
+    // The same visitor keeps their sandbox, as with Firebase's anonymous sign-in.
+    if (!sessionStorage.getItem("em-dev-anonymous"))
+      sessionStorage.setItem("em-dev-anonymous", crypto.randomUUID());
+    return;
+  }
+  const { auth, sdk } = await firebase();
+  if (!auth.currentUser?.isAnonymous) await sdk.signInAnonymously(auth);
+}
 export async function signIn(email: string, password: string) {
   if (devAuth) {
+    sessionStorage.removeItem("em-dev-anonymous");
     sessionStorage.setItem("em-dev-email", email);
     return true;
   }
@@ -71,6 +87,7 @@ export async function signIn(email: string, password: string) {
 }
 export async function signUp(name: string, email: string, password: string) {
   if (devAuth) {
+    sessionStorage.removeItem("em-dev-anonymous");
     sessionStorage.setItem("em-dev-email", email);
     return;
   }
@@ -122,6 +139,8 @@ export async function getToken() {
   if (devAuth) {
     const email = sessionStorage.getItem("em-dev-email");
     if (email) return `dev:${email}`;
+    const visitor = sessionStorage.getItem("em-dev-anonymous");
+    if (visitor) return `dev-anonymous:${visitor}`;
   }
   const { auth } = await firebase();
   if (!auth.currentUser)
@@ -130,6 +149,7 @@ export async function getToken() {
 }
 export async function signOutAccount() {
   sessionStorage.removeItem("em-dev-email");
+  sessionStorage.removeItem("em-dev-anonymous");
   if (!firebaseConfigured) return;
   const { auth, sdk } = await firebase();
   await sdk.signOut(auth);

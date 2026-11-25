@@ -160,10 +160,34 @@ export function endSession() {
     sessionStorage.removeItem("em-session");
   } catch {}
 }
-export function openDemo() {
+// The demo: a sandbox copy of the demo company on the backend, so every feature works. If it
+// can't be opened (sign-in not set up, too many demos from this address, backend down), the
+// browser-only demo opens instead.
+let openingDemo = false;
+export async function openDemo() {
+  if (openingDemo) return;
+  openingDemo = true;
   // Back to the workspace page that sent the visitor to sign in, if any.
-  if (startSession()) location.hash = "/" + intendedRoute();
-  else alert("Please enable browser storage to open the demo.");
+  const next = intendedRoute();
+  try {
+    const [{ signInAsDemoVisitor }, { api }] = await Promise.all([
+      import("./auth"),
+      import("./api"),
+    ]);
+    await signInAsDemoVisitor();
+    forgetAccountProfile();
+    await api.openDemo();
+    if (!startSession("api")) throw new Error("Browser storage is off.");
+  } catch (error) {
+    console.warn("Opening the browser demo instead of a sandbox:", error);
+    if (!startSession("demo")) {
+      alert("Please enable browser storage to open the demo.");
+      return;
+    }
+  } finally {
+    openingDemo = false;
+  }
+  location.hash = "/" + next;
 }
 export function navigate(path: string) {
   location.hash = "/" + path;

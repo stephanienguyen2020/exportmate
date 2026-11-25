@@ -39,6 +39,8 @@ class CompanyOut(CamelCaseModel):
     website: str | None
     founded_year: int | None
     team_size: str | None
+    # A demo visitor's sandbox, deleted after this time; null for a real company.
+    demo_expires_at: datetime | None = None
     updated_at: datetime
 
 

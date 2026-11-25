@@ -14,6 +14,9 @@ import { DEFAULT_CURRENCY, MAX_UPLOAD_MB, REQUIRED_COLUMNS } from "../order-csv"
 import type { CheckedImport, Workspace } from "./store";
 import { Button, PageHeading, download, go, plural, type Notify } from "./ui";
 
+// Sample orders for the demo company's suppliers (backend/app/seed_data/demo_company.json).
+const SAMPLE_ORDERS = "/samples/exportmate-sample-orders.csv";
+
 // The CSV template: the columns, with the demo's first sample order as the example row.
 function templateCsv() {
   const columns = [...REQUIRED_COLUMNS, "currency"];
@@ -33,6 +36,8 @@ export default function DataRoom({
   notify: Notify;
 }) {
   const { live, editable, orders } = ws;
+  // A demo sandbox starts without orders: the visitor imports the sample ones.
+  const sandbox = Boolean(ws.account?.company?.demoExpiresAt);
   const [fileName, setFileName] = useState("");
   const [checked, setChecked] = useState<CheckedImport | null>(null);
   const [checking, setChecking] = useState(false);
@@ -69,6 +74,16 @@ export default function DataRoom({
         });
     } finally {
       setChecking(false);
+    }
+  }
+  async function importSample() {
+    try {
+      const response = await fetch(SAMPLE_ORDERS);
+      if (!response.ok) throw new Error(`Couldn't load the sample orders (${response.status}).`);
+      const name = SAMPLE_ORDERS.split("/").pop()!;
+      await checkFile(new File([await response.blob()], name, { type: "text/csv" }));
+    } catch (error) {
+      notify(errorMessage(error), true);
     }
   }
   const commit = () =>
@@ -135,7 +150,14 @@ export default function DataRoom({
               company owner for editor access.
             </p>
           )}
+          {sandbox && (
+            <Button disabled={busy} onClick={() => void importSample()}>
+              <Upload size={17} />
+              Import the sample orders
+            </Button>
+          )}
           <Button
+            kind={sandbox ? "secondary" : ""}
             disabled={busy || !editable}
             onClick={() => fileRef.current?.click()}
           >
@@ -165,7 +187,7 @@ export default function DataRoom({
           </button>
           <a
             className="text-link template"
-            href="/samples/exportmate-sample-orders.csv"
+            href={SAMPLE_ORDERS}
             download
           >
             <Download size={15} />

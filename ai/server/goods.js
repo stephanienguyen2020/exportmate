@@ -66,6 +66,20 @@ export function companyGoods(company, mapOrders = []) {
   return {
     profile: { company: clean(company?.name), about: company ? aboutCompany(company) : "" },
     items: [...items.values()].slice(0, MAX_GOODS).map(({ suppliers, ...i }) => ({ ...i, supplier: suppliers.join(", ") })),
+    // A demo visitor's sandbox (backend services/demo.py) is deleted after this time.
+    ...(company?.demoExpiresAt ? { demoExpiresAt: company.demoExpiresAt } : {}),
+  };
+}
+
+/**
+ * Which stored goods the daily scan reads: real companies' first, then demo sandboxes that
+ * haven't expired, so sandboxes never push a company out. `expired` are the sandboxes to forget.
+ */
+export function scanTargets(lists, now = Date.now()) {
+  const live = (g) => Date.parse(g.demoExpiresAt) > now;
+  return {
+    targets: [...lists.filter((g) => !g.demoExpiresAt), ...lists.filter((g) => g.demoExpiresAt && live(g))],
+    expired: lists.filter((g) => g.demoExpiresAt && !live(g)),
   };
 }
 
