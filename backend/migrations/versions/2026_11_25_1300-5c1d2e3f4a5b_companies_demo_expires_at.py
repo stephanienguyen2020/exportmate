@@ -1,7 +1,7 @@
 """companies: demo_expires_at, for demo visitors' sandboxes
 
 Revision ID: 5c1d2e3f4a5b
-Revises: 46a214bfa4e0
+Revises: 7c1e2b9d4a10
 Create Date: 2026-11-24 12:00:00
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "5c1d2e3f4a5b"
-down_revision: str | Sequence[str] | None = "46a214bfa4e0"
+down_revision: str | Sequence[str] | None = "7c1e2b9d4a10"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
