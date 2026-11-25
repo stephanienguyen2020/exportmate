@@ -112,7 +112,8 @@ export default function AccuracySection() {
             Each ruling is a product description and the code customs ruled for
             it. ExportMate suggested codes for every one, the way it does for an
             order without a code, with no company history to lean on. Scored
-            once; the rulings are never used to tune it.
+            once; the rulings are never used to tune it. Gemini may have seen
+            some of these rulings in training; we can't measure how many.
           </p>
           {run && m && (
             <div className="accuracy-headline">
@@ -168,7 +169,7 @@ export default function AccuracySection() {
                 />
               </ul>
               <p className="accuracy-legend">
-                Bar: the measured rate. Bracket: its 95% interval.
+                Bar: the measured rate. Bracket: its 95% Wilson interval.
                 {m.errors > 0 &&
                   ` ${m.errors} ${m.errors === 1 ? "call" : "calls"} failed and count as wrong.`}
               </p>
@@ -204,7 +205,8 @@ export default function AccuracySection() {
                 <div>
                   <dt>Model</dt>
                   <dd>
-                    {run.model} · {run.embeddingModel}
+                    {run.model} · {run.embeddingModel}, Gemini on Vertex AI
+                    (Google Cloud)
                   </dd>
                 </div>
                 <div>
