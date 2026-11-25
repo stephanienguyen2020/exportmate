@@ -132,8 +132,8 @@ def create_app() -> FastAPI:
     api = APIRouter(prefix=API_PREFIX)
     for module in (
         health,
-        benchmarks,
         public,
+        benchmarks,
         account,
         orders,
         imports,

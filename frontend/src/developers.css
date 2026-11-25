@@ -386,6 +386,8 @@
 .dev-output {
   max-height: 420px;
   overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 .dev-run-button {
   display: inline-flex;

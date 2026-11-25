@@ -499,9 +499,11 @@ function ApiTab() {
               }
               spec={spec.value}
             />
+          ) : !endpoint.op.parameters?.length ? (
+            <p className="dev-muted">No arguments.</p>
           ) : (
             <dl className="dev-args">
-              {(endpoint.op.parameters || []).map((p) => (
+              {endpoint.op.parameters.map((p) => (
                 <div key={p.name}>
                   <dt>
                     <code>{p.name}</code>
