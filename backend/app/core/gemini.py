@@ -17,7 +17,6 @@ from google.genai import errors as genai_errors
 from google.genai import types
 from pydantic import BaseModel, ValidationError
 
-from app.core import ollama
 from app.core.config import get_settings
 from app.core.errors import AppError
 
@@ -85,12 +84,6 @@ def generate_json(
     `task` names the job in logs (e.g. "supplier_document_reading"); prompts and answers are not
     logged, since they hold company documents."""
     settings = get_settings()
-    if settings.ai_provider == "ollama":
-        if file:
-            raise AppError(
-                503, "ai_not_configured", "Reading files needs Gemini (AI_PROVIDER=vertex)."
-            )
-        return ollama.generate_json(task, prompt, schema)
     contents: list = [prompt]
     if file:
         contents.insert(0, types.Part.from_bytes(data=file[0], mime_type=file[1]))
@@ -129,8 +122,6 @@ def embed_texts(texts: list[str], task_type: str) -> list[list[float]]:
     """One vector per text. `task_type` is "RETRIEVAL_DOCUMENT" for what is searched and
     "RETRIEVAL_QUERY" for what is searched with. Raises AppError 503 when it fails."""
     settings = get_settings()
-    if settings.ai_provider == "ollama":
-        return ollama.embed_texts(texts, EMBEDDING_DIMENSIONS, EMBED_BATCH)
     vectors: list[list[float]] = []
     started = time.perf_counter()
     try:

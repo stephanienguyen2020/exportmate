@@ -66,11 +66,6 @@ class Settings(BaseSettings):
     graph_sync_invoker: str = ""
     # AI service origin; company reports read its news alerts with the caller's token.
     ai_service_url: str = "http://127.0.0.1:8080"
-    # Where AI calls go: "vertex" (Gemini on Vertex AI) or "ollama", a local model server for
-    # testing without Vertex (core/ollama.py). With ollama, gemini_model and embedding_model name
-    # Ollama models (e.g. qwen3:30b-a3b and nomic-embed-text, which gives 768 dimensions).
-    ai_provider: Literal["vertex", "ollama"] = "vertex"
-    ollama_url: str = "http://127.0.0.1:11434"
     # Gemini on Vertex AI (core/gemini.py), in the project above. Production sets GEMINI_MODEL
     # from Terraform's gemini_model, the model the AI service's news scan uses.
     gemini_model: str = "gemini-3.5-flash"
