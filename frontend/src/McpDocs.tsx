@@ -43,6 +43,7 @@ export default function McpDocs() {
   const url = mcpUrl();
   const [tools, setTools] = useState<Tools>({ kind: "loading" });
   useEffect(() => {
+    const title = document.title;
     document.title = "MCP server · ExportMate";
     const abort = new AbortController();
     listMcpTools(abort.signal)
@@ -50,7 +51,10 @@ export default function McpDocs() {
       .catch(() => {
         if (!abort.signal.aborted) setTools({ kind: "failed" });
       });
-    return () => abort.abort();
+    return () => {
+      abort.abort();
+      document.title = title;
+    };
   }, []);
   const json = JSON.stringify(
     { mcpServers: { exportmate: { type: "http", url } } },
