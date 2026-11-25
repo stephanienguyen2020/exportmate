@@ -15,7 +15,12 @@ router = APIRouter(tags=["benchmarks"])
 Db = Annotated[Session, Depends(get_db)]
 
 
-@router.get("/benchmarks/hs-codes", response_model=SuccessResponse[HsBenchmarkOut])
+@router.get(
+    "/benchmarks/hs-codes",
+    response_model=SuccessResponse[HsBenchmarkOut],
+    tags=["public"],  # in the public spec (api/public.py)
+    responses={404: {"description": "No full benchmark run yet."}},
+)
 def hs_code_benchmark(db: Db):
     """The latest full run of HS code suggestions on held-out customs rulings (no sign-in).
     Rates only; the per-ruling results stay in the database."""

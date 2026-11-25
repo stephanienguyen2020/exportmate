@@ -1,0 +1,461 @@
+.dev-page {
+  --dev-ink: #22342e;
+  --dev-muted: #5f6f63;
+  --dev-rule: #c8d0bf;
+  --dev-paper: #fafbf7;
+  --dev-panel: #f5f3e9;
+  --dev-accent: #2f5b47;
+  --dev-accent-soft: #e3eadb;
+  --dev-code: #22342e;
+  --dev-code-ink: #eef0da;
+  --dev-bad: #9a3b2e;
+  min-height: 100vh;
+  background: var(--dev-paper);
+  color: var(--dev-ink);
+  padding: 0 3.4vw 80px;
+}
+.dev-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 76px;
+  border-bottom: 2px solid var(--dev-ink);
+}
+.dev-wordmark {
+  font:
+    700 24px Georgia,
+    "Times New Roman",
+    serif;
+  color: inherit;
+  text-decoration: none;
+}
+.dev-wordmark span {
+  font-size: 0.5em;
+  vertical-align: super;
+}
+.dev-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: inherit;
+  font-size: 14px;
+  text-decoration: none;
+}
+.dev-back:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.dev-main {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding-top: 48px;
+}
+.dev-kicker,
+.dev-muted,
+.dev-code figcaption,
+.dev-chip,
+.dev-panel-top,
+.dev-select > span,
+.dev-tabs span,
+.dev-foot {
+  font:
+    10px "DM Mono",
+    monospace;
+  letter-spacing: 0.9px;
+  color: var(--dev-muted);
+}
+.dev-hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+}
+.dev-main h1 {
+  margin: 16px 0 0;
+  font-size: clamp(36px, 4.4vw, 68px);
+  font-weight: 400;
+  letter-spacing: -0.06em;
+  line-height: 1.04;
+}
+.dev-main h1 strong {
+  font-weight: 750;
+}
+.dev-lede {
+  max-width: 40em;
+  margin: 20px 0 0;
+  font-size: clamp(15px, 1.15vw, 18px);
+  line-height: 1.55;
+  color: var(--dev-muted);
+}
+.dev-main a {
+  color: inherit;
+  text-underline-offset: 3px;
+}
+.dev-spec {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 26px;
+  padding: 10px 14px;
+  border: 1px solid var(--dev-ink);
+  font-size: 14px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.dev-spec:hover {
+  background: var(--dev-accent-soft);
+}
+.dev-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  margin-top: 40px;
+  border: 1px solid var(--dev-ink);
+}
+.dev-tabs a {
+  display: grid;
+  gap: 4px;
+  padding: 16px 18px;
+  text-decoration: none;
+}
+.dev-tabs a + a {
+  border-left: 1px solid var(--dev-ink);
+}
+.dev-tabs a strong {
+  font-size: 18px;
+}
+.dev-tabs a.active {
+  background: var(--dev-accent-soft);
+  box-shadow: inset 0 -3px 0 var(--dev-accent);
+}
+.dev-block {
+  margin-top: 36px;
+  padding-top: 20px;
+  border-top: 1px solid var(--dev-ink);
+}
+.dev-block-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin-bottom: 16px;
+}
+.dev-main h2 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+}
+.dev-subtabs {
+  display: flex;
+  flex-wrap: wrap;
+}
+.dev-subtabs button {
+  padding: 9px 14px;
+  border: 1px solid var(--dev-rule);
+  border-bottom: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.dev-subtabs button + button {
+  border-left: 0;
+}
+.dev-subtabs button.active {
+  background: var(--dev-code);
+  border-color: var(--dev-code);
+  color: var(--dev-code-ink);
+}
+.dev-code {
+  margin: 0 0 14px;
+  background: var(--dev-code);
+  color: var(--dev-code-ink);
+}
+.dev-code figcaption,
+.dev-panel-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 14px;
+}
+.dev-code figcaption {
+  border-bottom: 1px solid #3c5048;
+  color: #a5b49b;
+}
+.dev-code button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid #526754;
+  background: transparent;
+  color: var(--dev-code-ink);
+  font: inherit;
+  cursor: pointer;
+}
+.dev-code button:hover {
+  background: #2f453d;
+}
+.dev-code pre,
+.dev-output {
+  margin: 0;
+  padding: 14px;
+  overflow-x: auto;
+  font:
+    13px/1.55 "DM Mono",
+    ui-monospace,
+    monospace;
+}
+.dev-status {
+  margin: 0;
+  padding: 20px;
+  border: 1px dashed var(--dev-rule);
+  color: var(--dev-muted);
+}
+.dev-status strong {
+  color: var(--dev-ink);
+}
+.dev-picker {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 18px;
+  align-items: start;
+}
+.dev-list {
+  padding: 12px;
+  background: var(--dev-panel);
+  border: 1px solid var(--dev-rule);
+}
+.dev-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--dev-paper);
+  border: 1px solid var(--dev-rule);
+}
+.dev-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  color: inherit;
+  outline: none;
+}
+.dev-search:focus-within {
+  outline: 2px solid var(--dev-accent);
+}
+.dev-list .dev-muted {
+  margin: 10px 2px 6px;
+}
+.dev-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.dev-list li button {
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-left: 3px solid transparent;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  font:
+    13px "DM Mono",
+    ui-monospace,
+    monospace;
+  cursor: pointer;
+}
+.dev-list li button:hover {
+  background: var(--dev-accent-soft);
+}
+.dev-list li button.active {
+  border-left-color: var(--dev-accent);
+  background: var(--dev-accent-soft);
+  font-weight: 600;
+}
+.dev-detail {
+  min-width: 0;
+  padding: 18px 20px;
+  background: var(--dev-panel);
+  border: 1px solid var(--dev-rule);
+}
+.dev-detail-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.dev-detail h3 {
+  margin: 0;
+  font-size: 19px;
+}
+.dev-detail > p {
+  margin: 10px 0 0;
+  line-height: 1.55;
+}
+.dev-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.dev-chip {
+  padding: 3px 7px;
+  border: 1px solid var(--dev-rule);
+  background: var(--dev-paper);
+}
+.dev-chip strong {
+  color: var(--dev-ink);
+}
+.dev-errors {
+  margin-top: 14px;
+}
+.dev-args {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0;
+  padding: 12px 0;
+  border-top: 1px solid var(--dev-rule);
+  border-bottom: 1px solid var(--dev-rule);
+}
+.dev-args > div {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.4fr) 1fr;
+  gap: 12px;
+  font-size: 14px;
+}
+.dev-args dt span {
+  display: block;
+  font:
+    10px "DM Mono",
+    monospace;
+  color: var(--dev-muted);
+}
+.dev-args dd {
+  margin: 0;
+  color: var(--dev-muted);
+}
+.dev-main code {
+  font-family: "DM Mono", ui-monospace, monospace;
+  font-size: 0.95em;
+  overflow-wrap: anywhere;
+}
+.dev-run {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-top: 14px;
+}
+.dev-panel {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--dev-paper);
+  border: 1px solid var(--dev-rule);
+}
+.dev-panel-top {
+  border-bottom: 1px solid var(--dev-rule);
+  min-height: 42px;
+}
+.dev-panel textarea {
+  flex: 1;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 14px;
+  border: 0;
+  resize: vertical;
+  background: transparent;
+  color: inherit;
+  font:
+    13px/1.55 "DM Mono",
+    ui-monospace,
+    monospace;
+}
+.dev-panel textarea:focus {
+  outline: 2px solid var(--dev-accent);
+  outline-offset: -2px;
+}
+.dev-output {
+  max-height: 420px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.dev-run-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 0;
+  background: var(--dev-accent);
+  color: #fff;
+  font: inherit;
+  letter-spacing: 0.6px;
+  cursor: pointer;
+}
+.dev-run-button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+.dev-ok {
+  color: var(--dev-accent);
+}
+.dev-bad {
+  color: var(--dev-bad);
+}
+.dev-select {
+  display: grid;
+  gap: 6px;
+  max-width: 520px;
+  margin-bottom: 14px;
+}
+.dev-select select {
+  padding: 10px 12px;
+  border: 1px solid var(--dev-ink);
+  background: var(--dev-paper);
+  color: inherit;
+  font:
+    14px "DM Mono",
+    ui-monospace,
+    monospace;
+}
+.dev-foot {
+  margin: 44px 0 0;
+  line-height: 1.6;
+}
+@media (max-width: 900px) {
+  .dev-picker,
+  .dev-run {
+    grid-template-columns: 1fr;
+  }
+  .dev-hero {
+    flex-direction: column;
+  }
+  .dev-spec {
+    margin-top: 0;
+  }
+}
+@media (max-width: 600px) {
+  .dev-page {
+    padding: 0 16px 56px;
+  }
+  .dev-tabs {
+    grid-template-columns: 1fr;
+  }
+  .dev-tabs a + a {
+    border-left: 0;
+    border-top: 1px solid var(--dev-ink);
+  }
+  .dev-args > div {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}

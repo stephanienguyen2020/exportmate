@@ -36,6 +36,9 @@ What each endpoint does and where the app uses it. The live contract (exact fiel
 | **Account** | | |
 | `GET /health` | none | Uptime checks, `deploy.sh` |
 | `GET /benchmarks/hs-codes` | none | Measured accuracy of HS code suggestions |
+| `POST /mcp` | none | MCP server: HS code tools for AI agents ([MCP.md](MCP.md)) |
+| `GET /public/tariff-lines`, `POST /public/hs-suggestions` | none | Public REST API ([MCP.md](MCP.md)) |
+| `GET /public/openapi.json` | none | OpenAPI 3.1 of the public operations only |
 | `GET /me` | signed in | Sign-in, every workspace load, Account settings; `ai/server` |
 | `PATCH /me` | signed in | Account settings |
 | `POST /me/logout` | signed in | `#/logout` |
