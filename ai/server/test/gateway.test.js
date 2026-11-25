@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { isTransient, toolGateway, validateArgs, withRetry } from "../gateway.js";
+import { REGISTRY } from "../agents/tools.js";
 
 const schema = {
   type: "OBJECT",
@@ -130,4 +131,15 @@ test("gateway retries transient failures, times out hung tools and enforces the 
   await gw.call("search", { query: "a" });
   const over = await gw.call("search", { query: "b" });
   assert.equal(over.errorKind, "budget");
+});
+
+test("the news search stops after 3 calls a question and says to answer with what it has", async () => {
+  const calls = [];
+  const search = { ...REGISTRY.search_knowledge, run: async (args) => (calls.push(args), { output: { results: [] } }) };
+  const gw = toolGateway({ search_knowledge: search }, {});
+  for (let i = 0; i < 3; i++) assert.equal((await gw.call("search_knowledge", { query: `q${i}` })).ok, true);
+  const fourth = await gw.call("search_knowledge", { query: "q3" });
+  assert.equal(fourth.errorKind, "budget");
+  assert.match(fourth.error, /Answer with the results you have/);
+  assert.equal(calls.length, 3);
 });

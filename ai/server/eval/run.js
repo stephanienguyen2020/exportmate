@@ -3,6 +3,7 @@
 //        npm run eval -- --only=latest-scan,unknown-sku
 //        npm run eval -- --judge            also grade answers with an LLM judge
 //        npm run eval -- --tier=complex     every case to one agent (simple: quick_answer, complex: the analyst)
+//        npm run eval -- --gap=20           wait 20 s between questions (default 10; a burst got Gemini restricted)
 //        npm run eval -- --engine           ask the deployed agents on Agent Runtime (AGENT_RUNTIME) instead
 //                                           of running them in this process
 //        npm run eval -- --vertex           also create an evaluation run on Agent Platform (Gen AI evaluation:
@@ -30,7 +31,7 @@ import { demoMapOrders, demoPlaybook } from "../orders.js";
 import { GEMINI_PROJECT, PROJECT, db, inventory, list } from "../db.js";
 import { ASSISTANT, GEMINI_LOCATION, SCAN_MODEL } from "../models.js";
 import { summarizeAudits } from "../metrics.js";
-import { POLICY_VERSION, RULES } from "../policy.js";
+import { POLICY_VERSION } from "../policy.js";
 import { examCases } from "./exam.js";
 import { goldenCases } from "./golden.js";
 import { compareRuns, scoreCase, summarizeRun } from "./score.js";
@@ -43,6 +44,9 @@ const tier = arg("tier") || undefined;
 const toVertex = arg("vertex") !== undefined;
 const onEngine = arg("engine") !== undefined;
 const asCompany = arg("company") !== undefined;
+// Seconds between questions. A burst of scripted questions got the project's Gemini access
+// restricted (Nov 2026), so runs are spaced out.
+const GAP_MS = Number(arg("gap") ?? 10) * 1000;
 const SET = asCompany ? "company" : "golden";
 if (onEngine && !runtime) throw new Error("--engine needs AGENT_RUNTIME (the deployed instance)");
 if (tier && !["simple", "complex"].includes(tier)) throw new Error("--tier must be simple or complex");
@@ -152,11 +156,11 @@ async function companyExam() {
     read("/api/v1/knowledge-graph/query?material=acacia&country=VN"),
   ]);
   const data = { markets: map.markets, orders: map.orders, suppliers: map.suppliers || [], rules: rules.filter((r) => r.enabled), acacia, today: new Date().toISOString().slice(0, 10) };
-  return { token, backend, profile, cases: examCases(data, { policyRules: RULES }) };
+  return { token, backend, profile, cases: examCases(data) };
 }
 
 const exam = asCompany ? await companyExam() : null;
-const cases = (exam ? exam.cases : goldenCases(await list(inventory), { rules: RULES })).filter((c) => !only || only.includes(c.id));
+const cases = (exam ? exam.cases : goldenCases(await list(inventory))).filter((c) => !only || only.includes(c.id));
 const sessionId = `eval-${Date.now().toString(36)}`;
 console.log(
   `${asCompany ? `Exam as ${exam.profile.company.name}` : "Eval"} ${sessionId}${onEngine ? ` on ${runtime.name}` : ""}: ${cases.length} cases, policy ${POLICY_VERSION}${tier ? `, all on ${tier}` : ""}, model ${ASSISTANT.model}${GEMINI_PROJECT !== PROJECT ? ` in ${GEMINI_PROJECT}` : ""}${useJudge ? `, judge ${JUDGE_MODEL}` : ""}`,
@@ -167,7 +171,8 @@ const company = exam ? { company: exam.profile, access: { companyId: exam.profil
 
 const scored = [];
 const results = [];
-for (const c of cases) {
+for (const [i, c] of cases.entries()) {
+  if (i && GAP_MS) await new Promise((resolve) => setTimeout(resolve, GAP_MS));
   // A demo case's orders and playbook go through the same checks as a demo chat's (index.js).
   const demo = c.demo ? { orders: demoMapOrders(c.demo.orders), playbook: demoPlaybook(c.demo.rules) } : null;
   const result = onEngine

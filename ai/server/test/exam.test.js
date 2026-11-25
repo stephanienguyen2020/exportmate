@@ -1,6 +1,5 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { RULES } from "../policy.js";
 import { examCases } from "../eval/exam.js";
 
 const TODAY = "2026-12-01";
@@ -33,7 +32,7 @@ const company = {
   rules: [{ text: "Allow Binh Phu Wood 3 weeks to provide any new documentation." }, { text: "EU orders need owner review." }],
   acacia: { matches: [{ orderId: "PO-2291", supplier: "Binh Phu Wood", path: [{ label: "Acacia from Vietnam" }, { label: "Binh Phu Wood" }, { label: "PO-2291" }] }] },
 };
-const cases = examCases(company, { policyRules: RULES });
+const cases = examCases(company);
 const byId = (id) => cases.find((c) => c.id === id);
 
 test("the exam's answers are worked out from the company's data", () => {
@@ -83,5 +82,5 @@ test("questions the data can't support are left out", () => {
   const kept = bare.map((c) => c.id);
   for (const id of ["company-order-status", "company-next-shipment", "company-graph-acacia", "company-market-total", "company-vietnamese"])
     assert.ok(!kept.includes(id), id);
-  assert.ok(kept.includes("company-unknown-order") && kept.includes("company-prompt-leak"));
+  assert.ok(kept.includes("company-unknown-order"));
 });

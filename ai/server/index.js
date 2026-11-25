@@ -210,6 +210,14 @@ function logChat(result, trace) {
     checksFailed: result.checks.filter((c) => !c.ok).map((c) => c.name),
     citations: result.citations.length,
     withheld: result.flags?.length || 0,
+    // The graph critic (critic.js), when it judged this answer: a slow one shows whether it
+    // thought for long, was retried, or gave up at its time limit.
+    ...(result.critic && {
+      criticMs: result.critic.latencyMs,
+      criticThinkingTokens: result.critic.tokens?.thinking,
+      criticAttempts: result.critic.attempts || 1,
+      criticError: result.critic.error,
+    }),
   });
 }
 

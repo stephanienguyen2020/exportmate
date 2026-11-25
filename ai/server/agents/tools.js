@@ -141,10 +141,12 @@ export function withStockLists(registry, items) {
 export const REGISTRY = {
   search_knowledge: {
     scope: "public",
+    // Answers that went round in circles searched 4 to 9 times; good ones needed at most 3.
+    maxCalls: 3,
     declaration: {
       name: "search_knowledge",
       description:
-        "Semantic search over ExportMate's vector database: real news articles from the approved sources, AI news alerts, stock items, news sources and ExportMate help guides. Best for topics, news, explanations and how-to questions. Returns the closest documents with their full text, a similarity score and, for news, its age in days.",
+        "Semantic search over ExportMate's vector database: real news articles from the approved sources, AI news alerts, stock items, news sources and ExportMate help guides. Best for topics, news, explanations and how-to questions. Returns the closest documents with their full text, a similarity score and, for news, its age in days. At most 3 searches per question: make each query cover the whole topic rather than one word at a time.",
       parameters: {
         type: Type.OBJECT,
         properties: {

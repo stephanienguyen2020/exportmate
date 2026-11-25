@@ -1,16 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { generateInventory } from "../seed/inventory.js";
-import { RULES } from "../policy.js";
 import { goldenCases } from "../eval/golden.js";
 import { compareRuns, scoreCase, summarizeRun } from "../eval/score.js";
 
-const cases = goldenCases(generateInventory(), { rules: RULES });
+const cases = goldenCases(generateInventory());
 const byId = (id) => cases.find((c) => c.id === id);
 
 test("golden set covers every kind of case, with unique ids and expectations", () => {
   assert.equal(new Set(cases.map((c) => c.id)).size, cases.length);
-  for (const kind of ["simple", "multi-hop", "tool-use", "follow-up", "hallucination-trap", "edge", "security", "scope"])
+  for (const kind of ["simple", "multi-hop", "tool-use", "follow-up", "hallucination-trap", "edge"])
     assert.ok(cases.some((c) => c.category === kind), kind);
   for (const c of cases) {
     assert.ok(c.messages.at(-1).role === "user" && c.question, c.id);

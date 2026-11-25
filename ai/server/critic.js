@@ -15,6 +15,9 @@ import { GEMINI_PROJECT } from "./db.js";
 const MAX_PROBLEMS = 5;
 const MODEL = ASSISTANT.model;
 const THINKING = "LOW";
+// The judgement usually takes about 3 s; twice in the 25 Nov exam it took 64 s and 98 s and held
+// the answer back. Past this, the answer goes out with the auditor's checks alone.
+export const CRITIC_TIMEOUT_MS = 20_000;
 
 const SCHEMA = {
   type: Type.OBJECT,
@@ -88,27 +91,46 @@ export function parseVerdict(text) {
 }
 
 let ai;
-const defaultGenerate = (prompt) => {
+// Resolves to { text, tokens, attempts }: the tokens (thinking included) and tries go on the audit,
+// so a slow verdict shows whether the model thought for long or the call was retried.
+const defaultGenerate = async (prompt, abortSignal) => {
   ai ??= new GoogleGenAI({ vertexai: true, project: GEMINI_PROJECT, location: GEMINI_LOCATION });
-  return withRetry(() =>
-    ai.models.generateContent({
+  let attempts = 0;
+  const res = await withRetry(() => {
+    attempts++;
+    return ai.models.generateContent({
       model: MODEL,
       contents: prompt,
-      config: { responseMimeType: "application/json", responseSchema: SCHEMA, maxOutputTokens: 4096, thinkingConfig: thinkingConfig(MODEL, THINKING) },
-    }),
-  ).then((res) => res.text);
+      config: { responseMimeType: "application/json", responseSchema: SCHEMA, maxOutputTokens: 4096, thinkingConfig: thinkingConfig(MODEL, THINKING), abortSignal },
+    });
+  });
+  const u = res.usageMetadata || {};
+  return { text: res.text, tokens: { prompt: u.promptTokenCount, output: u.candidatesTokenCount, thinking: u.thoughtsTokenCount }, attempts };
 };
 
 /**
  * Judges whether the paths support the answer's claims about connections. Resolves to
- * { supported, problems, model } and never rejects: a judge that fails leaves the answer to the
- * auditor alone (`error` says why).
+ * { supported, problems, model } and never rejects: a judge that fails or takes over timeoutMs
+ * (the request is then cancelled) leaves the answer to the auditor alone (`error` says why).
  */
-export async function critique({ answer, paths, generate = defaultGenerate }) {
+export async function critique({ answer, paths, generate = defaultGenerate, timeoutMs = CRITIC_TIMEOUT_MS }) {
   if (!answer || !paths.length) return { supported: true, problems: [], skipped: true };
+  const stop = new AbortController();
+  let timer;
+  const timedOut = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      stop.abort();
+      reject(new Error(`no verdict within ${timeoutMs / 1000} s`));
+    }, timeoutMs);
+  });
   try {
-    return { ...parseVerdict(await generate(criticPrompt(answer, paths))), model: MODEL };
+    const out = await Promise.race([generate(criticPrompt(answer, paths), stop.signal), timedOut]);
+    // generate resolves to the verdict's text, or to { text, tokens, attempts }.
+    const { text, tokens, attempts } = typeof out === "string" ? { text: out } : out;
+    return { ...parseVerdict(text), model: MODEL, ...(tokens && { tokens }), ...(attempts > 1 && { attempts }) };
   } catch (e) {
     return { supported: true, problems: [], error: String(e?.message || e) };
+  } finally {
+    clearTimeout(timer);
   }
 }
