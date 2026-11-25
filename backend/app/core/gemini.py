@@ -47,11 +47,12 @@ def _client() -> genai.Client:
 
 def _new_client() -> genai.Client:
     settings = get_settings()
-    if not settings.google_cloud_project:
+    project = settings.gemini_project or settings.google_cloud_project
+    if not project:
         raise AppError(503, "ai_not_configured", "AI is not set up on this server.")
     return genai.Client(
         vertexai=True,
-        project=settings.google_cloud_project,
+        project=project,
         location=settings.gemini_location,
         http_options=types.HttpOptions(
             timeout=settings.gemini_timeout_seconds * 1000,

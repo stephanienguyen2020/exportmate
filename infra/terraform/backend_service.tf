@@ -14,6 +14,7 @@ locals {
     AI_SERVICE_URL             = local.ai_url
     GOOGLE_CLOUD_PROJECT       = var.project_id # Vertex AI project for Gemini
     GEMINI_MODEL               = var.gemini_model
+    GEMINI_PROJECT             = var.gemini_project
     CONTACT_INBOX              = var.contact_inbox
     CHAIN_ADMIN_EMAILS         = var.chain_admin_emails
   }, local.graph_env)

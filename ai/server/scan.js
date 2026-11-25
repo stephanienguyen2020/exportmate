@@ -4,7 +4,7 @@
 // `npm run scan`.
 import { pathToFileURL } from "node:url";
 import { GoogleGenAI, Type } from "@google/genai";
-import { db, PROJECT, inventory, sources, articles, impacts, scans, companySources, goodsByCompany, list } from "./db.js";
+import { db, GEMINI_PROJECT, inventory, sources, articles, impacts, scans, companySources, goodsByCompany, list } from "./db.js";
 import { fetchFeed } from "./feeds.js";
 import { indexDocs, toDoc } from "./rag.js";
 import { withRetry } from "./gateway.js";
@@ -36,7 +36,7 @@ const MAX_BACKFILL_ARTICLES = 160;
 // Companies whose goods one scan reads news for, most recently refreshed first.
 const MAX_COMPANIES = 100;
 
-const ai = new GoogleGenAI({ vertexai: true, project: PROJECT, location: LOCATION });
+const ai = new GoogleGenAI({ vertexai: true, project: GEMINI_PROJECT, location: LOCATION });
 
 const SCHEMA = {
   type: Type.OBJECT,

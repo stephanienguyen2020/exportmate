@@ -2,6 +2,9 @@ import { Firestore } from "@google-cloud/firestore";
 
 // PROJECT_ID first: Agent Runtime sets GOOGLE_CLOUD_PROJECT itself (to the project number).
 export const PROJECT = process.env.PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT || "skilful-scarab-511320-q9";
+// The project whose Gemini quota the assistant, the news scan and the eval judge use; by default
+// this one. Everything else (Firestore, RAG Engine, Sessions, Memory Bank) stays in PROJECT.
+export const GEMINI_PROJECT = process.env.GEMINI_PROJECT || PROJECT;
 export const db = new Firestore({ projectId: PROJECT, ignoreUndefinedProperties: true });
 
 export const inventory = db.collection("inventory");

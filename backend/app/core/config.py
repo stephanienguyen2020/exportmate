@@ -70,6 +70,8 @@ class Settings(BaseSettings):
     # from Terraform's gemini_model, the model the AI service's news scan uses.
     gemini_model: str = "gemini-3.5-flash"
     gemini_location: str = "global"
+    # Another project whose Gemini quota to use (GEMINI_PROJECT); empty: the project above.
+    gemini_project: str = ""
     # How long the model reasons first. Each answer is a fixed JSON shape that code checks, so
     # LOW is enough; the model's default took 29 s for a what-if note. 2.x models refuse a level
     # and get none.

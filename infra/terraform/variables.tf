@@ -76,6 +76,12 @@ variable "gemini_model" {
   default     = "gemini-3.5-flash"
 }
 
+variable "gemini_project" {
+  description = "Another project whose Gemini quota the backend and the AI service use (its IAM grants roles/aiplatform.user to their service accounts); empty: project_id."
+  type        = string
+  default     = ""
+}
+
 variable "agent_runtime" {
   description = "The agents' Agent Runtime instance (projects/…/locations/…/reasoningEngines/…), printed by ai/server/platform/runtime.py deploy. Empty: the Cloud Run service runs the agents itself. The default is this project's instance, so an apply from any machine keeps chats on it; set it to \"\" for a new project until its instance exists."
   type        = string

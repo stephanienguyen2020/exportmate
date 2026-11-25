@@ -27,7 +27,7 @@ import { runAgent } from "../agent.js";
 import { runtime } from "../agents/platform.js";
 import { callRuntime } from "../agents/remote.js";
 import { demoMapOrders, demoPlaybook } from "../orders.js";
-import { PROJECT, db, inventory, list } from "../db.js";
+import { GEMINI_PROJECT, PROJECT, db, inventory, list } from "../db.js";
 import { ASSISTANT, GEMINI_LOCATION, SCAN_MODEL } from "../models.js";
 import { summarizeAudits } from "../metrics.js";
 import { POLICY_VERSION, RULES } from "../policy.js";
@@ -47,7 +47,7 @@ const SET = asCompany ? "company" : "golden";
 if (onEngine && !runtime) throw new Error("--engine needs AGENT_RUNTIME (the deployed instance)");
 if (tier && !["simple", "complex"].includes(tier)) throw new Error("--tier must be simple or complex");
 const JUDGE_MODEL = process.env.JUDGE_MODEL || SCAN_MODEL;
-const ai = new GoogleGenAI({ vertexai: true, project: PROJECT, location: GEMINI_LOCATION });
+const ai = new GoogleGenAI({ vertexai: true, project: GEMINI_PROJECT, location: GEMINI_LOCATION });
 
 const VERDICT = {
   type: Type.OBJECT,
@@ -159,7 +159,7 @@ const exam = asCompany ? await companyExam() : null;
 const cases = (exam ? exam.cases : goldenCases(await list(inventory), { rules: RULES })).filter((c) => !only || only.includes(c.id));
 const sessionId = `eval-${Date.now().toString(36)}`;
 console.log(
-  `${asCompany ? `Exam as ${exam.profile.company.name}` : "Eval"} ${sessionId}${onEngine ? ` on ${runtime.name}` : ""}: ${cases.length} cases, policy ${POLICY_VERSION}${tier ? `, all on ${tier}` : ""}, model ${ASSISTANT.model}${useJudge ? `, judge ${JUDGE_MODEL}` : ""}`,
+  `${asCompany ? `Exam as ${exam.profile.company.name}` : "Eval"} ${sessionId}${onEngine ? ` on ${runtime.name}` : ""}: ${cases.length} cases, policy ${POLICY_VERSION}${tier ? `, all on ${tier}` : ""}, model ${ASSISTANT.model}${GEMINI_PROJECT !== PROJECT ? ` in ${GEMINI_PROJECT}` : ""}${useJudge ? `, judge ${JUDGE_MODEL}` : ""}`,
 );
 // A company case runs as a signed-in chat does (index.js): the profile, the company's view of the
 // news sources, and its backend read with the owner's own token.

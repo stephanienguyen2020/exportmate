@@ -19,6 +19,7 @@ locals {
     PROJECT_ID            = var.project_id
     GOOGLE_CLOUD_LOCATION = "global" # Vertex AI endpoint for Gemini and the embedding model
     GEMINI_MODEL          = var.gemini_model
+    GEMINI_PROJECT        = var.gemini_project
     ALLOWED_ORIGINS       = var.allowed_origins
     BACKEND_URL           = google_cloud_run_v2_service.backend.uri
     SCHEDULER_SA          = google_service_account.scheduler.email

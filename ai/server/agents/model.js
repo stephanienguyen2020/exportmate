@@ -1,6 +1,6 @@
 // The Gemini client every agent shares. Each call names its model and thinking level (agent.js).
 import { Gemini } from "@google/adk";
-import { PROJECT } from "../db.js";
+import { GEMINI_PROJECT } from "../db.js";
 import { withRetry } from "../gateway.js";
 import { ASSISTANT, GEMINI_LOCATION } from "../models.js";
 
@@ -42,7 +42,7 @@ class RetryingGemini extends Gemini {
 export const gemini = new RetryingGemini({
   model: ASSISTANT.model,
   vertexai: true,
-  project: PROJECT,
+  project: GEMINI_PROJECT,
   location: GEMINI_LOCATION,
 });
 
