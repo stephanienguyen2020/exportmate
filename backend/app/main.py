@@ -10,6 +10,7 @@ from app.api import (
     account,
     analysis,
     audit_log,
+    benchmarks,
     company_sites,
     cost_settings,
     graph_sync,
@@ -118,6 +119,7 @@ def create_app() -> FastAPI:
     api = APIRouter(prefix=API_PREFIX)
     for module in (
         health,
+        benchmarks,
         account,
         orders,
         imports,
