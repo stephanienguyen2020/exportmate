@@ -67,19 +67,17 @@ def _order_without_code(db: Session, ctx: CompanyContext, external_id: str) -> O
     return order
 
 
-def candidate_headings(
-    db: Session, product: str, limit: int = HEADING_CANDIDATES
-) -> tuple[list[HsHeading], str]:
+def _candidate_headings(db: Session, product: str) -> tuple[list[HsHeading], str]:
     """(closest tariff lines, how they were found: "embedding" or "words")."""
     total, embedded = hs_queries.count_hs_headings(db)
     if embedded:
         try:
             (vector,) = gemini.embed_texts([product], "RETRIEVAL_QUERY")
-            return hs_queries.list_nearest_headings(db, vector, limit), "embedding"
+            return hs_queries.list_nearest_headings(db, vector, HEADING_CANDIDATES), "embedding"
         except AppError:
             log.warning("hs_code.embedding_unavailable")
     if total:
-        return hs_queries.list_headings_by_words(db, product, limit), "words"
+        return hs_queries.list_headings_by_words(db, product, HEADING_CANDIDATES), "words"
     return [], "none"
 
 
@@ -177,7 +175,7 @@ def propose_codes(
 
     The one path every suggestion takes, so the benchmark (app/hs_benchmark.py) scores exactly
     what users get."""
-    headings, method = candidate_headings(db, product)
+    headings, method = _candidate_headings(db, product)
     answer = gemini.generate_json(
         "hs_code_suggestion", _prompt(product, destination, past, headings), SuggestedCodes
     )

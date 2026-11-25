@@ -9,7 +9,6 @@ import {
   Send,
   ArrowDown,
 } from "lucide-react";
-import AccuracySection from "./AccuracySection";
 import { openDemo } from "./account-store";
 import { sendContactMessage } from "./api";
 import { errorMessage } from "./auth";
@@ -101,7 +100,7 @@ export default function Landing({ section = "" }: { section?: string }) {
     };
   }, []);
   useEffect(() => {
-    if (section && ["how", "accuracy", "about", "contact"].includes(section)) {
+    if (section && ["how", "about", "contact"].includes(section)) {
       requestAnimationFrame(() =>
         document.getElementById(section)?.scrollIntoView({
           behavior: matchMedia("(prefers-reduced-motion: reduce)").matches
@@ -167,12 +166,8 @@ export default function Landing({ section = "" }: { section?: string }) {
           </a>
           <nav aria-label="Main navigation">
             {link("How it works", "how")}
-            {link("Accuracy", "accuracy")}
             {link("About us", "about")}
             {link("Get in touch", "contact")}
-            <a className="lp-nav-link" href="#/developers">
-              <span>API · MCP</span>
-            </a>
           </nav>
           <a className="lp-login" href="#/login">
             Log in
@@ -369,14 +364,13 @@ export default function Landing({ section = "" }: { section?: string }) {
           </div>
         </div>
       </section>
-      <AccuracySection />
       <section
         className="story-about story-section"
         id="about"
         aria-labelledby="about-title"
       >
         <div className="story-section-top">
-          <span>03 / ABOUT US</span>
+          <span>02 / ABOUT US</span>
           <span>BUILT AROUND THE MAKER</span>
         </div>
         <div className="about-layout">
@@ -443,7 +437,7 @@ export default function Landing({ section = "" }: { section?: string }) {
         aria-labelledby="contact-title"
       >
         <div className="story-section-top">
-          <span>04 / GET IN TOUCH</span>
+          <span>03 / GET IN TOUCH</span>
           <span>THE NEXT CHAPTER STARTS HERE</span>
         </div>
         <div className="contact-layout">

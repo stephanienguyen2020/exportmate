@@ -1,8 +1,6 @@
 import logging
 import time
 import uuid
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,7 +23,6 @@ from app.api import (
     news_matches,
     orders,
     playbook,
-    public,
     regulations,
     reports,
     scenarios,
@@ -39,8 +36,6 @@ from app.core.config import get_settings
 from app.core.errors import register_error_handlers
 from app.core.logging import configure_logging
 from app.core.request_context import set_request_id, set_trace
-from app.mcp_server import mcp_route
-from app.mcp_server import server as mcp_server
 from app.services import graph_events
 
 API_PREFIX = "/api/v1"
@@ -66,15 +61,7 @@ def create_app() -> FastAPI:
         },
     )
 
-    mcp = mcp_route(f"{API_PREFIX}/mcp")  # made first: it creates the session manager
-
-    @asynccontextmanager
-    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-        async with mcp_server.session_manager.run():
-            yield
-
     app = FastAPI(
-        lifespan=lifespan,
         title="ExportMate API",
         version="0.1.0",
         docs_url=f"{API_PREFIX}/docs",
@@ -132,7 +119,6 @@ def create_app() -> FastAPI:
     api = APIRouter(prefix=API_PREFIX)
     for module in (
         health,
-        public,
         benchmarks,
         account,
         orders,
@@ -144,6 +130,7 @@ def create_app() -> FastAPI:
         company_sites,
         regulations,
         reports,
+        regulations,
         cost_settings,
         analysis,
         supplier_documents,
@@ -159,8 +146,6 @@ def create_app() -> FastAPI:
     ):
         api.include_router(module.router)
     app.include_router(api)
-    # The MCP server (app/mcp_server.py): public, read-only HS code tools.
-    app.router.routes.append(mcp)
     return app
 
 
