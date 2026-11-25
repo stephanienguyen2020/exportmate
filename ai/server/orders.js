@@ -14,12 +14,14 @@ const MAX_QUOTE = 300;
 const orderKey = (id) => String(id).toUpperCase().replace(/[^A-Z0-9]/g, "");
 const contains = (value, q) => String(value ?? "").toLowerCase().includes(q);
 
-/** Orders matching every filter given: ids, query (text in id, product, supplier, destination or HS code) and status. */
-export function matchOrders(mapOrders, { ids, query, status } = {}) {
+/** Orders matching every filter given: ids, query (text in id, product, supplier, destination or HS code), market and status. */
+export function matchOrders(mapOrders, { ids, query, market, status } = {}) {
   const wanted = ids?.length ? new Set(ids.map(orderKey)) : null;
   const q = String(query || "").trim().toLowerCase();
-  return mapOrders.filter(({ order: o }) =>
+  const inMarket = String(market || "").trim().toUpperCase();
+  return mapOrders.filter(({ order: o, placement }) =>
     (!wanted || wanted.has(orderKey(o.id))) &&
+    (!inMarket || String(placement?.market || "").toUpperCase() === inMarket) &&
     (!status || o.status === status) &&
     (!q || [o.id, o.product, o.supplier, o.destination, o.hsCode].some((v) => contains(v, q))),
   );
@@ -35,8 +37,10 @@ export function totalsByCurrency(mapOrders) {
 /**
  * One order for the model: its fields, status as the Orders page words it, and its checklist.
  * cite(key, info) returns a ref number; orders and the official texts behind checks are citable.
+ * Without `full`, only the checklist's gaps, and no quotes: a list of orders stays short, since
+ * the model rereads it on every later step of the answer.
  */
-export function presentOrder(m, cite) {
+export function presentOrder(m, cite, { full = true } = {}) {
   const o = m.order;
   const ref = cite(`order:${o.id}`, {
     type: "order",
@@ -59,24 +63,32 @@ export function presentOrder(m, cite) {
     status: o.status,
     statusLabel: STATUS_LABELS[o.status] || o.status,
     gapCount: m.gapCount,
-    checks: (m.checks || []).map((c) => ({
-      title: c.title,
-      level: c.level,
-      status: c.status,
-      gap: GAPS.has(c.status),
-      note: c.note,
-      source: c.source && {
-        ref: cite(`regdoc:${c.source.documentId}`, {
-          type: "regulation",
-          id: c.source.documentId,
-          title: `${c.source.regulationTitle} (${c.source.documentTitle}, version ${c.source.versionNumber})`,
-          url: `#/workspace/regulations/documents/${encodeURIComponent(c.source.documentId)}`,
-        }),
-        regulation: c.source.regulationTitle,
+    ...(full
+      ? { checks: (m.checks || []).map((c) => presentCheck(c, cite, true)) }
+      : { checklistLines: (m.checks || []).length, gaps: (m.checks || []).filter((c) => GAPS.has(c.status)).map((c) => presentCheck(c, cite, false)) }),
+  };
+}
+
+function presentCheck(c, cite, withQuote) {
+  return {
+    title: c.title,
+    ...(withQuote && { level: c.level }),
+    status: c.status,
+    ...(withQuote && { gap: GAPS.has(c.status) }),
+    note: c.note,
+    source: c.source && {
+      ref: cite(`regdoc:${c.source.documentId}`, {
+        type: "regulation",
+        id: c.source.documentId,
+        title: `${c.source.regulationTitle} (${c.source.documentTitle}, version ${c.source.versionNumber})`,
+        url: `#/workspace/regulations/documents/${encodeURIComponent(c.source.documentId)}`,
+      }),
+      regulation: c.source.regulationTitle,
+      ...(withQuote && {
         officialId: c.source.officialId || undefined,
         quote: c.source.quote?.length > MAX_QUOTE ? `${c.source.quote.slice(0, MAX_QUOTE)}…` : c.source.quote,
-      },
-    })),
+      }),
+    },
   };
 }
 

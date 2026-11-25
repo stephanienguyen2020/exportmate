@@ -34,6 +34,8 @@ const ageDays = (iso) => (iso && !isNaN(Date.parse(iso)) ? Math.max(0, Math.floo
 const SEVERITY = { high: 0, medium: 1, low: 2 };
 // Document types whose text comes from third parties (news feeds, or alerts written from them).
 const UNTRUSTED_TYPES = new Set(["article", "alert", "source"]);
+// query_orders returns whole checklists for this many orders or fewer; a longer list gets gaps only.
+const FULL_CHECKLIST_ORDERS = 3;
 
 // Where query_orders and get_playbook read from: the company backend with the caller's own
 // token, or the orders and playbook the browser demo sent (orders.js checked them).
@@ -515,13 +517,15 @@ export const REGISTRY = {
     declaration: {
       name: "query_orders",
       description:
-        "The company's own orders (the Orders page), read live: order id (e.g. PO-2291), product, supplier, destination and market, value and currency, ship date, HS code, status (exposed is shown as \"Action needed\") and each order's document checklist: every line's status (on_file, missing, mismatch, prepare, check, unknown), a note and the official text it comes from (the browser demo has one sample check per order it covers, with no official text). Also returns the count and total value per currency of all matches. Filters combine with AND; with none, every order.",
+        "The company's own orders (the Orders page), read live: order id (e.g. PO-2291), product, supplier, destination and market, value and currency, ship date, HS code, status (exposed is shown as \"Action needed\") and its gaps (checklist lines missing or mismatched, with a note and the official text they come from). When 3 or fewer orders are returned, or checklist is true, each order's whole document checklist instead: every line's status (on_file, missing, mismatch, prepare, check, unknown), a note and the official text it comes from, quoted (the browser demo has one sample check per order it covers, with no official text). Also returns the count and total value per currency of all matches. Filters combine with AND; with none, every order.",
       parameters: {
         type: Type.OBJECT,
         properties: {
           ids: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Order ids, e.g. PO-2291" },
           query: { type: Type.STRING, description: "Text in the order id, product, supplier, destination or HS code" },
+          market: { type: Type.STRING, description: "Destination market code, e.g. EU, US, UK, JP, SG, KR" },
           status: { type: Type.STRING, enum: ORDER_STATUSES },
+          checklist: { type: Type.BOOLEAN, description: "Every returned order's whole checklist, quoted (long): for questions about lines that aren't gaps, e.g. which orders need ISPM 15 packaging" },
           limit: { type: Type.INTEGER, description: "Orders to return, default 10, max 30 (count and totals cover every match)" },
         },
       },
@@ -529,7 +533,7 @@ export const REGISTRY = {
     async run(args, { refs, orders: readOrders }) {
       const matching = matchOrders(await readOrders(), args);
       const totals = totalsByCurrency(matching);
-      const filters = describe(args, ["limit"]);
+      const filters = describe(args, ["limit", "checklist"]);
       const totalText = Object.entries(totals).map(([c, v]) => `${c} ${v.toLocaleString("en-US")}`).join(" + ") || "no value";
       const ref = refs.cite(`orders:${filters}`, {
         type: "query",
@@ -537,7 +541,9 @@ export const REGISTRY = {
         title: `Order query${filters ? ` (${filters})` : ""}: ${matching.length} orders, ${totalText}`,
         url: "#/workspace/orders",
       });
-      const orders = matching.slice(0, clamp(args.limit, 1, 30, 10)).map((m) => presentOrder(m, refs.cite));
+      const shown = matching.slice(0, clamp(args.limit, 1, 30, 10));
+      const full = args.checklist === true || shown.length <= FULL_CHECKLIST_ORDERS;
+      const orders = shown.map((m) => presentOrder(m, refs.cite, { full }));
       return {
         output: { ref, matching: matching.length, totalValueByCurrency: totals, orders },
         audit: {

@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { REGISTRY, makeRefs } from "../agents/tools.js";
 import { MAX_DEMO_ORDERS, demoMapOrders, demoPlaybook, matchOrders, presentOrder, totalsByCurrency } from "../orders.js";
 
 const source = {
@@ -37,6 +38,8 @@ test("filters by text and status, combined with AND", () => {
   assert.deepEqual(matchOrders(orders, { query: "tokyo" }).map((m) => m.order.id), ["PO-2302"]);
   assert.deepEqual(matchOrders(orders, { query: "plywood", status: "exposed" }).map((m) => m.order.id), ["PO-2291"]);
   assert.equal(matchOrders(orders, {}).length, 3);
+  assert.deepEqual(matchOrders(orders, { market: "eu", status: "exposed" }).map((m) => m.order.id), ["PO-2291"]);
+  assert.deepEqual(matchOrders(orders, { market: "US" }), []);
 });
 
 test("totals values per currency from hundredths", () => {
@@ -62,6 +65,17 @@ test("presents an order with its status label, gaps and cited official texts", (
     ["order", "#/workspace/map/order/PO-2291"],
     ["regulation", "#/workspace/regulations/documents/d1"],
   ]);
+});
+
+test("in a list, an order shows only its gaps, still cited, and no quotes", () => {
+  const cited = [];
+  const o = presentOrder(orders[0], (key, info) => (cited.push({ key, ...info }), cited.length), { full: false });
+  assert.equal(o.checks, undefined);
+  assert.equal(o.checklistLines, 2);
+  assert.deepEqual(o.gaps.map((g) => [g.title, g.status, g.note]), [["EUDR due diligence statement", "missing", "No geolocation on file."]]);
+  assert.equal(o.gaps[0].source.regulation, "EU Deforestation Regulation");
+  assert.equal(o.gaps[0].source.quote, undefined);
+  assert.equal(cited.at(-1).type, "regulation");
 });
 
 const demoOrder = (o = {}) => ({
@@ -115,4 +129,15 @@ test("the demo's playbook keeps only rules that are switched on and have text", 
   assert.deepEqual(rules, [{ id: "1", category: "Supplier", text: "Allow Binh Phu Wood 3 weeks.", enabled: true }]);
   assert.equal(demoPlaybook([]), null);
   assert.equal(demoPlaybook({}), null);
+});
+
+test("query_orders gives whole checklists for 3 orders or fewer, else gaps unless asked", async () => {
+  const run = (args) => REGISTRY.query_orders.run(args, { refs: makeRefs(), orders: async () => [...orders, mapOrder({ id: "PO-2320", destination: "Long Beach, US" })] });
+  const few = (await run({ ids: ["PO-2291", "PO-2302"] })).output;
+  assert.equal(few.matching, 2);
+  assert.ok(few.orders.every((o) => o.checks && !o.gaps));
+  const many = (await run({})).output;
+  assert.equal(many.matching, 4);
+  assert.ok(many.orders.every((o) => o.gaps && !o.checks));
+  assert.ok((await run({ checklist: true })).output.orders.every((o) => o.checks));
 });
