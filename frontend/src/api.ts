@@ -1540,3 +1540,49 @@ export async function sendContactMessage(message: ContactMessage) {
   });
   if (!response.ok) throw await responseError(response);
 }
+
+// Measured accuracy of HS code suggestions (GET /benchmarks/hs-codes): the latest full run on
+// held-out customs rulings. Public, so no token. null until a full run exists.
+export type BenchmarkRate = {
+  right: number;
+  of: number;
+  rate: number | null;
+  low: number | null; // 95% interval
+  high: number | null;
+};
+export type HsBenchmark = {
+  createdAt: string;
+  model: string;
+  embeddingModel: string;
+  dataset: {
+    source: string;
+    sourceUrl: string;
+    licence: string;
+    licenceUrl: string;
+    downloadedOn: string;
+    rulingsListed: number;
+    sampled: number;
+  };
+  caseCount: number;
+  metrics: {
+    top1: BenchmarkRate;
+    top3: BenchmarkRate;
+    heading: BenchmarkRate;
+    retrieval: BenchmarkRate;
+    nearestLine: BenchmarkRate;
+    noSuggestion: number;
+    errors: number;
+  };
+};
+export async function fetchHsBenchmark(
+  signal?: AbortSignal,
+): Promise<HsBenchmark | null> {
+  const response = await fetch(base + "/benchmarks/hs-codes", {
+    signal: signal
+      ? AbortSignal.any([signal, AbortSignal.timeout(15000)])
+      : AbortSignal.timeout(15000),
+  });
+  if (response.status === 404) return null;
+  if (!response.ok) throw await responseError(response);
+  return ((await response.json()) as Envelope<HsBenchmark>).data;
+}
