@@ -11,7 +11,6 @@ from app.database.models.audit import AuditEvent
 from app.database.models.base import Base
 from app.database.models.hs_code import (
     EMBEDDING_DIMENSIONS,
-    HsBenchmarkRun,
     HsCodeSuggestion,
     HsHeading,
     HsSuggestionStatus,
@@ -90,7 +89,6 @@ __all__ = [
     "GraphNodeKind",
     "GraphRelation",
     "GraphSource",
-    "HsBenchmarkRun",
     "HsCodeSuggestion",
     "HsHeading",
     "HsSuggestionStatus",

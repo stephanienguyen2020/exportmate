@@ -68,23 +68,3 @@ class HsCodeSuggestion(Base):
     created_at: Mapped[datetime] = created_column()
     decided_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-
-
-class HsBenchmarkRun(Base):
-    """One scoring of HS code suggestions on held-out customs rulings (app/hs_benchmark.py).
-
-    Kept so accuracy claims anywhere in the product read a measured run, with its model and data,
-    instead of a number typed into a page."""
-
-    __tablename__ = "hs_benchmark_runs"
-    id: Mapped[uuid.UUID] = id_column()
-    created_at: Mapped[datetime] = created_column()
-    model: Mapped[str] = mapped_column(String(100), nullable=False)
-    embedding_model: Mapped[str] = mapped_column(String(100), nullable=False)
-    # The rulings: where from, under what licence, when downloaded (seed_data/hs_benchmark.json).
-    dataset: Mapped[dict] = mapped_column(JSONB, nullable=False)
-    case_count: Mapped[int] = mapped_column(Integer, nullable=False)
-    # {"top1": {"right": n, "of": n, "rate": x, "low": x, "high": x}, ...}
-    metrics: Mapped[dict] = mapped_column(JSONB, nullable=False)
-    # Per ruling: ref, the ruled code, what was suggested, whether the tariff search found it.
-    results: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)

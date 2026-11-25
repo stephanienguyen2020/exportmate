@@ -5,7 +5,7 @@ from datetime import timedelta
 from types import SimpleNamespace
 
 import pytest
-from conftest import TEST_TODAY, import_orders, onboard
+from conftest import import_orders, onboard
 from sqlalchemy import func, select, update
 
 from app.core import clock
@@ -23,8 +23,7 @@ from app.update_link_weights import update_link_weights
 
 
 def ships_in(days: int) -> str:
-    # TEST_TODAY, not clock.today(): ORDERS is built at import, before the fixture fixes today.
-    return (TEST_TODAY + timedelta(days=days)).isoformat()
+    return (clock.today() + timedelta(days=days)).isoformat()
 
 
 # Suppliers from the demo seed: Binh Phu Wood buys acacia logs from Vietnam, Savannakhet Timber

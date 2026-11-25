@@ -4,7 +4,7 @@ import uuid
 from datetime import timedelta
 
 import pytest
-from conftest import TEST_TODAY, add_member, import_orders, onboard
+from conftest import add_member, import_orders, onboard
 from sqlalchemy import select
 
 from app.core import clock
@@ -16,8 +16,7 @@ from app.services.knowledge_graph import GraphWalker, hs_heading
 
 
 def ships_in(days: int) -> str:
-    # TEST_TODAY, not clock.today(): NEWS_CSV is built at import, before the fixture fixes today.
-    return (TEST_TODAY + timedelta(days=days)).isoformat()
+    return (clock.today() + timedelta(days=days)).isoformat()
 
 
 # PO-1 is suggested for the plywood alert. PO-2 has another HS heading, PO-3 the right
