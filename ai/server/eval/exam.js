@@ -146,7 +146,8 @@ export function examCases(company) {
       id: "company-coming-changes",
       category: "rules",
       question: "Are any rules changing soon in the markets I ship to?",
-      expect: { tools: ["upcoming_changes"], contains: (company.changes || []).slice(0, 1).map((c) => c.title) },
+      // The first change by any of its names: the checklist line, its regulation or the official ID.
+      expect: { tools: ["upcoming_changes"], containsAny: (company.changes || []).slice(0, 1).flatMap((c) => [c.title, c.source?.regulationTitle, c.source?.officialId].filter(Boolean)) },
       rubric: `Names the checklist lines that take effect or change soon in the markets of open orders, with the date and the orders shipping after it; says so plainly if none. They are: ${(company.changes || []).map((c) => `${c.on} ${c.market} ${c.title} (orders: ${c.orderIds.join(", ") || "none"})`).join("; ") || "none"}.`,
     },
     {

@@ -47,7 +47,7 @@ export const RULES = [
   {
     id: "rule-changes",
     when: "changes",
-    text: "For what is changing soon (rules taking effect or changing in the markets the company ships to), call upcoming_changes, with days reaching the latest ship date that matters (at most 365). Give each change's date, market and what changes, cited with its source ref, and the orders it affects; no orderIds means no open order to that market ships on or after that date (name the closest one if it matters). News of proposed rules may add to it (search_knowledge), but say it is not yet in the checklists.",
+    text: "For what is changing soon (rules taking effect or changing in the markets the company ships to), call upcoming_changes, with days reaching the latest ship date that matters (at most 365). Give each change's date, market and what changes, cited with its source ref, and the orders it affects; no orderIds means no open order to that market ships on or after that date.",
     prevents: "\"Are any rules changing soon?\" answered from news only, missing a change the orders' own checklists hold (the US Section 232 rate increase on 1 Jan 2027).",
   },
   {
