@@ -545,9 +545,12 @@ def place_orders(db: Session, orders: list[Order]) -> list[tuple[Order, OrderPla
     return [(order, locate_destination(order.destination, gazetteer)) for order in orders]
 
 
-def list_suppliers(db: Session, ctx: CompanyContext) -> list[MapSupplierOut]:
+def list_suppliers(
+    db: Session, ctx: CompanyContext, for_orders: list[str] | None = None
+) -> list[MapSupplierOut]:
     """The company's suppliers with their documents, sourcing and the orders that name them,
-    then the supplier names orders use that have no supplier record (`id` None)."""
+    then the supplier names orders use that have no supplier record (`id` None). With
+    `for_orders`, only the suppliers those orders name (IDs written any way)."""
     kinds = {k.kind: k.label for k in map_queries.list_document_kinds(db)}
     suppliers = map_queries.list_company_suppliers(db, ctx.company_id)
     by_key = {s.name_key: s for s in suppliers}
@@ -589,7 +592,11 @@ def list_suppliers(db: Session, ctx: CompanyContext) -> list[MapSupplierOut]:
         for key in names_on_orders
         if key not in by_key
     ]
-    return listed + unlisted
+    everyone = listed + unlisted
+    if not for_orders:
+        return everyone
+    wanted = {order_queries.order_id_key(i) for i in for_orders}
+    return [s for s in everyone if wanted & {order_queries.order_id_key(i) for i in s.order_ids}]
 
 
 def list_sites(db: Session, ctx: CompanyContext) -> list[SiteOut]:

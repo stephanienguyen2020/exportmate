@@ -1,7 +1,7 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core.auth import EditorContext, ViewerContext
@@ -22,10 +22,15 @@ Db = Annotated[Session, Depends(get_db)]
 
 
 @router.get("", response_model=SuccessResponse[list[MapSupplierOut]])
-def list_suppliers(ctx: ViewerContext, db: Db):
+def list_suppliers(
+    ctx: ViewerContext,
+    db: Db,
+    order_ids: Annotated[list[str] | None, Query(alias="orderId", max_length=50)] = None,
+):
     """The company's suppliers with their documents, sourcing and the orders that name them,
-    then supplier names its orders use that have no record yet (`id` null)."""
-    return success_response(trade_map_service.list_suppliers(db, ctx))
+    then supplier names its orders use that have no record yet (`id` null). `orderId`
+    (repeated): only the suppliers those orders name."""
+    return success_response(trade_map_service.list_suppliers(db, ctx, order_ids))
 
 
 @router.post("", response_model=SuccessResponse[SupplierOut], status_code=201)

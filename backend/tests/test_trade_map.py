@@ -149,6 +149,10 @@ def test_suppliers_sites_and_observations(client, reference):
     data = get_map(client, headers)
 
     suppliers = {s["name"]: s for s in get_data(client, headers, "/suppliers")}
+    # One order's supplier, with or without a record.
+    named = get_data(client, headers, "/suppliers?orderId=po 2&orderId=PO-4")
+    assert [s["name"] for s in named] == ["Binh Phu Wood", "Dong Nai Veneer"]
+    assert get_data(client, headers, "/suppliers?orderId=PO-404") == []
     assert suppliers["Binh Phu Wood"]["orderIds"] == ["PO-1", "PO-2"]
     assert suppliers["Binh Phu Wood"]["location"] == {"latitude": 11.54, "longitude": 106.9}
     assert {d["kind"] for d in suppliers["Binh Phu Wood"]["documents"]} == {
