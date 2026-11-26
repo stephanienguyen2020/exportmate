@@ -273,9 +273,8 @@ The full list, with reasons, is in [AGENT_HARNESS.md](AGENT_HARNESS.md#not-done-
 
 ```sh
 cd ai/server
-npm run dev        # the service on :8080 (needs gcloud auth application-default login; reads ai/server/.env if present)
+npm run dev        # the agents (runtime.js) on :8080, which the backend's AGENTS_AT=http://127.0.0.1:8080 uses (needs gcloud auth application-default login; reads ai/server/.env if present)
 npm test           # unit tests, no GCP needed
-npm run runtime    # the agents behind Agent Runtime's contract; AGENTS_AT=http://127.0.0.1:8080 on the API uses them
 npm run eval       # golden set against live Gemini + Firestore; saved to eval_runs (--engine: the deployed agents)
 npm run eval:vertex  # the same, plus an evaluation run on Agent Platform › Evaluation
 npm run ops        # health of recent chats

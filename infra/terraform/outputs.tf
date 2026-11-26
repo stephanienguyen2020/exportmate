@@ -8,11 +8,6 @@ output "web_url" {
   value       = google_cloud_run_v2_service.web.uri
 }
 
-output "ai_url" {
-  description = "Base URL of the AI service. The website forwards /api/* here."
-  value       = local.ai_url
-}
-
 output "image_repository" {
   description = "Where backend/deploy.sh and ai/server/deploy.sh push images."
   value       = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.images.repository_id}"

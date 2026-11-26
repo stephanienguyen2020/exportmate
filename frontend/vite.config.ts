@@ -2,7 +2,6 @@ import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 
 const LOCAL_BACKEND = "http://127.0.0.1:8000";
-const LOCAL_AI_SERVICE = "http://127.0.0.1:8080";
 
 export default defineConfig(({ mode, command }) => {
   // BACKEND_URL in .env.local points local development at the deployed backend.
@@ -11,15 +10,12 @@ export default defineConfig(({ mode, command }) => {
   // AUTH_MODE=dev, so dev auth always talks to the local backend.
   const backend =
     env.VITE_AUTH_MODE === "dev" ? LOCAL_BACKEND : env.BACKEND_URL || LOCAL_BACKEND;
-  const aiService = env.AI_SERVICE_URL || LOCAL_AI_SERVICE;
-  if (command === "serve")
-    console.info(`[proxy] /api/v1 -> ${backend}   /api -> ${aiService}`);
+  if (command === "serve") console.info(`[proxy] /api/v1 -> ${backend}`);
   return {
     plugins: [react()],
     server: {
       proxy: {
         "/api/v1": { target: backend, changeOrigin: true },
-        "/api": { target: aiService, changeOrigin: true },
       },
     },
   };

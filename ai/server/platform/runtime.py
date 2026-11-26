@@ -110,11 +110,11 @@ def config(name, image=None, resource=None, identity="agent", gateway=None):
         # The agent runs as its own Agent Identity (no service-account keys); IAM and Agent Gateway
         # policies are granted to it by infra/agent-platform/govern.sh.
         **({"identity_type": types.IdentityType.AGENT_IDENTITY} if identity == "agent" else {}),
-        # SERVE picks runtime.js (main.js); AGENT_RUNTIME is the instance's own name, which its
+        # AGENT_RUNTIME is the instance's own name, which its
         # Sessions and Memory Bank use (a new instance gets it on the update that follows).
         # GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY turns on the console's Dashboards and Traces
         # (runtime.js sends the traces without prompt or response text).
-        env_vars={"SERVE": "runtime", "PROJECT_ID": PROJECT, "GEMINI_LOCATION": "global", "GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY": "true", **({"AGENT_GATEWAY_CA": gateway_ca(gateway)} if gateway else {}), **({"AGENT_RUNTIME": resource} if resource else {}), **env},
+        env_vars={"PROJECT_ID": PROJECT, "GEMINI_LOCATION": "global", "GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY": "true", **({"AGENT_GATEWAY_CA": gateway_ca(gateway)} if gateway else {}), **({"AGENT_RUNTIME": resource} if resource else {}), **env},
         # Behind Agent Gateway (Govern): all egress goes through it, allowed per registered endpoint.
         **(
             {

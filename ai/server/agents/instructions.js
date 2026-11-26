@@ -4,7 +4,7 @@ import { rulesFor } from "../policy.js";
 import { asData } from "../guard.js";
 
 // Who the assistant works for. A signed-in company's profile comes from the backend
-// (GET /api/v1/company/knowledge) and its stock is its own goods (the backend's GET /news-goods); without one, the
+// (with each company chat, as GET /api/v1/company/knowledge gives it) and its stock is its own goods (the backend's GET /news-goods); without one, the
 // demo company, named by its goods' profile (`stockOwner`), whose orders and playbook the browser
 // sends with the question (when it has them). `session` is
 // { company, orders, playbook, stock, stockOwner } (agent.js).

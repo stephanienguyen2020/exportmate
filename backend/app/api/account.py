@@ -66,6 +66,6 @@ def update_company(payload: CompanyUpdate, ctx: OwnerContext, db: Db):
 
 @router.get("/company/knowledge", response_model=SuccessResponse[CompanyKnowledgeOut])
 def get_company_knowledge(ctx: ViewerContext, db: Db):
-    """The caller's company profile and sites. The AI service fetches this with the user's own
-    token to answer questions about the company; it never reads the database directly."""
+    """The caller's company profile and sites, as the assistant gets them with each company chat
+    (services/assistant.py). The assistant's exam reads it to run a company chat's turn."""
     return success_response(accounts.build_company_knowledge(db, ctx))

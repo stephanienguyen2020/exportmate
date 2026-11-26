@@ -50,7 +50,7 @@ class NewsOrderMatchOut(CamelCaseModel):
 
 
 class NewsMatchesOut(CamelCaseModel):
-    news_available: bool  # False when the AI service couldn't be reached
+    news_available: bool  # False when News watch's Firestore couldn't be read
     matches: list[NewsOrderMatchOut]
 
 

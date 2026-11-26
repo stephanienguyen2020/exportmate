@@ -1,6 +1,6 @@
 """A person's verdict on whether a News watch alert affects one of the company's orders.
 
-Alerts live in the AI service (Firestore), so a review keeps the alert's ID and a copy of its
+Alerts live in Firestore, so a review keeps the alert's ID and a copy of its
 headline and link: the alert can age out of News watch while the verdict stays on record.
 """
 

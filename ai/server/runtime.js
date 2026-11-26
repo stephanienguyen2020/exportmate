@@ -5,11 +5,12 @@
 //     list_memories  { userKey } → what Memory Bank remembers about that user
 //     delete_memory  { userKey, id } → { deleted }
 //   POST /api/stream_reasoning_engine   { class_method: "stream_query", input } → NDJSON
-//     the same events as /api/chat: { type: "step" | "done" | "error", … }
+//     a chat turn's events: { type: "step" | "done" | "error", … }
 //
-// Only the Cloud Run API (index.js) and people with Agent Platform access can call it (IAM on
-// the reasoning engine); it trusts the caller's company, user and access, which index.js
-// checked with the backend. The user's backend token arrives per call, is used only for the
+// Only the company backend (backend/app/core/agents.py, its /assistant routes) and people with
+// Agent Platform access can call it (IAM on the reasoning engine); it trusts the caller's
+// company, user and access, which the backend checked. The browser demo's orders and rules are
+// checked here (orders.js demoData). The user's backend token arrives per call, is used only for the
 // company's orders and playbook, and is never stored in the session or logged.
 // The console playground sends { message, user_id, session_id }; that runs as the demo.
 import http from "node:http";
@@ -27,7 +28,7 @@ const PORT = Number(process.env.PORT || 8080);
 const BACKEND_URL = (process.env.BACKEND_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
 const SESSION = /^[A-Za-z0-9-]{8,64}$/;
 
-// GETs a backend path with the user's own token ({ status, body }), as index.js does.
+// GETs a backend path with the user's own token ({ status, body }).
 const backendReader = (token) => async (path) => {
   try {
     const res = await fetch(`${BACKEND_URL}${path}`, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(5000), redirect: "error" });
@@ -37,7 +38,7 @@ const backendReader = (token) => async (path) => {
   }
 };
 
-/** A chat turn's arguments from a query input (index.js's, or the console playground's). */
+/** A chat turn's arguments from a query input (the backend's, or the console playground's). */
 export function chatInput(input = {}) {
   if (typeof input.message === "string") {
     const sessionId = SESSION.test(input.session_id || "") ? input.session_id : `playground-${randomUUID().slice(0, 8)}`;
@@ -121,7 +122,8 @@ export const server = http.createServer(async (req, res) => {
   return send(res, 404, { error: "Not found" });
 });
 
-if (process.env.SERVE === "runtime" || (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)) {
+// Started as a program (the image's entrypoint, `npm start`, `npm run dev`); tests import it.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const tracing = startTracing();
   server.listen(PORT, "0.0.0.0", () => log("INFO", `ExportMate agents listening on :${PORT} (Agent Runtime contract)`, { tracing }));
 }

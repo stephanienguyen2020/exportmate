@@ -1,4 +1,4 @@
-"""News watch's records in Firestore, shared with the AI service's news scan (ai/server):
+"""News watch's records in Firestore, shared with the assistant's agents (ai/server):
 `sources` (one document per feed), `companySources/{companyId}` (the shared sources a
 company switched off, `disabled`, and `skipOld` false when it switched the age rule off),
 `impacts` (alerts), `articles` and `scans`, which the news scan (services/news_scan.py) writes,

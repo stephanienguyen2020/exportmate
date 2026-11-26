@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ANONYMOUS, DEMO_COMPANY_ID, auditVisible, presentScan, presentSources, publicAudit, skipsOld, visibleItems } from "../access.js";
+import { ANONYMOUS, DEMO_COMPANY_ID, presentScan, presentSources, publicAudit, skipsOld, visibleItems } from "../access.js";
 
 const sources = [
   { id: "builtin", name: "Timber news", builtIn: true, enabled: true },
@@ -61,11 +61,7 @@ test("alerts and stock items are for the company whose goods they are about; the
   assert.deepEqual(visibleItems(records, sources, { companyId: "A", disabled: ["builtin"] }).map((r) => r.id), ["guide"]);
 });
 
-test("company audits need that company; raw reasoning never leaves the server", () => {
-  assert.ok(auditVisible({ companyId: undefined }, ANONYMOUS));
-  assert.ok(!auditVisible({ companyId: "B" }, companyA));
-  assert.ok(!auditVisible({ companyId: "B" }, ANONYMOUS));
-  assert.ok(auditVisible({ companyId: "A" }, companyA));
+test("raw reasoning never leaves the server", () => {
   const shown = publicAudit({ id: "x", steps: [{ kind: "plan", thought: "secret", note: "n" }, { kind: "tool" }] });
   assert.deepEqual(shown.steps, [{ kind: "plan", note: "n" }, { kind: "tool" }]);
 });

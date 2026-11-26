@@ -1,17 +1,17 @@
-# The AI service (ai/server) in the same project as the backend: Firestore, the Cloud
-# Storage bucket RAG Engine imports from, a Cloud Run service (the API in front of the
-# agents) and job, the Model Armor template that screens news articles (used by the backend's
-# news scan, backend_service.tf) and log-based metrics. Terraform creates the service and job with a placeholder
-# image; ai/server/deploy.sh builds the real one and rolls it out. The agents themselves run on
-# Agent Platform: ai/server/platform/runtime.py creates the Agent Runtime instance (Sessions,
-# Memory Bank) and infra/agent-platform/govern.sh sets up Agent Identity, Agent Registry, the
-# egress policies and Agent Gateway; set var.agent_runtime to the instance afterwards.
+# The assistant and News watch's data and AI pieces (ai/server), in the same project as the
+# backend: Firestore, the Cloud Storage bucket RAG Engine imports from, a Cloud Run job for the AI
+# image's commands (seed, index, eval, ops), the Model Armor template that screens news articles
+# (used by the backend's news scan, backend_service.tf) and log-based metrics. Terraform creates
+# the job with a placeholder image; ai/server/deploy.sh builds the real one and rolls it out. The
+# agents run on Agent Platform: ai/server/platform/runtime.py creates the Agent Runtime instance
+# (Sessions, Memory Bank) and infra/agent-platform/govern.sh sets up Agent Identity, Agent
+# Registry, the egress policies and Agent Gateway; set var.agent_runtime to the instance
+# afterwards. The backend's /assistant routes relay chats to it (the Node API that did was
+# switched off in Phase 2, step 4b).
 
 data "google_project" "this" {}
 
 locals {
-  # Cloud Run's deterministic URL, known before the service exists.
-  ai_url               = "https://exportmate-ai-${data.google_project.this.number}.${var.region}.run.app"
   model_armor_template = "projects/${var.project_id}/locations/${google_model_armor_template.untrusted_text.location}/templates/${google_model_armor_template.untrusted_text.template_id}"
 
   ai_env = {
@@ -20,17 +20,14 @@ locals {
     GOOGLE_CLOUD_LOCATION = "global" # Vertex AI endpoint for Gemini and the embedding model
     GEMINI_MODEL          = var.gemini_model
     GEMINI_PROJECT        = var.gemini_project
-    ALLOWED_ORIGINS       = var.allowed_origins
     BACKEND_URL           = google_cloud_run_v2_service.backend.uri
     RAG_BUCKET            = google_storage_bucket.kb.name
-    # Chats go to the agents on Agent Runtime once the instance exists (empty: in-process).
+    # The deployed agents (eval/run.js --engine).
     AGENT_RUNTIME = var.agent_runtime
-    AGENTS_AT     = var.agent_runtime == "" ? "" : "runtime"
   }
 
-  # One chat.completed line per answer: the backend's assistant routes write it, as the AI
-  # service's /api/chat did until it was switched off.
-  chat_logs = "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=(\"exportmate-ai\" OR \"exportmate-backend\")"
+  # One chat.completed line per answer, written by the backend's assistant routes.
+  chat_logs = "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"exportmate-backend\""
 }
 
 # Stock, news sources, articles, alerts, scans, RAG file records, audits, the answer cache,
@@ -140,10 +137,11 @@ resource "google_model_armor_template" "untrusted_text" {
   depends_on = [google_project_service.apis]
 }
 
-# Least privilege: read/write Firestore documents and call Gemini on Vertex AI, nothing else.
+# The AI job's identity. Least privilege: read/write Firestore documents and call Gemini on
+# Vertex AI, nothing else.
 resource "google_service_account" "ai" {
   account_id   = "exportmate-ai"
-  display_name = "ExportMate AI service (Cloud Run)"
+  display_name = "ExportMate AI job (Cloud Run)"
 
   depends_on = [google_project_service.apis]
 }
@@ -166,68 +164,6 @@ resource "google_service_account" "scheduler" {
   display_name = "Cloud Scheduler: daily news scan, nightly link weights"
 
   depends_on = [google_project_service.apis]
-}
-
-resource "google_cloud_run_v2_service" "ai" {
-  name                = "exportmate-ai"
-  location            = var.region
-  deletion_protection = false
-  ingress             = "INGRESS_TRAFFIC_ALL"
-
-  template {
-    service_account = google_service_account.ai.email
-    # A chat streams for up to a minute or two; a scan can take several.
-    timeout                          = "600s"
-    max_instance_request_concurrency = 80
-
-    # Chat limits are counted per instance (CHAT_LIMIT_PER_INSTANCE), so this caps spend.
-    scaling {
-      max_instance_count = 3
-    }
-
-    containers {
-      image = local.placeholder_image
-
-      resources {
-        limits = {
-          cpu    = "1"
-          memory = "1Gi"
-        }
-        startup_cpu_boost = true
-      }
-
-      dynamic "env" {
-        for_each = local.ai_env
-        content {
-          name  = env.key
-          value = env.value
-        }
-      }
-    }
-  }
-
-  lifecycle {
-    ignore_changes = [
-      template[0].containers[0].image,
-      client,
-      client_version,
-    ]
-  }
-
-  depends_on = [
-    google_firestore_database.default,
-    google_project_iam_member.ai_firestore,
-    google_project_iam_member.ai_vertex,
-  ]
-}
-
-# Public API (the website forwards /api/* here): chat is anonymous or carries the user's Firebase
-# token, which the backend checks.
-resource "google_cloud_run_v2_service_iam_member" "ai_public" {
-  name     = google_cloud_run_v2_service.ai.name
-  location = var.region
-  role     = "roles/run.invoker"
-  member   = "allUsers"
 }
 
 # Runs one shell command with the AI image, e.g.
@@ -284,8 +220,8 @@ resource "google_cloud_run_v2_job" "ai_task" {
   ]
 }
 
-# AgentOps: metrics from the service's structured logs (ai/server/log.js), for Cloud
-# Monitoring charts and alerts. `npm run ops` gives the same picture from the audits.
+# AgentOps: metrics from structured logs (the backend's chat.completed lines and the news scan
+# job's), for Cloud Monitoring charts and alerts (infra/monitoring/ai). `npm run ops` gives the same picture from the audits.
 resource "google_logging_metric" "chat_answers" {
   name        = "exportmate_ai/chat_answers"
   description = "Assistant answers by outcome (ok, needs_review, max_steps, error) and policy version."

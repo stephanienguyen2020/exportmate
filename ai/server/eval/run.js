@@ -169,7 +169,7 @@ const sessionId = `eval-${Date.now().toString(36)}`;
 console.log(
   `${asCompany ? `Exam as ${exam.profile.company.name}` : "Eval"} ${sessionId}${onEngine ? ` on ${runtime.name}` : ""}: ${cases.length} cases, policy ${POLICY_VERSION}${tier ? `, all on ${tier}` : ""}, model ${ASSISTANT.model}${GEMINI_PROJECT !== PROJECT ? ` in ${GEMINI_PROJECT}` : ""}${useJudge ? `, judge ${JUDGE_MODEL}` : ""}`,
 );
-// A company case runs as a signed-in chat does (index.js): the profile, the company's view of the
+// A company case runs as a signed-in chat does (the backend's /assistant/chat): the profile, the company's view of the
 // news sources, and its backend read with the owner's own token.
 const company = exam ? { company: exam.profile, access: { companyId: exam.profile.company.id, disabled: [] } } : null;
 
