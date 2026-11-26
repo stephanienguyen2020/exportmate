@@ -78,12 +78,13 @@ const GROUPS: { kind: Kind; label: string; icon: typeof Search }[] = [
   { kind: "rule", label: "Playbook rules", icon: Settings2 },
 ];
 const PER_GROUP = 5;
-const AI_API = (import.meta.env.VITE_CHAT_API_URL || "/api/chat").replace(/\/chat$/, "");
+const BACKEND = (import.meta.env.VITE_BACKEND_API_URL || "/api/v1").replace(/\/$/, "");
 
-async function aiService<T>(path: string, signal: AbortSignal): Promise<T> {
-  const res = await fetch(AI_API + path, { signal, headers: await companyAuth() });
+// News watch's alerts and goods, also signed out (the demo's sample stock).
+async function newsWatch<T>(path: string, signal: AbortSignal): Promise<T> {
+  const res = await fetch(BACKEND + path, { signal, headers: await companyAuth() });
   if (!res.ok) throw new Error(`Request failed (${res.status})`);
-  return res.json() as Promise<T>;
+  return ((await res.json()) as { data: T }).data;
 }
 
 const hit = (
@@ -288,8 +289,8 @@ export default function WorkspaceSearch({
       );
     setLoading(true);
     const tasks = [
-      load("news", aiService<{ impacts: Impact[] }>("/impacts", signal), (v) => ({ impacts: v.impacts })),
-      load("stock", aiService<{ items: StockItem[]; kind?: string }>("/inventory", signal), (v) => ({
+      load("news", newsWatch<{ impacts: Impact[] }>("/news-alerts", signal), (v) => ({ impacts: v.impacts })),
+      load("stock", newsWatch<{ items: StockItem[]; kind?: string }>("/news-goods", signal), (v) => ({
         stock: v.items,
         goods: v.kind === "company",
       })),

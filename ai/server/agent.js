@@ -11,7 +11,7 @@
 import { FieldValue } from "@google-cloud/firestore";
 import { Runner, createEvent, LogLevel, setLogger } from "@google/adk";
 import { FunctionCallingConfigMode } from "@google/genai";
-import { db, inventory, sources, answerCache, list } from "./db.js";
+import { db, inventory, sources, answerCache, goodsByCompany, list } from "./db.js";
 import { EMBED_MODEL } from "./rag.js";
 import { toolGateway } from "./gateway.js";
 import { POLICY_VERSION } from "./policy.js";
@@ -23,7 +23,6 @@ import { ASSISTANT, assistantThinking } from "./models.js";
 import { routeQuestion } from "./router.js";
 import { answerKey, cacheable, cachedAudit, fingerprint, CACHE_TTL_MS } from "./answer-cache.js";
 import { GUIDES } from "./seed/guides.js";
-import { companyStock, goodsReader } from "./goods-store.js";
 import { LIVE_TOOLS, REGISTRY, UnknownToolPlugin, cached, clearCaches, lastDoneScan, makeRefs, withStockLists, workspaceReaders } from "./agents/tools.js";
 import { ANSWERING, buildAssistant } from "./agents/assistant.js";
 import { APP, chatSession, memoryService, remembers, userKeyFor } from "./agents/platform.js";
@@ -67,13 +66,18 @@ async function dataVersion(company, access, session) {
   return fingerprint({ items: session.stock, sources: presentSources(stored, access), scan: scan?.id ?? null, company, tools, guides: GUIDES_VERSION });
 }
 
-// What query_inventory and get_alerts read: a company's own goods (goods-store.js, refreshed
-// with the member's token when stale), or the sample stock in the browser demo. Unread, the
+// What query_inventory and get_alerts read: a company's own goods (the backend's
+// GET /api/v1/news-goods with the member's token, which rebuilds them when stale; without a
+// token, as last stored in companyGoods), or the sample stock in the browser demo. Unread, the
 // tools get nothing and the stock filters are free text.
+async function companyGoodsItems(companyId, backend) {
+  if (!backend) return (await goodsByCompany.doc(companyId).get()).get("items") ?? [];
+  const { status, body } = await backend("/api/v1/news-goods");
+  if (status !== 200) throw new Error(`news-goods ${status}`);
+  return body.data?.items ?? [];
+}
 async function stockFor(company, backend) {
-  const load = company
-    ? companyStock(company.company.id, backend ? goodsReader(backend, async () => company.company) : null).then((g) => g.items ?? [])
-    : cached("inventory", () => list(inventory));
+  const load = company ? companyGoodsItems(company.company.id, backend) : cached("inventory", () => list(inventory));
   return load.catch((e) => {
     log("WARNING", "stock.unavailable", { companyId: company?.company.id, error: String(e?.message || e) });
     return [];

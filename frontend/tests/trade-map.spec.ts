@@ -184,8 +184,8 @@ async function openMap(
     ];
   }
   const scenarios: Record<string, unknown>[] = [];
-  await page.route("**/api/impacts**", (r) =>
-    r.fulfill({ json: { impacts: [], scan: null } }),
+  await page.route("**/api/v1/news-alerts**", (r) =>
+    r.fulfill({ json: { data: { impacts: [], scan: null } } }),
   );
   await page.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url());

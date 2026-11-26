@@ -932,8 +932,8 @@ async function fixture(
     }
     await route.fulfill({ json: { data, meta } });
   });
-  await page.route("**/api/impacts**", (route) =>
-    route.fulfill({ json: { impacts: [] } }),
+  await page.route("**/api/v1/news-alerts**", (route) =>
+    route.fulfill({ json: { data: { impacts: [] } } }),
   );
   return requests;
 }
@@ -1269,7 +1269,9 @@ test("new accounts onboard through the API and the sample demo stays local", asy
   await expect(
     page.getByRole("button", { name: "PO-2291", exact: true }),
   ).toBeVisible();
-  expect(requests.length).toBe(count);
+  // The demo only reads News watch's public alerts and sample stock, signed out.
+  const demoReads = requests.slice(count);
+  expect(demoReads.every((r) => /^\/news-(alerts|goods)$/.test(r.path) && !r.auth)).toBeTruthy();
 });
 
 // News sources are in the company backend; built-in ones are shared by every
@@ -1388,7 +1390,7 @@ async function scanFixture(page: Page, { starts }: { starts: boolean }) {
     impactsFound: 1,
   };
   const polls = { after: 0 };
-  await page.route("**/api/impacts**", async (route) => {
+  await page.route("**/api/v1/news-alerts**", async (route) => {
     if (latest.id === "scan-2" && ++polls.after > 1) {
       latest = {
         ...latest,
@@ -1399,7 +1401,7 @@ async function scanFixture(page: Page, { starts }: { starts: boolean }) {
         impactsFound: 2,
       };
     }
-    await route.fulfill({ json: { impacts: [], scan: latest } });
+    await route.fulfill({ json: { data: { impacts: [], scan: latest } } });
   });
   await page.route("**/api/scan", async (route) => {
     if (starts) latest = { id: "scan-2", status: "running", startedAt: new Date().toISOString() };
@@ -2156,9 +2158,9 @@ test("viewers read the analysis but can't start, review or message", async ({ pa
 // editors confirm or reject with their own token, viewers only read.
 async function newsReviewFixture(page: Page) {
   const reviews: { method: string; path: string; body: any; auth?: string }[] = [];
-  await page.route("**/api/impacts**", (route) =>
+  await page.route("**/api/v1/news-alerts**", (route) =>
     route.fulfill({
-      json: {
+      json: { data: {
         scan: null,
         impacts: [
           {
@@ -2178,7 +2180,7 @@ async function newsReviewFixture(page: Page) {
             createdAt: new Date().toISOString(),
           },
         ],
-      },
+      } },
     }),
   );
   let review: any = null;
@@ -2309,13 +2311,13 @@ test("a company's News watch is about its own goods, shown by name", async ({ pa
   const tee = { sku: "G-3FA2C1", name: "Cotton T-shirt", hsCode: "6109.10", markets: ["EU"], supplier: "Mill A", orders: ["PO-1"], source: "orders" };
   const sweaters = { sku: "G-00A1B2", name: "Merino sweaters", hsCode: "", markets: [], supplier: "", orders: [], source: "profile" };
   let stockAuth: string | undefined;
-  await page.route("**/api/inventory**", (route) => {
+  await page.route("**/api/v1/news-goods**", (route) => {
     stockAuth = route.request().headers().authorization;
-    return route.fulfill({ json: { kind: "company", items: [tee, sweaters], owner: { company: "Acme", about: "" }, watchedSince: null } });
+    return route.fulfill({ json: { data: { kind: "company", items: [tee, sweaters], owner: { company: "Acme", about: "" }, watchedSince: null } } });
   });
-  await page.route("**/api/impacts**", (route) =>
+  await page.route("**/api/v1/news-alerts**", (route) =>
     route.fulfill({
-      json: {
+      json: { data: {
         scan: null,
         impacts: [
           {
@@ -2334,7 +2336,7 @@ test("a company's News watch is about its own goods, shown by name", async ({ pa
             createdAt: new Date().toISOString(),
           },
         ],
-      },
+      } },
     }),
   );
   await page.route("**/api/v1/news-matches**", (route) =>

@@ -47,8 +47,8 @@ const stock = [
 ];
 
 test("a news alert's stock items link to the orders they match", async ({ page }) => {
-  await page.route("**/api/impacts**", (route) => route.fulfill({ json: { impacts: [impact], scan: null } }));
-  await page.route("**/api/inventory**", (route) => route.fulfill({ json: { items: stock } }));
+  await page.route("**/api/v1/news-alerts**", (route) => route.fulfill({ json: { data: { impacts: [impact], scan: null } } }));
+  await page.route("**/api/v1/news-goods**", (route) => route.fulfill({ json: { data: { items: stock } } }));
   await page.goto("/");
   await page.evaluate(() => sessionStorage.setItem("em-session", "demo"));
   await page.goto("/#/workspace/news");
@@ -80,8 +80,8 @@ test("the +N chip on a news card shows the rest of its stock items", async ({ pa
     ...impact,
     affected: [...impact.affected, affected("OUT-101", "Teak bench"), affected("OUT-102", "Teak table"), affected("FLR-102", "Oak floor")],
   };
-  await page.route("**/api/impacts**", (route) => route.fulfill({ json: { impacts: [many], scan: null } }));
-  await page.route("**/api/inventory**", (route) => route.fulfill({ json: { items: stock } }));
+  await page.route("**/api/v1/news-alerts**", (route) => route.fulfill({ json: { data: { impacts: [many], scan: null } } }));
+  await page.route("**/api/v1/news-goods**", (route) => route.fulfill({ json: { data: { items: stock } } }));
   await page.goto("/");
   await page.evaluate(() => sessionStorage.setItem("em-session", "demo"));
   await page.goto("/#/workspace/news");
@@ -96,9 +96,9 @@ test("the +N chip on a news card shows the rest of its stock items", async ({ pa
 
 test("the stock list shows each item's material and origin trace, and whose stock it is", async ({ page }) => {
   const traced = { ...item("TEX-101", "Organic cotton tee", "6109.10", ["EU"]), material: "Organic cotton", materialOrigin: "India", originTraced: true };
-  await page.route("**/api/impacts**", (route) => route.fulfill({ json: { impacts: [], scan: null } }));
-  await page.route("**/api/inventory**", (route) =>
-    route.fulfill({ json: { items: [traced], owner: { company: "Sample Textiles Ltd.", about: "a sample apparel maker" } } }),
+  await page.route("**/api/v1/news-alerts**", (route) => route.fulfill({ json: { data: { impacts: [], scan: null } } }));
+  await page.route("**/api/v1/news-goods**", (route) =>
+    route.fulfill({ json: { data: { items: [traced], owner: { company: "Sample Textiles Ltd.", about: "a sample apparel maker" } } } }),
   );
   await page.goto("/");
   await page.evaluate(() => sessionStorage.setItem("em-session", "demo"));

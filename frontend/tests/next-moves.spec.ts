@@ -257,8 +257,8 @@ async function fixture(page: Page) {
     }
     await route.fulfill({ json: { data, meta: {} } });
   });
-  await page.route("**/api/impacts**", (route) =>
-    route.fulfill({ json: { impacts: [] } }),
+  await page.route("**/api/v1/news-alerts**", (route) =>
+    route.fulfill({ json: { data: { impacts: [] } } }),
   );
   return requests;
 }

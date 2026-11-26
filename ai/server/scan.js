@@ -1,5 +1,5 @@
 // Daily news scan: read enabled sources, ask Gemini on Vertex AI which items each new article
-// could affect, in the browser demo's sample stock and in each company's own goods (goods.js),
+// could affect, in the browser demo's sample stock and in each company's own goods (built by the backend, GET /news-goods),
 // and store the results in Firestore. Runs from POST /api/scan (Cloud Scheduler or the UI) or
 // `npm run scan`.
 import { pathToFileURL } from "node:url";

@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, Path
+from fastapi import APIRouter, Depends, Path
 from sqlalchemy.orm import Session
 
 from app.core.auth import EditorContext, ViewerContext
@@ -21,13 +21,10 @@ ImpactId = Annotated[str, Path(pattern=r"^[\w~-]{1,128}$")]
 
 
 @router.get("", response_model=SuccessResponse[NewsMatchesOut])
-def list_news_matches(
-    ctx: ViewerContext, db: Db, authorization: Annotated[str | None, Header()] = None
-):
+def list_news_matches(ctx: ViewerContext, db: Db):
     """For each News watch alert, the open orders it may affect (same HS heading and market as
-    a stock item it names) and the orders people linked, with each verdict. Reads News watch
-    with the caller's token."""
-    return success_response(news_service.build_news_matches(db, ctx, authorization))
+    a stock item it names) and the orders people linked, with each verdict."""
+    return success_response(news_service.build_news_matches(db, ctx))
 
 
 @router.get("/accuracy", response_model=SuccessResponse[NewsMatchAccuracyOut])
@@ -44,13 +41,10 @@ def review_news_match(
     payload: NewsReviewIn,
     ctx: EditorContext,
     db: Db,
-    authorization: Annotated[str | None, Header()] = None,
 ):
     """Confirm (`relevant`) or reject (`not_relevant`) that an alert affects an order, with an
     optional note. Works for any of the company's orders, suggested or not."""
-    return success_response(
-        news_service.review_news_match(db, ctx, impact_id, order_id, payload, authorization)
-    )
+    return success_response(news_service.review_news_match(db, ctx, impact_id, order_id, payload))
 
 
 @router.delete("/{impact_id}/orders/{order_id}", response_model=SuccessResponse[dict])

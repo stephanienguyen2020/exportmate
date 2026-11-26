@@ -120,6 +120,8 @@ What each endpoint does and where the app uses it. The live contract (exact fiel
 | `DELETE /news-sources/{id}` | editor | News watch › Sources: "Remove" |
 | `GET /news-settings` | viewer, or signed out | News watch › Sources: the age rule's switch |
 | `PATCH /news-settings` | editor | the same |
+| `GET /news-alerts` | viewer, or signed out | News watch, Alerts tab and scan bar; the dashboard's scan time; search |
+| `GET /news-goods` | viewer, or signed out | News watch, Stock tab; alert chips; search |
 | **News watch and orders** | | |
 | `GET /news-matches` | viewer | News watch, Alerts tab: "Orders this may affect" on each alert, and the "Orders" filter |
 | `GET /news-matches/accuracy` | viewer | Not used by the frontend yet (how often each way of suggesting, and each chain link, is confirmed) |
@@ -262,7 +264,7 @@ Declines it → `{"deleted": true}`.
   "sourcesCheckedAt": null}}
 ```
 - `countsByStatus` always lists all 4 statuses. Value at risk and nearest date count only `exposed` orders, and the date only counts ship dates from today on.
-- `sourcesCheckedAt` is always `null` until the crawler exists (phase 4, `GET /sources`). The dashboard takes its scan time from `ai/server` `/api/impacts`.
+- `sourcesCheckedAt` is always `null` until the crawler exists (phase 4, `GET /sources`). The dashboard takes its scan time from `GET /news-alerts`.
 
 Dashboard tiles, loaded on every workspace load.
 
@@ -714,7 +716,7 @@ Content shape (camelCase): `{title, subtitle, summary, sections: [{id, layout: "
   "edits": {"header": false, "sections": 0, "rowsEdited": 0, "rowsAdded": 0, "rowsRemoved": 0}}}
 ```
 - Order: order facts, the document checklist exactly as `GET /orders?checklist=all` checks it, what the order's latest analysis found (`analysis`: next step, estimated cost, review state, playbook rules fired, missing data; `costs`: each cost line with its formula and basis, and unpriced duties), cited sources with quotes, the CSV row. Preparing a report never starts an analysis (that changes order statuses and needs an editor); without one the sections say "Not analysed yet", and they say so when the checklist has changed since the analysis. `404` for another company's order.
-- Company: at a glance; checklist lines in the markets the company ships to that take effect or change in the next `days`, with the open orders shipping on or after that date; News watch alerts (high and medium, last `days`), read from the AI service's `GET /api/impacts` with the caller's token (`AI_SERVICE_URL`; if it can't be reached the section says so), each naming the orders someone confirmed it affects (`/news-matches`); floods within the check radius of suppliers and sites (last `days`); regulation versions added in the last `days` and the open orders whose checklists cite that regulation; open orders with document gaps; suppliers to follow up; sources.
+- Company: at a glance; checklist lines in the markets the company ships to that take effect or change in the next `days`, with the open orders shipping on or after that date; News watch alerts (high and medium, last `days`), as `GET /news-alerts` gives them to the caller (if News watch can't be read the section says so), each naming the orders someone confirmed it affects (`/news-matches`); floods within the check radius of suppliers and sites (last `days`); regulation versions added in the last `days` and the open orders whose checklists cite that regulation; open orders with document gaps; suppliers to follow up; sources.
 
 ### `GET /report-drafts` (viewer)
 The caller's 30 most recently updated reports (summary fields only).
@@ -778,11 +780,26 @@ The company's own source only (`400 built_in_source` / `shared_source` otherwise
 `{skipOld}`: for the caller's company only; then only it sees what old articles raise.
 `400 no_age_rule` when the rule is off. Audited `news_settings.updated`.
 
+### `GET /news-alerts` (viewer, or signed out)
+Moved from the AI service's `/api/impacts` (Phase 2). `{impacts, scan}`: the newest 60 alerts about
+the caller's goods (signed out: the sample stock's), as the AI service's news scan stored them in
+Firestore `impacts` (fields passed through as they are), and the latest scan. An alert must come
+from a source the caller sees and has switched on and pass the caller's age rule. In `scan`,
+`impactsFound` counts the caller's alerts and other companies' own sources are left out.
+
+### `GET /news-goods` (viewer, or signed out)
+Moved from the AI service's `/api/inventory`. `{kind, items, owner, updatedAt, watchedSince}`.
+`company`: one item per product and HS code from the company profile's products and its orders
+(`sku` `G-…`, `name`, `hsCode`, `markets`, `orders`, `source` `profile`/`orders`, `supplier`), at
+most 60, kept in Firestore `companyGoods/{companyId}` for the scan and rebuilt when 15 minutes
+old; `watchedSince` is when the scan first read back news for them (`null`: from the next scan).
+`sample` (signed out): the demo's synthetic stock.
+
 ## News watch and orders
 
 News watch (the AI service) matches each article to the company's goods (what its profile names and its orders ship), not straight to orders. The backend suggests which of the company's orders an alert may affect, and people decide (`news_order_reviews`, `services/news_matches.py`). Suggestions come from walking the knowledge graph (`services/knowledge_graph.py`, data in `app/knowledge_graph/`), only for orders that haven't shipped:
 - **From what the article names** (the alert's `mentions`: `materials`, `hsCodes`, `originCountries`, `markets`): an order whose supplier buys a named material and/or from a named country (`supplier_sourcing`). The path follows the material chain from the form the supplier buys to the order's product; when the article names a product of the chain (logs, 4403), the order's product must be made from it. Named markets limit the orders to those shipping there.
-- **From each item the alert names** (from the AI service's `GET /api/inventory`): an order with the item's HS heading (first four digits) shipping to one of the item's markets (`EU`, `US`…; items with no export market, such as raw material, match on the heading alone). A suggestion is a guess until an owner or editor confirms or rejects it, and only confirmed links reach reports. Alerts and stock are read with the caller's token. A review keeps a copy of the alert's headline and link, so it outlives the alert.
+- **From each item the alert names** (`GET /news-goods`): an order with the item's HS heading (first four digits) shipping to one of the item's markets (`EU`, `US`…; items with no export market, such as raw material, match on the heading alone). A suggestion is a guess until an owner or editor confirms or rejects it, and only confirmed links reach reports. Alerts and goods are read as the caller sees them. A review keeps a copy of the alert's headline and link, so it outlives the alert.
 
 ### `GET /news-matches` (viewer)
 ```json

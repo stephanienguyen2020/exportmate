@@ -1,7 +1,7 @@
 """Which orders a News watch alert may affect, and people's verdicts on it.
 
 The AI service matches each article to the company's goods (what its profile names and its
-orders ship, each with an HS code and markets; ai/server/goods.js), and records what the
+orders ship, each with an HS code and markets; services/news_goods.py), and records what the
 article names (`mentions`: materials, HS codes, origin countries, markets). Orders are
 suggested by walking the knowledge graph (services/knowledge_graph.py) from those mentions,
 through suppliers' sourcing and the material chain, and from each item the alert names (same
@@ -23,7 +23,6 @@ from sqlalchemy.orm import Session
 from app.core import clock
 from app.core.context import CompanyContext
 from app.core.errors import AppError, not_found_error
-from app.core.news_alerts import fetch_news_alerts, fetch_news_stock
 from app.database.models import NewsOrderReview, NewsVerdict, Order, User
 from app.database.queries import audit as audit_queries
 from app.database.queries import news_reviews as news_queries
@@ -41,6 +40,8 @@ from app.schemas.news import (
 )
 from app.services import graph_feedback
 from app.services.knowledge_graph import GraphMatch, GraphMentions, GraphPathStep, GraphWalker
+from app.services.news_alerts import fetch_news_alerts
+from app.services.news_goods import list_stock_items
 from app.services.trade_map import load_gazetteer, locate_destination
 
 log = logging.getLogger(__name__)
@@ -126,13 +127,11 @@ def _alert_id(alert: dict) -> str:
     return str(alert.get("id") or alert.get("articleId") or "")
 
 
-def build_news_matches(
-    db: Session, ctx: CompanyContext, authorization: str | None
-) -> NewsMatchesOut:
-    alerts = fetch_news_alerts(authorization)
+def build_news_matches(db: Session, ctx: CompanyContext) -> NewsMatchesOut:
+    alerts = fetch_news_alerts(ctx)
     if alerts is None:
         return NewsMatchesOut(news_available=False, matches=[])
-    stock = {str(i.get("sku")): i for i in fetch_news_stock(authorization) or []}
+    stock = {str(i.get("sku")): i for i in list_stock_items(db, ctx)}
     gazetteer = load_gazetteer(db)
     orders = order_queries.list_company_orders(db, ctx.company_id)
     markets = {o.id: locate_destination(o.destination, gazetteer).market for o in orders}
@@ -202,8 +201,8 @@ def _match_out(
     )
 
 
-def _find_alert(impact_id: str, authorization: str | None) -> dict:
-    alerts = fetch_news_alerts(authorization)
+def _find_alert(ctx: CompanyContext, impact_id: str) -> dict:
+    alerts = fetch_news_alerts(ctx)
     if alerts is None:
         raise AppError(503, "news_unavailable", "News watch can't be reached. Try again shortly.")
     alert = next((a for a in alerts if _alert_id(a) == impact_id), None)
@@ -218,15 +217,14 @@ def review_news_match(
     impact_id: str,
     external_id: str,
     payload: NewsReviewIn,
-    authorization: str | None,
 ) -> NewsOrderMatchOut:
     """Confirm or reject that an alert affects an order. Any order of the company may be
     linked, so a person can add one ExportMate missed."""
     order = order_queries.get_order_by_external_id(db, ctx.company_id, external_id)
     if not order:
         raise not_found_error("Order")
-    alert = _find_alert(impact_id, authorization)
-    stock = {str(i.get("sku")): i for i in fetch_news_stock(authorization) or []}
+    alert = _find_alert(ctx, impact_id)
+    stock = {str(i.get("sku")): i for i in list_stock_items(db, ctx)}
     market = locate_destination(order.destination, load_gazetteer(db)).market
     suggestion = next(
         (

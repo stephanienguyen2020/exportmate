@@ -58,10 +58,10 @@ def reference() -> None:
 @pytest.fixture(autouse=True)
 def fixed_world(monkeypatch: pytest.MonkeyPatch) -> dict:
     """Today is fixed (the seed's dates don't move) and News watch answers with NEWS."""
-    calls: dict = {"news": NEWS, "auth": []}
+    calls: dict = {"news": NEWS, "readers": []}
 
-    def fake_news(authorization):
-        calls["auth"].append(authorization)
+    def fake_news(ctx):
+        calls["readers"].append(ctx.user.email)
         return calls["news"]
 
     monkeypatch.setattr(clock, "today", lambda: TODAY)
@@ -169,7 +169,7 @@ def test_company_report_covers_what_is_happening_and_what_it_affects(client, lan
     report = create(client, lan, kind="company", days=90)
     content = report["content"]
     assert report["scope"] == {"days": 90}
-    assert fixed_world["auth"] == ["Bearer dev:lan@example.com"]
+    assert fixed_world["readers"] == ["lan@example.com"]
     assert [s["id"] for s in content["sections"]] == [
         "glance",
         "changes",
@@ -218,8 +218,8 @@ def test_company_report_covers_what_is_happening_and_what_it_affects(client, lan
 def test_company_report_names_the_orders_people_confirmed_an_alert_affects(
     client, lan, monkeypatch
 ):
-    monkeypatch.setattr(news_service, "fetch_news_alerts", lambda authorization: NEWS)
-    monkeypatch.setattr(news_service, "fetch_news_stock", lambda authorization: [])
+    monkeypatch.setattr(news_service, "fetch_news_alerts", lambda ctx: NEWS)
+    monkeypatch.setattr(news_service, "list_stock_items", lambda db, ctx: [])
     for order_id, verdict in (("PO-1", "relevant"), ("PO-3", "relevant"), ("PO-6", "not_relevant")):
         response = client.put(
             f"/api/v1/news-matches/a1/orders/{order_id}", headers=lan, json={"verdict": verdict}

@@ -25,15 +25,9 @@ report_email_limiter = RateLimiter("report emails")
 
 
 @router.post("", response_model=SuccessResponse[ReportDraftOut], status_code=201)
-def create_report(
-    body: ReportCreateIn,
-    ctx: ViewerContext,
-    db: Db,
-    authorization: Annotated[str | None, Header()] = None,
-):
-    """Generates an order or company report into a draft only its author sees and edits.
-    A company report reads News watch with the caller's token."""
-    return success_response(report_service.create_report_draft(db, ctx, body, authorization))
+def create_report(body: ReportCreateIn, ctx: ViewerContext, db: Db):
+    """Generates an order or company report into a draft only its author sees and edits."""
+    return success_response(report_service.create_report_draft(db, ctx, body))
 
 
 @router.get("", response_model=SuccessResponse[list[ReportDraftSummaryOut]])

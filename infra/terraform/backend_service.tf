@@ -2,8 +2,6 @@
 # Terraform creates them with a placeholder image; backend/deploy.sh sets the real one.
 
 locals {
-  # AI_SERVICE_URL is the AI service the website forwards /api to (web_service.tf). News watch
-  # matches and company reports read their alerts there, so they name the alerts people see.
   backend_env = merge({
     ENV                        = "production"
     AUTH_MODE                  = "firebase"
@@ -11,7 +9,6 @@ locals {
     ALLOWED_ORIGINS            = var.allowed_origins
     REGULATION_DOCUMENT_BUCKET = google_storage_bucket.regulation_documents.name
     REPORT_EMAIL_FROM          = var.report_email_from
-    AI_SERVICE_URL             = local.ai_url
     GOOGLE_CLOUD_PROJECT       = var.project_id # Vertex AI project for Gemini
     GEMINI_MODEL               = var.gemini_model
     GEMINI_PROJECT             = var.gemini_project
@@ -40,8 +37,8 @@ resource "google_secret_manager_secret_iam_member" "backend_reads_resend_api_key
   member    = "serviceAccount:${google_service_account.backend.email}"
 }
 
-# News watch's sources and settings (/news-sources, /news-settings) are in the AI service's
-# Firestore, where its news scan reads them.
+# News watch's records (/news-sources, /news-settings, /news-alerts, /news-goods) are in the
+# AI service's Firestore, where its news scan reads and writes them.
 resource "google_project_iam_member" "backend_firestore" {
   project = var.project_id
   role    = "roles/datastore.user"

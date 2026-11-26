@@ -2,8 +2,8 @@ import { test, expect, type Page } from "@playwright/test";
 
 // The browser-only sample demo: no backend, so these run against the Vite server alone.
 async function openDemo(page: Page, hash = "#/workspace") {
-  await page.route("**/api/impacts**", (route) =>
-    route.fulfill({ json: { impacts: [], scan: null } }),
+  await page.route("**/api/v1/news-alerts**", (route) =>
+    route.fulfill({ json: { data: { impacts: [], scan: null } } }),
   );
   await page.goto("/");
   await page.evaluate(() => sessionStorage.setItem("em-session", "demo"));
@@ -450,8 +450,8 @@ test("news alerts filter by severity, text, source, stock item and date", async 
   ];
   await openDemo(page, "#/workspace/news");
   // Registered last, so it answers before openDemo's empty list.
-  await page.route("**/api/impacts**", (route) =>
-    route.fulfill({ json: { impacts, scan: null } }),
+  await page.route("**/api/v1/news-alerts**", (route) =>
+    route.fulfill({ json: { data: { impacts, scan: null } } }),
   );
   await page.reload();
   const cards = page.locator(".news-list .news-card");
@@ -511,11 +511,11 @@ test("people confirm or reject which demo orders a news alert affects", async ({
     { sku: "PLY-001", name: "Acacia plywood 18 mm", hsCode: "4412.33", markets: ["EU"] },
   ];
   await openDemo(page, "#/workspace/news");
-  await page.route("**/api/impacts**", (route) =>
-    route.fulfill({ json: { impacts, scan: null } }),
+  await page.route("**/api/v1/news-alerts**", (route) =>
+    route.fulfill({ json: { data: { impacts, scan: null } } }),
   );
-  await page.route("**/api/inventory**", (route) =>
-    route.fulfill({ json: { items } }),
+  await page.route("**/api/v1/news-goods**", (route) =>
+    route.fulfill({ json: { data: { items } } }),
   );
   await page.reload();
 

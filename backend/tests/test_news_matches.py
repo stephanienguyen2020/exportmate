@@ -44,14 +44,14 @@ STOCK = [
 
 @pytest.fixture(autouse=True)
 def news_watch(monkeypatch: pytest.MonkeyPatch) -> dict:
-    world: dict = {"alerts": [ALERT], "stock": STOCK, "auth": []}
+    world: dict = {"alerts": [ALERT], "stock": STOCK, "readers": []}
 
-    def fake_alerts(authorization):
-        world["auth"].append(authorization)
+    def fake_alerts(ctx):
+        world["readers"].append(ctx.user.email)
         return world["alerts"]
 
     monkeypatch.setattr(news_service, "fetch_news_alerts", fake_alerts)
-    monkeypatch.setattr(news_service, "fetch_news_stock", lambda authorization: world["stock"])
+    monkeypatch.setattr(news_service, "list_stock_items", lambda db, ctx: world["stock"])
     return world
 
 
@@ -91,8 +91,8 @@ def test_open_orders_with_the_items_heading_and_market_are_suggested(client, lan
     assert (
         match["reason"] == "HS 4412 and ships to EU, like Acacia plywood 18 mm named in this alert."
     )
-    # News watch is read with the caller's own token.
-    assert news_watch["auth"] == ["Bearer dev:lan@example.com"]
+    # News watch is read as the caller (their company's view).
+    assert news_watch["readers"] == ["lan@example.com"]
 
 
 def test_editors_confirm_reject_and_undo_a_suggestion(client, lan):

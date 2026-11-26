@@ -145,7 +145,7 @@ export function useImpacts() {
   const [error, setError] = useState("");
   // Resolves to the latest scan (undefined when the request failed).
   const load = () =>
-    api<{ impacts: Impact[]; scan: Scan | null }>("/impacts")
+    backend<{ impacts: Impact[]; scan: Scan | null }>("/news-alerts")
       .then((d) => {
         setImpacts(d.impacts.sort(bySeverity));
         setScan(d.scan);
@@ -196,7 +196,7 @@ let stockRequest: { key: string; list: Promise<StockList> } | null = null;
 async function loadStockList() {
   const key = JSON.stringify(await companyAuth());
   if (stockRequest?.key !== key) {
-    const list = api<StockList>("/inventory").catch((e) => {
+    const list = backend<StockList>("/news-goods").catch((e) => {
       if (stockRequest?.list === list) stockRequest = null;
       throw e;
     });
