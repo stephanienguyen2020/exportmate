@@ -1,4 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
+import type { TradeMap } from "../src/api";
+import { mapApiData } from "./map-api";
 
 const account = {
   user: {
@@ -442,7 +444,9 @@ async function fixture(
     });
     let data: unknown = {};
     let meta = {};
-    if (path === "/me") {
+    const fromMap = mapApiData(route, tradeMap as unknown as TradeMap);
+    if (fromMap !== undefined) data = fromMap;
+    else if (path === "/me") {
       if (method === "PATCH") me.user = { ...me.user, ...body };
       data = me;
     } else if (path === "/company") {
@@ -873,7 +877,6 @@ async function fixture(
       }
       data = draft;
     }
-    else if (path === "/trade-map") data = tradeMap;
     else if (path === "/playbook/rules") {
       if (method === "POST") {
         const rule = { ...body, id: "rule-2", checked: !!body.when };
@@ -975,7 +978,7 @@ test("rule watch shows the company's own requirements, not the sample scenario",
   page,
 }) => {
   await fixture(page);
-  await page.route("**/api/v1/trade-map/changes", (route) =>
+  await page.route("**/api/v1/market-requirements/changes", (route) =>
     route.fulfill({
       json: {
         data: {

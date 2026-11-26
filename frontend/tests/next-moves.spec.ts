@@ -2,6 +2,8 @@
 // the order's page, and saving analyses the order again. The API is mocked; the supplier
 // record, the documents and the re-analysis come from the backend in a real session.
 import { test, expect, type Page } from "@playwright/test";
+import type { TradeMap } from "../src/api";
+import { mapApiData } from "./map-api";
 
 const account = {
   user: {
@@ -153,44 +155,7 @@ async function fixture(page: Page) {
     requests.push({ method, path, body });
     const status = supplierSaved ? "clear" : "exposed";
     let data: unknown;
-    if (path === "/me") data = account;
-    else if (path === "/orders") data = [{ ...table, status }, sideTable];
-    else if (path === "/overview")
-      data = {
-        totalOrders: 2,
-        countsByStatus: {
-          exposed: supplierSaved ? 1 : 2,
-          clear: supplierSaved ? 1 : 0,
-        },
-        valueAtRiskByCurrency: {},
-        nearestAffectedShipDate: null,
-        sourcesCheckedAt: null,
-      };
-    else if (path === "/order-statuses") data = orderStatuses;
-    else if (path === "/orders/PO-3101")
-      data = {
-        order: { ...table, status },
-        source: null,
-        exposures: [],
-        latestReportId: supplierSaved ? "report-2" : "report-1",
-        statusChanges: [],
-      };
-    else if (path === "/orders/PO-3120")
-      data = {
-        order: sideTable,
-        source: null,
-        exposures: [],
-        latestReportId: "report-3",
-        statusChanges: [],
-      };
-    else if (path === "/reports/report-1")
-      data = report("report-1", table, "before");
-    else if (path === "/reports/report-2")
-      data = report("report-2", { ...table, status: "clear" }, "after");
-    else if (path === "/reports/report-3")
-      data = report("report-3", sideTable, "before");
-    else if (path === "/trade-map")
-      data = {
+    const tradeMap: TradeMap = {
         markets: [],
         orders: [
           {
@@ -231,6 +196,44 @@ async function fixture(page: Page) {
         homeCountryIds: [],
         checkRadiusKm: 25,
       };
+    const fromMap = mapApiData(route, tradeMap);
+    if (fromMap !== undefined) data = fromMap;
+    else if (path === "/me") data = account;
+    else if (path === "/orders") data = [{ ...table, status }, sideTable];
+    else if (path === "/overview")
+      data = {
+        totalOrders: 2,
+        countsByStatus: {
+          exposed: supplierSaved ? 1 : 2,
+          clear: supplierSaved ? 1 : 0,
+        },
+        valueAtRiskByCurrency: {},
+        nearestAffectedShipDate: null,
+        sourcesCheckedAt: null,
+      };
+    else if (path === "/order-statuses") data = orderStatuses;
+    else if (path === "/orders/PO-3101")
+      data = {
+        order: { ...table, status },
+        source: null,
+        exposures: [],
+        latestReportId: supplierSaved ? "report-2" : "report-1",
+        statusChanges: [],
+      };
+    else if (path === "/orders/PO-3120")
+      data = {
+        order: sideTable,
+        source: null,
+        exposures: [],
+        latestReportId: "report-3",
+        statusChanges: [],
+      };
+    else if (path === "/reports/report-1")
+      data = report("report-1", table, "before");
+    else if (path === "/reports/report-2")
+      data = report("report-2", { ...table, status: "clear" }, "after");
+    else if (path === "/reports/report-3")
+      data = report("report-3", sideTable, "before");
     else if (path === "/suppliers" && method === "POST") {
       supplierSaved = true;
       data = {
