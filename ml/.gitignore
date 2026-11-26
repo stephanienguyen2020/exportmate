@@ -1,2 +1,5 @@
 # Training data stays local (later in a GCS bucket), never in git.
 data/
+models/
+__pycache__/
+.pytest_cache/
