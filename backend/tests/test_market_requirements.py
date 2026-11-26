@@ -68,8 +68,8 @@ def draft(client, headers, document_id: str):
 
 
 def order_check_keys(client, headers) -> set[str]:
-    data = client.get("/api/v1/trade-map", headers=headers).json()["data"]
-    return {c["requirementKey"] for c in data["orders"][0]["checks"]}
+    data = client.get("/api/v1/orders?checklist=all", headers=headers).json()["data"]
+    return {c["requirementKey"] for c in data[0]["checks"]}
 
 
 def test_ai_drafts_are_checked_and_count_only_once_reviewed(client, lan, fake_gemini):

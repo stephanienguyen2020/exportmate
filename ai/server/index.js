@@ -14,7 +14,7 @@ import { ANONYMOUS, auditVisible, isShared, presentScan, presentSources, publicA
 import { readJson, scanBlocked } from "./limits.js";
 import { deleteMemory, listMemories, memoryKeepDays, remembers, userKeyFor } from "./agents/platform.js";
 import { AGENTS_AT, callAgents, streamTurn } from "./agents/remote.js";
-import { demoMapOrders, demoPlaybook } from "./orders.js";
+import { demoOrders, demoPlaybook } from "./orders.js";
 import { ASSISTANT, SCAN_MODEL } from "./models.js";
 
 const PORT = Number(process.env.PORT || 8080);
@@ -252,7 +252,7 @@ async function streamChat(req, res, body, origin, requestId) {
       user: user && { id: user.id },
       requestId,
       // The browser demo sends its own orders and playbook; a company chat never uses what the client sends.
-      demo: company ? null : { orders: demoMapOrders(body.demo?.orders), playbook: demoPlaybook(body.demo?.rules) },
+      demo: company ? null : { orders: demoOrders(body.demo?.orders), playbook: demoPlaybook(body.demo?.rules) },
     };
     if (AGENTS_AT) {
       // The agents run on Agent Runtime (agents/remote.js): relay their events. The user's token

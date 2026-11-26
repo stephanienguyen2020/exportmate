@@ -71,11 +71,16 @@ class RequirementCheckOut(CamelCaseModel):
     accepted_standards: list[str] = Field(default_factory=list)
 
 
-class MapOrderOut(CamelCaseModel):
-    order: OrderOut
+ChecklistDetail = Literal["none", "gaps", "all"]
+
+
+class OrderListItemOut(OrderOut):
+    """An order in GET /orders: its fields, where it goes and how many checklist lines it's
+    missing; `checks` holds its checklist (all lines, or only the gaps) when asked for."""
+
     placement: OrderPlacementOut
-    checks: list[RequirementCheckOut]
     gap_count: int  # checks that are "missing" or "mismatch"
+    checks: list[RequirementCheckOut] | None = None  # None: checklist=none
 
 
 class DocumentKindOut(CamelCaseModel):
@@ -175,9 +180,6 @@ class SatelliteObservationOut(CamelCaseModel):
 
 class TradeMapOut(CamelCaseModel):
     markets: list[MarketOut]
-    orders: list[MapOrderOut]
-    suppliers: list[MapSupplierOut]
-    sites: list[SiteOut]
     observations: list[SatelliteObservationOut]
     document_kinds: list[DocumentKindOut]
     countries: list[CountryOut]  # the countries a supplier or site can be in

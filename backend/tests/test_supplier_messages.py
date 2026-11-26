@@ -118,7 +118,7 @@ def test_edits_after_approval_go_back_to_draft_and_roles_apply(client, lan):
         json={"recipient": "export@binhphuwood.example.com", "saveRecipientToSupplier": True},
     ).json()["data"]
     assert (edited["status"], edited["approvedBy"]) == ("draft", None)
-    suppliers = client.get("/api/v1/trade-map", headers=lan).json()["data"]["suppliers"]
+    suppliers = client.get("/api/v1/suppliers", headers=lan).json()["data"]
     binh_phu = next(s for s in suppliers if s["name"] == "Binh Phu Wood")
     assert binh_phu["contactEmail"] == "export@binhphuwood.example.com"
 

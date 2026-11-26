@@ -623,6 +623,15 @@ export type SatelliteObservation = {
   sourceUrl: string | null;
   nearby: NearbyPlace[];
 };
+/** An order from GET /orders: its fields, placement and gap count, and its checks when asked
+ * for (`checklist=gaps|all`). */
+export type OrderListItem = ApiOrder & {
+  placement: MapOrder["placement"];
+  gapCount: number;
+  checks: RequirementCheck[] | null;
+};
+/** What the trade map page shows, read from GET /trade-map (markets, observations and the
+ * forms' lists), /orders, /suppliers and /sites. */
 export type TradeMap = {
   markets: MapMarket[];
   orders: MapOrder[];
@@ -929,6 +938,23 @@ async function responseError(response: Response): Promise<ApiError> {
     body?.error?.code || "request_failed",
   );
 }
+/** Every page of GET /orders with these filters (`checklist`, `market`, `status`, `q`). */
+async function allOrders(
+  filters: Record<string, string>,
+  signal?: AbortSignal,
+): Promise<OrderListItem[]> {
+  const orders: OrderListItem[] = [];
+  let cursor: string | null | undefined;
+  do {
+    const query = new URLSearchParams({ ...filters, limit: "200" });
+    if (cursor) query.set("cursor", cursor);
+    const page = await request<OrderListItem[]>(`/orders?${query}`, { signal });
+    orders.push(...page.data);
+    cursor = page.meta.nextCursor;
+  } while (cursor);
+  return orders;
+}
+
 export async function request<T>(
   path: string,
   options: RequestInit = {},
@@ -1013,18 +1039,8 @@ export const api = {
   logout: () => request("/me/logout", { method: "POST" }),
   overview: (signal?: AbortSignal) =>
     request<Overview>("/overview", { signal }).then((r) => r.data),
-  async orders(signal?: AbortSignal) {
-    const orders: Order[] = [];
-    let cursor: string | null | undefined;
-    do {
-      const query = new URLSearchParams({ limit: "200" });
-      if (cursor) query.set("cursor", cursor);
-      const page = await request<ApiOrder[]>(`/orders?${query}`, { signal });
-      orders.push(...page.data.map(asOrder));
-      cursor = page.meta.nextCursor;
-    } while (cursor);
-    return orders;
-  },
+  orders: async (signal?: AbortSignal) =>
+    (await allOrders({}, signal)).map(asOrder),
   detail: (id: string) =>
     request<OrderDetail>(`/orders/${encodeURIComponent(id)}`).then(
       (r) => r.data,
@@ -1169,11 +1185,30 @@ export const api = {
     link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 60000);
   },
-  tradeMap: (signal?: AbortSignal) =>
-    request<TradeMap>("/trade-map", { signal }).then((r) => r.data),
+  async tradeMap(signal?: AbortSignal): Promise<TradeMap> {
+    const [layers, orders, suppliers, sites] = await Promise.all([
+      request<Omit<TradeMap, "orders" | "suppliers" | "sites">>("/trade-map", {
+        signal,
+      }).then((r) => r.data),
+      allOrders({ checklist: "all" }, signal),
+      request<MapSupplier[]>("/suppliers", { signal }).then((r) => r.data),
+      request<MapSite[]>("/sites", { signal }).then((r) => r.data),
+    ]);
+    return {
+      ...layers,
+      orders: orders.map(({ placement, gapCount, checks, ...order }) => ({
+        order,
+        placement,
+        gapCount,
+        checks: checks ?? [],
+      })),
+      suppliers,
+      sites,
+    };
+  },
   // The window is the backend's RULE_WATCH_DAYS setting.
   checklistChanges: (signal?: AbortSignal) =>
-    request<ChecklistChanges>("/trade-map/changes", { signal }).then(
+    request<ChecklistChanges>("/market-requirements/changes", { signal }).then(
       (r) => r.data,
     ),
   // `analysedOrderIds` defaults to none: a backend deployed before it was added doesn't
@@ -1208,23 +1243,23 @@ export const api = {
     request(`/sites/${encodeURIComponent(id)}`, { method: "DELETE" }),
   compareMarkets: (orderId: string, market: string, signal?: AbortSignal) =>
     request<MarketComparison>(
-      `/trade-map/compare?${new URLSearchParams({ orderId, market })}`,
+      `/orders/${encodeURIComponent(orderId)}/what-if?${new URLSearchParams({ market })}`,
       { signal },
     ).then((r) => r.data),
   compareShipDate: (orderId: string, shipDate: string, signal?: AbortSignal) =>
     request<MarketComparison>(
-      `/trade-map/compare?${new URLSearchParams({ orderId, shipDate })}`,
+      `/orders/${encodeURIComponent(orderId)}/what-if?${new URLSearchParams({ shipDate })}`,
       { signal },
     ).then((r) => r.data),
   compareRoute: (orderId: string, via: string, signal?: AbortSignal) =>
     request<MarketComparison>(
-      `/trade-map/compare?${new URLSearchParams({ orderId, via })}`,
+      `/orders/${encodeURIComponent(orderId)}/what-if?${new URLSearchParams({ via })}`,
       { signal },
     ).then((r) => r.data),
   // What-ifs saved with a note; saving changes nothing on the order.
   scenarios: (orderId?: string, signal?: AbortSignal) =>
     request<SavedScenario[]>(
-      `/trade-map/scenarios${orderId ? `?${new URLSearchParams({ orderId })}` : ""}`,
+      `/what-ifs${orderId ? `?${new URLSearchParams({ orderId })}` : ""}`,
       { signal },
     ).then((r) => r.data),
   saveScenario: (scenario: {
@@ -1233,17 +1268,17 @@ export const api = {
     target: string;
     note: string | null;
   }) =>
-    request<SavedScenario>("/trade-map/scenarios", {
+    request<SavedScenario>("/what-ifs", {
       method: "POST",
       body: JSON.stringify(scenario),
     }).then((r) => r.data),
   updateScenarioNote: (id: string, note: string | null) =>
-    request<SavedScenario>(`/trade-map/scenarios/${encodeURIComponent(id)}`, {
+    request<SavedScenario>(`/what-ifs/${encodeURIComponent(id)}`, {
       method: "PATCH",
       body: JSON.stringify({ note }),
     }).then((r) => r.data),
   deleteScenario: (id: string) =>
-    request(`/trade-map/scenarios/${encodeURIComponent(id)}`, {
+    request(`/what-ifs/${encodeURIComponent(id)}`, {
       method: "DELETE",
     }),
   suggestScenarioNote: (what: {
@@ -1251,7 +1286,7 @@ export const api = {
     kind: ScenarioKind;
     target: string;
   }) =>
-    request<ScenarioSuggestion>("/trade-map/scenarios/suggest", {
+    request<ScenarioSuggestion>("/what-ifs/suggest", {
       method: "POST",
       body: JSON.stringify(what),
     }).then((r) => r.data),

@@ -8,7 +8,7 @@ from app.database.models import Role
 from app.database.session import open_session
 from app.seed_reference_data import seed_reference_data
 
-URL = "/api/v1/trade-map/scenarios"
+URL = "/api/v1/what-ifs"
 
 
 @pytest.fixture

@@ -27,7 +27,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { runAgent } from "../agent.js";
 import { runtime } from "../agents/platform.js";
 import { callRuntime } from "../agents/remote.js";
-import { demoMapOrders, demoPlaybook } from "../orders.js";
+import { demoOrders, demoPlaybook } from "../orders.js";
 import { GEMINI_PROJECT, PROJECT, db, inventory, list } from "../db.js";
 import { ASSISTANT, GEMINI_LOCATION, SCAN_MODEL } from "../models.js";
 import { summarizeAudits } from "../metrics.js";
@@ -149,13 +149,15 @@ async function companyExam() {
     if (status !== 200) throw new Error(`GET ${path}: ${status} ${body.error?.code || ""}`);
     return body.data;
   };
-  const [profile, map, rules, acacia] = await Promise.all([
+  const [profile, map, orders, suppliers, rules, acacia] = await Promise.all([
     read("/api/v1/company/knowledge"),
     read("/api/v1/trade-map"),
+    read("/api/v1/orders?checklist=all&limit=200"),
+    read("/api/v1/suppliers"),
     read("/api/v1/playbook/rules"),
     read("/api/v1/knowledge-graph/query?material=acacia&country=VN"),
   ]);
-  const data = { markets: map.markets, orders: map.orders, suppliers: map.suppliers || [], rules: rules.filter((r) => r.enabled), acacia, today: new Date().toISOString().slice(0, 10) };
+  const data = { markets: map.markets, orders, suppliers, rules: rules.filter((r) => r.enabled), acacia, today: new Date().toISOString().slice(0, 10) };
   return { token, backend, profile, cases: examCases(data) };
 }
 
@@ -174,7 +176,7 @@ const results = [];
 for (const [i, c] of cases.entries()) {
   if (i && GAP_MS) await new Promise((resolve) => setTimeout(resolve, GAP_MS));
   // A demo case's orders and playbook go through the same checks as a demo chat's (index.js).
-  const demo = c.demo ? { orders: demoMapOrders(c.demo.orders), playbook: demoPlaybook(c.demo.rules) } : null;
+  const demo = c.demo ? { orders: demoOrders(c.demo.orders), playbook: demoPlaybook(c.demo.rules) } : null;
   const result = onEngine
     ? (await callRuntime("query", { messages: c.messages, sessionId, channel: "eval", tier, demo, ...(company && { ...company, backendToken: exam.token }) })).result
     : await runAgent({ messages: c.messages, sessionId, channel: "eval", withEvidence: true, tier, demo, ...(company && { ...company, backend: exam.backend }) });

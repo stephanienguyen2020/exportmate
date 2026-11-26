@@ -15,11 +15,25 @@ from app.schemas.market_requirements import (
     MarketRequirementUpdate,
     VersionRequirementsOut,
 )
+from app.schemas.trade_map import ChecklistChangesOut
 from app.services import market_requirements as requirement_service
+from app.services import trade_map as trade_map_service
 
 router = APIRouter(tags=["market requirements"])
 Db = Annotated[Session, Depends(get_db)]
 draft_limiter = RateLimiter("requirement drafts")
+
+
+@router.get("/market-requirements/changes", response_model=SuccessResponse[ChecklistChangesOut])
+def get_checklist_changes(
+    ctx: ViewerContext,
+    db: Db,
+    days: Annotated[int | None, Query(ge=1, le=365)] = None,
+):
+    """Checklist lines in the markets of the company's open orders that take effect or change
+    in the next `days` days (default RULE_WATCH_DAYS), with the open orders shipping on or
+    after each date."""
+    return success_response(trade_map_service.build_checklist_changes(db, ctx, days))
 
 
 @router.post(

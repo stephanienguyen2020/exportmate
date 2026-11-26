@@ -43,7 +43,7 @@ def lan(client) -> tuple[dict, str]:
         _, company = user_queries.get_user_company_membership(db, user.id)
         seed_company_map_data(db, company.id)
     import_orders(client, headers, ORDERS)
-    suppliers = client.get("/api/v1/trade-map", headers=headers).json()["data"]["suppliers"]
+    suppliers = client.get("/api/v1/suppliers", headers=headers).json()["data"]
     supplier_id = next(s["id"] for s in suppliers if s["name"] == "Binh Phu Wood")
     return headers, supplier_id
 
@@ -61,7 +61,7 @@ def supplier_files(file_storage) -> list[str]:
 
 
 def geolocation_status(client, headers) -> str:
-    order = client.get("/api/v1/trade-map", headers=headers).json()["data"]["orders"][0]
+    order = client.get("/api/v1/orders?checklist=all", headers=headers).json()["data"][0]
     return next(c["status"] for c in order["checks"] if c["requirementKey"] == "geolocation")
 
 
@@ -162,7 +162,7 @@ def test_editing_a_supplier_keeps_typed_and_uploaded_document_fields(client, lan
     )
     supplier = next(
         s
-        for s in client.get("/api/v1/trade-map", headers=headers).json()["data"]["suppliers"]
+        for s in client.get("/api/v1/suppliers", headers=headers).json()["data"]
         if s["id"] == supplier_id
     )
     # The edit form sends every document back, as typed fields.
@@ -228,7 +228,7 @@ def test_materials_a_document_names_are_suggested_for_the_suppliers_sourcing(
         },
     )
     assert confirmed.status_code == 200, confirmed.text
-    suppliers = client.get("/api/v1/trade-map", headers=headers).json()["data"]["suppliers"]
+    suppliers = client.get("/api/v1/suppliers", headers=headers).json()["data"]
     sourcing = next(s for s in suppliers if s["id"] == supplier_id)["sourcing"]
     assert [(s["material"], s["country"]) for s in sourcing] == [("acacia", "LA"), ("acacia", "VN")]
     added = next(s for s in sourcing if s["country"] == "LA")

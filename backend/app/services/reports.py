@@ -28,6 +28,7 @@ from fpdf import FPDF, FontFace
 from sqlalchemy.orm import Session
 
 from app.core import clock
+from app.core.config import get_settings
 from app.core.context import CompanyContext
 from app.core.email import EmailAttachment, OutgoingEmail, get_email_sender
 from app.core.errors import AppError, not_found_error
@@ -39,6 +40,7 @@ from app.database.queries import news_reviews as news_queries
 from app.database.queries import orders as order_queries
 from app.database.queries import regulations as regulation_queries
 from app.database.queries import reports as report_queries
+from app.database.queries import trade_map as map_queries
 from app.schemas.analysis import ReportContentOut as AnalysisContent
 from app.schemas.orders import OrderOut
 from app.schemas.reports import (
@@ -51,7 +53,7 @@ from app.schemas.reports import (
     ReportRow,
     ReportSection,
 )
-from app.schemas.trade_map import MapOrderOut, RequirementSourceOut
+from app.schemas.trade_map import OrderListItemOut, RequirementSourceOut
 from app.services import trade_map as trade_map_service
 
 FONT_DIR = Path(__file__).resolve().parents[1] / "assets" / "fonts"
@@ -171,7 +173,7 @@ class _Citations:
 # Generation -------------------------------------------------------------------------------
 
 
-def _check_rows(checklist: MapOrderOut, citations: _Citations) -> list[ReportRow]:
+def _check_rows(checklist: OrderListItemOut, citations: _Citations) -> list[ReportRow]:
     return [
         ReportRow(
             id=f"check-{check.requirement_key}",
@@ -191,7 +193,7 @@ def money_text(amount_minor: int, currency: str) -> str:
     return f"{currency} {amount_minor / 100:,.2f}"
 
 
-def _analysis_sections(db: Session, order, checklist: MapOrderOut) -> list[ReportSection]:
+def _analysis_sections(db: Session, order, checklist: OrderListItemOut) -> list[ReportSection]:
     """What the order's latest analysis found. Analysis is started by an editor (POST /runs),
     never by preparing a report, since it changes order statuses."""
     report = analysis_queries.get_latest_order_report(db, order.id)
@@ -287,7 +289,7 @@ def build_order_report_content(db: Session, ctx: CompanyContext, order_id: str) 
     if not order:
         raise not_found_error("Order")
     checklist, market = trade_map_service.build_order_checklist(db, ctx, order)
-    out = checklist.order
+    out = checklist
     citations = _Citations()
     check_rows = _check_rows(checklist, citations)
 
@@ -390,14 +392,14 @@ class _CompanyFacts:
 def _change_section(
     db: Session,
     ctx: CompanyContext,
-    open_orders: list[MapOrderOut],
+    open_orders: list[OrderListItemOut],
     today: date,
     until: date,
     citations: _Citations,
     facts: _CompanyFacts,
 ) -> ReportSection:
     changes = trade_map_service.list_checklist_changes(
-        db, ctx.company_id, [(m.order, m.placement.market) for m in open_orders], today, until
+        db, ctx.company_id, [(m, m.placement.market) for m in open_orders], today, until
     )
     rows = []
     for change in changes:
@@ -509,10 +511,15 @@ def build_company_report_content(
 ) -> ReportContent:
     today = clock.today()
     since, until = today - timedelta(days=days), today + timedelta(days=days)
-    trade_map = trade_map_service.build_trade_map(db, ctx)
-    market_names = {m.code: m.name for m in trade_map.markets}
-    open_orders = [m for m in trade_map.orders if m.order.ship_date >= today]
-    open_ids = {m.order.id for m in open_orders}
+    market_names = {m.code: m.name for m in map_queries.list_markets(db)}
+    open_orders = [
+        o
+        for o in trade_map_service.order_entries(
+            db, ctx, order_queries.list_company_orders(db, ctx.company_id)
+        )
+        if o.ship_date >= today
+    ]
+    open_ids = {o.id for o in open_orders}
     citations = _Citations()
     facts = _CompanyFacts(open_orders=len(open_orders))
 
@@ -526,10 +533,11 @@ def build_company_report_content(
 
     # Floods near the company's suppliers and sites.
     supplier_orders = {
-        s.name: [i for i in s.order_ids if i in open_ids] for s in trade_map.suppliers
+        s.name: [i for i in s.order_ids if i in open_ids]
+        for s in trade_map_service.list_suppliers(db, ctx)
     }
     flood_rows = []
-    for obs in trade_map.observations:
+    for obs in trade_map_service.list_observations(db, ctx):
         if not obs.nearby or obs.observed_on < since:
             continue
         orders = sorted(
@@ -558,7 +566,7 @@ def build_company_report_content(
     citing: dict[uuid.UUID, set[str]] = defaultdict(set)
     for m in open_orders:
         for check in m.checks:
-            citing[check.source.regulation_id].add(m.order.id)
+            citing[check.source.regulation_id].add(m.id)
     version_rows = []
     added_since = datetime.combine(since, time.min, UTC)
     for document, regulation in regulation_queries.list_documents_added_since(
@@ -586,34 +594,34 @@ def build_company_report_content(
     # What is affected: orders with document gaps, and the suppliers behind them.
     gap_rows = []
     by_supplier: dict[str, dict] = {}
-    for m in sorted(open_orders, key=lambda m: (m.order.ship_date, m.order.id)):
+    for m in sorted(open_orders, key=lambda m: (m.ship_date, m.id)):
         gaps = [c for c in m.checks if c.status in GAP_STATUSES]
         unknown = any(c.status == "unknown" for c in m.checks)
-        key = trade_map_service.supplier_name_key(m.order.supplier)
+        key = trade_map_service.supplier_name_key(m.supplier)
         entry = by_supplier.setdefault(
-            key, {"name": m.order.supplier, "gaps": {}, "orders": [], "unknown": False}
+            key, {"name": m.supplier, "gaps": {}, "orders": [], "unknown": False}
         )
         if gaps or unknown:
-            entry["orders"].append(m.order.id)
+            entry["orders"].append(m.id)
             entry["unknown"] |= unknown
             for c in gaps:
                 entry["gaps"][c.title] = STATUS_LABELS[c.status]
-        if m.order.ship_date <= until:
+        if m.ship_date <= until:
             facts.window_orders += 1
             facts.window_gap_orders += bool(gaps)
         if not gaps:
             continue
-        facts.gap_orders.append(m.order)
+        facts.gap_orders.append(m)
         gap_rows.append(
             ReportRow(
-                id=f"order-{m.order.id}",
+                id=f"order-{m.id}",
                 cells=[
-                    m.order.id,
-                    format_day(m.order.ship_date),
-                    market_names.get(m.placement.market or "", m.order.destination),
-                    format_order_value(m.order.value_minor, m.order.currency),
+                    m.id,
+                    format_day(m.ship_date),
+                    market_names.get(m.placement.market or "", m.destination),
+                    format_order_value(m.value_minor, m.currency),
                     "; ".join(f"{c.title}: {STATUS_LABELS[c.status]}" for c in gaps),
-                    m.order.supplier,
+                    m.supplier,
                     ", ".join(citations.cite(c.source, c.title) for c in gaps),
                 ],
                 tone="gap",
@@ -713,7 +721,7 @@ def build_company_report_content(
                 layout="table",
                 heading="Floods near your suppliers and sites",
                 note=f"Satellite flood observations from the last {days} days within "
-                f"{trade_map.check_radius_km:g} km of a supplier or site. Sample observations "
+                f"{get_settings().flood_check_radius_km:g} km of a supplier or site. Sample observations "
                 "are not a live feed.",
                 empty="No flood observed near your suppliers or sites in this window.",
                 columns=["Observed", "Event", "Near you", "Confidence", "Open orders"],

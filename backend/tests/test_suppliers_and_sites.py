@@ -37,14 +37,14 @@ def reference() -> None:
         seed_reference_data(db)
 
 
-def get_map(client, headers) -> dict:
-    response = client.get("/api/v1/trade-map", headers=headers)
+def get_data(client, headers, path: str):
+    response = client.get(f"/api/v1{path}", headers=headers)
     assert response.status_code == 200, response.text
     return response.json()["data"]
 
 
-def checks_of(data: dict, order_id: str) -> dict[str, str]:
-    order = next(o for o in data["orders"] if o["order"]["id"] == order_id)
+def checks_of(client, headers, order_id: str) -> dict[str, str]:
+    [order] = get_data(client, headers, f"/orders?id={order_id}&checklist=all")
     return {c["requirementKey"]: c["status"] for c in order["checks"]}
 
 
@@ -64,9 +64,8 @@ def latest_report(client, headers, order_id: str) -> dict:
 def test_new_supplier_is_matched_to_its_orders_and_checked(client, reference):
     headers = onboard(client, "lan@example.com")
     import_orders(client, headers, ORDERS_CSV)
-    before = get_map(client, headers)
-    assert checks_of(before, "PO-1")["legality"] == "unknown"
-    assert any(c["code"] == "KH" for c in before["countries"])
+    assert checks_of(client, headers, "PO-1")["legality"] == "unknown"
+    assert any(c["code"] == "KH" for c in get_data(client, headers, "/trade-map")["countries"])
 
     created = client.post("/api/v1/suppliers", headers=headers, json=SUPPLIER)
     assert created.status_code == 201, created.text
@@ -77,12 +76,12 @@ def test_new_supplier_is_matched_to_its_orders_and_checked(client, reference):
         "Timber legality evidence",
     ]
 
-    after = get_map(client, headers)
-    listed = next(s for s in after["suppliers"] if s["id"] == supplier["id"])
+    suppliers = get_data(client, headers, "/suppliers")
+    listed = next(s for s in suppliers if s["id"] == supplier["id"])
     # The order wrote "Dong Nai  veneer"; the name key ignores case and spacing.
     assert listed["orderIds"] == ["PO-1"]
     assert listed["location"] == {"latitude": 10.95, "longitude": 106.82}
-    checks = checks_of(after, "PO-1")
+    checks = checks_of(client, headers, "PO-1")
     assert checks["legality"] == "on_file"
     assert checks["geolocation"] == "missing"
     assert audit_actions("supplier.")[-1] == "supplier.created"
@@ -146,7 +145,7 @@ def test_update_and_delete_supplier(client, reference):
     assert data["place"] is None and data["location"] is None
     assert data["name"] == "Dong Nai Veneer"  # not sent, not changed
     assert [d["kind"] for d in data["documents"]] == ["geolocation"]
-    checks = checks_of(get_map(client, headers), "PO-1")
+    checks = checks_of(client, headers, "PO-1")
     assert checks["geolocation"] == "on_file"
     assert checks["legality"] == "missing"
 
@@ -155,10 +154,9 @@ def test_update_and_delete_supplier(client, reference):
 
     deleted = client.delete(f"/api/v1/suppliers/{supplier_id}", headers=headers)
     assert deleted.json()["data"] == {"deleted": True, "analysedOrderIds": ["PO-1"]}
-    data = get_map(client, headers)
     # The order stays, named but without a record: supplier evidence is unknown again.
-    assert [s["id"] for s in data["suppliers"]] == [None]
-    assert checks_of(data, "PO-1")["legality"] == "unknown"
+    assert [s["id"] for s in get_data(client, headers, "/suppliers")] == [None]
+    assert checks_of(client, headers, "PO-1")["legality"] == "unknown"
     assert audit_actions("supplier.") == [
         "supplier.created",
         "supplier.updated",
@@ -272,7 +270,7 @@ def test_sites_and_the_route_origin(client, reference):
     )
     assert moved.status_code == 200, moved.text
     assert moved.json()["data"]["note"] == "Central gateway"
-    sites = {s["id"]: s for s in get_map(client, headers)["sites"]}
+    sites = {s["id"]: s for s in get_data(client, headers, "/sites")}
     assert sites[warehouse["id"]]["isRouteOrigin"] is True
     assert sites[factory["id"]]["isRouteOrigin"] is False
     assert sites[warehouse["id"]]["key"] == "da-nang-warehouse"  # keys never change
@@ -284,7 +282,7 @@ def test_sites_and_the_route_origin(client, reference):
         == 422
     )
     assert client.delete(f"/api/v1/sites/{twin['id']}", headers=headers).status_code == 200
-    assert len(get_map(client, headers)["sites"]) == 2
+    assert len(get_data(client, headers, "/sites")) == 2
     assert audit_actions()[-1] == "company_site.deleted"
 
 
@@ -324,8 +322,9 @@ def test_supplier_sourcing_is_saved_checked_and_shown_on_the_map(client, referen
             "basis": "Origin certificate",
         },
     ]
-    data = get_map(client, headers)
-    on_map = next(s for s in data["suppliers"] if s["name"] == "Dong Nai Veneer")
+    data = get_data(client, headers, "/trade-map")
+    suppliers = get_data(client, headers, "/suppliers")
+    on_map = next(s for s in suppliers if s["name"] == "Dong Nai Veneer")
     assert [s["material"] for s in on_map["sourcing"]] == ["acacia", "okoume"]
     # The form offers every material with the chain steps it can be bought as.
     acacia = next(m for m in data["materials"] if m["key"] == "acacia")

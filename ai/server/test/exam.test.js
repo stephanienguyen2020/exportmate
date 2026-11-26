@@ -5,7 +5,15 @@ import { examCases } from "../eval/exam.js";
 const TODAY = "2026-12-01";
 const check = (requirementKey, status, title = requirementKey) => ({ requirementKey, status, title });
 const order = (id, { market = "EU", shipDate = "2026-12-10", supplier = "Binh Phu Wood", value = 2400000, checks = [] } = {}) => ({
-  order: { id, product: "Acacia plywood", supplier, destination: "Rotterdam, NL", valueMinor: value, currency: "USD", shipDate, hsCode: "4412.33", status: "exposed" },
+  id,
+  product: "Acacia plywood",
+  supplier,
+  destination: "Rotterdam, NL",
+  valueMinor: value,
+  currency: "USD",
+  shipDate,
+  hsCode: "4412.33",
+  status: "exposed",
   placement: { market },
   checks,
   gapCount: checks.filter((c) => ["missing", "mismatch"].includes(c.status)).length,

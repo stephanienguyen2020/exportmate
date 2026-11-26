@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import type { TradeMap } from "../src/api";
+import { mapApiData } from "./map-api";
 
 const order = {
   id: "PO|42",
@@ -199,7 +200,7 @@ async function openMap(
           origin: options.origin ?? account.company.origin,
         },
       };
-    else if (path === "/orders") data = [order];
+    else if (path === "/orders" && !url.searchParams.has("checklist")) data = [order];
     else if (path === "/playbook/rules") data = [];
     else if (path === "/overview")
       data = {
@@ -214,13 +215,19 @@ async function openMap(
         nearestAffectedShipDate: null,
         sourcesCheckedAt: null,
       };
-    else if (path === "/trade-map") {
-      if (options.fail)
+    else if (
+      mapApiData(route, current) !== undefined &&
+      (path !== "/orders" || url.searchParams.has("checklist"))
+    ) {
+      if (options.fail && path === "/trade-map")
         return route.fulfill({
           status: 503,
           json: { error: { message: "Map service unavailable" } },
         });
-      data = { ...current, sites: options.noOrigin ? [] : current.sites };
+      data = mapApiData(route, {
+        ...current,
+        sites: options.noOrigin ? [] : current.sites,
+      });
     } else if (path === "/suppliers/supplier-1/documents") {
       options.writes?.push({ method: "POST", path, body: null });
       data = {
@@ -297,11 +304,11 @@ async function openMap(
         data = { ...current.sites[0], ...body };
         current.sites[0] = data as TradeMap["sites"][number];
       }
-    } else if (path.startsWith("/trade-map/scenarios")) {
+    } else if (path.startsWith("/what-ifs")) {
       const method = route.request().method();
       const body = route.request().postDataJSON();
       if (method !== "GET") options.writes?.push({ method, path, body });
-      if (path === "/trade-map/scenarios/suggest")
+      if (path === "/what-ifs/suggest")
         data = {
           summary: "A stop in Singapore asks for a fresh look at origin proof.",
           nextSteps: [
@@ -345,7 +352,7 @@ async function openMap(
         );
         data = { deleted: true };
       } else data = scenarios;
-    } else if (path === "/trade-map/compare") {
+    } else if (/^\/orders\/[^/]+\/what-if$/.test(path)) {
       comparisons.push(url);
       if (url.searchParams.get("shipDate")) {
         data = {
@@ -490,7 +497,9 @@ test("comparison preserves IDs containing delimiters and route visibility in bot
   await expect(
     page.locator(".tm-compare b").filter({ hasText: "Shipment declaration" }),
   ).toBeVisible();
-  expect(comparisons.at(-1)?.searchParams.get("orderId")).toBe("PO|42");
+  expect(decodeURIComponent(comparisons.at(-1)?.pathname ?? "")).toBe(
+    "/api/v1/orders/PO|42/what-if",
+  );
   await expect(globe.getByText("2 TRADE CONNECTIONS")).toBeVisible();
   await page.getByRole("button", { name: "Routes", exact: true }).click();
   await expect(globe.getByText("0 TRADE CONNECTIONS")).toBeVisible();
@@ -823,7 +832,7 @@ test("editors save a proposed route with a note, started from an AI suggestion",
   ).toBeVisible();
   expect(writes.at(-1)).toEqual({
     method: "POST",
-    path: "/trade-map/scenarios/suggest",
+    path: "/what-ifs/suggest",
     body: { orderId: "PO|42", kind: "route", target: "SG" },
   });
   await page.getByRole("button", { name: "Use as note" }).click();

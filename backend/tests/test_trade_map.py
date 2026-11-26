@@ -34,14 +34,22 @@ def seed_company(email: str) -> None:
         seed_company_map_data(db, company.id)
 
 
-def get_map(client, headers) -> dict:
-    response = client.get("/api/v1/trade-map", headers=headers)
+def get_data(client, headers, path: str):
+    response = client.get(f"/api/v1{path}", headers=headers)
     assert response.status_code == 200, response.text
     return response.json()["data"]
 
 
-def orders_by_id(data: dict) -> dict:
-    return {o["order"]["id"]: o for o in data["orders"]}
+def get_map(client, headers) -> dict:
+    return get_data(client, headers, "/trade-map")
+
+
+def list_orders(client, headers, query: str = "checklist=all") -> list[dict]:
+    return get_data(client, headers, f"/orders?{query}")
+
+
+def orders_by_id(orders: list[dict]) -> dict:
+    return {o["id"]: o for o in orders}
 
 
 @pytest.mark.parametrize(
@@ -63,7 +71,7 @@ def test_orders_are_placed_and_checked(client, reference):
     headers = onboard(client, "lan@example.com")
     seed_company("lan@example.com")
     import_orders(client, headers, MAP_CSV)
-    orders = orders_by_id(get_map(client, headers))
+    orders = orders_by_id(list_orders(client, headers))
 
     po1 = orders["PO-1"]
     assert po1["placement"] == {
@@ -104,13 +112,47 @@ def test_orders_are_placed_and_checked(client, reference):
     assert orders["PO-5"]["checks"] == []
 
 
+def test_orders_filter_by_market_and_id_with_the_checklist_asked_for(client, reference):
+    headers = onboard(client, "lan@example.com")
+    seed_company("lan@example.com")
+    import_orders(client, headers, MAP_CSV)
+
+    plain = list_orders(client, headers, "")
+    assert [o["id"] for o in plain] == ["PO-1", "PO-3", "PO-2", "PO-4", "PO-5"]
+    assert plain[0]["checks"] is None
+    assert plain[0]["placement"]["market"] == "EU"
+    assert plain[0]["gapCount"] == 1
+
+    gaps = orders_by_id(list_orders(client, headers, "checklist=gaps"))
+    assert [c["requirementKey"] for c in gaps["PO-1"]["checks"]] == ["geolocation"]
+    assert {c["status"] for c in gaps["PO-2"]["checks"]} <= {"missing", "mismatch"}
+
+    # The market comes from the destination; pages follow the same cursor.
+    first = client.get("/api/v1/orders?market=eu&limit=2", headers=headers).json()
+    assert [o["id"] for o in first["data"]] == ["PO-1", "PO-3"]
+    assert first["meta"]["total"] == 3
+    cursor = first["meta"]["nextCursor"]
+    rest = client.get(f"/api/v1/orders?market=EU&limit=2&cursor={cursor}", headers=headers)
+    assert [o["id"] for o in rest.json()["data"]] == ["PO-4"]
+    assert rest.json()["meta"]["nextCursor"] is None
+    assert [o["id"] for o in list_orders(client, headers, "market=EU&status=clear")] == ["PO-3"]
+
+    # IDs however they're written.
+    assert [o["id"] for o in list_orders(client, headers, "id=po 2&id=PO5")] == ["PO-2", "PO-5"]
+    assert client.get("/api/v1/orders?checklist=some", headers=headers).status_code == 422
+
+
 def test_suppliers_sites_and_observations(client, reference):
     headers = onboard(client, "lan@example.com")
     seed_company("lan@example.com")
     import_orders(client, headers, MAP_CSV)
     data = get_map(client, headers)
 
-    suppliers = {s["name"]: s for s in data["suppliers"]}
+    suppliers = {s["name"]: s for s in get_data(client, headers, "/suppliers")}
+    # One order's supplier, with or without a record.
+    named = get_data(client, headers, "/suppliers?orderId=po 2&orderId=PO-4")
+    assert [s["name"] for s in named] == ["Binh Phu Wood", "Dong Nai Veneer"]
+    assert get_data(client, headers, "/suppliers?orderId=PO-404") == []
     assert suppliers["Binh Phu Wood"]["orderIds"] == ["PO-1", "PO-2"]
     assert suppliers["Binh Phu Wood"]["location"] == {"latitude": 11.54, "longitude": 106.9}
     assert {d["kind"] for d in suppliers["Binh Phu Wood"]["documents"]} == {
@@ -125,7 +167,8 @@ def test_suppliers_sites_and_observations(client, reference):
     # In the supplier list without open orders.
     assert suppliers["Savannakhet Timber"]["orderIds"] == []
 
-    assert [s["key"] for s in data["sites"] if s["isRouteOrigin"]] == ["factory"]
+    sites = get_data(client, headers, "/sites")
+    assert [s["key"] for s in sites if s["isRouteOrigin"]] == ["factory"]
     assert data["homeCountryIds"] == ["418", "704"]  # Laos, Vietnam
     assert data["checkRadiusKm"] == 25
 
@@ -151,12 +194,12 @@ def test_company_map_data_is_not_shared(client, reference):
     mai = onboard(client, "mai@example.com", company="Other Co")
 
     data = get_map(client, mai)
-    assert data["orders"] == []
-    assert data["suppliers"] == []
-    assert data["sites"] == []
+    assert list_orders(client, mai) == []
+    assert get_data(client, mai, "/suppliers") == []
+    assert get_data(client, mai, "/sites") == []
     assert all(o["nearby"] == [] for o in data["observations"])
     assert len(data["markets"]) == 8  # reference data is shared
-    compare = "/api/v1/trade-map/compare?orderId=PO-1&market=US"
+    compare = "/api/v1/orders/PO-1/what-if?market=US"
     assert client.get(compare, headers=mai).status_code == 404
 
 
@@ -165,7 +208,7 @@ def test_compare_markets(client, reference):
     seed_company("lan@example.com")
     import_orders(client, headers, MAP_CSV)
 
-    response = client.get("/api/v1/trade-map/compare?orderId=PO-1&market=us", headers=headers)
+    response = client.get("/api/v1/orders/PO-1/what-if?market=us", headers=headers)
     assert response.status_code == 200, response.text
     result = response.json()["data"]
     assert (result["fromMarket"], result["toMarket"]) == ("EU", "US")
@@ -190,15 +233,15 @@ def test_compare_markets(client, reference):
         "Proof of origin",
     ]
 
-    def error_code(query: str) -> tuple[int, str]:
-        r = client.get(f"/api/v1/trade-map/compare?{query}", headers=headers)
+    def error_code(order_id: str, query: str) -> tuple[int, str]:
+        r = client.get(f"/api/v1/orders/{order_id}/what-if?{query}", headers=headers)
         return r.status_code, r.json()["error"]["code"]
 
-    assert error_code("orderId=PO-1&market=EU") == (422, "same_market")
-    assert error_code("orderId=PO-1&market=XX") == (422, "unknown_market")
-    assert error_code("orderId=PO-404&market=US") == (404, "not_found")
-    assert error_code("orderId=PO-1") == (422, "invalid_input")
-    assert error_code("orderId=PO-1&market=US&shipDate=2027-01-01") == (422, "invalid_input")
+    assert error_code("PO-1", "market=EU") == (422, "same_market")
+    assert error_code("PO-1", "market=XX") == (422, "unknown_market")
+    assert error_code("PO-404", "market=US") == (404, "not_found")
+    assert error_code("PO-1", "") == (422, "invalid_input")
+    assert error_code("PO-1", "market=US&shipDate=2027-01-01") == (422, "invalid_input")
 
 
 def test_compare_ship_date_uses_checklist_dates(client, reference):
@@ -206,9 +249,7 @@ def test_compare_ship_date_uses_checklist_dates(client, reference):
     seed_company("lan@example.com")
     import_orders(client, headers, MAP_CSV)
 
-    early = client.get(
-        "/api/v1/trade-map/compare?orderId=PO-1&shipDate=2026-07-01", headers=headers
-    )
+    early = client.get("/api/v1/orders/PO-1/what-if?shipDate=2026-07-01", headers=headers)
     assert early.status_code == 200, early.text
     result = early.json()["data"]
     assert result["kind"] == "ship_date"
@@ -222,13 +263,11 @@ def test_compare_ship_date_uses_checklist_dates(client, reference):
         for item in result["unknown"]
     )
 
-    later = client.get(
-        "/api/v1/trade-map/compare?orderId=PO-2&shipDate=2027-02-01", headers=headers
-    )
+    later = client.get("/api/v1/orders/PO-2/what-if?shipDate=2027-02-01", headers=headers)
     assert later.status_code == 200, later.text
     changed = {item["title"]: item["tag"] for item in later.json()["data"]["reevaluate"]}
     assert changed["Section 232 tariff category"] == "Changes"
-    same = client.get("/api/v1/trade-map/compare?orderId=PO-1&shipDate=2026-10-27", headers=headers)
+    same = client.get("/api/v1/orders/PO-1/what-if?shipDate=2026-10-27", headers=headers)
     assert same.status_code == 422
     assert same.json()["error"]["code"] == "same_date"
 
@@ -238,7 +277,7 @@ def test_compare_route_names_what_to_recheck_and_not_a_freight_quote(client, ref
     seed_company("lan@example.com")
     import_orders(client, headers, MAP_CSV)
 
-    via = client.get("/api/v1/trade-map/compare?orderId=PO-1&via=sg", headers=headers)
+    via = client.get("/api/v1/orders/PO-1/what-if?via=sg", headers=headers)
     assert via.status_code == 200, via.text
     result = via.json()["data"]
     assert result["kind"] == "route"
@@ -255,7 +294,7 @@ def test_compare_route_names_what_to_recheck_and_not_a_freight_quote(client, ref
     points = result["routePoints"]
     assert len(points) == 3
     assert points[0] == next(
-        s["location"] for s in get_map(client, headers)["sites"] if s["isRouteOrigin"]
+        s["location"] for s in get_data(client, headers, "/sites") if s["isRouteOrigin"]
     )
     assert points[1] == {"latitude": 1.26, "longitude": 103.84}
     assert points[2] == {"latitude": 51.92, "longitude": 4.4}
@@ -266,7 +305,7 @@ def test_compare_route_names_what_to_recheck_and_not_a_freight_quote(client, ref
         "Port congestion and insurance",
     }
 
-    direct = client.get("/api/v1/trade-map/compare?orderId=PO-1&via=direct", headers=headers)
+    direct = client.get("/api/v1/orders/PO-1/what-if?via=direct", headers=headers)
     assert direct.status_code == 200, direct.text
     direct_data = direct.json()["data"]
     assert len(direct_data["routePoints"]) == 2
@@ -276,10 +315,10 @@ def test_compare_route_names_what_to_recheck_and_not_a_freight_quote(client, ref
         item["title"] == "Proof of origin" and item["tag"] == "Prepare"
         for item in direct_data["reevaluate"]
     )
-    uppercase = client.get("/api/v1/trade-map/compare?orderId=PO-1&via=DIRECT", headers=headers)
+    uppercase = client.get("/api/v1/orders/PO-1/what-if?via=DIRECT", headers=headers)
     assert uppercase.status_code == 200
     assert uppercase.json()["data"]["via"] == "direct"
-    unknown = client.get("/api/v1/trade-map/compare?orderId=PO-1&via=XX", headers=headers)
+    unknown = client.get("/api/v1/orders/PO-1/what-if?via=XX", headers=headers)
     assert unknown.status_code == 422
     assert unknown.json()["error"]["code"] == "unknown_route"
 
@@ -288,7 +327,7 @@ def test_compare_route_names_what_to_recheck_and_not_a_freight_quote(client, ref
 def test_unchanged_requirements_do_not_invent_supplier_evidence(client, reference, query):
     headers = onboard(client, "no-docs@example.com")
     import_orders(client, headers, MAP_CSV)
-    response = client.get(f"/api/v1/trade-map/compare?orderId=PO-1&{query}", headers=headers)
+    response = client.get(f"/api/v1/orders/PO-1/what-if?{query}", headers=headers)
     assert response.status_code == 200
     data = response.json()["data"]
     assert data["reuse"] == []
@@ -302,7 +341,7 @@ def test_unchanged_requirements_do_not_invent_supplier_evidence(client, referenc
 def test_route_without_known_destination_has_no_invented_geometry(client, reference):
     headers = onboard(client, "unknown-place@example.com")
     import_orders(client, headers, MAP_CSV.replace("Rotterdam, NL", "Unmapped destination"))
-    response = client.get("/api/v1/trade-map/compare?orderId=PO-1&via=SG", headers=headers)
+    response = client.get("/api/v1/orders/PO-1/what-if?via=SG", headers=headers)
     assert response.status_code == 200
     data = response.json()["data"]
     assert data["routePoints"] == []
@@ -320,7 +359,7 @@ def test_checklists_follow_the_product_not_only_wood(client, reference):
         'PO-T,Cotton shirts,Textile Co,"Hamburg, DE",9000,2026-11-03,6109.10\n'
         'PO-E,Wireless handsets,Radio Co,"Rotterdam, NL",12000,2026-11-04,8517.12\n',
     )
-    orders = orders_by_id(get_map(client, headers))
+    orders = orders_by_id(list_orders(client, headers))
     food = {c["requirementKey"] for c in orders["PO-F"]["checks"]}
     textile = {c["requirementKey"] for c in orders["PO-T"]["checks"]}
     electronics = {c["requirementKey"] for c in orders["PO-E"]["checks"]}
@@ -335,7 +374,9 @@ def test_market_requirements_cite_their_official_text(client, reference):
     headers = onboard(client, "lan@example.com")
     seed_company("lan@example.com")
     import_orders(client, headers, MAP_CSV)
-    po1 = {c["requirementKey"]: c for c in orders_by_id(get_map(client, headers))["PO-1"]["checks"]}
+    po1 = {
+        c["requirementKey"]: c for c in orders_by_id(list_orders(client, headers))["PO-1"]["checks"]
+    }
 
     source = po1["geolocation"]["source"]
     assert source["regulationTitle"] == "EU Deforestation Regulation (EU) 2023/1115"

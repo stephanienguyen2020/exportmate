@@ -18,7 +18,7 @@ from app.schemas.scenarios import (
 )
 from app.services import scenarios as scenario_service
 
-router = APIRouter(prefix="/trade-map/scenarios", tags=["trade map"])
+router = APIRouter(prefix="/what-ifs", tags=["what-ifs"])
 Db = Annotated[Session, Depends(get_db)]
 suggestion_limiter = RateLimiter("what-if suggestions")
 

@@ -53,7 +53,8 @@ What each endpoint does and where the app uses it. The live contract (exact fiel
 | `DELETE /me/invites/{id}` | signed in | Onboarding: "Decline" |
 | **Orders and import** | | |
 | `GET /overview` | viewer | Dashboard |
-| `GET /orders` | viewer | Every workspace load |
+| `GET /orders` | viewer | Every workspace load; Trade map (`checklist=all`); `ai/server` chat (`query_orders`) and News watch goods |
+| `GET /orders/{id}/what-if` | viewer | Trade map: "What if" panel |
 | `GET /orders/{id}` | viewer | Order detail page |
 | `PATCH /orders/{id}` | editor | Order page: "Edit order", "Save changes" |
 | `DELETE /orders/{id}` | editor | Order page: "Remove order", then "Remove <id>" |
@@ -70,19 +71,20 @@ What each endpoint does and where the app uses it. The live contract (exact fiel
 | `DELETE /playbook/rules/{id}` | editor | Playbook: delete |
 | `GET /playbook/fields` | viewer | Playbook: WHEN/THEN builder (add rule, "Add conditions") |
 | **Trade map, suppliers and sites** | | |
-| `GET /trade-map` | viewer | Trade map; `ai/server` chat (`query_orders`) |
-| `GET /trade-map/compare` | viewer | Trade map: "What if" panel |
-| `GET /trade-map/changes` | viewer | Rules & news › Rule watch: "Coming up" |
-| `GET /trade-map/scenarios` | viewer | Trade map: "What if" panel, "Saved what-ifs" |
-| `POST /trade-map/scenarios` | editor | Trade map: "What if" panel, "Save what-if" / "Update" |
-| `POST /trade-map/scenarios/suggest` | editor | Trade map: "What if" panel, "Suggest a note with AI" |
-| `PATCH /trade-map/scenarios/{id}` | editor | (not yet: the panel re-saves through `POST`) |
-| `DELETE /trade-map/scenarios/{id}` | editor | Trade map: "Saved what-ifs", delete |
+| `GET /trade-map` | viewer | Trade map (markets, observations, the forms' lists) |
+| `GET /market-requirements/changes` | viewer | Rules & news › Rule watch: "Coming up" |
+| `GET /what-ifs` | viewer | Trade map: "What if" panel, "Saved what-ifs" |
+| `POST /what-ifs` | editor | Trade map: "What if" panel, "Save what-if" / "Update" |
+| `POST /what-ifs/suggest` | editor | Trade map: "What if" panel, "Suggest a note with AI" |
+| `PATCH /what-ifs/{id}` | editor | (not yet: the panel re-saves through `POST`) |
+| `DELETE /what-ifs/{id}` | editor | Trade map: "Saved what-ifs", delete |
+| `GET /suppliers` | viewer | Trade map, workspace search, an order's analysis report (supplier form) |
 | `POST /suppliers` | editor | Trade map: "Add supplier" / "Add a supplier record"; an order's analysis report: "Add … with its documents" |
 | `PATCH /suppliers/{id}` | editor | Trade map: "Edit supplier"; an order's analysis report: "Record documents from …" |
 | `DELETE /suppliers/{id}` | editor | Trade map: "Delete supplier" |
 | `POST /suppliers/{id}/documents` | editor | Trade map supplier panel: "Upload certificate" |
 | `POST /supplier-documents/{id}/confirm` | editor | Trade map supplier panel: "Confirm certificate" |
+| `GET /sites` | viewer | Trade map, workspace search |
 | `POST /sites` | editor | Trade map: "Add site" |
 | `PATCH /sites/{id}` | editor | Trade map: "Edit site" |
 | `DELETE /sites/{id}` | editor | Trade map: "Delete site" |
@@ -258,15 +260,32 @@ Declines it → `{"deleted": true}`.
 Dashboard tiles, loaded on every workspace load.
 
 ### `GET /orders` (viewer)
-Query: `status` (`awaiting_analysis` | `clear` | `exposed` | `needs_data`), `q` (≤100 chars, case-insensitive substring of id, product, supplier, destination or HS code), `limit` (1–200, default 50), `cursor`.
-Sorted by `shipDate`, then `id`. `meta`: `{"total": 12, "nextCursor": "…" | null}`. A bad cursor gives `422 invalid_cursor`.
+Query (filters combine with AND):
+
+| Parameter | |
+| --- | --- |
+| `status` | `awaiting_analysis`, `clear`, `exposed` or `needs_data` |
+| `q` | ≤100 chars, case-insensitive substring of id, product, supplier, destination or HS code |
+| `id` | repeated, ≤50: these orders; `PO-2291`, `po 2291` and `po2291` are the same |
+| `market` | destination market code (`EU`, `US`, …; any case), from the destination as the map places it |
+| `checklist` | `none` (default), `gaps` (only `missing` / `mismatch` lines) or `all`: adds `checks[]` |
+| `limit`, `cursor` | 1–200, default 50; the cursor from the previous page |
+
+Sorted by `shipDate`, then `id`. `meta`: `{"total": 12, "nextCursor": "…" | null}`. A bad cursor gives `422 invalid_cursor`; an unknown `checklist`, `422 invalid_input`.
 
 ```json
 {"id": "PO-2291", "product": "Acacia plywood · 18 mm", "supplier": "Binh Phu Wood",
  "destination": "Rotterdam, NL", "valueMinor": 2400000, "currency": "USD",
- "shipDate": "2026-10-27", "hsCode": "4412.33", "status": "exposed"}
+ "shipDate": "2026-10-27", "hsCode": "4412.33", "status": "exposed",
+ "placement": {"city": "Rotterdam", "country": "NL", "market": "EU",
+   "location": {"latitude": 51.92, "longitude": 4.4}, "approximate": false},
+ "gapCount": 1, "checks": null}
 ```
-On every workspace load, `api.orders()` reads every page (`limit=200`) until `nextCursor` is null. Search and status filters on the Orders page then run in the browser; the frontend doesn't send `status` or `q` yet.
+`placement`: where the map puts the destination (`approximate` = at the country centre; `market` and `location` are `null` outside the map's markets). `gapCount` counts the checklist lines that are `missing` or `mismatch`; a supplier document that expires before the order's ship date is a `mismatch`.
+
+`checks[]` (with `checklist`): `requirementKey`, `title`, `level` (`supplier` / `shipment` / `check`), `status` (`on_file` / `missing` / `mismatch` / `prepare` / `check` / `unknown`), `note`, `source`, `documentKind` (the supplier document that answers it, `null` for shipment paperwork and checks) and `acceptedStandards`. An analysis report's `findings[]` have the same shape; reports saved before `documentKind` was added don't carry it. `source` is the shared regulation version behind the requirement and the sentence that requires it: `regulationTitle`, `officialId`, `documentId` (→ `GET /regulation-documents/{id}/file`), `versionNumber`, `sourceUrl`, `quote`.
+
+On every workspace load, `api.orders()` reads every page (`limit=200`) until `nextCursor` is null; the trade map reads them with `checklist=all`. Search and status filters on the Orders page then run in the browser. The assistant's `query_orders` tool (`ai/server/orders.js`) takes these filters as they are, with the chatting user's own token; News watch reads every page to build the company's goods.
 
 ### `GET /orders/{id}` (viewer)
 `{id}` is the company's own order ID (`PO-2291`).
@@ -395,34 +414,30 @@ Fields: `market`, `supplier`, `hs_code`, `order_value`, `days_until_ship`, `miss
 `#/workspace/map` (`frontend/src/TradeMap.tsx`, lazy-loaded). Live sessions only; the demo shows "Sign in to your company workspace".
 
 ### `GET /trade-map` (viewer)
-Everything the map draws, in one call when the page opens:
+What the map draws besides the company's orders (`GET /orders?checklist=all`), suppliers (`GET /suppliers`) and sites (`GET /sites`), which the page reads alongside it:
 
 | Key | Holds |
 | --- | --- |
 | `markets` | `code` (`EU`), name, hub point, `countryIds` (ISO numeric, matching world-atlas), `searchTerms` |
-| `orders[]` | `order`, `placement` (city, country, market, location, `approximate` = placed at the country centre), `checks[]`, `gapCount` |
-| `orders[].checks[]` | `requirementKey`, `title`, `level` (`supplier` / `shipment` / `check`), `status` (`on_file` / `missing` / `mismatch` / `prepare` / `check` / `unknown`), `note`, `source`, `documentKind` (the supplier document that answers it, `null` for shipment paperwork and checks) and `acceptedStandards`. An analysis report's `findings[]` have the same shape; reports saved before `documentKind` was added don't carry it |
-| `checks[].source` | The shared regulation version behind the requirement and the sentence that requires it: `regulationTitle`, `officialId`, `documentId` (→ `GET /regulation-documents/{id}/file`), `versionNumber`, `sourceUrl`, `quote` |
-| `suppliers[]` | From orders (matched by trimmed, lower-case name) + the supplier list. `id`/`documents` are `null` when the supplier is only named on orders. A document has `kind`, `detail`, `standards`, `documentNumber`, `issuer`, `expiresOn` (typed in or read from an upload) and `fromUpload` |
-| `sites[]` | Factories, ports, warehouses. `isRouteOrigin` marks the company's route start |
 | `observations[]` | Satellite samples (`isSample: true`) with a GeoJSON `extent` and `nearby` suppliers/sites within `checkRadiusKm` (default 25). Order statuses never change because of them |
-| `documentKinds`, `homeCountryIds`, `checkRadiusKm` | Labels, the countries to highlight, the flood check radius |
-| `suppliers[].sourcing` | What a supplier buys: `material` (key, e.g. `acacia`), `materialName`, `country`, `form` (chain step, e.g. `roundwood`) and `formName`, `basis` (how we know). `null` for a supplier only named on orders. The knowledge graph walks from news about a material or country to these suppliers' orders |
+| `documentKinds`, `homeCountryIds`, `checkRadiusKm` | Labels, the countries to highlight (with the company's sites or suppliers), the flood check radius |
 | `materials` | What sourcing can name: each material's `key`, `name`, `industry` and the chain steps (`forms[]`: `key`, `name`, `hsCodes`) it can be bought as |
 | `countries` | `code` (alpha-2), `numericCode` (world-atlas id), `name`: the countries a supplier or site can be in. Includes sourcing countries outside any market (Laos, Cambodia, Thailand, …) |
-| `suppliers[].country`, `sites[].country` | An alpha-2 code from `countries`, or `null` |
-| `sites[].id`, `sites[].key` | `id` is for `PATCH`/`DELETE /sites/{id}`; `key` is made from the name, never changes, and is what observations' `nearby[].ref` uses |
+
+### `GET /suppliers` (viewer)
+`?orderId=` (repeated, any spelling): only the suppliers those orders name. The supplier list, then the supplier names orders use that have no record (matched by trimmed, lower-case name; `id`, `documents` and `sourcing` are `null`). Each has `name`, `place`, `country` (alpha-2 or `null`), `location`, `supplies`, `contactName`, `contactEmail`, `orderIds` (the orders that name it), `documents[]` (`kind`, `label`, `detail`, `standards`, `documentNumber`, `issuer`, `expiresOn`, `fromUpload`) and `sourcing[]`: what it buys, `material` (key, e.g. `acacia`), `materialName`, `country`, `form` (chain step, e.g. `roundwood`) and `formName`, `basis` (how we know). The knowledge graph walks from news about a material or country to these suppliers' orders.
+
+### `GET /sites` (viewer)
+Factories, ports, warehouses: `id` (for `PATCH`/`DELETE /sites/{id}`), `key` (made from the name, never changes, what observations' `nearby[].ref` uses), `kind`, `name`, `shortName`, `place`, `country`, `location`, `note`, `isRouteOrigin` (the company's route start).
 
 `nearby[].distanceKm` estimates distance to the mapped polygon (including holes) using a local equirectangular projection. The proximity threshold is applied before rounding up to whole kilometres; zero means on or inside the extent. It is a screening estimate, not a survey measurement. The dashed overview circle is an approximate search-area illustration.
 
-A supplier document that expires before the order's ship date is a `mismatch`. `gapCount` counts the checks that are `missing` or `mismatch`. The market panel ("changes to check") is built in the frontend from these checks.
+The market panel ("changes to check") is built in the frontend from the orders' checks.
 
-The assistant's `query_orders` tool (`ai/server/orders.js`) also reads this route, with the chatting user's own token, to answer questions about the company's orders and their checklists.
+### `GET /orders/{id}/what-if` (viewer)
+One what-if at a time for one order. Send exactly one of `market`, `shipDate`, or `via`.
 
-### `GET /trade-map/compare` (viewer)
-One what-if at a time. Send exactly one of `market`, `shipDate`, or `via`.
-
-`?orderId=PO-2291&market=US` — another market. Paperwork only.
+`/orders/PO-2291/what-if?market=US` — another market. Paperwork only.
 ```json
 {"data": {"orderId": "PO-2291", "fromMarket": "EU", "toMarket": "US",
   "reuse":      [{"title": "FSC chain of custody", "note": "…", "tag": null}],
@@ -435,18 +450,18 @@ One what-if at a time. Send exactly one of `market`, `shipDate`, or `via`.
 - `422 unknown_market`, `422 same_market` (the order already goes there), `404` for an unknown order.
 - `422 invalid_input` when the call sends none of, or more than one of, `market`, `shipDate`, and `via`.
 
-`?orderId=PO-2291&shipDate=2027-02-01` compares the planned ship date with that day. `kind` is `ship_date`. Lines whose `effectiveOn` falls between the two dates are in `reevaluate` (`tag: "New"` when the new date is the one that brings them into force). A `changesOn` date between them is `tag: "Changes"`. Unchanged lines are evaluated against supplier evidence: only matching records enter `reuse`; missing or mismatched documents, shipment paperwork and manual checks stay in `reevaluate`, and absent supplier records stay in `unknown`. Arrival time and the buyer's window stay in `unknown`. `422 same_date` when the date is already the planned one.
+`?shipDate=2027-02-01` compares the planned ship date with that day. `kind` is `ship_date`. Lines whose `effectiveOn` falls between the two dates are in `reevaluate` (`tag: "New"` when the new date is the one that brings them into force). A `changesOn` date between them is `tag: "Changes"`. Unchanged lines are evaluated against supplier evidence: only matching records enter `reuse`; missing or mismatched documents, shipment paperwork and manual checks stay in `reevaluate`, and absent supplier records stay in `unknown`. Arrival time and the buyer's window stay in `unknown`. `422 same_date` when the date is already the planned one.
 
-`?orderId=PO-2291&via=SG` compares a routing. `via` is `direct`, `SG`, `MY`, `HK`, `AE`, or `LK`. `kind` is `route`. `routeSensitive` checklist lines (origin proofs) go to `reevaluate` when there is an intermediate stop. `routePoints` contains the ordered origin, optional stop and actual order destination used for both rendering and distance calculation. It is empty if an endpoint or stop cannot be located. `distanceKm` is the great-circle length of those segments; `assumptions` says it is not a voyage or a freight quote. Freight, sailing time, and congestion stay in `unknown`. Unchanged requirements use the same evidence classification as the ship-date comparison, including direct routes. `422 unknown_route`, `422 same_route` when the stop is already the destination country.
+`?via=SG` compares a routing. `via` is `direct`, `SG`, `MY`, `HK`, `AE`, or `LK`. `kind` is `route`. `routeSensitive` checklist lines (origin proofs) go to `reevaluate` when there is an intermediate stop. `routePoints` contains the ordered origin, optional stop and actual order destination used for both rendering and distance calculation. It is empty if an endpoint or stop cannot be located. `distanceKm` is the great-circle length of those segments; `assumptions` says it is not a voyage or a freight quote. Freight, sailing time, and congestion stay in `unknown`. Unchanged requirements use the same evidence classification as the ship-date comparison, including direct routes. `422 unknown_route`, `422 same_route` when the stop is already the destination country.
 
 Checklists are scoped by HS prefix: wood lines (chapters 44 and furniture 9401/9403), food (chapters 01–23), textiles (50–63), and listed electronics headings. A prefix-less line, such as proof of origin or ISPM 15 packaging, still applies across those products. Each line still cites an official text.
 
 Called from the order's "What if" panel each time the market, date, or route changes. A new call cancels the previous one.
 
-### Saved what-ifs: `/trade-map/scenarios`
+### Saved what-ifs: `/what-ifs`
 A what-if from the compare panel kept on record with a note: a proposal, not a change. Saving changes nothing on the order (status, ship date, destination, reports); nothing else reads it yet. Audited as `scenario.saved` / `scenario.deleted` (object: the order).
 
-`POST` (editor) `{"orderId": "PO-2291", "kind": "route", "target": "SG", "note": "Buyer prefers Singapore."}`. `kind` is `market`, `ship_date` or `route`; `target` is a market code, an ISO date, or a `via` code as in `/trade-map/compare`. The comparison is worked out again on the server (same errors as `/trade-map/compare`: `422 unknown_market`, `same_market`, `same_date`, `unknown_route`, `same_route`, `invalid_input` for a bad date, `404` for an unknown order) and stored as it stood. Saving the same order, kind and target again replaces the note and the stored comparison. Note: up to 2,000 characters; blank is `null`.
+`POST` (editor) `{"orderId": "PO-2291", "kind": "route", "target": "SG", "note": "Buyer prefers Singapore."}`. `kind` is `market`, `ship_date` or `route`; `target` is a market code, an ISO date, or a `via` code as in `/orders/{id}/what-if`. The comparison is worked out again on the server (same errors as `/orders/{id}/what-if`: `422 unknown_market`, `same_market`, `same_date`, `unknown_route`, `same_route`, `invalid_input` for a bad date, `404` for an unknown order) and stored as it stood. Saving the same order, kind and target again replaces the note and the stored comparison. Note: up to 2,000 characters; blank is `null`.
 ```json
 {"data": {"id": "…", "orderId": "PO-2291", "kind": "route", "target": "SG",
   "label": "Route via Singapore", "note": "Buyer prefers Singapore.",
@@ -464,7 +479,7 @@ A what-if from the compare panel kept on record with a note: a proposal, not a c
   "note": "A stop in Singapore …\n\nNext steps:\n- …\n\nTo ask:\n- …"}}
 ```
 
-### `GET /trade-map/changes` (viewer)
+### `GET /market-requirements/changes` (viewer)
 `?days=` (optional, 1–365; default the `RULE_WATCH_DAYS` setting, 90). Checklist lines in force in the markets of the company's open orders (ship date today or later) that take effect (`effectiveOn`) or change (`changesOn`) between today and `until`, oldest first, each with the open orders to that market and HS prefix that ship on or after that day.
 ```json
 {"data": {"start": "2026-10-15", "until": "2027-01-13", "days": 90,
@@ -475,7 +490,7 @@ A what-if from the compare panel kept on record with a note: a proposal, not a c
 The company report's "Checklist changes coming up" section is built from the same list (`trade_map.list_checklist_changes`). `422` for `days` outside 1–365.
 
 ### Suppliers and sites (editor)
-Editors enter them in the map's side panel, or a supplier from an order's analysis report (its next moves open the same form); viewers don't see the controls. The location comes from a click on the 2D map (which also suggests the country) or from typed `latitude, longitude`. After a save or delete the page reloads `GET /trade-map`, so order checks and flood proximity are recomputed. Each change writes an audit event (`supplier.created|updated|deleted`, `company_site.created|updated|deleted`).
+Editors enter them in the map's side panel, or a supplier from an order's analysis report (its next moves open the same form); viewers don't see the controls. The location comes from a click on the 2D map (which also suggests the country) or from typed `latitude, longitude`. After a save or delete the page reloads the map (`GET /trade-map`, `/orders`, `/suppliers`, `/sites`), so order checks and flood proximity are recomputed. Each change writes an audit event (`supplier.created|updated|deleted`, `company_site.created|updated|deleted`).
 
 `POST /suppliers` → `201`:
 ```json
@@ -691,7 +706,7 @@ Content shape (camelCase): `{title, subtitle, summary, sections: [{id, layout: "
   "content": {…}, "original": {…},
   "edits": {"header": false, "sections": 0, "rowsEdited": 0, "rowsAdded": 0, "rowsRemoved": 0}}}
 ```
-- Order: order facts, the document checklist exactly as `GET /trade-map` checks it, what the order's latest analysis found (`analysis`: next step, estimated cost, review state, playbook rules fired, missing data; `costs`: each cost line with its formula and basis, and unpriced duties), cited sources with quotes, the CSV row. Preparing a report never starts an analysis (that changes order statuses and needs an editor); without one the sections say "Not analysed yet", and they say so when the checklist has changed since the analysis. `404` for another company's order.
+- Order: order facts, the document checklist exactly as `GET /orders?checklist=all` checks it, what the order's latest analysis found (`analysis`: next step, estimated cost, review state, playbook rules fired, missing data; `costs`: each cost line with its formula and basis, and unpriced duties), cited sources with quotes, the CSV row. Preparing a report never starts an analysis (that changes order statuses and needs an editor); without one the sections say "Not analysed yet", and they say so when the checklist has changed since the analysis. `404` for another company's order.
 - Company: at a glance; checklist lines in the markets the company ships to that take effect or change in the next `days`, with the open orders shipping on or after that date; News watch alerts (high and medium, last `days`), read from the AI service's `GET /api/impacts` with the caller's token (`AI_SERVICE_URL`; if it can't be reached the section says so), each naming the orders someone confirmed it affects (`/news-matches`); floods within the check radius of suppliers and sites (last `days`); regulation versions added in the last `days` and the open orders whose checklists cite that regulation; open orders with document gaps; suppliers to follow up; sources.
 
 ### `GET /report-drafts` (viewer)

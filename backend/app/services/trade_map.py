@@ -42,16 +42,17 @@ from app.schemas.orders import OrderOut
 from app.schemas.trade_map import (
     ChecklistChangeOut,
     ChecklistChangesOut,
+    ChecklistDetail,
     CheckStatus,
     ComparisonItemOut,
     CountryOut,
     DocumentKindOut,
     GeoPoint,
-    MapOrderOut,
     MapSupplierOut,
     MarketComparisonOut,
     MarketOut,
     NearbyPlaceOut,
+    OrderListItemOut,
     OrderPlacementOut,
     RequirementCheckOut,
     RequirementSourceOut,
@@ -488,28 +489,26 @@ def supplier_documents_out(
     ]
 
 
-def build_trade_map(db: Session, ctx: CompanyContext) -> TradeMapOut:
-    started = time.perf_counter()
-    radius = get_settings().flood_check_radius_km
-    gazetteer = load_gazetteer(db)
+def order_entries(
+    db: Session,
+    ctx: CompanyContext,
+    orders: list[Order],
+    *,
+    checklist: ChecklistDetail = "all",
+    gazetteer: Gazetteer | None = None,
+) -> list[OrderListItemOut]:
+    """Each order with where it goes, its gap count and (as `checklist` asks) its document
+    checks, worked out the same way for the order list, the map and the company report."""
+    gazetteer = gazetteer or load_gazetteer(db)
     requirements = requirements_by_market(db, ctx.company_id)
     sources = load_requirement_sources(db, requirements)
-    kinds = {k.kind: k.label for k in map_queries.list_document_kinds(db)}
-    orders = order_queries.list_company_orders(db, ctx.company_id)
     suppliers = map_queries.list_company_suppliers(db, ctx.company_id)
     by_key = {s.name_key: s for s in suppliers}
     documents = documents_by_supplier(db, suppliers)
-    sites = map_queries.list_company_sites(db, ctx.company_id)
-
-    map_orders: list[MapOrderOut] = []
-    order_ids: dict[str, list[str]] = defaultdict(list)
-    names_on_orders: dict[str, str] = {}
+    entries = []
     for order in orders:
-        key = supplier_name_key(order.supplier)
-        order_ids[key].append(order.external_id)
-        names_on_orders.setdefault(key, " ".join(order.supplier.split()))
-        supplier = by_key.get(key)
         placement = locate_destination(order.destination, gazetteer)
+        supplier = by_key.get(supplier_name_key(order.supplier))
         checks = (
             check_order(
                 order,
@@ -520,17 +519,50 @@ def build_trade_map(db: Session, ctx: CompanyContext) -> TradeMapOut:
             if placement.market
             else []
         )
-        map_orders.append(
-            MapOrderOut(
-                order=OrderOut.from_order(order),
-                placement=placement,
-                checks=checks,
-                gap_count=sum(c.status in _GAP_STATUSES for c in checks),
-            )
-        )
+        entries.append(order_entry(order, placement, checks, checklist))
+    return entries
 
+
+def order_entry(
+    order: Order,
+    placement: OrderPlacementOut,
+    checks: list[RequirementCheckOut],
+    checklist: ChecklistDetail,
+) -> OrderListItemOut:
+    gaps = [c for c in checks if c.status in _GAP_STATUSES]
+    shown = {"none": None, "gaps": gaps, "all": checks}[checklist]
+    return OrderListItemOut(
+        **OrderOut.from_order(order).model_dump(),
+        placement=placement,
+        gap_count=len(gaps),
+        checks=shown,
+    )
+
+
+def place_orders(db: Session, orders: list[Order]) -> list[tuple[Order, OrderPlacementOut]]:
+    """Each order with where its destination is on the map."""
+    gazetteer = load_gazetteer(db)
+    return [(order, locate_destination(order.destination, gazetteer)) for order in orders]
+
+
+def list_suppliers(
+    db: Session, ctx: CompanyContext, for_orders: list[str] | None = None
+) -> list[MapSupplierOut]:
+    """The company's suppliers with their documents, sourcing and the orders that name them,
+    then the supplier names orders use that have no supplier record (`id` None). With
+    `for_orders`, only the suppliers those orders name (IDs written any way)."""
+    kinds = {k.kind: k.label for k in map_queries.list_document_kinds(db)}
+    suppliers = map_queries.list_company_suppliers(db, ctx.company_id)
+    by_key = {s.name_key: s for s in suppliers}
+    documents = documents_by_supplier(db, suppliers)
+    order_ids: dict[str, list[str]] = defaultdict(list)
+    names_on_orders: dict[str, str] = {}
+    for order in order_queries.list_company_orders(db, ctx.company_id):
+        key = supplier_name_key(order.supplier)
+        order_ids[key].append(order.external_id)
+        names_on_orders.setdefault(key, " ".join(order.supplier.split()))
     sourcing = sourcing_service.sourcing_by_supplier(db, [s.id for s in suppliers])
-    map_suppliers = [
+    listed = [
         MapSupplierOut(
             id=s.id,
             name=s.name,
@@ -546,8 +578,7 @@ def build_trade_map(db: Session, ctx: CompanyContext) -> TradeMapOut:
         )
         for s in suppliers
     ]
-    unmatched = [key for key in names_on_orders if key not in by_key]
-    map_suppliers += [
+    unlisted = [
         MapSupplierOut(
             id=None,
             name=names_on_orders[key],
@@ -558,11 +589,26 @@ def build_trade_map(db: Session, ctx: CompanyContext) -> TradeMapOut:
             documents=None,
             order_ids=order_ids[key],
         )
-        for key in unmatched
+        for key in names_on_orders
+        if key not in by_key
     ]
+    everyone = listed + unlisted
+    if not for_orders:
+        return everyone
+    wanted = {order_queries.order_id_key(i) for i in for_orders}
+    return [s for s in everyone if wanted & {order_queries.order_id_key(i) for i in s.order_ids}]
 
-    observations = map_queries.list_satellite_observations(db, OBSERVATION_LIMIT)
-    map_observations = [
+
+def list_sites(db: Session, ctx: CompanyContext) -> list[SiteOut]:
+    return [site_out(s) for s in map_queries.list_company_sites(db, ctx.company_id)]
+
+
+def list_observations(db: Session, ctx: CompanyContext) -> list[SatelliteObservationOut]:
+    """Satellite observations, each with the company's suppliers and sites near it."""
+    radius = get_settings().flood_check_radius_km
+    suppliers = map_queries.list_company_suppliers(db, ctx.company_id)
+    sites = map_queries.list_company_sites(db, ctx.company_id)
+    return [
         SatelliteObservationOut(
             id=o.id,
             kind=o.kind.value,
@@ -580,29 +626,29 @@ def build_trade_map(db: Session, ctx: CompanyContext) -> TradeMapOut:
             source_url=o.source_url,
             nearby=nearby_places(o, suppliers, sites, radius),
         )
-        for o in observations
+        for o in map_queries.list_satellite_observations(db, OBSERVATION_LIMIT)
     ]
 
+
+def build_trade_map(db: Session, ctx: CompanyContext) -> TradeMapOut:
+    """What the map draws besides the company's orders, suppliers and sites (GET /orders,
+    /suppliers, /sites): markets, observations near the company, and the reference lists its
+    forms use."""
+    started = time.perf_counter()
+    gazetteer = load_gazetteer(db)
+    suppliers = map_queries.list_company_suppliers(db, ctx.company_id)
+    sites = map_queries.list_company_sites(db, ctx.company_id)
+    observations = list_observations(db, ctx)
     home = {s.country_alpha2 for s in [*sites, *suppliers] if s.country_alpha2}
-    unplaced = sum(m.placement.location is None for m in map_orders)
     log.info(
         "trade_map.built",
         extra={
             "company_id": str(ctx.company_id),
-            "orders": len(map_orders),
-            "unplaced_orders": unplaced,
-            "orders_with_gaps": sum(m.gap_count > 0 for m in map_orders),
-            "suppliers": len(suppliers),
-            "suppliers_without_record": len(unmatched),
-            "sites": len(sites),
-            "observations": len(map_observations),
-            "observations_near_company": sum(bool(o.nearby) for o in map_observations),
+            "observations": len(observations),
+            "observations_near_company": sum(bool(o.nearby) for o in observations),
             "duration_ms": round((time.perf_counter() - started) * 1000, 1),
         },
     )
-    if not sites:
-        log.info("trade_map.no_sites", extra={"company_id": str(ctx.company_id)})
-
     return TradeMapOut(
         markets=[
             MarketOut(
@@ -617,11 +663,10 @@ def build_trade_map(db: Session, ctx: CompanyContext) -> TradeMapOut:
             )
             for m in gazetteer.markets.values()
         ],
-        orders=map_orders,
-        suppliers=map_suppliers,
-        sites=[site_out(s) for s in sites],
-        observations=map_observations,
-        document_kinds=[DocumentKindOut(kind=k, label=label) for k, label in kinds.items()],
+        observations=observations,
+        document_kinds=[
+            DocumentKindOut(kind=k.kind, label=k.label) for k in map_queries.list_document_kinds(db)
+        ],
         countries=sorted(
             (
                 CountryOut(code=c.alpha2, numeric_code=c.numeric_code, name=c.name)
@@ -633,7 +678,7 @@ def build_trade_map(db: Session, ctx: CompanyContext) -> TradeMapOut:
         home_country_ids=sorted(
             gazetteer.countries[c].numeric_code for c in home if c in gazetteer.countries
         ),
-        check_radius_km=radius,
+        check_radius_km=get_settings().flood_check_radius_km,
     )
 
 
@@ -709,7 +754,7 @@ def _load_order(db: Session, ctx: CompanyContext, order_id: str) -> Order:
 
 def build_order_checklist(
     db: Session, ctx: CompanyContext, order: Order
-) -> tuple[MapOrderOut, Market | None]:
+) -> tuple[OrderListItemOut, Market | None]:
     """One order's placement and document checks, exactly as the trade map shows them, and the
     market it ships to (None when the destination isn't in a market on the map)."""
     gazetteer = load_gazetteer(db)
@@ -726,13 +771,7 @@ def build_order_checklist(
             _supplier_documents(db, ctx, order),
             load_requirement_sources(db, requirements),
         )
-    checked = MapOrderOut(
-        order=OrderOut.from_order(order),
-        placement=placement,
-        checks=checks,
-        gap_count=sum(c.status in _GAP_STATUSES for c in checks),
-    )
-    return checked, market
+    return order_entry(order, placement, checks, "all"), market
 
 
 def _supplier_documents(db: Session, ctx: CompanyContext, order: Order) -> SupplierDocs | None:

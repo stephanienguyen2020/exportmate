@@ -7,8 +7,8 @@ import { generateInventory } from "../seed/inventory.js";
 import { companyGoods } from "../goods.js";
 
 const goods = companyGoods({ name: "Saigon Knit Co.", businessRole: "Manufacturer", origin: "Vietnam", destination: "EU", products: "" }, [
-  { order: { id: "PO-1", product: "Cotton T-shirt", hsCode: "6109.10", supplier: "Mill A", shipDate: "2026-11-01" }, placement: { market: "EU" } },
-  { order: { id: "PO-2", product: "Wool scarf", hsCode: "6117.10", supplier: "Mill B", shipDate: "2026-11-02" }, placement: { market: "UK" } },
+  { id: "PO-1", product: "Cotton T-shirt", hsCode: "6109.10", supplier: "Mill A", shipDate: "2026-11-01", placement: { market: "EU" } },
+  { id: "PO-2", product: "Wool scarf", hsCode: "6117.10", supplier: "Mill B", shipDate: "2026-11-02", placement: { market: "UK" } },
 ]).items;
 
 test("the scan's stock lines show what each item has", () => {
