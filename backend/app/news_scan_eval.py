@@ -7,8 +7,8 @@ to articles, alerts or the search index.
   uv run python -m app.news_scan_eval --repeat=3             a case passes only if it always does
 On GCP: gcloud run jobs execute exportmate-backend-task --args="python -m app.news_scan_eval" --wait
 
-Needs GOOGLE_CLOUD_PROJECT (the sample stock and the runs are in its Firestore) and Google
-credentials. Each run is stored in Firestore `scan_eval_runs` and compared with the last run
+The cases are about the demo company's sample stock (DEMO_COMPANY_ID). Needs
+GOOGLE_CLOUD_PROJECT (the stock and the runs are in its Firestore) and Google credentials. Each run is stored in Firestore `scan_eval_runs` and compared with the last run
 without model errors; it exits 1 if a case that passed now fails or any model call failed.
 Run it after every change to the scan's RULES, schema, model or decide()."""
 
@@ -28,24 +28,19 @@ from app.services.news_scan_exam import (
     score_scan_cases,
     summarize_scan_run,
 )
-from app.services.news_scan_rules import (
-    SAMPLE_STOCK_PROFILE,
-    SCAN_POLICY_VERSION,
-    clean_mentions,
-    decide,
-)
+from app.services.news_scan_rules import SCAN_POLICY_VERSION, clean_mentions, decide
 
 
 def _pct(x: float | None) -> str:
     return "n/a" if x is None else f"{round(x * 100)}%"
 
 
-def run_once(cases: list[dict], items: list[dict]) -> list[dict]:
+def run_once(cases: list[dict], items: list[dict], profile: dict) -> list[dict]:
     by_sku = {i["sku"]: i for i in items}
     outcomes: dict[str, dict] = {}
     for batch in in_batches(cases, BATCH):
         try:
-            results = assess([c["article"] for c in batch], items, SAMPLE_STOCK_PROFILE)
+            results = assess([c["article"] for c in batch], items, profile)
         except AppError as error:
             for c in batch:
                 outcomes[c["id"]] = {"error": error_text(error)}
@@ -55,9 +50,7 @@ def run_once(cases: list[dict], items: list[dict]) -> list[dict]:
             r = by_index.get(n)
             if r is None:
                 continue
-            relevant, affected, duplicate, other = decide(
-                case["article"], r, n, by_sku, SAMPLE_STOCK_PROFILE
-            )
+            relevant, affected, duplicate, other = decide(case["article"], r, n, by_sku, profile)
             outcomes[case["id"]] = {
                 "relevant": relevant,
                 "modelRelevant": bool(r.get("relevant")),
@@ -83,7 +76,8 @@ def main() -> None:
     settings = get_settings()
     store = get_news_store()
 
-    items = store.list_sample_stock()
+    goods = store.get_company_goods(settings.demo_company_id) or {}
+    items, profile = goods.get("items") or [], goods.get("profile") or {}
     if not items:
         sys.exit(f"No sample stock in {settings.google_cloud_project}; seed the AI service first")
     cases = [c for c in scan_cases(items, date.today()) if not only or c["id"] in only]
@@ -91,7 +85,7 @@ def main() -> None:
         f"Scan eval: {len(cases)} articles, {repeat} run(s), model {settings.gemini_model}, "
         f"scan policy {SCAN_POLICY_VERSION}"
     )
-    runs = [run_once(cases, items) for _ in range(repeat)]
+    runs = [run_once(cases, items, profile) for _ in range(repeat)]
     scored = merge_repeats(runs)
     summaries = [summarize_scan_run(cases, r) for r in runs]
 

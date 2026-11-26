@@ -8,7 +8,8 @@
 import crypto from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { GoogleAuth } from "google-auth-library";
-import { db, PROJECT, inventory, sources, articles, impacts, list } from "./db.js";
+import { db, PROJECT, sources, articles, impacts, storedGoods, list } from "./db.js";
+import { DEMO_COMPANY_ID } from "./access.js";
 import { GUIDES } from "./seed/guides.js";
 import { rerank } from "./rerank.js";
 import { isShared } from "./access.js";
@@ -107,6 +108,7 @@ export const toDoc = {
     id: `item:${i.sku}`,
     type: "item",
     refId: i.sku,
+    companyId: i.companyId,
     title: `${i.sku} · ${i.name}`,
     url: "#/workspace/news",
     text:
@@ -115,20 +117,20 @@ export const toDoc = {
       `Certifications: ${i.certifications.join(", ") || "none"}. Origin trace ${i.originTraced ? "on file" : "missing"}. ` +
       `${i.qtyOnHand} ${i.unit} on hand at ${i.warehouse}, unit cost USD ${i.unitCostUsd}, stock value USD ${Math.round(i.qtyOnHand * i.unitCostUsd)}.`,
   }),
-  // A company's alert (scan.js) has an id of its own and its companyId: only it sees the alert.
+  // An alert carries its companyId: only that company sees it.
   alert: (a) => ({
     id: `alert:${a.impactId ?? a.articleId}`,
     type: "alert",
     refId: a.impactId ?? a.articleId,
     ...origin(a),
-    ...(a.companyId ? { companyId: a.companyId } : {}),
+    companyId: a.companyId,
     title: a.headline,
     url: a.url,
     publishedAt: a.publishedAt,
     source: a.publisher,
     text:
       `News alert, ${a.severity} severity, ${a.direction}: ${a.headline}. ${a.why} ` +
-      `Affected ${a.companyId ? "goods" : "stock"}: ${a.affected.map((x) => `${x.sku} ${x.name} (${x.reason})`).join("; ")}. ` +
+      `Affected goods: ${a.affected.map((x) => `${x.sku} ${x.name} (${x.reason})`).join("; ")}. ` +
       `${Number.isFinite(a.stockValueUsd) ? `Stock value exposed USD ${a.stockValueUsd}. ` : ""}Next step: ${a.action} Source article: "${a.title}", ${a.publisher}, ${day(a.publishedAt)}.`,
   }),
   article: (a) => ({
@@ -233,9 +235,10 @@ export async function syncSourceDocs(all) {
 
 /** Rebuilds the index from every collection and removes stale documents. */
 export async function reindexAll() {
-  const [items, srcs, arts, alerts] = await Promise.all([list(inventory), list(sources), list(articles), list(impacts)]);
+  // Stock items: the demo company's sample stock (seed.js).
+  const [items, srcs, arts, alerts] = await Promise.all([storedGoods(DEMO_COMPANY_ID), list(sources), list(articles), list(impacts)]);
   const docs = [
-    ...items.map(toDoc.item),
+    ...items.map((i) => toDoc.item({ ...i, companyId: DEMO_COMPANY_ID })),
     ...srcs.map(toDoc.source),
     ...arts.map(toDoc.article),
     ...alerts.map((a) => toDoc.alert({ ...a, impactId: a.id, articleId: a.articleId || a.id })),

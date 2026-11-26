@@ -68,6 +68,10 @@ class Settings(BaseSettings):
     # google_cloud_project, which the AI service's assistant also reads. A scan skips articles
     # older than this many days unless a company switched that off (0: no rule).
     scan_max_age_days: int = 365
+    # Whose goods a signed-out visitor (the browser demo) watches: a company like any other in
+    # Firestore (`companyGoods/<id>`, the AI service's `npm run seed` writes its sample stock),
+    # with no Postgres account. The AI service's DEMO_COMPANY_ID must match.
+    demo_company_id: str = "sample"
     # The Cloud Run job that runs a scan ("projects/<p>/locations/<r>/jobs/<name>"); "Scan now"
     # starts it. Empty (locally): the scan runs in this process.
     news_scan_job: str = ""

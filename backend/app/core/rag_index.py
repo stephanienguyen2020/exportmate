@@ -68,7 +68,7 @@ def article_doc(article: dict) -> dict:
 
 
 def alert_doc(alert: dict) -> dict:
-    """A company's alert has an id of its own and its companyId: only it sees the alert."""
+    """An alert carries its companyId: only that company sees it."""
     ref = alert.get("impactId") or alert["articleId"]
     affected = "; ".join(f"{x['sku']} {x['name']} ({x['reason']})" for x in alert["affected"])
     value = alert.get("stockValueUsd")
@@ -78,14 +78,14 @@ def alert_doc(alert: dict) -> dict:
         "type": "alert",
         "refId": ref,
         **_origin(alert),
-        **({"companyId": alert["companyId"]} if alert.get("companyId") else {}),
+        "companyId": alert.get("companyId"),
         "title": alert.get("headline"),
         "url": alert.get("url"),
         "publishedAt": alert.get("publishedAt"),
         "source": alert.get("publisher"),
         "text": f"News alert, {alert['severity']} severity, {alert['direction']}: "
         f"{alert['headline']}. {alert['why']} "
-        f"Affected {'goods' if alert.get('companyId') else 'stock'}: {affected}. "
+        f"Affected goods: {affected}. "
         f'{exposed}Next step: {alert["action"]} Source article: "{alert.get("title")}", '
         f"{alert.get('publisher')}, {_day(alert.get('publishedAt'))}.",
     }

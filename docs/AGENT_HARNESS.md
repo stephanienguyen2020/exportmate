@@ -41,8 +41,8 @@ Still open: name an owner for each agent and record it here.
 | Tool | Scope | Access | Data | Held by |
 | --- | --- | --- | --- | --- |
 | `search_knowledge` | public | read | RAG Engine corpora: articles, alerts, items, sources, guides | quick_answer, analyst |
-| `query_inventory` | public | read | the turn's stock: a company's own goods (the backend's `GET /news-goods`) or, in the demo, `inventory` (synthetic sample stock) | quick_answer, analyst |
-| `get_alerts` | public | read | `impacts`, `inventory`, `scans` | quick_answer, analyst |
+| `query_inventory` | public | read | the turn's stock: the company's goods (the backend's `GET /news-goods`); in the demo, the demo company's, the synthetic sample stock in `companyGoods` | quick_answer, analyst |
+| `get_alerts` | public | read | `impacts`, `companyGoods`, `scans` | quick_answer, analyst |
 | `calculate` | public | none | arithmetic only | quick_answer, analyst |
 | `get_scan_status` | public | read | `scans`, `sources` | quick_answer, analyst |
 | `get_company_profile` | company | read | the caller's profile from the backend (`GET /api/v1/company/knowledge` with the user's own token) | quick_answer, analyst |

@@ -1,6 +1,7 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { chatInput, server } from "../runtime.js";
+import { DEMO_COMPANY_ID } from "../access.js";
 import { startTracing, traceResource } from "../agents/telemetry.js";
 
 const listening = new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve(server.address().port)));
@@ -26,7 +27,7 @@ test("the console playground's message runs as the demo", () => {
   assert.deepEqual(turn.messages, [{ role: "user", text: "Which items have no geolocation?" }]);
   assert.match(turn.sessionId, /^playground-/); // "abc" is not a valid session id
   assert.equal(turn.company, undefined);
-  assert.equal(turn.access.companyId, null);
+  assert.equal(turn.access.companyId, DEMO_COMPANY_ID);
 });
 
 test("the user's backend token only reaches the backend reader, never the turn's data", () => {

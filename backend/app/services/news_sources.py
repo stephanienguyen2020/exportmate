@@ -4,7 +4,8 @@
 Built-in sources, and custom ones added before sources had owners, are shared by every
 workspace: a company can switch one off for itself only. A custom source belongs to the
 company that added it: only that company sees it, and its owners and editors switch it off or
-remove it. Signed out (the browser demo) sees the shared sources as they are.
+remove it. Signed out is the browser demo: the demo company (DEMO_COMPANY_ID), which has no
+account, so nothing it sees can be changed.
 
 The age rule: a scan skips articles published more than SCAN_MAX_AGE_DAYS before it; a
 company can switch that off for itself (Firestore `companySources/{id}.skipOld` false)."""
@@ -39,18 +40,16 @@ log = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class NewsAccess:
-    """Whose view of News watch: the company (None signed out), the shared sources it switched
-    off, and whether it switched the age rule off."""
+    """Whose view of News watch: the company (the demo company signed out), the shared sources
+    it switched off, and whether it switched the age rule off."""
 
-    company_id: str | None = None
+    company_id: str
     disabled: list[str] = field(default_factory=list)
     skip_old_off: bool = False
 
 
 def news_access(ctx: CompanyContext | None) -> NewsAccess:
-    if ctx is None:
-        return NewsAccess()
-    company_id = str(ctx.company_id)
+    company_id = str(ctx.company_id) if ctx else get_settings().demo_company_id
     stored = get_news_store().get_company_settings(company_id)
     disabled = stored.get("disabled")
     return NewsAccess(
@@ -65,9 +64,7 @@ def is_shared(source: dict) -> bool:
 
 
 def source_visible(source: dict, access: NewsAccess) -> bool:
-    return is_shared(source) or (
-        access.company_id is not None and source.get("companyId") == access.company_id
-    )
+    return is_shared(source) or source.get("companyId") == access.company_id
 
 
 def source_enabled(source: dict, access: NewsAccess) -> bool:

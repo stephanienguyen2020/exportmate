@@ -790,12 +790,12 @@ while a scan runs or within 10 minutes of the last one; `503 scan_unavailable` i
 couldn't start. Audited `news_scan.started`. Cloud Scheduler starts the same job daily at 07:00
 Asia/Ho_Chi_Minh. The scan (`services/news_scan.py`) reads the enabled sources, screens new
 articles (patterns, then Model Armor with `MODEL_ARMOR_TEMPLATE`), asks Gemini which items each
-affects in the sample stock and in each company's goods, writes `articles`, `impacts` and the
+affects in each company's goods (the demo company's are the sample stock), writes `articles`, `impacts` and the
 scan, and adds them to the assistant's search (`RAG_BUCKET`, `core/rag_index.py`).
 
 ### `GET /news-alerts` (viewer, or signed out)
 Moved from the AI service's `/api/impacts` (Phase 2). `{impacts, scan}`: the newest 60 alerts about
-the caller's goods (signed out: the sample stock's), as the AI service's news scan stored them in
+the caller's goods (signed out: the demo company's, `DEMO_COMPANY_ID`), as the news scan stored them in
 Firestore `impacts` (fields passed through as they are), and the latest scan. An alert must come
 from a source the caller sees and has switched on and pass the caller's age rule. In `scan`,
 `impactsFound` counts the caller's alerts and other companies' own sources are left out.
@@ -806,7 +806,9 @@ Moved from the AI service's `/api/inventory`. `{kind, items, owner, updatedAt, w
 (`sku` `G-…`, `name`, `hsCode`, `markets`, `orders`, `source` `profile`/`orders`, `supplier`), at
 most 60, kept in Firestore `companyGoods/{companyId}` for the scan and rebuilt when 15 minutes
 old; `watchedSince` is when the scan first read back news for them (`null`: from the next scan).
-`sample` (signed out): the demo's synthetic stock.
+`sample` (signed out): the demo company's goods, the synthetic stock the AI service's
+`npm run seed` writes to `companyGoods/<DEMO_COMPANY_ID>`, read as stored (with quantities and
+values).
 
 ## News watch and orders
 

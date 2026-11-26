@@ -2,8 +2,8 @@
 `sources` (one document per feed), `companySources/{companyId}` (the shared sources a
 company switched off, `disabled`, and `skipOld` false when it switched the age rule off),
 `impacts` (alerts), `articles` and `scans`, which the news scan (services/news_scan.py) writes,
-`locks/scan` (one scan at a time), `inventory` (the demo's sample stock), `companyGoods/{companyId}`
-(each company's goods) and `rag_files` (the assistant's search records, core/rag_index.py).
+`locks/scan` (one scan at a time), `companyGoods/{companyId}` (each company's goods, the demo
+company's sample stock among them) and `rag_files` (the assistant's search records, core/rag_index.py).
 The only place the backend reads or writes them; it never commits Postgres."""
 
 from collections.abc import Callable
@@ -28,10 +28,8 @@ class NewsStore(Protocol):
         self, company_id: str, source_id: str, disabled: bool, fields: dict
     ) -> None: ...
     def update_company_settings(self, company_id: str, fields: dict) -> None: ...
-    def list_recent_alerts(self, limit: int) -> list[dict]: ...
     def list_company_alerts(self, company_id: str) -> list[dict]: ...
     def get_latest_scan(self) -> dict | None: ...
-    def list_sample_stock(self) -> list[dict]: ...
     def get_company_goods(self, company_id: str) -> dict | None: ...
     def save_company_goods(self, company_id: str, fields: dict) -> None: ...
     def list_company_settings(self) -> dict[str, dict]: ...
@@ -59,7 +57,6 @@ class FirestoreNewsStore:
         self.company_sources = self.client.collection("companySources")
         self.impacts = self.client.collection("impacts")
         self.scans = self.client.collection("scans")
-        self.inventory = self.client.collection("inventory")
         self.company_goods = self.client.collection("companyGoods")
         self.articles = self.client.collection("articles")
         self.locks = self.client.collection("locks")
@@ -97,10 +94,6 @@ class FirestoreNewsStore:
     def update_company_settings(self, company_id: str, fields: dict) -> None:
         self.company_sources.document(company_id).set(fields, merge=True)
 
-    def list_recent_alerts(self, limit: int) -> list[dict]:
-        query = self.impacts.order_by("createdAt", direction=firestore.Query.DESCENDING)
-        return _with_ids(query.limit(limit).stream())
-
     def list_company_alerts(self, company_id: str) -> list[dict]:
         # By companyId alone, which needs no composite index; the caller sorts.
         return _with_ids(
@@ -111,9 +104,6 @@ class FirestoreNewsStore:
         query = self.scans.order_by("startedAt", direction=firestore.Query.DESCENDING)
         found = _with_ids(query.limit(1).stream())
         return found[0] if found else None
-
-    def list_sample_stock(self) -> list[dict]:
-        return _with_ids(self.inventory.order_by("sku").stream())
 
     def get_company_goods(self, company_id: str) -> dict | None:
         doc = self.company_goods.document(company_id).get()

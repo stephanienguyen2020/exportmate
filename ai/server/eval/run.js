@@ -28,7 +28,8 @@ import { runAgent } from "../agent.js";
 import { runtime } from "../agents/platform.js";
 import { callRuntime } from "../agents/remote.js";
 import { demoOrders, demoPlaybook } from "../orders.js";
-import { GEMINI_PROJECT, PROJECT, db, inventory, list } from "../db.js";
+import { GEMINI_PROJECT, PROJECT, db, storedGoods, list } from "../db.js";
+import { DEMO_COMPANY_ID } from "../access.js";
 import { ASSISTANT, GEMINI_LOCATION, SCAN_MODEL } from "../models.js";
 import { summarizeAudits } from "../metrics.js";
 import { POLICY_VERSION } from "../policy.js";
@@ -163,7 +164,7 @@ async function companyExam() {
 }
 
 const exam = asCompany ? await companyExam() : null;
-const cases = (exam ? exam.cases : goldenCases(await list(inventory))).filter((c) => !only || only.includes(c.id));
+const cases = (exam ? exam.cases : goldenCases(await storedGoods(DEMO_COMPANY_ID))).filter((c) => !only || only.includes(c.id));
 const sessionId = `eval-${Date.now().toString(36)}`;
 console.log(
   `${asCompany ? `Exam as ${exam.profile.company.name}` : "Eval"} ${sessionId}${onEngine ? ` on ${runtime.name}` : ""}: ${cases.length} cases, policy ${POLICY_VERSION}${tier ? `, all on ${tier}` : ""}, model ${ASSISTANT.model}${GEMINI_PROJECT !== PROJECT ? ` in ${GEMINI_PROJECT}` : ""}${useJudge ? `, judge ${JUDGE_MODEL}` : ""}`,

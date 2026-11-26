@@ -15,24 +15,11 @@ from pydantic import BaseModel, Field
 from app.core.untrusted_text import as_data
 from app.services.news_sources import NewsAccess, is_shared, source_enabled, source_visible
 
-# Whose the sample stock is and how news talks about it (the AI service's seed/inventory.js
-# STOCK_PROFILE, which seeds the stock). `goods_terms` are the words news uses for these goods;
-# `other_goods` are goods that rules covering them also cover, which this company doesn't stock
-# (decide() drops an article that names only those). Singular words; plurals match too.
-SAMPLE_STOCK_PROFILE = {
-    "company": "Binh Duong Wood Co.",
-    "about": "a fictional Vietnamese wood-products and furniture manufacturer and exporter",
-    "goodsTerms": [
-        "wood", "wooden", "woodworking", "timber", "lumber", "plywood", "veneer", "sawn",
-        "sawmill", "hardwood", "softwood", "furniture", "cabinet", "flooring", "mdf",
-        "particleboard", "pellet", "forest products", "rubberwood", "acacia", "oak", "birch",
-        "eucalyptus", "teak", "walnut",
-    ],
-    "otherGoods": [
-        "cocoa", "coffee", "cattle", "beef", "soy", "soya", "soybean", "palm oil", "rubber",
-        "leather", "chocolate", "critical minerals",
-    ],
-}  # fmt: skip
+# A company's goods profile ({company, about}, in Firestore companyGoods with its items) may also
+# say how news talks about its goods: `goodsTerms` are the words news uses for them;
+# `otherGoods` are goods that rules covering them also cover, which the company doesn't stock
+# (decide() drops an article that names only those). Singular words; plurals match too. The
+# demo's sample stock has both (the AI service's seed/inventory.js STOCK_PROFILE).
 
 # The scan's instructions. Article text is third-party data (feeds can be added by any company
 # editor), so it is fenced in <article> tags and the rules say it never instructs.

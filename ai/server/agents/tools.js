@@ -3,13 +3,13 @@
 // cleans third-party text in results; `refs` numbers every citable result for the auditor.
 import { BasePlugin, BaseTool, isToolNotFound } from "@google/adk";
 import { Type } from "@google/genai";
-import { inventory, impacts, scans, sources, list } from "../db.js";
+import { impacts, scans, sources, storedGoods, list } from "../db.js";
 import { search, TYPES } from "../rag.js";
 import { evaluate } from "../calc.js";
 import { ToolError } from "../gateway.js";
 import { CHECKLIST_DETAILS, ORDER_STATUSES, matchOrders, ordersQuery, presentOrder, presentSource, totalsByCurrency } from "../orders.js";
 import { createGuard } from "../guard.js";
-import { itemVisible, presentScan, presentSources, visibleItems } from "../access.js";
+import { DEMO_COMPANY_ID, itemVisible, presentScan, presentSources, visibleItems } from "../access.js";
 
 // Describes the Cloud Scheduler job; set it where the job is configured.
 const SCAN_SCHEDULE = process.env.SCAN_SCHEDULE || "Daily at 07:00 Asia/Ho_Chi_Minh (Cloud Scheduler)";
@@ -28,8 +28,8 @@ const clamp = (n, lo, hi, fallback) => (Number.isInteger(n) ? Math.min(hi, Math.
 const has = (value, wanted) => !wanted || String(value).toLowerCase().includes(String(wanted).toLowerCase());
 // An item's stock value; a company's goods have no quantity or cost, so none.
 const stockValue = (i) => (Number.isFinite(i?.qtyOnHand * i?.unitCostUsd) ? Math.round(i.qtyOnHand * i.unitCostUsd) : undefined);
-// The turn's stock (agent.js): a company's own goods, or the sample stock in the browser demo.
-const stockOf = async (ctx) => ctx.stock ?? (await cached("inventory", () => list(inventory)));
+// The turn's stock (agent.js): the company's goods, the demo company's in the browser demo.
+const stockOf = async (ctx) => ctx.stock ?? (await cached("goods", () => storedGoods(DEMO_COMPANY_ID)));
 const ageDays = (iso) => (iso && !isNaN(Date.parse(iso)) ? Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / 86_400_000)) : undefined);
 const SEVERITY = { high: 0, medium: 1, low: 2 };
 // Document types whose text comes from third parties (news feeds, or alerts written from them).

@@ -1,12 +1,15 @@
-// Loads the synthetic stock and the default news sources into Firestore.
-// Usage: npm run seed            (upserts; keeps custom sources)
-import { db, inventory, sources } from "./db.js";
-import { generateInventory, DEFAULT_SOURCES } from "./seed/inventory.js";
+// Loads the synthetic stock, as the demo company's goods (access.js DEMO_COMPANY_ID), and the
+// default news sources into Firestore.
+// Usage: npm run seed            (upserts; keeps custom sources and when the scan first read news
+// for the stock, `backfilledAt`)
+import { db, goodsByCompany, sources } from "./db.js";
+import { DEMO_COMPANY_ID } from "./access.js";
+import { generateInventory, DEFAULT_SOURCES, STOCK_PROFILE } from "./seed/inventory.js";
 import { reindexAll } from "./rag.js";
 
-const items = generateInventory();
+const items = generateInventory().sort((a, b) => a.sku.localeCompare(b.sku));
 const batch = db.batch();
-for (const item of items) batch.set(inventory.doc(item.sku), item);
+batch.set(goodsByCompany.doc(DEMO_COMPANY_ID), { profile: STOCK_PROFILE, items, updatedAt: new Date().toISOString() }, { merge: true });
 for (const { id, ...s } of DEFAULT_SOURCES)
   batch.set(sources.doc(id), { ...s, builtIn: true, enabled: true }, { merge: true });
 await batch.commit();

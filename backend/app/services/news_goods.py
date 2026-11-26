@@ -4,9 +4,11 @@ goods.js / goods-store.js).
 A signed-in company's goods are what its profile (Account › About company) names and what its
 orders ship: one item per product and HS code, with every market and supplier and the newest
 orders, without quantities or values. They are kept in Firestore `companyGoods/{companyId}`,
-where the daily news scan (ai/server/scan.js) reads them with no one's token, and rebuilt from
-Postgres on a read when older than GOODS_TTL. The scan sets `backfilledAt` once it has read
-back over recent news for them. Signed out (the browser demo) gets the sample stock.
+where the daily news scan (services/news_scan.py) reads them, and rebuilt from Postgres on a
+read when older than GOODS_TTL. The scan sets `backfilledAt` once it has read back over recent
+news for them. Signed out is the demo company (DEMO_COMPANY_ID), whose goods are the sample
+stock the AI service's `npm run seed` writes there; with no Postgres account, they are read
+as stored.
 
 Item IDs must stay the same as goods.js made them: stored alerts name items by them."""
 
@@ -18,6 +20,7 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.context import CompanyContext
 from app.database.models import Order
 from app.database.news_store import get_news_store
@@ -32,12 +35,6 @@ MAX_GOODS = 60
 MAX_ORDER_IDS = 10
 MAX_ABOUT = 600
 GOODS_TTL = timedelta(minutes=15)
-# Whose the sample stock is. ai/server/seed/inventory.js STOCK_PROFILE says the same until the
-# news scan moves here.
-SAMPLE_STOCK_OWNER = StockOwnerOut(
-    company="Binh Duong Wood Co.",
-    about="a fictional Vietnamese wood-products and furniture manufacturer and exporter",
-)
 
 log = logging.getLogger(__name__)
 
@@ -167,22 +164,24 @@ def _fresh(updated_at: object, now: datetime) -> bool:
     return stamp.tzinfo is not None and now - stamp < GOODS_TTL
 
 
-def list_stock_items(db: Session, ctx: CompanyContext | None) -> list[dict]:
-    """The items alerts name: the company's goods, or the sample stock signed out."""
+def caller_goods(db: Session, ctx: CompanyContext | None) -> dict:
+    """The caller's goods: its company's, or the demo company's signed out ({} until seeded)."""
     if ctx is None:
-        return get_news_store().list_sample_stock()
-    return company_stock(db, ctx).get("items") or []
+        return get_news_store().get_company_goods(get_settings().demo_company_id) or {}
+    return company_stock(db, ctx)
+
+
+def list_stock_items(db: Session, ctx: CompanyContext | None) -> list[dict]:
+    """The items the caller's alerts name."""
+    return caller_goods(db, ctx).get("items") or []
 
 
 def list_news_goods(db: Session, ctx: CompanyContext | None) -> NewsGoodsOut:
-    if ctx is None:
-        return NewsGoodsOut(
-            kind="sample", items=get_news_store().list_sample_stock(), owner=SAMPLE_STOCK_OWNER
-        )
-    goods = company_stock(db, ctx)
+    goods = caller_goods(db, ctx)
     profile = goods.get("profile") or {}
     return NewsGoodsOut(
-        kind="company",
+        # The demo's sample stock has quantities and values; a company's goods don't.
+        kind="sample" if ctx is None else "company",
         items=goods.get("items") or [],
         owner=StockOwnerOut(company=profile.get("company", ""), about=profile.get("about", "")),
         updated_at=goods.get("updatedAt"),
