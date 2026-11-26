@@ -7,7 +7,7 @@ import { inventory, impacts, scans, sources, list } from "../db.js";
 import { search, TYPES } from "../rag.js";
 import { evaluate } from "../calc.js";
 import { ToolError } from "../gateway.js";
-import { CHECKLIST_DETAILS, ORDER_STATUSES, matchOrders, ordersQuery, presentOrder, totalsByCurrency } from "../orders.js";
+import { CHECKLIST_DETAILS, ORDER_STATUSES, matchOrders, ordersQuery, presentOrder, presentSource, totalsByCurrency } from "../orders.js";
 import { createGuard } from "../guard.js";
 import { itemVisible, presentScan, presentSources, visibleItems } from "../access.js";
 
@@ -54,6 +54,15 @@ export function workspaceReaders(backend, demo) {
       orders: async (args = {}) => read(`/api/v1/orders?${ordersQuery(args, MAX_ORDERS)}`, "orders"),
       playbook: async () => (await read("/api/v1/playbook/rules", "playbook")).filter((r) => r.enabled),
       graph: async (args) => read(`/api/v1/knowledge-graph/query?${graphQuery(args)}`, "knowledge graph"),
+      // GET /api/v1/orders/{id}/what-if: a 404 or 422 (unknown order, market or route; the same
+      // market or date) goes back to the model with the backend's message, so it can correct the call.
+      whatIf: async ({ orderId, ...change }) => {
+        const { status, body } = await backend(`/api/v1/orders/${encodeURIComponent(orderId)}/what-if?${new URLSearchParams(change)}`);
+        if (status === 404 || status === 422) throw new ToolError("invalid_args", body?.error?.message || `No what-if for ${orderId}.`);
+        if (status !== 200) throw Object.assign(new Error("The what-if can't be worked out right now."), { status: 503 });
+        return body.data;
+      },
+      changes: async (days) => read(`/api/v1/market-requirements/changes${days ? `?days=${days}` : ""}`, "rule changes"),
     };
   }
   // The browser demo has no backend, so no knowledge graph to walk.
@@ -61,6 +70,8 @@ export function workspaceReaders(backend, demo) {
     orders: demo?.orders ? async (args = {}) => matchOrders(demo.orders, args) : null,
     playbook: demo?.playbook ? async () => demo.playbook : null,
     graph: null,
+    whatIf: null,
+    changes: null,
   };
 }
 
@@ -661,6 +672,95 @@ REGISTRY.query_graph = {
 };
 
 // Tools that read data outside the answer cache's fingerprint (answer-cache.js).
+const WHAT_IF_ROUTES = ["direct", "SG", "MY", "HK", "AE", "LK"];
+
+REGISTRY.compare_order = {
+  scope: "whatIf",
+  // Works the comparison out live from the company's orders, suppliers and checklists.
+  live: true,
+  declaration: {
+    name: "compare_order",
+    description:
+      "GET /api/v1/orders/{orderId}/what-if: what one change to one order would mean for its paperwork, worked out from the company's own checklists and supplier documents (the trade map's \"What if\" panel). Give exactly one change: market (another destination market), shipDate (another ship date) or via (a stop on the route). Returns reuse (documents on file that still apply, to review), reevaluate (what to redo or prepare; tag New, Changes or Prepare), unknown (what the data can't answer, e.g. duty or freight), dropped (requirements the change removes) and assumptions; a route also has distanceKm (great-circle, not a voyage). Market comparisons cover paperwork only. For a what-if about a material or an origin country (\"what if Vietnam restricts acacia logs\"), use query_graph instead.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        orderId: { type: Type.STRING, description: "The order, e.g. PO-2291" },
+        market: { type: Type.STRING, description: "Another destination market code: EU, US, UK, JP, SG, KR, CA, AU" },
+        shipDate: { type: Type.STRING, description: "Another ship date, YYYY-MM-DD (\"a month later\": add a month to the order's ship date from query_orders)" },
+        via: { type: Type.STRING, enum: WHAT_IF_ROUTES, description: "A stop on the route: SG Singapore, MY Port Klang, HK Hong Kong, AE Jebel Ali, LK Colombo; direct for none" },
+      },
+      required: ["orderId"],
+    },
+  },
+  async run(args, { refs, whatIf }) {
+    const changes = ["market", "shipDate", "via"].filter((k) => args[k]);
+    if (changes.length !== 1) throw new ToolError("invalid_args", "Give exactly one change: market, shipDate or via.");
+    const [kind] = changes;
+    const result = await whatIf({ orderId: args.orderId, [kind]: args[kind] });
+    const change = kind === "market" ? `went to ${result.toMarket}` : kind === "shipDate" ? `shipped on ${result.toShipDate}` : `went via ${result.viaName}`;
+    const counts = `reuse ${result.reuse.length}, recheck ${result.reevaluate.length}, unknown ${result.unknown.length}, no longer needed ${result.dropped.length}`;
+    const ref = refs.cite(`whatif:${result.orderId}:${kind}=${args[kind]}`, {
+      type: "query",
+      id: `${result.orderId} ${kind}=${args[kind]}`,
+      title: `What if ${result.orderId} ${change}: ${counts}`,
+      url: `#/workspace/map/order/${encodeURIComponent(result.orderId)}`,
+    });
+    const { routePoints: _points, ...comparison } = result;
+    return {
+      output: { ref, ...comparison },
+      audit: { count: result.reuse.length + result.reevaluate.length + result.unknown.length, results: [{ ref, type: "query", title: `What if ${result.orderId} ${change}: ${counts}` }] },
+    };
+  },
+};
+
+REGISTRY.upcoming_changes = {
+  scope: "changes",
+  // The company's markets and checklists, read live.
+  live: true,
+  declaration: {
+    name: "upcoming_changes",
+    description:
+      "GET /api/v1/market-requirements/changes: checklist lines in the markets the company's open orders ship to that take effect (kind effective) or change (kind changes) between today and `days` from now, oldest first (Rule watch's \"Coming up\"). Each has its date (on), market, title, whatChanges, the official text it comes from, and orderIds: the open orders to that market and product that ship on or after that date. Set days so the window reaches the latest ship date that matters (default 90, at most 365). These are dated lines in the company's own checklists; news about proposed rules comes from search_knowledge.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        days: { type: Type.INTEGER, description: "How far ahead, 1–365 days (default 90)" },
+      },
+    },
+  },
+  async run(args, { refs, changes: readChanges }) {
+    const days = args.days === undefined ? undefined : clamp(args.days, 1, 365, 90);
+    const found = await readChanges(days);
+    const ref = refs.cite(`changes:${found.start}:${found.until}`, {
+      type: "query",
+      id: `${found.start} to ${found.until}`,
+      title: `Checklist changes from ${found.start} to ${found.until}: ${found.changes.length}`,
+      url: "#/workspace/rules",
+    });
+    const changes = found.changes.map((c) => ({
+      on: c.on,
+      kind: c.kind,
+      market: c.market,
+      marketName: c.marketName,
+      title: c.title,
+      whatChanges: c.whatChanges,
+      orderIds: c.orderIds,
+      source: presentSource(c.source, refs.cite),
+    }));
+    return {
+      output: { ref, start: found.start, until: found.until, days: found.days, changes },
+      audit: {
+        count: changes.length,
+        results: [
+          { ref, type: "query", title: `Checklist changes from ${found.start} to ${found.until}: ${changes.length}` },
+          ...changes.map((c) => ({ ref: c.source.ref, type: "regulation", title: `${c.on} ${c.market}: ${c.title}` })),
+        ],
+      },
+    };
+  },
+};
+
 export const LIVE_TOOLS = new Set(Object.keys(REGISTRY).filter((name) => REGISTRY[name].live));
 
 export function makeRefs() {

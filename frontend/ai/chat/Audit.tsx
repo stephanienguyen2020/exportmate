@@ -1,11 +1,13 @@
 import React from "react";
 import {
+  ArrowLeftRight,
   Bell,
   Bookmark,
   BookOpen,
   Brain,
   Building2,
   Calculator,
+  CalendarClock,
   CircleAlert,
   CircleCheck,
   ClipboardList,
@@ -32,6 +34,8 @@ const TOOL_LABELS: Record<string, [React.ElementType, string]> = {
   query_orders: [ClipboardList, "Read the company's orders"],
   get_playbook: [BookOpen, "Read the playbook"],
   query_graph: [Waypoints, "Walked the knowledge graph"],
+  compare_order: [ArrowLeftRight, "Compared a what-if"],
+  upcoming_changes: [CalendarClock, "Checked rule changes ahead"],
 };
 
 // Why the tool gateway refused or failed a call.

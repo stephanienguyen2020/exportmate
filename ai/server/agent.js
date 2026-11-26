@@ -121,7 +121,7 @@ export async function runAgent({
   const companyId = company?.company.id;
   const readers = workspaceReaders(backend, company ? null : demo);
   // What this turn's tools and rules may use (gateway.js scopes, policy.js `when`).
-  const session = { company, orders: readers.orders, playbook: readers.playbook, graph: readers.graph, stock: await stockFor(company, backend), memories: [] };
+  const session = { company, orders: readers.orders, playbook: readers.playbook, graph: readers.graph, whatIf: readers.whatIf, changes: readers.changes, stock: await stockFor(company, backend), memories: [] };
   // Who this chat runs as (agents/platform.js): Agent Platform session and Memory Bank scope.
   const userKey = userKeyFor({ company, user, sessionId });
 

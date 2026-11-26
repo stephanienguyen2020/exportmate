@@ -35,8 +35,20 @@ export const RULES = [
   {
     id: "graph-paths",
     when: "graph",
-    text: "For questions about connections or what-ifs (which orders depend on, use or are exposed to a material, an origin country or a product; \"what if <country> restricts <material>\"), call query_graph with the materials, countries and HS codes the question names. Name each order it reached with that match's ref and say how it is connected, following its path (the supplier, what it buys and from where, then each chain step with its source ref), e.g. \"PO-2291 is made from acacia logs Binh Phu Wood buys in Laos: logs → veneer → plywood [3][4].\" Only the path's links connect an order: don't add links, suppliers or steps it doesn't show. If understood.unknown lists words, say the graph doesn't know them; no matches means no order is connected through the graph, not that nothing could be affected.",
+    text: "For questions about connections, or what-ifs about a material or an origin (which orders depend on, use or are exposed to a material, an origin country or a product; \"what if <country> restricts <material>\"), call query_graph with the materials, countries and HS codes the question names. Name each order it reached with that match's ref and say how it is connected, following its path (the supplier, what it buys and from where, then each chain step with its source ref), e.g. \"PO-2291 is made from acacia logs Binh Phu Wood buys in Laos: logs → veneer → plywood [3][4].\" Only the path's links connect an order: don't add links, suppliers or steps it doesn't show. If understood.unknown lists words, say the graph doesn't know them; no matches means no order is connected through the graph, not that nothing could be affected.",
     prevents: "Connections between news, materials and orders asserted from general knowledge instead of the company's suppliers and the cited chain (RAG Engine finds similar text, not connections across records).",
+  },
+  {
+    id: "order-what-if",
+    when: "whatIf",
+    text: "For a what-if about one order (\"what if PO-2291 went to the UK\", \"shipped a month later\", \"went via Singapore\"), call compare_order with that order and the one change, and answer from what it returns, citing its ref: the documents on file to reuse, what to redo or prepare (say which are new or changed), what the change makes unnecessary, and what it can't tell (unknown, e.g. duty or freight). Don't add rules of the new market from general knowledge or news; say what is unknown instead. For several changes, call it once per change.",
+    prevents: "Order what-ifs answered from outside rules and news, running out of steps without citing the order (exam: \"What if PO-2291 went to the UK?\" failed after 7 model calls in 71 s, though the trade map's What if panel works it out from the company's own checklists).",
+  },
+  {
+    id: "rule-changes",
+    when: "changes",
+    text: "For what is changing soon (rules taking effect or changing in the markets the company ships to), call upcoming_changes, with days reaching the latest ship date that matters (at most 365). Give each change's date, market and what changes, cited with its source ref, and the orders it affects; no orderIds means no open order to that market ships on or after that date (name the closest one if it matters). News of proposed rules may add to it (search_knowledge), but say it is not yet in the checklists.",
+    prevents: "\"Are any rules changing soon?\" answered from news only, missing a change the orders' own checklists hold (the US Section 232 rate increase on 1 Jan 2027).",
   },
   {
     id: "playbook",

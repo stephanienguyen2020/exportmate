@@ -32,6 +32,8 @@ Alerts and answers are AI assessments, not legal advice. Legal and regulatory co
 | Using ExportMate | How do I import my orders? | `search_knowledge` (help guides) |
 | Your company (signed in) | Which certifications do we hold? | `get_company_profile` |
 | Your orders | Why does PO-2291 need action? | `query_orders` |
+| What if an order changed (signed in) | What if PO-2291 went to the UK? | `compare_order` |
+| Rules changing soon (signed in) | Are any rules changing soon in the markets I ship to? | `upcoming_changes` |
 | Advice under your own rules | Should we ship PO-2291 this week? | `query_orders`, `get_playbook` |
 | Connections and what-ifs (signed in) | Which of our orders depend on acacia from Vietnam? What if Vietnam restricts acacia log exports? | `query_graph`: each order with the supplier, what it buys and from where, and each step of the material chain, every step citing its official text |
 | General trade knowledge | What is a certificate of origin? | No tools; it marks regulatory details as things to verify |
@@ -205,6 +207,8 @@ The assistant's instructions are a list of rules in `policy.js`. Each rule names
 | `query_orders` | Your orders and their document checklists (the gaps, or every line), from `GET /api/v1/orders` with your token, or the orders the browser demo sent | Company workspace, or a demo with orders |
 | `get_playbook` | The playbook rules switched on, from `GET /api/v1/playbook/rules` with your token, or the rules the browser demo sent | Company workspace, or a demo with rules |
 | `query_graph` | The knowledge graph (GraphRAG): from a material, origin country, HS code or market to the orders it reaches through your suppliers' sourcing and the material chain, with every link's official text (`GET /api/v1/knowledge-graph/query` with your token). The same walk News watch uses for an article | Company workspace |
+| `compare_order` | What one change to an order would mean for its paperwork (another market, ship date or route), from `GET /api/v1/orders/{id}/what-if`, the trade map's What if panel | Company workspace |
+| `upcoming_changes` | Checklist lines that start or change soon in your markets, with the orders shipping after them, from `GET /api/v1/market-requirements/changes` (Rule watch's Coming up) | Company workspace |
 
 **Connections.** RAG Engine finds text similar to a question; it can't follow connections across records ("which orders depend on wood from Laos?"). `query_graph` walks them: the agent asks the backend, which walks from what the question names through your suppliers' sourcing and the material chain to your orders, the same walk as News watch, so the answer is code's, not the model's. Each order it reaches is cited as a **graph path** and each link's source as an **official text**. Before the answer is shown, the auditor checks every order named from the graph cites its path, and a critic (Gemini) compares, order by order, what the answer says connects it with its path; a draft that adds a supplier, a country or a step goes back once, and one that still does is marked **Needs review**.
 

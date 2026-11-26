@@ -20,7 +20,7 @@ const money = (minor) => (minor / 100).toFixed(minor % 100 ? 2 : 0);
 /**
  * company: { today (YYYY-MM-DD), markets: from GET /trade-map, orders: GET /orders?checklist=all
  * (each order with its placement, checks and gapCount), suppliers: GET /suppliers, rules:
- * switched-on playbook rules,
+ * switched-on playbook rules, changes: GET /market-requirements/changes?days=365,
  * acacia: GET /knowledge-graph/query?material=acacia&country=VN }.
  */
 export function examCases(company) {
@@ -146,8 +146,8 @@ export function examCases(company) {
       id: "company-coming-changes",
       category: "rules",
       question: "Are any rules changing soon in the markets I ship to?",
-      expect: { tools: ["query_orders"] },
-      rubric: "Names checklist lines that take effect or change soon in the markets of open orders (for example a US tariff change), with the date and the orders shipping after it; says so plainly if none.",
+      expect: { tools: ["upcoming_changes"], contains: (company.changes || []).slice(0, 1).map((c) => c.title) },
+      rubric: `Names the checklist lines that take effect or change soon in the markets of open orders, with the date and the orders shipping after it; says so plainly if none. They are: ${(company.changes || []).map((c) => `${c.on} ${c.market} ${c.title} (orders: ${c.orderIds.join(", ") || "none"})`).join("; ") || "none"}.`,
     },
     {
       id: "company-news",
@@ -190,15 +190,15 @@ export function examCases(company) {
       id: "company-whatif-market",
       category: "trade-map",
       question: `What if ${gapped[0].id} went to ${otherMarket.name} instead?`,
-      expect: { tools: ["query_orders"], contains: [gapped[0].id] },
-      rubric: `Says what it can tell from the order's checklist, invents no ${otherMarket.name} requirements it wasn't given, and points to the trade map's What if panel for the full comparison.`,
+      expect: { tools: ["compare_order"], contains: [gapped[0].id] },
+      rubric: `From the order's what-if comparison: the documents on file to reuse, what to redo or prepare for ${otherMarket.name}, what is no longer needed and what can't be told (e.g. duty); invents no ${otherMarket.name} requirements the comparison doesn't list.`,
     },
     gapped[0] && {
       id: "company-whatif-later",
       category: "trade-map",
       question: `What if ${gapped[0].id} shipped a month later?`,
-      expect: { tools: ["query_orders"], contains: [gapped[0].id] },
-      rubric: "Says whether any checklist line takes effect or changes before the later date, and whether that gives more time for the missing documents; invents no rule changes.",
+      expect: { tools: ["compare_order"], contains: [gapped[0].id] },
+      rubric: "From the order's what-if comparison for the later date: whether any checklist line takes effect or changes by then, and what still has to be prepared; invents no rule changes.",
     },
     // Follow-ups: the second question only makes sense with the first.
     euTotal !== null && eu.length > 0 && {
