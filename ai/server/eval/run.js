@@ -149,15 +149,16 @@ async function companyExam() {
     if (status !== 200) throw new Error(`GET ${path}: ${status} ${body.error?.code || ""}`);
     return body.data;
   };
-  const [profile, map, orders, suppliers, rules, acacia] = await Promise.all([
+  const [profile, map, orders, suppliers, changes, rules, acacia] = await Promise.all([
     read("/api/v1/company/knowledge"),
     read("/api/v1/trade-map"),
     read("/api/v1/orders?checklist=all&limit=200"),
     read("/api/v1/suppliers"),
+    read("/api/v1/market-requirements/changes?days=365"),
     read("/api/v1/playbook/rules"),
     read("/api/v1/knowledge-graph/query?material=acacia&country=VN"),
   ]);
-  const data = { markets: map.markets, orders, suppliers, rules: rules.filter((r) => r.enabled), acacia, today: new Date().toISOString().slice(0, 10) };
+  const data = { markets: map.markets, orders, suppliers, changes: changes.changes, rules: rules.filter((r) => r.enabled), acacia, today: new Date().toISOString().slice(0, 10) };
   return { token, backend, profile, cases: examCases(data) };
 }
 

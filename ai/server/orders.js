@@ -83,19 +83,24 @@ export function presentOrder(o, cite) {
         status: c.status,
         gap: GAPS.has(c.status),
         note: c.note,
-        source: c.source && {
-          ref: cite(`regdoc:${c.source.documentId}`, {
-            type: "regulation",
-            id: c.source.documentId,
-            title: `${c.source.regulationTitle} (${c.source.documentTitle}, version ${c.source.versionNumber})`,
-            url: `#/workspace/regulations/documents/${encodeURIComponent(c.source.documentId)}`,
-          }),
-          regulation: c.source.regulationTitle,
-          officialId: c.source.officialId || undefined,
-          quote: c.source.quote?.length > MAX_QUOTE ? `${c.source.quote.slice(0, MAX_QUOTE)}…` : c.source.quote,
-        },
+        source: c.source && presentSource(c.source, cite),
       })),
     }),
+  };
+}
+
+/** An official text a checklist line cites (the backend's RequirementSourceOut), cited once per version. */
+export function presentSource(source, cite) {
+  return {
+    ref: cite(`regdoc:${source.documentId}`, {
+      type: "regulation",
+      id: source.documentId,
+      title: `${source.regulationTitle} (${source.documentTitle}, version ${source.versionNumber})`,
+      url: `#/workspace/regulations/documents/${encodeURIComponent(source.documentId)}`,
+    }),
+    regulation: source.regulationTitle,
+    officialId: source.officialId || undefined,
+    quote: source.quote?.length > MAX_QUOTE ? `${source.quote.slice(0, MAX_QUOTE)}…` : source.quote,
   };
 }
 
