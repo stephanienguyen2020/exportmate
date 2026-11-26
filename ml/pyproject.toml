@@ -1,0 +1,29 @@
+[project]
+name = "exportmate-ml"
+version = "0.1.0"
+description = "Offline models for ExportMate: the trade defence risk model"
+requires-python = ">=3.12"
+dependencies = [
+    "catboost>=1.2",
+    "lightgbm>=4.5",
+    "numpy>=2.0",
+    "openpyxl>=3.1",
+    "pandas>=2.2,<3",
+    "psycopg[binary]>=3.2",
+    "pyarrow>=17",
+    "scikit-learn>=1.5",
+    "xgboost>=2.1",
+    "xlrd>=2.0",
+]
+
+[tool.uv]
+package = false
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
