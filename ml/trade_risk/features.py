@@ -5,7 +5,7 @@
 The label `case_opened_next_year` is 1 when the market opened an anti-dumping or anti-subsidy case
 against the exporter on the product in the following year. Every feature uses only what was known
 at the end of the row's year: that year's trade figures and the cases opened up to then.
-Feature meanings: docs/local/TRADE_DEFENCE_RISK_MODEL.md ("Build features").
+Feature meanings: ml/docs/TRADE_DEFENCE_RISK_MODEL.md ("Build features").
 """
 
 import numpy as np
