@@ -1,3 +1,4 @@
+import re
 import uuid
 from collections.abc import Iterable
 from datetime import date
@@ -20,8 +21,21 @@ def _escape_like(text: str) -> str:
     return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
-def _order_filters(company_id: uuid.UUID, status: OrderStatus | None, q: str | None) -> list:
+def order_id_key(external_id: str) -> str:
+    """ "PO-2291", "po 2291" and "po2291" name the same order."""
+    return re.sub(r"[^A-Z0-9]", "", external_id.upper())
+
+
+def _order_filters(
+    company_id: uuid.UUID,
+    status: OrderStatus | None,
+    q: str | None,
+    ids: list[str] | None = None,
+) -> list:
     where = [Order.company_id == company_id]
+    if ids:
+        key = func.regexp_replace(func.upper(Order.external_id), "[^A-Z0-9]", "", "g")
+        where.append(key.in_([order_id_key(i) for i in ids]))
     if status:
         where.append(Order.status == status)
     if q:
@@ -49,11 +63,13 @@ def list_orders_page(
     *,
     status: OrderStatus | None,
     q: str | None,
+    ids: list[str] | None,
     after: tuple[date, str] | None,
-    limit: int,
+    limit: int | None,
 ) -> tuple[list[Order], int]:
-    """Orders sorted by (ship date, order id). `after` is the last (ship date, id) seen."""
-    where = _order_filters(company_id, status, q)
+    """Orders sorted by (ship date, order id). `after` is the last (ship date, id) seen;
+    `limit` None returns every match after it."""
+    where = _order_filters(company_id, status, q, ids)
     total = db.scalar(select(func.count()).select_from(Order).where(*where)) or 0
     stmt = select(Order).where(*where)
     if after:

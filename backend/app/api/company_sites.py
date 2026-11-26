@@ -4,14 +4,21 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.core.auth import EditorContext
+from app.core.auth import EditorContext, ViewerContext
 from app.database.session import get_db
 from app.schemas.common import SuccessResponse, success_response
 from app.schemas.trade_map import SiteIn, SiteOut, SiteUpdate
 from app.services import company_sites as site_service
+from app.services import trade_map as trade_map_service
 
 router = APIRouter(prefix="/sites", tags=["trade map"])
 Db = Annotated[Session, Depends(get_db)]
+
+
+@router.get("", response_model=SuccessResponse[list[SiteOut]])
+def list_sites(ctx: ViewerContext, db: Db):
+    """The company's own sites (factories, warehouses, offices)."""
+    return success_response(trade_map_service.list_sites(db, ctx))
 
 
 @router.post("", response_model=SuccessResponse[SiteOut], status_code=201)

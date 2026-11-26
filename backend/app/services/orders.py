@@ -35,7 +35,9 @@ from app.schemas.orders import (
     StatusChangerOut,
 )
 from app.schemas.overview import OverviewOut
+from app.schemas.trade_map import ChecklistDetail, OrderListItemOut
 from app.services import analysis as analysis_service
+from app.services import trade_map as trade_map_service
 
 log = logging.getLogger(__name__)
 
@@ -59,16 +61,33 @@ def list_orders(
     *,
     status: OrderStatus | None,
     q: str | None,
+    ids: list[str] | None,
+    market: str | None,
+    checklist: ChecklistDetail,
     cursor: str | None,
     limit: int,
-) -> tuple[list[Order], int, str | None]:
+) -> tuple[list[OrderListItemOut], int, str | None]:
+    """A page of the company's orders, by ship date then ID, each with where it goes, its
+    gap count and its checklist as asked. The market comes from the destination, not a column,
+    so a market filter reads every other match and filters them here."""
     after = decode_order_cursor(cursor) if cursor else None
-    # Fetch one extra to know whether another page exists.
-    orders, total = order_queries.list_orders_page(
-        db, ctx.company_id, status=status, q=q, after=after, limit=limit + 1
-    )
+    if market:
+        matching, _ = order_queries.list_orders_page(
+            db, ctx.company_id, status=status, q=q, ids=ids, after=None, limit=None
+        )
+        wanted = market.strip().upper()
+        placed = [o for o, p in trade_map_service.place_orders(db, matching) if p.market == wanted]
+        total = len(placed)
+        orders = [o for o in placed if not after or (o.ship_date, o.external_id) > after]
+        orders = orders[: limit + 1]
+    else:
+        # Fetch one extra to know whether another page exists.
+        orders, total = order_queries.list_orders_page(
+            db, ctx.company_id, status=status, q=q, ids=ids, after=after, limit=limit + 1
+        )
     next_cursor = encode_order_cursor(orders[limit - 1]) if len(orders) > limit else None
-    return orders[:limit], total, next_cursor
+    entries = trade_map_service.order_entries(db, ctx, orders[:limit], checklist=checklist)
+    return entries, total, next_cursor
 
 
 def get_order_detail(db: Session, ctx: CompanyContext, external_id: str) -> OrderDetailOut:

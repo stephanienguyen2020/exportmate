@@ -137,7 +137,7 @@ def test_order_report_lists_checks_sources_and_csv_row(client, lan):
 
 
 def test_rule_watch_lists_checklist_changes_with_the_orders_they_reach(client, lan, monkeypatch):
-    response = client.get("/api/v1/trade-map/changes?days=90", headers=lan)
+    response = client.get("/api/v1/market-requirements/changes?days=90", headers=lan)
     assert response.status_code == 200, response.text
     data = response.json()["data"]
     assert data["start"] == "2026-10-15" and data["until"] == "2027-01-13"
@@ -156,13 +156,13 @@ def test_rule_watch_lists_checklist_changes_with_the_orders_they_reach(client, l
     monkeypatch.setenv("RULE_WATCH_DAYS", "30")
     get_settings.cache_clear()
     try:
-        shorter = client.get("/api/v1/trade-map/changes", headers=lan).json()["data"]
+        shorter = client.get("/api/v1/market-requirements/changes", headers=lan).json()["data"]
     finally:
         monkeypatch.delenv("RULE_WATCH_DAYS")
         get_settings.cache_clear()
     assert shorter["days"] == 30 and shorter["until"] == "2026-11-14"
     assert all(c["on"] <= "2026-11-14" for c in shorter["changes"])
-    assert client.get("/api/v1/trade-map/changes?days=0", headers=lan).status_code == 422
+    assert client.get("/api/v1/market-requirements/changes?days=0", headers=lan).status_code == 422
 
 
 def test_company_report_covers_what_is_happening_and_what_it_affects(client, lan, fixed_world):
