@@ -1,7 +1,7 @@
 # The AI service (ai/server) in the same project as the backend: Firestore, the Cloud
 # Storage bucket RAG Engine imports from, a Cloud Run service (the API in front of the
-# agents) and job, the daily news-scan schedule, the Model Armor template that screens news
-# articles and log-based metrics. Terraform creates the service and job with a placeholder
+# agents) and job, the Model Armor template that screens news articles (used by the backend's
+# news scan, backend_service.tf) and log-based metrics. Terraform creates the service and job with a placeholder
 # image; ai/server/deploy.sh builds the real one and rolls it out. The agents themselves run on
 # Agent Platform: ai/server/platform/runtime.py creates the Agent Runtime instance (Sessions,
 # Memory Bank) and infra/agent-platform/govern.sh sets up Agent Identity, Agent Registry, the
@@ -10,9 +10,9 @@
 data "google_project" "this" {}
 
 locals {
-  # Cloud Run's deterministic URL, known before the service exists. The daily scan's
-  # OIDC token is minted for this audience and the service checks it (SCAN_AUDIENCE).
-  ai_url = "https://exportmate-ai-${data.google_project.this.number}.${var.region}.run.app"
+  # Cloud Run's deterministic URL, known before the service exists.
+  ai_url               = "https://exportmate-ai-${data.google_project.this.number}.${var.region}.run.app"
+  model_armor_template = "projects/${var.project_id}/locations/${google_model_armor_template.untrusted_text.location}/templates/${google_model_armor_template.untrusted_text.template_id}"
 
   ai_env = {
     GOOGLE_CLOUD_PROJECT  = var.project_id
@@ -22,9 +22,6 @@ locals {
     GEMINI_PROJECT        = var.gemini_project
     ALLOWED_ORIGINS       = var.allowed_origins
     BACKEND_URL           = google_cloud_run_v2_service.backend.uri
-    SCHEDULER_SA          = google_service_account.scheduler.email
-    SCAN_AUDIENCE         = local.ai_url
-    MODEL_ARMOR_TEMPLATE  = "projects/${var.project_id}/locations/${google_model_armor_template.untrusted_text.location}/templates/${google_model_armor_template.untrusted_text.template_id}"
     RAG_BUCKET            = google_storage_bucket.kb.name
     # Chats go to the agents on Agent Runtime once the instance exists (empty: in-process).
     AGENT_RUNTIME = var.agent_runtime
@@ -67,11 +64,18 @@ resource "google_storage_bucket_iam_member" "kb_rag_reader" {
   member = "serviceAccount:service-${data.google_project.this.number}@gcp-sa-vertex-rag.iam.gserviceaccount.com"
 }
 
-# The scan and `npm run index` (Cloud Run job) write the files RAG Engine imports.
+# `npm run index` and seeding (Cloud Run job) write the files RAG Engine imports.
 resource "google_storage_bucket_iam_member" "kb_ai_writer" {
   bucket = google_storage_bucket.kb.name
   role   = "roles/storage.objectAdmin"
   member = "serviceAccount:${google_service_account.ai.email}"
+}
+
+# So does the backend's news scan, for its new articles and alerts and the sources.
+resource "google_storage_bucket_iam_member" "kb_backend_writer" {
+  bucket = google_storage_bucket.kb.name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.backend.email}"
 }
 
 # Agent Runtime pulls the agents' container image (the same image as the Cloud Run service).
@@ -105,8 +109,8 @@ resource "google_firestore_field" "answer_cache_ttl" {
   index_config {}
 }
 
-# Screens each new news article before Gemini or the search index sees it (ai/server/armor.js,
-# called by scan.js): prompt injection and jailbreaks, and links to known-malicious sites.
+# Screens each new news article before Gemini or the search index sees it (the backend's
+# core/model_armor.py, called by services/news_scan.py): prompt injection and jailbreaks, and links to known-malicious sites.
 # Medium confidence and above; a withheld article is recorded with what matched. It lives in
 # var.model_armor_region because asia-southeast1 doesn't offer the malicious-link filter.
 resource "google_model_armor_template" "untrusted_text" {
@@ -134,8 +138,7 @@ resource "google_model_armor_template" "untrusted_text" {
   depends_on = [google_project_service.apis]
 }
 
-# Least privilege: read/write Firestore documents, call Gemini on Vertex AI and screen text
-# with Model Armor, nothing else.
+# Least privilege: read/write Firestore documents and call Gemini on Vertex AI, nothing else.
 resource "google_service_account" "ai" {
   account_id   = "exportmate-ai"
   display_name = "ExportMate AI service (Cloud Run)"
@@ -155,13 +158,7 @@ resource "google_project_iam_member" "ai_vertex" {
   member  = "serviceAccount:${google_service_account.ai.email}"
 }
 
-resource "google_project_iam_member" "ai_modelarmor" {
-  project = var.project_id
-  role    = "roles/modelarmor.user"
-  member  = "serviceAccount:${google_service_account.ai.email}"
-}
-
-# Signs the daily scan's OIDC token. It needs no roles: the AI service checks the token's email.
+# Starts the daily news scan and the nightly link weights jobs (backend_service.tf).
 resource "google_service_account" "scheduler" {
   account_id   = "exportmate-scheduler"
   display_name = "Cloud Scheduler: daily news scan, nightly link weights"
@@ -219,13 +216,11 @@ resource "google_cloud_run_v2_service" "ai" {
     google_firestore_database.default,
     google_project_iam_member.ai_firestore,
     google_project_iam_member.ai_vertex,
-    google_project_iam_member.ai_modelarmor,
   ]
 }
 
 # Public API (the website forwards /api/* here): chat is anonymous or carries the user's Firebase
-# token, source changes are checked against the backend, and POST /api/scan needs the
-# scheduler's OIDC token or an owner/editor token.
+# token, which the backend checks.
 resource "google_cloud_run_v2_service_iam_member" "ai_public" {
   name     = google_cloud_run_v2_service.ai.name
   location = var.region
@@ -235,7 +230,7 @@ resource "google_cloud_run_v2_service_iam_member" "ai_public" {
 
 # Runs one shell command with the AI image, e.g.
 #   gcloud run jobs execute exportmate-ai-task --wait --args="node eval/run.js --judge"
-# Commands: node seed.js | node rag.js | node scan.js | node eval/run.js | node ops.js
+# Commands: node seed.js | node rag.js | node eval/run.js | node ops.js
 resource "google_cloud_run_v2_job" "ai_task" {
   name                = "exportmate-ai-task"
   location            = var.region
@@ -284,29 +279,7 @@ resource "google_cloud_run_v2_job" "ai_task" {
     google_firestore_database.default,
     google_project_iam_member.ai_firestore,
     google_project_iam_member.ai_vertex,
-    google_project_iam_member.ai_modelarmor,
   ]
-}
-
-# The daily news scan, OIDC-signed so it skips the 10-minute "Scan now" limit.
-resource "google_cloud_scheduler_job" "daily_scan" {
-  name             = "exportmate-daily-news-scan"
-  region           = var.region
-  schedule         = "0 7 * * *"
-  time_zone        = "Asia/Ho_Chi_Minh"
-  attempt_deadline = "600s"
-
-  http_target {
-    http_method = "POST"
-    uri         = "${local.ai_url}/api/scan"
-
-    oidc_token {
-      service_account_email = google_service_account.scheduler.email
-      audience              = local.ai_url
-    }
-  }
-
-  depends_on = [google_cloud_run_v2_service.ai]
 }
 
 # AgentOps: metrics from the service's structured logs (ai/server/log.js), for Cloud
@@ -378,7 +351,7 @@ resource "google_logging_metric" "guard_withheld" {
 resource "google_logging_metric" "armor_failures" {
   name        = "exportmate_ai/armor_failures"
   description = "News scans where Model Armor could not screen some articles (they wait for the next scan)."
-  filter      = "${local.ai_logs} AND jsonPayload.message=\"scan.armor_failed\""
+  filter      = "${local.news_scan_logs} AND jsonPayload.message=\"scan.armor_failed\""
 
   metric_descriptor {
     metric_kind = "DELTA"
@@ -391,7 +364,7 @@ resource "google_logging_metric" "armor_failures" {
 resource "google_logging_metric" "scan_failures" {
   name        = "exportmate_ai/scan_failures"
   description = "News-scan Gemini batches that failed after retries."
-  filter      = "${local.ai_logs} AND jsonPayload.message=\"scan.batch_failed\""
+  filter      = "${local.news_scan_logs} AND jsonPayload.message=\"scan.batch_failed\""
 
   metric_descriptor {
     metric_kind = "DELTA"

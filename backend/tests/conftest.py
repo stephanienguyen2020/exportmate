@@ -29,6 +29,8 @@ from app.main import create_app
 from app.services import market_requirements as requirement_service
 from app.services import news_alerts as news_alert_service
 from app.services import news_goods as news_goods_service
+from app.services import news_scan as news_scan_service
+from app.services import news_scan_runs
 from app.services import news_sources as news_source_service
 from app.services import regulations as regulation_service
 from app.services import supplier_documents as supplier_document_service
@@ -117,6 +119,10 @@ class InMemoryNewsStore:
         self.scans: list[dict] = []
         self.stock: list[dict] = []
         self.goods: dict[str, dict] = {}
+        self.articles: dict[str, dict] = {}
+        self.scan_records: dict[str, dict] = {}
+        self.lock: dict | None = None
+        self.rag: dict[str, dict] = {}
 
     def list_sources(self) -> list[dict]:
         return sorted(
@@ -171,11 +177,73 @@ class InMemoryNewsStore:
     def save_company_goods(self, company_id: str, fields: dict) -> None:
         self.goods.setdefault(company_id, {}).update(fields)
 
+    def list_company_settings(self) -> dict[str, dict]:
+        return {i: dict(c) for i, c in self.companies.items()}
+
+    def list_goods_for_scan(self, limit: int) -> list[dict]:
+        goods = ({"id": i, **g} for i, g in self.goods.items())
+        return sorted(goods, key=lambda g: g.get("updatedAt", ""), reverse=True)[:limit]
+
+    def find_analysed_articles(self, ids: list[str]) -> set[str]:
+        return set(ids) & set(self.articles)
+
+    def list_recent_articles(self, since: str, limit: int) -> list[dict]:
+        recent = [
+            {"id": i, **a} for i, a in self.articles.items() if a.get("publishedAt", "") >= since
+        ]
+        return sorted(recent, key=lambda a: a["publishedAt"], reverse=True)[:limit]
+
+    def new_scan_id(self) -> str:
+        return f"scan{len(self.scan_records) + 1}"
+
+    def start_scan(self, fields: dict, scan_id: str | None = None) -> str:
+        scan_id = scan_id or self.new_scan_id()
+        self.scan_records[scan_id] = dict(fields)
+        self.scans = [{"id": i, **r} for i, r in self.scan_records.items()]
+        return scan_id
+
+    def update_scan(self, scan_id: str, fields: dict) -> None:
+        self.scan_records[scan_id].update(fields)
+        self.scans = [{"id": i, **r} for i, r in self.scan_records.items()]
+
+    def save_scan_results(self, articles: dict[str, dict], alerts: dict[str, dict]) -> None:
+        self.articles.update(articles)
+        self.alerts.update(alerts)
+
+    def claim_scan_lock(self, claim):
+        fields = claim(dict(self.lock) if self.lock else None)
+        if fields is not None:
+            self.lock = dict(fields)
+        return fields
+
+    def update_scan_lock(self, fields: dict) -> None:
+        self.lock = {**(self.lock or {}), **fields}
+
+    def get_rag_records(self, ids: list[str]) -> dict[str, dict]:
+        return {i: dict(self.rag[i]) for i in ids if i in self.rag}
+
+    def save_rag_records(self, records: dict[str, dict]) -> None:
+        self.rag.update(records)
+
+    def list_rag_ids(self, doc_type: str) -> list[str]:
+        return [i for i, r in self.rag.items() if r.get("type") == doc_type]
+
+    def delete_rag_records(self, ids: list[str]) -> None:
+        for record_id in ids:
+            self.rag.pop(record_id, None)
+
 
 @pytest.fixture(autouse=True)
 def news_store(monkeypatch: pytest.MonkeyPatch) -> InMemoryNewsStore:
     store = InMemoryNewsStore()
-    for service in (news_source_service, news_alert_service, news_goods_service):
+    services = (
+        news_source_service,
+        news_alert_service,
+        news_goods_service,
+        news_scan_service,
+        news_scan_runs,
+    )
+    for service in services:
         monkeypatch.setattr(service, "get_news_store", lambda: store)
     return store
 
@@ -220,8 +288,8 @@ class FakeGemini:
         self.embedded += texts
         return [word_vector(t) for t in texts]
 
-    def generate_json(self, task, prompt, schema, file=None):
-        self.calls.append({"task": task, "prompt": prompt, "file": file})
+    def generate_json(self, task, prompt, schema, file=None, **settings):
+        self.calls.append({"task": task, "prompt": prompt, "file": file, **settings})
         if task not in self.answers:
             raise AppError(503, "ai_unavailable", "The AI step failed. Try again in a minute.")
         return schema.model_validate(self.answers[task](prompt, file))

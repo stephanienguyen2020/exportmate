@@ -16,8 +16,6 @@ export const scans = db.collection("scans");
 export const companySources = db.collection("companySources");
 // Per company: its goods for News watch, built and refreshed by the backend (GET /news-goods).
 export const goodsByCompany = db.collection("companyGoods");
-// One document per lock; "scan" stops two scans running at once across instances.
-export const locks = db.collection("locks");
 // Answers already given ({ auditId, expireAt }), keyed by answer-cache.js answerKey.
 export const answerCache = db.collection("answer_cache");
 

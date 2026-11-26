@@ -7,7 +7,7 @@ How ExportMate's AI follows agent and harness engineering practice: what each co
 | Agent | What it does | Pattern | Model | Can change data? | Human in the loop | Record |
 | --- | --- | --- | --- | --- | --- | --- |
 | Assistant (`agent.js`, `agents/`) | Answers questions about stock, news alerts, sources, the company profile, orders, the playbook and how to use ExportMate | Google ADK multi-agent team on Agent Platform Agent Runtime: a `RoutedAgent` picks `quick_answer` (lookups, every read tool) or `analyst` (both with every read tool); ReAct loops bounded per agent, plus a deterministic auditor and, for answers built on knowledge graph paths, a critic | Every agent on one model (`models.js`, `GEMINI_MODEL`, default gemini-3.5-flash); `router.js` picks quick_answer or the analyst | No: every tool is read-only | Answers are informational. One that still fails the auditor after its revision is shown marked **Needs review** (`status: needs_review`) | `audits` document per answer; Agent Platform session and Memory Bank per user |
-| News scanner (`scan.js`) | Reads enabled feeds daily, asks which SKUs each new article affects, raises alerts | Batch pipeline with a structured-output (JSON schema) model call | `GEMINI_MODEL` (default gemini-3.5-flash) | Writes alerts, articles and the vector index only | Source changes are limited to company owners and editors (checked against the backend). Alerts are advisory | `scans` document per run |
+| News scanner (backend `services/news_scan.py`, a Cloud Run job) | Reads enabled feeds daily, asks which SKUs each new article affects, raises alerts | Batch pipeline with a structured-output (JSON schema) model call | `GEMINI_MODEL` (default gemini-3.5-flash) | Writes alerts, articles and the vector index only | Source changes are limited to company owners and editors (checked against the backend). Alerts are advisory | `scans` document per run |
 
 Risk tier for both: low. Neither sends messages, spends money or deletes records. When actions arrive (drafting and sending supplier messages, backend phase 3), they are drafted, approved by a person (who/when/hash of the exact text), then sent once with an idempotency key.
 
@@ -65,8 +65,8 @@ npm run eval -- --judge                # add the LLM judge (JUDGE_MODEL, default
 npm run eval -- --tier=simple          # every case to one agent, e.g. to see what quick_answer can handle
 npm run eval:vertex                    # also create an evaluation run on Agent Platform › Evaluation (managed judges)
 npm run ops                            # last 7 days of chats; --days=1, --eval, --json
-npm run eval:scan                      # news scan relevance on labeled articles; saves to scan_eval_runs
-npm run eval:scan -- --repeat=3        # each case 3 times; passes only if it passes every time
+# in backend/: the news scan's relevance on labeled articles; saves to scan_eval_runs
+uv run python -m app.news_scan_eval              # --repeat=3: each case 3 times, passes only if every time
 ```
 
 When the assistant gets something wrong:
@@ -77,7 +77,7 @@ When the assistant gets something wrong:
    - The first eval run on GCP (14/17, 13 Oct 2026) found the agent dropping news dates despite the `dated-evidence` rule, so the auditor now enforces them (`News cited with its date`), and writing a poem despite the `scope` rule, so that rule moved first and names what to decline. The other failure was in the judge, which marked a correct decline as irrelevant; it now grades against the rubric. Next run: 17/17.
 4. Run `npm test` and `npm run eval`; no regressions before deploying.
 
-When the scan raises a false alarm or misses an article: add the article (rewritten so it isolates the link or the trap) to `eval/scan-golden.js`, then fix the scan's `RULES` in `scan.js` or the checks in `relevance.js` until `npm run eval:scan` passes.
+When the scan raises a false alarm or misses an article: add the article (rewritten so it isolates the link or the trap) to the backend's `services/news_scan_exam.py`, then fix the scan's `RULES` or `decide()` in `services/news_scan_rules.py` until `python -m app.news_scan_eval` passes.
 
 **Agent Platform evaluation** (`platform/evaluate.py`, Python via `uv`, runs locally, not in the Cloud Run job): `npm run eval:vertex` runs the golden set as usual, then exports each case as Agent Platform agent data (`eval/results/<session>.vertex.json`, git-ignored): the instruction and tool declarations the model was given, earlier turns, every function call with its full response, the auditor's send-back and the final answer. It creates an **evaluation run** with the Gen AI evaluation client (`agentplatform.Client().evals.create_evaluation_run`) scored by managed, Gemini-judged adaptive-rubric metrics: final response quality, tool use quality, hallucination (claims the tool results don't support) and safety. Runs belong to the evaluation experiment **ExportMate assistant** on **Agent Platform › Evaluation**, where each case's rubric verdicts and runs can be compared; results are written to the project's Agent Platform staging bucket (or `EVAL_GCS_DEST`). The service runs in us-central1 (`EVAL_LOCATION`; it isn't offered in asia-southeast1). The runner's own checks (expected tools and arguments, figures, declines) stay in Firestore `eval_runs`; the managed metrics don't replace them.
 

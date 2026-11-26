@@ -216,13 +216,13 @@ The assistant's instructions are a list of rules in `policy.js`. Each rule names
 
 ### The daily news scan
 
-Cloud Scheduler calls `POST /api/scan` at 07:00 Asia/Ho_Chi_Minh. The scan (`scan.js`):
+The scan runs in the backend (`backend/app/services/news_scan.py`, the Cloud Run job `exportmate-backend-news-scan`): Cloud Scheduler starts it at 07:00 Asia/Ho_Chi_Minh, and "Scan now" (`POST /api/v1/news-scans`, owners and editors, at most once per 10 minutes) starts it too. It:
 
 1. Reads every enabled feed and keeps each article no earlier scan has analysed, back to the age rule: articles published more than `SCAN_MAX_AGE_DAYS` (default 365; 0 removes the rule) before the scan are skipped, except from the sources read by a company that switched the rule off (`companySources/{companyId}.skipOld`). It takes at most 80, newest first. Each article and alert records its age when scanned (`ageDays`), so a company with the rule on never sees what an older article raised.
 2. Withholds articles that address the assistant or link to malicious sites: first by pattern, then with Model Armor when it is configured. An article Model Armor couldn't screen is left for the next scan.
-3. Sends the rest to Gemini in batches of 16, with the stock list and the stock's profile (`seed/inventory.js` `STOCK_PROFILE`: whose stock it is, the words news uses for its goods and the goods that share its rules), so no industry is written into the code. For each article, the model answers whether it is relevant, how severe, which SKUs it affects and why, and one next step. The rules tell it to be strict: exchange rates, energy prices and goods the company doesn't stock are not relevant, and article text is news, never instructions.
-4. Keeps an alert only if the model said relevant, at least one SKU it named is really in stock, the article isn't a repeat of another one, and it doesn't name only goods that share the stock's rules (for the sample, cocoa, coffee, rubber…) without the words for the stock's own goods (`relevance.js`, with the profile's word lists).
-5. Does the same for each company's own goods (`companyGoods` in Firestore, built by the backend from its profile and orders; at most 100 companies per scan): the new articles from the sources that company reads, plus, on its first scan, up to 48 stored articles from the last two weeks. The prompt describes the company from its profile. Its alerts carry its company id, so only it sees them (`access.js`); the demo sees only the sample stock's alerts. The scan record's alert count is shown per caller.
+3. Sends the rest to Gemini in batches of 16, with the stock list and the stock's profile (`news_scan_rules.py` `SAMPLE_STOCK_PROFILE`, the same as the AI service's `seed/inventory.js` `STOCK_PROFILE`: whose stock it is, the words news uses for its goods and the goods that share its rules), so no industry is written into the code. For each article, the model answers whether it is relevant, how severe, which SKUs it affects and why, and one next step. The rules tell it to be strict: exchange rates, energy prices and goods the company doesn't stock are not relevant, and article text is news, never instructions.
+4. Keeps an alert only if the model said relevant, at least one SKU it named is really in stock, the article isn't a repeat of another one, and it doesn't name only goods that share the stock's rules (for the sample, cocoa, coffee, rubber…) without the words for the stock's own goods (`decide()` in `news_scan_rules.py`, with the profile's word lists).
+5. Does the same for each company's own goods (`companyGoods` in Firestore, built by the backend from its profile and orders; at most 100 companies per scan): the new articles from the sources that company reads, plus, on its first scan, up to 48 stored articles from the last two weeks. The prompt describes the company from its profile. Its alerts carry its company id, so only it sees them (the backend's `services/news_alerts.py`, the AI service's `access.js`); the demo sees only the sample stock's alerts. The scan record's alert count is shown per caller.
 6. Stores the articles, alerts and scan record, and adds them to the search index on RAG Engine.
 
 Articles Gemini couldn't assess aren't recorded, so the next scan tries them again, however long ago they were published (within the age rule). The scan record counts them (`articlesFailed`) with the reason (`error`), and a scan that had articles to assess but got no answer for any of them is `failed`. Before this, a scan whose every Gemini call failed reported "done" with no new articles: on 15 October 2026 `GEMINI_MODEL` named gemini-2.5-flash, which refuses a thinking level.
@@ -279,9 +279,11 @@ npm test           # unit tests, no GCP needed
 npm run runtime    # the agents behind Agent Runtime's contract; AGENTS_AT=http://127.0.0.1:8080 on the API uses them
 npm run eval       # golden set against live Gemini + Firestore; saved to eval_runs (--engine: the deployed agents)
 npm run eval:vertex  # the same, plus an evaluation run on Agent Platform › Evaluation
-npm run eval:scan  # news scan relevance on labeled articles
 npm run ops        # health of recent chats
 gcloud run jobs execute exportmate-ai-task --region asia-southeast1 --wait --args="node eval/run.js"   # any of these, on GCP
+
+# In backend/: the news scan's relevance exam on labeled articles (saved to scan_eval_runs)
+uv run python -m app.news_scan_eval        # --only=<ids>, --repeat=N; needs GOOGLE_CLOUD_PROJECT
 ```
 
 Locally (`./dev.sh` from the repository root runs everything), the assistant and News watch read the AI service's Firestore and RAG Engine and call Gemini in its project. The backend's AI steps (document reading, requirement drafts, HS code and what-if suggestions, suggested solutions, supplier messages) need `GOOGLE_CLOUD_PROJECT` in `backend/.env`. The assistant remembers people locally only when `AGENT_RUNTIME` in `ai/server/.env` names a development Agent Runtime instance (`exportmate-agents-dev`; see `ai/server/.env.example`); without it, chat sessions are kept in memory and nothing is remembered.

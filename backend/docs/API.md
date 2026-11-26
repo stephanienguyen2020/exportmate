@@ -122,6 +122,7 @@ What each endpoint does and where the app uses it. The live contract (exact fiel
 | `PATCH /news-settings` | editor | the same |
 | `GET /news-alerts` | viewer, or signed out | News watch, Alerts tab and scan bar; the dashboard's scan time; search |
 | `GET /news-goods` | viewer, or signed out | News watch, Stock tab; alert chips; search |
+| `POST /news-scans` | editor | News watch: "Scan now" |
 | **News watch and orders** | | |
 | `GET /news-matches` | viewer | News watch, Alerts tab: "Orders this may affect" on each alert, and the "Orders" filter |
 | `GET /news-matches/accuracy` | viewer | Not used by the frontend yet (how often each way of suggesting, and each chain link, is confirmed) |
@@ -779,6 +780,18 @@ The company's own source only (`400 built_in_source` / `shared_source` otherwise
 ### `PATCH /news-settings` (editor)
 `{skipOld}`: for the caller's company only; then only it sees what old articles raise.
 `400 no_age_rule` when the rule is off. Audited `news_settings.updated`.
+
+### `POST /news-scans` (editor)
+"Scan now". Moved from the AI service's `/api/scan` (Phase 2). Takes the scan lock (Firestore
+`locks/scan`), writes the scan record and starts the Cloud Run job `exportmate-backend-news-scan`
+(`NEWS_SCAN_JOB`; locally the scan runs in this process), then answers `202 {scan}` at once with
+the record (`status: running`); `GET /news-alerts` shows it until it ends. `429 scan_blocked`
+while a scan runs or within 10 minutes of the last one; `503 scan_unavailable` if the job
+couldn't start. Audited `news_scan.started`. Cloud Scheduler starts the same job daily at 07:00
+Asia/Ho_Chi_Minh. The scan (`services/news_scan.py`) reads the enabled sources, screens new
+articles (patterns, then Model Armor with `MODEL_ARMOR_TEMPLATE`), asks Gemini which items each
+affects in the sample stock and in each company's goods, writes `articles`, `impacts` and the
+scan, and adds them to the assistant's search (`RAG_BUCKET`, `core/rag_index.py`).
 
 ### `GET /news-alerts` (viewer, or signed out)
 Moved from the AI service's `/api/impacts` (Phase 2). `{impacts, scan}`: the newest 60 alerts about

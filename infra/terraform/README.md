@@ -20,7 +20,7 @@ Creates everything ExportMate runs on Google Cloud (website, backend and AI serv
 | Cloud Run service (public) | `exportmate-ai`, URL printed as `ai_url` |
 | Cloud Run job (same image, one command) | `exportmate-ai-task` |
 | Model Armor template | `exportmate-untrusted-text` (prompt injection and jailbreak at medium confidence and above, malicious links, any language), screens each new news article; set on the service as `MODEL_ARMOR_TEMPLATE`. In `us-central1` (`model_armor_region`): `asia-southeast1` lacks the malicious-link filter and multi-language detection, and only public news articles are sent to it |
-| Cloud Scheduler | `exportmate-daily-news-scan`, 07:00 Asia/Ho_Chi_Minh, `POST <ai_url>/api/scan` |
+| Cloud Run job + Cloud Scheduler (daily) | `exportmate-backend-news-scan` (`python -m app.run_news_scan`: the news scan), started by `exportmate-daily-news-scan` at 07:00 Asia/Ho_Chi_Minh and by "Scan now" (`POST /news-scans`, as the backend's service account); `backend/deploy.sh` keeps its image current |
 | Log-based metrics | `exportmate_ai/chat_answers` (by status, policy version), `chat_latency`, `guard_withheld`, `armor_failures`, `scan_failures` |
 | **Website** (`web_service.tf`) | |
 | Service account | `exportmate-web` (no roles) |

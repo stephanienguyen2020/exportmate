@@ -40,6 +40,14 @@ uv run python -m app.seed_reference_data   # also run by seed_demo_data and by d
 uv run python -m app.cleanup_imports --older-than-days 30   # delete uploads never committed (run daily)
 ```
 
+News watch's scan (`services/news_scan.py`) runs as the Cloud Run job `exportmate-backend-news-scan`;
+locally (needs `GOOGLE_CLOUD_PROJECT` and Google credentials; it writes that project's Firestore):
+
+```sh
+uv run python -m app.run_news_scan          # one scan now, unless one is running
+uv run python -m app.news_scan_eval         # the scan's relevance exam on labeled articles (--only=, --repeat=)
+```
+
 The demo seed adds the demo company's suppliers, their documents and its sites
 (`app/seed_data/demo_company.json`, which also holds its About company profile). Observations are samples.
 

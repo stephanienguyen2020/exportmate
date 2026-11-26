@@ -84,7 +84,6 @@ type Source = {
   lastError?: string | null;
 };
 
-const API = (import.meta.env.VITE_CHAT_API_URL || "/api/chat").replace(/\/chat$/, "");
 const SEVERITY = { high: 0, medium: 1, low: 2 };
 
 class ApiError extends Error {
@@ -94,18 +93,6 @@ class ApiError extends Error {
   ) {
     super(message);
   }
-}
-
-// Every call carries the company token in a signed-in workspace (none in the demo), so the
-// AI service can tell who is asking.
-async function api<T>(path: string, init?: Omit<RequestInit, "headers">): Promise<T> {
-  const res = await fetch(API + path, {
-    ...init,
-    headers: { ...(init?.body ? { "Content-Type": "application/json" } : {}), ...(await companyAuth()) },
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new ApiError(data.error || `Request failed (${res.status})`, res.status);
-  return data as T;
 }
 
 // News sources and the age rule are in the company backend (/api/v1/news-sources,
@@ -121,12 +108,10 @@ async function backend<T>(path: string, init?: Omit<RequestInit, "headers">): Pr
   return body.data as T;
 }
 
-// A scan runs inside its POST and can outlast the website's proxy (its nginx gives up on the AI
-// service after 300 s with a 504) while it carries on in the AI service. "Scan now" then
-// follows the scan record until it ends, for as long as Cloud Run lets a request run.
+// "Scan now" starts the backend's scan job and gets its record back at once; the page then
+// follows the record until the scan ends (a scan takes a few minutes).
 const SCAN_POLL_MS = 10_000;
 const SCAN_FOLLOW_MS = 10 * 60_000;
-const proxyGaveUp = (e: unknown) => e instanceof ApiError && (e.status === 502 || e.status === 504);
 
 const usd = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
@@ -847,20 +832,20 @@ export default function NewsWatchPage({
     setMessage("");
     const before = scan?.id;
     try {
-      const d = await api<{ scan: Scan }>("/scan", { method: "POST" });
+      const d = await backend<{ scan: Scan }>("/news-scans", { method: "POST" });
       setScan(d.scan);
-      setMessage(scanMessage(d.scan));
-      await load();
+      const followed = await followScan(before);
+      if (followed === "running") setMessage("The scan is still running; its alerts appear here when it ends.");
+      else if (followed) setMessage(scanMessage(followed));
+      else setMessage("The scan didn't start. Try again in a few minutes.");
     } catch (e) {
-      const followed = proxyGaveUp(e) ? await followScan(before) : null;
-      if (followed) setMessage(followed === "running" ? "The scan is still running; its alerts appear here when it ends." : scanMessage(followed));
-      else setMessage(e instanceof Error ? e.message : "Scan failed.");
+      setMessage(e instanceof Error ? e.message : "Scan failed.");
     } finally {
       setScanning(false);
     }
   };
   // The scan this click started (a record newer than `before`), once it ends; "running" if it
-  // outlasts SCAN_FOLLOW_MS; null if no scan started, so the request's own error stands.
+  // outlasts SCAN_FOLLOW_MS; null if no scan started.
   const followScan = async (before?: string): Promise<Scan | "running" | null> => {
     let seen = false;
     for (let waited = 0; waited < SCAN_FOLLOW_MS; waited += SCAN_POLL_MS) {

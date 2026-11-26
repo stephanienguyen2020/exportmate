@@ -31,6 +31,12 @@ if gcloud run jobs describe exportmate-backend-link-weights --project "$PROJECT_
   gcloud run jobs update exportmate-backend-link-weights --project "$PROJECT_ID" --region "$REGION" --image "$IMAGE"
 fi
 
+# So does the daily news scan job ("Scan now" starts it too).
+if gcloud run jobs describe exportmate-backend-news-scan --project "$PROJECT_ID" --region "$REGION" >/dev/null 2>&1; then
+  echo "==> Updating the news scan job"
+  gcloud run jobs update exportmate-backend-news-scan --project "$PROJECT_ID" --region "$REGION" --image "$IMAGE"
+fi
+
 echo "==> Deploying service"
 gcloud run services update exportmate-backend --project "$PROJECT_ID" --region "$REGION" --image "$IMAGE"
 
