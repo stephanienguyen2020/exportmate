@@ -28,7 +28,9 @@ locals {
     AGENTS_AT     = var.agent_runtime == "" ? "" : "runtime"
   }
 
-  ai_logs = "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"exportmate-ai\""
+  # One chat.completed line per answer: the backend's assistant routes write it, as the AI
+  # service's /api/chat did until it was switched off.
+  chat_logs = "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=(\"exportmate-ai\" OR \"exportmate-backend\")"
 }
 
 # Stock, news sources, articles, alerts, scans, RAG file records, audits, the answer cache,
@@ -287,7 +289,7 @@ resource "google_cloud_run_v2_job" "ai_task" {
 resource "google_logging_metric" "chat_answers" {
   name        = "exportmate_ai/chat_answers"
   description = "Assistant answers by outcome (ok, needs_review, max_steps, error) and policy version."
-  filter      = "${local.ai_logs} AND jsonPayload.message=\"chat.completed\""
+  filter      = "${local.chat_logs} AND jsonPayload.message=\"chat.completed\""
 
   metric_descriptor {
     metric_kind = "DELTA"
@@ -315,7 +317,7 @@ resource "google_logging_metric" "chat_answers" {
 resource "google_logging_metric" "chat_latency" {
   name            = "exportmate_ai/chat_latency"
   description     = "Time to a complete assistant answer."
-  filter          = "${local.ai_logs} AND jsonPayload.message=\"chat.completed\""
+  filter          = "${local.chat_logs} AND jsonPayload.message=\"chat.completed\""
   value_extractor = "EXTRACT(jsonPayload.latencyMs)"
 
   metric_descriptor {
@@ -338,7 +340,7 @@ resource "google_logging_metric" "chat_latency" {
 resource "google_logging_metric" "guard_withheld" {
   name        = "exportmate_ai/guard_withheld"
   description = "Answers where the guard withheld third-party text addressed to the assistant (possible prompt injection)."
-  filter      = "${local.ai_logs} AND jsonPayload.message=\"chat.completed\" AND jsonPayload.withheld>0"
+  filter      = "${local.chat_logs} AND jsonPayload.message=\"chat.completed\" AND jsonPayload.withheld>0"
 
   metric_descriptor {
     metric_kind = "DELTA"

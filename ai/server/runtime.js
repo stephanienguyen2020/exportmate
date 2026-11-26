@@ -17,6 +17,7 @@ import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { runAgent } from "./agent.js";
 import { ANONYMOUS, publicAudit, publicStep } from "./access.js";
+import { demoData } from "./orders.js";
 import { deleteMemory, listMemories } from "./agents/platform.js";
 import { startTracing } from "./agents/telemetry.js";
 import { readJson } from "./limits.js";
@@ -49,7 +50,9 @@ export function chatInput(input = {}) {
     company: input.company ?? null,
     user: input.user ?? null,
     access: input.access ?? ANONYMOUS,
-    demo: input.demo ?? null,
+    // The browser demo's orders and rules as the browser sent them, checked here; a company
+    // chat never uses what the client sends.
+    demo: input.company ? null : demoData(input.demo),
     requestId: input.requestId || randomUUID(),
     backend: input.company && input.backendToken ? backendReader(input.backendToken) : null,
     // The golden set run against this runtime (eval/run.js --engine): no cache, no memories,

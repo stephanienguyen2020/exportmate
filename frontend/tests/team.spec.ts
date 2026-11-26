@@ -71,6 +71,7 @@ async function teamFixture(page: Page, options: { role?: Role; onboarded?: boole
       });
     if (path === "/company/cost-settings") return reply([]);
     if (path === "/audit-events") return reply([]);
+    if (path === "/assistant/memories") return reply({ memories: [], enabled: false, keepDays: null });
     if (path === "/company/members") return reply(members);
     if (path === "/company/invites" && method === "POST") {
       const invite = {

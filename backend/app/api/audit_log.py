@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import OwnerContext
 from app.core.config import get_settings
 from app.core.rate_limit import RateLimiter
+from app.core.request_context import visitor_address
 from app.database.session import get_db
 from app.schemas.audit import AuditEventOut, ContactIn
 from app.schemas.common import SuccessResponse, success_response
@@ -55,15 +56,9 @@ def export_audit_events(
     )
 
 
-def _visitor_ip(request: Request) -> str:
-    """The first X-Forwarded-For address (set by Cloud Run's front end), else the peer."""
-    forwarded = request.headers.get("X-Forwarded-For", "")
-    return forwarded.split(",")[0].strip() or (request.client.host if request.client else "")
-
-
 @router.post("/contact", response_model=SuccessResponse[dict], status_code=202)
 def send_contact_message(payload: ContactIn, request: Request):
     """The public contact form: emailed to the ExportMate team. No sign-in."""
-    contact_limiter.check(_visitor_ip(request), get_settings().contact_messages_per_hour)
+    contact_limiter.check(visitor_address(request), get_settings().contact_messages_per_hour)
     audit_service.send_contact_message(payload)
     return success_response({"received": True})

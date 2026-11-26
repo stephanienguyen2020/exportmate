@@ -332,7 +332,7 @@ test("the demo never shows a signed-in account's profile", async ({ page }) => {
 
 test("New chat clears the conversation and starts a new session", async ({ page }) => {
   const sent: any[] = [];
-  await page.route("**/api/chat", async (route) => {
+  await page.route("**/api/v1/assistant/chat", async (route) => {
     sent.push(route.request().postDataJSON());
     await route.fulfill({
       contentType: "application/x-ndjson",
@@ -342,9 +342,9 @@ test("New chat clears the conversation and starts a new session", async ({ page 
     });
   });
   const audits: string[] = [];
-  await page.route("**/api/audits**", (route) => {
+  await page.route("**/api/v1/assistant/audits**", (route) => {
     audits.push(new URL(route.request().url()).searchParams.get("session") || "");
-    return route.fulfill({ json: { audits: [] } });
+    return route.fulfill({ json: { data: [] } });
   });
   await openDemo(page, "#/workspace/orders");
   await page.getByRole("button", { name: "Open assistant" }).click();
@@ -374,7 +374,7 @@ test("the assistant gets the demo's orders and playbook, and shows code", async 
   page,
 }) => {
   let sent: any = null;
-  await page.route("**/api/chat", async (route) => {
+  await page.route("**/api/v1/assistant/chat", async (route) => {
     sent = route.request().postDataJSON();
     await route.fulfill({
       contentType: "application/x-ndjson",

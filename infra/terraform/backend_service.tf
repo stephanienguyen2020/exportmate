@@ -19,6 +19,9 @@ locals {
     NEWS_SCAN_JOB        = "projects/${var.project_id}/locations/${var.region}/jobs/exportmate-backend-news-scan"
     MODEL_ARMOR_TEMPLATE = local.model_armor_template
     RAG_BUCKET           = google_storage_bucket.kb.name
+    # The assistant's routes (/assistant/*) relay each chat to the agents on Agent Runtime.
+    AGENT_RUNTIME = var.agent_runtime
+    AGENTS_AT     = var.agent_runtime == "" ? "" : "runtime"
   }, local.graph_env)
 
   news_scan_logs = "resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"exportmate-backend-news-scan\""

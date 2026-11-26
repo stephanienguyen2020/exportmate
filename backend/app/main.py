@@ -9,6 +9,7 @@ from sqlalchemy.engine import make_url
 from app.api import (
     account,
     analysis,
+    assistant,
     audit_log,
     company_sites,
     cost_settings,
@@ -120,6 +121,7 @@ def create_app() -> FastAPI:
     for module in (
         health,
         account,
+        assistant,
         orders,
         imports,
         playbook,
