@@ -18,14 +18,15 @@ const failedScan = {
 
 async function openNews(page: import("@playwright/test").Page) {
   await page.route("**/api/impacts**", (route) => route.fulfill({ json: { impacts: [], scan: failedScan } }));
-  await page.route("**/api/sources**", (route) =>
+  await page.route("**/api/v1/news-sources", (route) =>
     route.fulfill({
       json: {
-        sources: [{ id: "source-1", name: "Timber news", url: "https://news.example/feed.xml", kind: "News", builtIn: true, enabled: true }],
-        scanRules: { maxAgeDays: 365, skipOld: true },
+        data: [{ id: "source-1", name: "Timber news", url: "https://news.example/feed.xml", kind: "News", builtIn: true, enabled: true }],
+        meta: {},
       },
     }),
   );
+  await page.route("**/api/v1/news-settings", (route) => route.fulfill({ json: { data: { maxAgeDays: 365, skipOld: true }, meta: {} } }));
   await page.goto("/");
   await page.evaluate(() => sessionStorage.setItem("em-session", "demo"));
   await page.goto("/#/workspace/news");

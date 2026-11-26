@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 import { GoogleGenAI, Type } from "@google/genai";
 import { db, GEMINI_PROJECT, inventory, sources, articles, impacts, scans, companySources, goodsByCompany, list } from "./db.js";
 import { fetchFeed } from "./feeds.js";
-import { indexDocs, toDoc } from "./rag.js";
+import { indexDocs, syncSourceDocs, toDoc } from "./rag.js";
 import { withRetry } from "./gateway.js";
 import { asData, findInjection } from "./guard.js";
 import { armor } from "./armor.js";
@@ -348,6 +348,8 @@ export async function runScan({ trigger = "manual", maxAgeDays = MAX_AGE_DAYS } 
     let indexError = null;
     try {
       indexed = await indexDocs([...analysed.filter((a) => !a.withheld).map(toDoc.article), ...found.map(toDoc.alert)]);
+      // Sources are changed in the backend, which doesn't index them: catch up here.
+      indexed.sources = await syncSourceDocs(await list(sources));
     } catch (e) {
       indexError = String(e?.message || e);
       log("ERROR", "scan.index_failed", { scanId: scanRef.id, error: indexError });

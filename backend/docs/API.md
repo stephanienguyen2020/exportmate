@@ -113,6 +113,13 @@ What each endpoint does and where the app uses it. The live contract (exact fiel
 | `PATCH /report-drafts/{id}` | viewer (author) | Report editor: save (also before preview, download, email) |
 | `GET /report-drafts/{id}/pdf` | viewer (author) | Report editor: "Preview PDF", "Download PDF" |
 | `POST /report-drafts/{id}/email` | editor (author) | Report editor: "Email report" |
+| **News watch: sources** | | |
+| `GET /news-sources` | viewer, or signed out | News watch › Sources (the demo reads the shared sources signed out) |
+| `POST /news-sources` | editor | News watch › Sources: "Add source" |
+| `PATCH /news-sources/{id}` | editor | News watch › Sources: a source's switch |
+| `DELETE /news-sources/{id}` | editor | News watch › Sources: "Remove" |
+| `GET /news-settings` | viewer, or signed out | News watch › Sources: the age rule's switch |
+| `PATCH /news-settings` | editor | the same |
 | **News watch and orders** | | |
 | `GET /news-matches` | viewer | News watch, Alerts tab: "Orders this may affect" on each alert, and the "Orders" filter |
 | `GET /news-matches/accuracy` | viewer | Not used by the frontend yet (how often each way of suggesting, and each chain link, is confirmed) |
@@ -733,6 +740,43 @@ The PDF of the saved content, `inline` for the preview; `?download=true` makes i
 - `sandbox: true` means `RESEND_API_KEY` isn't set: built and audited, not delivered.
 - Writes a `report.emailed` audit event with the recipients, note and edit counts (logs only carry counts).
 - `422 invalid_input` (bad addresses), `422 email_rejected`, `429 rate_limited` (`REPORT_EMAILS_PER_HOUR`, default 20 per user), `502 email_failed`, `503 email_unavailable`.
+
+## News watch: sources
+
+Moved from the AI service's `/api/sources` and `/api/scan-rules` (Phase 2). The records stay in
+Firestore (`sources`, `companySources/{companyId}`, the project in `GOOGLE_CLOUD_PROJECT`), where
+the AI service's news scan reads them; each scan also brings the sources' search records up to
+date. Built-in sources are shared by every workspace; a company's own sources only it sees.
+Signed out (the browser demo), the reads return the shared sources and the rule as configured.
+
+### `GET /news-sources` (viewer, or signed out)
+The sources the caller sees: `id`, `name`, `url`, `kind`, `builtIn`, `shared`, `enabled` (for the
+caller's company: a shared source it switched off is `false`), `addedAt`, and from the latest scan
+`lastFetchedAt`, `lastOk`, `lastCount`, `lastError`. Never another company's own source or owner IDs.
+
+### `POST /news-sources` (editor)
+`{name, url}`. Reads the feed once (public HTTPS only: every address the host resolves to must be
+public, and the request connects to the checked address; at most 3 MB and 3 redirects) and returns
+`{source, sample}` (its three newest articles). `400 feed_unreadable` with the reason,
+`409 source_exists` (a feed the company already sees), `400 too_many_sources` (10 per company, 100
+in all). Audited `news_source.added`.
+
+### `PATCH /news-sources/{id}` (editor)
+`{enabled}`. A shared source is switched off for the caller's company only; the company's own source
+for real. Returns the source as the caller now sees it. Audited `news_source.enabled` / `.disabled`.
+
+### `DELETE /news-sources/{id}` (editor)
+The company's own source only (`400 built_in_source` / `shared_source` otherwise). Audited
+`news_source.deleted`. Another company's source is `404`.
+
+### `GET /news-settings` (viewer, or signed out)
+`{maxAgeDays, skipOld}`: scans skip articles published more than `maxAgeDays` before them
+(`SCAN_MAX_AGE_DAYS`, which must match the AI service's) unless the company set `skipOld` false.
+`null` when the rule is off on this service.
+
+### `PATCH /news-settings` (editor)
+`{skipOld}`: for the caller's company only; then only it sees what old articles raise.
+`400 no_age_rule` when the rule is off. Audited `news_settings.updated`.
 
 ## News watch and orders
 

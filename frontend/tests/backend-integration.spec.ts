@@ -1272,16 +1272,18 @@ test("new accounts onboard through the API and the sample demo stays local", asy
   expect(requests.length).toBe(count);
 });
 
-// News sources live on the AI service and are shared by every workspace, so
-// only signed-in owners and editors may change them (with their own token).
+// News sources are in the company backend; built-in ones are shared by every
+// workspace, so only signed-in owners and editors may change them (with their own token).
 async function sourcesFixture(page: Page) {
   const changes: { method: string; auth: string | undefined }[] = [];
   let scanRules = { maxAgeDays: 365, skipOld: true };
-  await page.route("**/api/scan-rules**", async (route) => {
+  await page.route("**/api/v1/news-settings", async (route) => {
     const request = route.request();
-    changes.push({ method: `${request.method()} rules`, auth: request.headers().authorization });
-    scanRules = { ...scanRules, ...request.postDataJSON() };
-    await route.fulfill({ json: { scanRules } });
+    if (request.method() !== "GET") {
+      changes.push({ method: `${request.method()} rules`, auth: request.headers().authorization });
+      scanRules = { ...scanRules, ...request.postDataJSON() };
+    }
+    await route.fulfill({ json: { data: scanRules, meta: {} } });
   });
   let sources = [
     {
@@ -1293,11 +1295,11 @@ async function sourcesFixture(page: Page) {
       enabled: true,
     },
   ];
-  await page.route("**/api/sources**", async (route) => {
+  await page.route("**/api/v1/news-sources**", async (route) => {
     const request = route.request();
     const method = request.method();
     if (method === "GET") {
-      await route.fulfill({ json: { sources, scanRules } });
+      await route.fulfill({ json: { data: sources, meta: {} } });
       return;
     }
     changes.push({ method, auth: request.headers().authorization });
@@ -1310,14 +1312,14 @@ async function sourcesFixture(page: Page) {
         enabled: true,
       };
       sources = [...sources, source];
-      await route.fulfill({ status: 201, json: { source, sample: [] } });
+      await route.fulfill({ status: 201, json: { data: { source, sample: [] }, meta: {} } });
       return;
     }
     const id = new URL(request.url()).pathname.split("/").pop();
     sources = sources.map((s) =>
       s.id === id ? { ...s, ...request.postDataJSON() } : s,
     );
-    await route.fulfill({ json: { ok: true } });
+    await route.fulfill({ json: { data: sources.find((s) => s.id === id) ?? { deleted: true }, meta: {} } });
   });
   return changes;
 }
