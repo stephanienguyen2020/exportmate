@@ -39,24 +39,24 @@ export function aboutCompany(c) {
 
 /**
  * { profile, items } from the company profile (GET /api/v1/company/knowledge's `company`) and
- * its orders (GET /api/v1/trade-map's `orders`: { order, placement }). Products the profile
+ * its orders (GET /api/v1/orders: each order with its `placement`). Products the profile
  * names come first; then orders with the same product and HS code make one item, with every
  * market and supplier, newest ship dates first. `profile` is what scan.js's prompt needs.
  */
-export function companyGoods(company, mapOrders = []) {
+export function companyGoods(company, orders = []) {
   const items = new Map();
   for (const name of profileProducts(company?.products))
     items.set(goodsId(name), { sku: goodsId(name), name, hsCode: "", markets: [], suppliers: [], orders: [], source: "profile" });
   const named = new Set([...items.values()].map((i) => i.name.toLowerCase()));
-  const byDate = [...(mapOrders || [])]
-    .filter((m) => clean(m?.order?.product))
-    .sort((a, b) => String(b.order.shipDate ?? "").localeCompare(String(a.order.shipDate ?? "")));
-  for (const { order, placement } of byDate) {
+  const byDate = [...(orders || [])]
+    .filter((o) => clean(o?.product))
+    .sort((a, b) => String(b.shipDate ?? "").localeCompare(String(a.shipDate ?? "")));
+  for (const order of byDate) {
     const name = clean(order.product);
     // A product the profile names and an order ships with no HS code is the same item.
     const id = !digits(order.hsCode) && named.has(name.toLowerCase()) ? goodsId(name) : goodsId(name, order.hsCode);
     const item = items.get(id) ?? { sku: id, name, hsCode: clean(order.hsCode), markets: [], suppliers: [], orders: [], source: "orders" };
-    const market = placement?.market;
+    const market = order.placement?.market;
     if (market && !item.markets.includes(market)) item.markets.push(market);
     const supplier = clean(order.supplier);
     if (supplier && !item.suppliers.includes(supplier)) item.suppliers.push(supplier);

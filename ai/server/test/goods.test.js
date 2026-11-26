@@ -13,8 +13,12 @@ const company = {
   materials: "Organic cotton (India)",
   certifications: "GOTS",
 };
-const mapOrder = (id, product, hsCode, market, supplier, shipDate) => ({
-  order: { id, product, hsCode, supplier, shipDate },
+const listedOrder = (id, product, hsCode, market, supplier, shipDate) => ({
+  id,
+  product,
+  hsCode,
+  supplier,
+  shipDate,
   placement: { market },
 });
 
@@ -31,10 +35,10 @@ test("an item's id stays the same for the same product and HS code", () => {
 
 test("orders with the same product and HS code make one item with every market and supplier", () => {
   const { profile, items } = companyGoods(company, [
-    mapOrder("PO-1", "Cotton T-shirt", "6109.10", "EU", "Mill A", "2026-11-01"),
-    mapOrder("PO-2", "Cotton T-shirt", "6109.10", "US", "Mill B", "2026-12-01"),
-    mapOrder("PO-3", "Wool scarf", "6117.10", "UK", "Mill A", "2026-10-20"),
-    mapOrder("PO-4", "  ", "6117.10", "UK", "Mill A", "2026-10-20"),
+    listedOrder("PO-1", "Cotton T-shirt", "6109.10", "EU", "Mill A", "2026-11-01"),
+    listedOrder("PO-2", "Cotton T-shirt", "6109.10", "US", "Mill B", "2026-12-01"),
+    listedOrder("PO-3", "Wool scarf", "6117.10", "UK", "Mill A", "2026-10-20"),
+    listedOrder("PO-4", "  ", "6117.10", "UK", "Mill A", "2026-10-20"),
   ]);
   assert.deepEqual(profile, {
     company: "Saigon Knit Co.",
@@ -53,14 +57,14 @@ test("orders with the same product and HS code make one item with every market a
 });
 
 test("an order with no HS code joins the profile product it names", () => {
-  const { items } = companyGoods(company, [mapOrder("PO-9", "merino sweaters", "", "EU", "Mill C", "2026-11-01")]);
+  const { items } = companyGoods(company, [listedOrder("PO-9", "merino sweaters", "", "EU", "Mill C", "2026-11-01")]);
   const sweaters = items.find((i) => i.name === "merino sweaters");
   assert.deepEqual([sweaters.orders, sweaters.markets, sweaters.source], [["PO-9"], ["EU"], "profile"]);
   assert.equal(items.length, 2);
 });
 
 test("goods are capped, and the same goods give the same fingerprint", () => {
-  const many = Array.from({ length: MAX_GOODS + 5 }, (_, n) => mapOrder(`PO-${n}`, `Product ${n}`, "8471.30", "EU", "S", "2026-11-01"));
+  const many = Array.from({ length: MAX_GOODS + 5 }, (_, n) => listedOrder(`PO-${n}`, `Product ${n}`, "8471.30", "EU", "S", "2026-11-01"));
   const goods = companyGoods({ ...company, products: "" }, many);
   assert.equal(goods.items.length, MAX_GOODS);
   assert.equal(goodsFingerprint(goods), goodsFingerprint(companyGoods({ ...company, products: "" }, many)));

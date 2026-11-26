@@ -202,7 +202,7 @@ The assistant's instructions are a list of rules in `policy.js`. Each rule names
 | `calculate` | Exact arithmetic, so every figure can be traced | Always |
 | `get_scan_status` | When the last scan ran, what it read and raised, the schedule and each source's health | Always |
 | `get_company_profile` | Your company profile and sites | Company workspace |
-| `query_orders` | Your orders and their document checklists, from `GET /api/v1/trade-map` with your token, or the orders the browser demo sent | Company workspace, or a demo with orders |
+| `query_orders` | Your orders and their document checklists (the gaps, or every line), from `GET /api/v1/orders` with your token, or the orders the browser demo sent | Company workspace, or a demo with orders |
 | `get_playbook` | The playbook rules switched on, from `GET /api/v1/playbook/rules` with your token, or the rules the browser demo sent | Company workspace, or a demo with rules |
 | `query_graph` | The knowledge graph (GraphRAG): from a material, origin country, HS code or market to the orders it reaches through your suppliers' sourcing and the material chain, with every link's official text (`GET /api/v1/knowledge-graph/query` with your token). The same walk News watch uses for an article | Company workspace |
 

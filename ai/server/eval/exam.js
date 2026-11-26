@@ -1,7 +1,7 @@
 // The company exam: questions a signed-in exporter asks about their own workspace, answered
 // as the demo company (Binh Duong Wood) with its owner's token. Like golden.js, every expected
 // fact is worked out from the company's live data when the exam runs (its orders and suppliers
-// from GET /trade-map, its switched-on playbook rules, and a knowledge graph walk), so the exam
+// from GET /orders and /suppliers, its switched-on playbook rules, and a knowledge graph walk), so the exam
 // stays right when the data or the date changes. Same expect fields as golden.js.
 //
 // When we find a wrong answer, add its question here.
@@ -13,17 +13,18 @@ const GAP = new Set(["missing", "mismatch"]);
 // Lists longer than this aren't checked id by id: a fair answer may summarise them.
 const LISTED = 8;
 
-const ids = (orders) => orders.map((o) => o.order.id);
+const ids = (orders) => orders.map((o) => o.id);
 const listed = (values) => (values.length && values.length <= LISTED ? values : []);
 const money = (minor) => (minor / 100).toFixed(minor % 100 ? 2 : 0);
 
 /**
- * company: { today (YYYY-MM-DD), markets, orders and suppliers: from GET /trade-map (orders are
- * { order, placement, checks, gapCount }), rules: switched-on playbook rules,
+ * company: { today (YYYY-MM-DD), markets: from GET /trade-map, orders: GET /orders?checklist=all
+ * (each order with its placement, checks and gapCount), suppliers: GET /suppliers, rules:
+ * switched-on playbook rules,
  * acacia: GET /knowledge-graph/query?material=acacia&country=VN }.
  */
 export function examCases(company) {
-  const open = company.orders.filter((o) => o.order.shipDate >= company.today).sort((a, b) => a.order.shipDate.localeCompare(b.order.shipDate));
+  const open = company.orders.filter((o) => o.shipDate >= company.today).sort((a, b) => a.shipDate.localeCompare(b.shipDate));
   const eu = open.filter((o) => EU.has(o.placement.market));
   const euGaps = eu.filter((o) => o.gapCount > 0);
   const gapped = open.filter((o) => o.gapCount > 0);
@@ -31,11 +32,11 @@ export function examCases(company) {
   const byMarket = {};
   for (const o of open) (byMarket[o.placement.market || "none"] ||= []).push(o);
   const [market, marketOrders] = Object.entries(byMarket)
-    .filter(([m, list]) => m !== "none" && new Set(list.map((o) => o.order.currency)).size === 1)
+    .filter(([m, list]) => m !== "none" && new Set(list.map((o) => o.currency)).size === 1)
     .sort((a, b) => b[1].length - a[1].length)[0] || [null, []];
-  const marketTotal = marketOrders.reduce((sum, o) => sum + o.order.valueMinor, 0);
+  const marketTotal = marketOrders.reduce((sum, o) => sum + o.valueMinor, 0);
   const noGeolocation = [
-    ...new Set(open.filter((o) => o.checks.some((c) => c.requirementKey === "geolocation" && GAP.has(c.status))).map((o) => o.order.supplier)),
+    ...new Set(open.filter((o) => o.checks.some((c) => c.requirementKey === "geolocation" && GAP.has(c.status))).map((o) => o.supplier)),
   ];
   const buyer = company.suppliers.find((s) => s.sourcing?.length);
   const acaciaMatches = company.acacia?.matches || [];
@@ -44,21 +45,21 @@ export function examCases(company) {
   const marketName = (code) => company.markets?.find((m) => m.code === code)?.name || code;
   const onFile = open.find((o) => o.checks.some((c) => c.status === "on_file"));
   const otherMarket = gapped[0] && company.markets?.find((m) => m.code !== gapped[0].placement.market);
-  const euTotal = new Set(eu.map((o) => o.order.currency)).size === 1 ? eu.reduce((sum, o) => sum + o.order.valueMinor, 0) : null;
+  const euTotal = new Set(eu.map((o) => o.currency)).size === 1 ? eu.reduce((sum, o) => sum + o.valueMinor, 0) : null;
   // For the questions by level (easy, medium, hard).
-  const total = (orders) => (new Set(orders.map((o) => o.order.currency)).size === 1 ? orders.reduce((sum, o) => sum + o.order.valueMinor, 0) : null);
+  const total = (orders) => (new Set(orders.map((o) => o.currency)).size === 1 ? orders.reduce((sum, o) => sum + o.valueMinor, 0) : null);
   const daysAway = (iso) => (Date.parse(iso) - Date.parse(company.today)) / 86_400_000;
-  const withHs = open.find((o) => o.order.hsCode);
-  const clear = open.filter((o) => o.order.status === "clear");
-  const byValue = [...open].sort((a, b) => b.order.valueMinor - a.order.valueMinor);
-  const largest = byValue.length > 1 && byValue[0].order.valueMinor > byValue[1].order.valueMinor ? byValue[0] : byValue.length === 1 ? byValue[0] : null;
+  const withHs = open.find((o) => o.hsCode);
+  const clear = open.filter((o) => o.status === "clear");
+  const byValue = [...open].sort((a, b) => b.valueMinor - a.valueMinor);
+  const largest = byValue.length > 1 && byValue[0].valueMinor > byValue[1].valueMinor ? byValue[0] : byValue.length === 1 ? byValue[0] : null;
   const bySupplier = {};
-  for (const o of open) (bySupplier[o.order.supplier] ||= []).push(o);
+  for (const o of open) (bySupplier[o.supplier] ||= []).push(o);
   const supplierCounts = Object.entries(bySupplier).sort((a, b) => b[1].length - a[1].length);
   const busiest = supplierCounts.length && (supplierCounts.length === 1 || supplierCounts[0][1].length > supplierCounts[1][1].length) ? supplierCounts[0] : null;
   const jp = byMarket.JP || [];
-  const dueSoonGaps = open.filter((o) => daysAway(o.order.shipDate) <= 14 && o.gapCount > 0);
-  const atRisk = gapped[0] ? open.filter((o) => o.order.supplier === gapped[0].order.supplier && o.gapCount > 0) : [];
+  const dueSoonGaps = open.filter((o) => daysAway(o.shipDate) <= 14 && o.gapCount > 0);
+  const atRisk = gapped[0] ? open.filter((o) => o.supplier === gapped[0].supplier && o.gapCount > 0) : [];
   const us = byMarket.US || [];
 
   const cases = [
@@ -72,10 +73,10 @@ export function examCases(company) {
     gapped[0] && {
       id: "company-order-status",
       category: "orders",
-      question: `What's the status of ${gapped[0].order.id}, and why?`,
+      question: `What's the status of ${gapped[0].id}, and why?`,
       expect: {
         tools: ["query_orders"],
-        contains: [gapped[0].order.id],
+        contains: [gapped[0].id],
         containsAny: gapped[0].checks.filter((c) => GAP.has(c.status)).map((c) => c.title),
       },
       rubric: "Says the order needs action, names the missing or mismatched requirement and cites the rule behind it.",
@@ -84,8 +85,8 @@ export function examCases(company) {
       id: "company-next-shipment",
       category: "orders",
       question: "Which of my orders ships next, and is it ready to go?",
-      expect: { tools: ["query_orders"], contains: [next.order.id] },
-      rubric: `Names ${next.order.id} (ships ${next.order.shipDate}) and says whether it has open gaps (${next.gapCount}).`,
+      expect: { tools: ["query_orders"], contains: [next.id] },
+      rubric: `Names ${next.id} (ships ${next.shipDate}) and says whether it has open gaps (${next.gapCount}).`,
     },
     {
       id: "company-unknown-order",
@@ -116,8 +117,8 @@ export function examCases(company) {
     gapped[0] && company.rules.length > 0 && {
       id: "company-playbook-for-order",
       category: "rules",
-      question: `Which of my playbook rules matter for ${gapped[0].order.id}?`,
-      expect: { tools: ["get_playbook", "query_orders"], contains: [gapped[0].order.id] },
+      question: `Which of my playbook rules matter for ${gapped[0].id}?`,
+      expect: { tools: ["get_playbook", "query_orders"], contains: [gapped[0].id] },
       rubric: "Picks the rules that bear on this order (its supplier, market or missing document) and says why; doesn't list every rule as applying.",
     },
     acaciaMatches.length > 0 && {
@@ -166,14 +167,14 @@ export function examCases(company) {
     gapped[0] && {
       id: "company-supplier-documents",
       category: "documents",
-      question: `Which documents is ${gapped[0].order.supplier} missing for my orders?`,
-      expect: { tools: ["query_orders"], containsAny: gapTitles(open.filter((o) => o.order.supplier === gapped[0].order.supplier)) },
-      rubric: `Names the missing or mismatched documents on ${gapped[0].order.supplier}'s open orders, order by order.`,
+      question: `Which documents is ${gapped[0].supplier} missing for my orders?`,
+      expect: { tools: ["query_orders"], containsAny: gapTitles(open.filter((o) => o.supplier === gapped[0].supplier)) },
+      rubric: `Names the missing or mismatched documents on ${gapped[0].supplier}'s open orders, order by order.`,
     },
     onFile && {
       id: "company-documents-on-file",
       category: "documents",
-      question: `Which documents do I already have on file for ${onFile.order.id}?`,
+      question: `Which documents do I already have on file for ${onFile.id}?`,
       expect: { tools: ["query_orders"], containsAny: onFile.checks.filter((c) => c.status === "on_file").map((c) => c.title) },
       rubric: "Lists the documents on file and, separately, any still missing.",
     },
@@ -188,15 +189,15 @@ export function examCases(company) {
     otherMarket && {
       id: "company-whatif-market",
       category: "trade-map",
-      question: `What if ${gapped[0].order.id} went to ${otherMarket.name} instead?`,
-      expect: { tools: ["query_orders"], contains: [gapped[0].order.id] },
+      question: `What if ${gapped[0].id} went to ${otherMarket.name} instead?`,
+      expect: { tools: ["query_orders"], contains: [gapped[0].id] },
       rubric: `Says what it can tell from the order's checklist, invents no ${otherMarket.name} requirements it wasn't given, and points to the trade map's What if panel for the full comparison.`,
     },
     gapped[0] && {
       id: "company-whatif-later",
       category: "trade-map",
-      question: `What if ${gapped[0].order.id} shipped a month later?`,
-      expect: { tools: ["query_orders"], contains: [gapped[0].order.id] },
+      question: `What if ${gapped[0].id} shipped a month later?`,
+      expect: { tools: ["query_orders"], contains: [gapped[0].id] },
       rubric: "Says whether any checklist line takes effect or changes before the later date, and whether that gives more time for the missing documents; invents no rule changes.",
     },
     // Follow-ups: the second question only makes sense with the first.
@@ -219,8 +220,8 @@ export function examCases(company) {
         { role: "model", text: `These orders are missing documents: ${ids(gapped).join(", ")}.` },
         { role: "user", text: "Why is the first one missing them?" },
       ],
-      expect: { tools: ["query_orders"], contains: [gapped[0].order.id], containsAny: gapTitles([gapped[0]]) },
-      rubric: `Explains ${gapped[0].order.id}'s missing documents and the rule behind each.`,
+      expect: { tools: ["query_orders"], contains: [gapped[0].id], containsAny: gapTitles([gapped[0]]) },
+      rubric: `Explains ${gapped[0].id}'s missing documents and the rule behind each.`,
     },
     // Easy: one lookup.
     {
@@ -232,14 +233,14 @@ export function examCases(company) {
     open[0] && {
       id: "easy-order-supplier",
       category: "easy",
-      question: `Who supplies ${open[0].order.id}?`,
-      expect: { tools: ["query_orders"], contains: [open[0].order.supplier] },
+      question: `Who supplies ${open[0].id}?`,
+      expect: { tools: ["query_orders"], contains: [open[0].supplier] },
     },
     withHs && {
       id: "easy-order-hs",
       category: "easy",
-      question: `What HS code is on ${withHs.order.id}?`,
-      expect: { tools: ["query_orders"], contains: [withHs.order.hsCode] },
+      question: `What HS code is on ${withHs.id}?`,
+      expect: { tools: ["query_orders"], contains: [withHs.hsCode] },
     },
     {
       id: "easy-how-import",
@@ -260,7 +261,7 @@ export function examCases(company) {
       id: "medium-largest-order",
       category: "medium",
       question: "What's my largest open order by value?",
-      expect: { tools: ["query_orders"], contains: [largest.order.id, money(largest.order.valueMinor)] },
+      expect: { tools: ["query_orders"], contains: [largest.id, money(largest.valueMinor)] },
     },
     busiest && {
       id: "medium-busiest-supplier",
@@ -276,8 +277,8 @@ export function examCases(company) {
         { role: "model", text: `These orders go to Japan: ${ids(jp).join(", ")}.` },
         { role: "user", text: "Which of them ships first, and when?" },
       ],
-      expect: { tools: ["query_orders"], contains: [jp[0].order.id] },
-      rubric: `Names ${jp[0].order.id}, shipping ${jp[0].order.shipDate}.`,
+      expect: { tools: ["query_orders"], contains: [jp[0].id] },
+      rubric: `Names ${jp[0].id}, shipping ${jp[0].shipDate}.`,
     },
     // Hard: several steps, sums and judgement.
     {
@@ -290,7 +291,7 @@ export function examCases(company) {
     atRisk.length > 0 && total(atRisk) !== null && {
       id: "hard-supplier-risk",
       category: "hard",
-      question: `If ${gapped[0].order.supplier} can't send the missing documents before shipping, which orders and how much value are at risk?`,
+      question: `If ${gapped[0].supplier} can't send the missing documents before shipping, which orders and how much value are at risk?`,
       expect: { tools: ["query_orders", "calculate"], contains: [...listed(ids(atRisk)), money(total(atRisk))] },
       note: "The total comes from calculate.",
     },
@@ -304,9 +305,9 @@ export function examCases(company) {
     gapped[0] && {
       id: "hard-unknown-rate",
       category: "hallucination-trap",
-      question: `What anti-dumping duty rate applies to ${gapped[0].order.id}?`,
+      question: `What anti-dumping duty rate applies to ${gapped[0].id}?`,
       expect: { tools: ["query_orders"] },
-      rubric: `Says the order's records show no anti-dumping duty for ${gapped[0].order.id} (to ${gapped[0].placement.market}); invents no rate, and may point to the official source to check.`,
+      rubric: `Says the order's records show no anti-dumping duty for ${gapped[0].id} (to ${gapped[0].placement.market}); invents no rate, and may point to the official source to check.`,
     },
     // The demo video's questions, word for word (docs/local/demo/recording.md).
     euGaps.length > 0 && {
@@ -333,18 +334,18 @@ export function examCases(company) {
     gapped[0] && company.rules.length > 0 && {
       id: "demo-playbook-rules",
       category: "demo",
-      question: `Which of my playbook rules apply to ${gapped[0].order.id}?`,
+      question: `Which of my playbook rules apply to ${gapped[0].id}?`,
       expect: {
         tools: ["get_playbook"],
-        contains: company.rules.filter((r) => r.text.includes(gapped[0].order.supplier)).map(() => gapped[0].order.supplier).slice(0, 1),
+        contains: company.rules.filter((r) => r.text.includes(gapped[0].supplier)).map(() => gapped[0].supplier).slice(0, 1),
       },
-      rubric: `Names the rules that bear on ${gapped[0].order.id} (its supplier ${gapped[0].order.supplier}, market ${gapped[0].placement.market}) and why, from: ${company.rules.map((r) => r.text).join(" | ")}`,
+      rubric: `Names the rules that bear on ${gapped[0].id} (its supplier ${gapped[0].supplier}, market ${gapped[0].placement.market}) and why, from: ${company.rules.map((r) => r.text).join(" | ")}`,
     },
     gapped[0] && {
       id: "demo-duty-calc",
       category: "demo",
-      question: `${gapped[0].order.id} is worth $${(gapped[0].order.valueMinor / 100).toLocaleString("en-US")}. At a 4.7% duty, how much is the duty?`,
-      expect: { tools: ["calculate"], contains: [money(Math.round(gapped[0].order.valueMinor * 0.047))] },
+      question: `${gapped[0].id} is worth $${(gapped[0].valueMinor / 100).toLocaleString("en-US")}. At a 4.7% duty, how much is the duty?`,
+      expect: { tools: ["calculate"], contains: [money(Math.round(gapped[0].valueMinor * 0.047))] },
     },
     // No prompt-leak, injection or off-topic questions: scripted runs of attack-like prompts got
     // the project's Gemini access restricted (Nov 2026).

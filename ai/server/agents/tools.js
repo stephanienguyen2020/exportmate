@@ -7,7 +7,7 @@ import { inventory, impacts, scans, sources, list } from "../db.js";
 import { search, TYPES } from "../rag.js";
 import { evaluate } from "../calc.js";
 import { ToolError } from "../gateway.js";
-import { ORDER_STATUSES, matchOrders, presentOrder, totalsByCurrency } from "../orders.js";
+import { CHECKLIST_DETAILS, ORDER_STATUSES, matchOrders, ordersQuery, presentOrder, totalsByCurrency } from "../orders.js";
 import { createGuard } from "../guard.js";
 import { itemVisible, presentScan, presentSources, visibleItems } from "../access.js";
 
@@ -34,6 +34,8 @@ const ageDays = (iso) => (iso && !isNaN(Date.parse(iso)) ? Math.max(0, Math.floo
 const SEVERITY = { high: 0, medium: 1, low: 2 };
 // Document types whose text comes from third parties (news feeds, or alerts written from them).
 const UNTRUSTED_TYPES = new Set(["article", "alert", "source"]);
+// GET /orders' largest page: query_orders reads every match up to it.
+const MAX_ORDERS = 200;
 
 // Where query_orders and get_playbook read from: the company backend with the caller's own
 // token, or the orders and playbook the browser demo sent (orders.js checked them).
@@ -48,14 +50,15 @@ export function workspaceReaders(backend, demo) {
       return body.data;
     };
     return {
-      orders: async () => (await read("/api/v1/trade-map", "orders")).orders,
+      // Every match (up to MAX_ORDERS), so the count and totals cover them all.
+      orders: async (args = {}) => read(`/api/v1/orders?${ordersQuery(args, MAX_ORDERS)}`, "orders"),
       playbook: async () => (await read("/api/v1/playbook/rules", "playbook")).filter((r) => r.enabled),
       graph: async (args) => read(`/api/v1/knowledge-graph/query?${graphQuery(args)}`, "knowledge graph"),
     };
   }
   // The browser demo has no backend, so no knowledge graph to walk.
   return {
-    orders: demo?.orders ? async () => demo.orders : null,
+    orders: demo?.orders ? async (args = {}) => matchOrders(demo.orders, args) : null,
     playbook: demo?.playbook ? async () => demo.playbook : null,
     graph: null,
   };
@@ -515,21 +518,23 @@ export const REGISTRY = {
     declaration: {
       name: "query_orders",
       description:
-        "The company's own orders (the Orders page), read live: order id (e.g. PO-2291), product, supplier, destination and market, value and currency, ship date, HS code, status (exposed is shown as \"Action needed\") and each order's document checklist: every line's status (on_file, missing, mismatch, prepare, check, unknown), a note and the official text it comes from (the browser demo has one sample check per order it covers, with no official text). Also returns the count and total value per currency of all matches. Filters combine with AND; with none, every order.",
+        "GET /api/v1/orders: the company's own orders (the Orders page), read live, by ship date: order id (e.g. PO-2291), product, supplier, destination and market, value and currency, ship date, HS code, status (exposed is shown as \"Action needed\") and gap count (checklist lines missing or mismatched). checklist adds each order's document checklist: \"gaps\" (default) only the missing or mismatched lines, \"all\" every line with its status (on_file, missing, mismatch, prepare, check, unknown); each line has a note and the official text it comes from (the browser demo has one sample check per order it covers, with no official text). Use \"all\" for a few named orders or for lines that aren't gaps (what is on file, which orders need ISPM 15 packaging). Also returns the count and total value per currency of all matches. Filters combine with AND; with none, every order.",
       parameters: {
         type: Type.OBJECT,
         properties: {
-          ids: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Order ids, e.g. PO-2291" },
-          query: { type: Type.STRING, description: "Text in the order id, product, supplier, destination or HS code" },
           status: { type: Type.STRING, enum: ORDER_STATUSES },
+          q: { type: Type.STRING, description: "Text in the order id, product, supplier, destination or HS code" },
+          market: { type: Type.STRING, description: "Destination market code, e.g. EU, US, UK, JP, SG, KR" },
+          id: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Order ids, e.g. PO-2291" },
+          checklist: { type: Type.STRING, enum: CHECKLIST_DETAILS, description: "none, gaps (default) or all" },
           limit: { type: Type.INTEGER, description: "Orders to return, default 10, max 30 (count and totals cover every match)" },
         },
       },
     },
     async run(args, { refs, orders: readOrders }) {
-      const matching = matchOrders(await readOrders(), args);
+      const matching = await readOrders(args);
       const totals = totalsByCurrency(matching);
-      const filters = describe(args, ["limit"]);
+      const filters = describe(args, ["limit", "checklist"]);
       const totalText = Object.entries(totals).map(([c, v]) => `${c} ${v.toLocaleString("en-US")}`).join(" + ") || "no value";
       const ref = refs.cite(`orders:${filters}`, {
         type: "query",
@@ -537,7 +542,7 @@ export const REGISTRY = {
         title: `Order query${filters ? ` (${filters})` : ""}: ${matching.length} orders, ${totalText}`,
         url: "#/workspace/orders",
       });
-      const orders = matching.slice(0, clamp(args.limit, 1, 30, 10)).map((m) => presentOrder(m, refs.cite));
+      const orders = matching.slice(0, clamp(args.limit, 1, 30, 10)).map((o) => presentOrder(o, refs.cite));
       return {
         output: { ref, matching: matching.length, totalValueByCurrency: totals, orders },
         audit: {

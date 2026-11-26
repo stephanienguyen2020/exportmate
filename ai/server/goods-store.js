@@ -8,10 +8,12 @@ import { log } from "./log.js";
 
 export const GOODS_TTL_MS = 15 * 60_000;
 const NONE = Object.freeze({ profile: null, items: [] });
+// Orders read to build the goods; past that, goods come from the earliest-shipping ones.
+const MAX_ORDERS_READ = 2000;
 
 /**
  * A company's goods ({ profile, items, updatedAt, backfilledAt }). `read` is { company, orders }
- * (the profile and GET /api/v1/trade-map's orders, read with the member's token), or null when
+ * (the profile and GET /api/v1/orders, read with the member's token), or null when
  * there is no token: the stored goods are then used as they are.
  */
 export async function companyStock(companyId, read, now = Date.now()) {
@@ -38,10 +40,18 @@ export async function companyStock(companyId, read, now = Date.now()) {
 export function goodsReader(get, company) {
   return {
     company,
+    // Every page of GET /api/v1/orders (each order with its placement).
     orders: async () => {
-      const { status, body } = await get("/api/v1/trade-map");
-      if (status !== 200) throw new Error(`trade map ${status}`);
-      return body.data?.orders ?? [];
+      const orders = [];
+      let cursor = null;
+      do {
+        const query = new URLSearchParams({ limit: "200", ...(cursor && { cursor }) });
+        const { status, body } = await get(`/api/v1/orders?${query}`);
+        if (status !== 200) throw new Error(`orders ${status}`);
+        orders.push(...(body.data ?? []));
+        cursor = body.meta?.nextCursor ?? null;
+      } while (cursor && orders.length < MAX_ORDERS_READ);
+      return orders;
     },
   };
 }
