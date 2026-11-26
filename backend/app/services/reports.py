@@ -32,7 +32,6 @@ from app.core.config import get_settings
 from app.core.context import CompanyContext
 from app.core.email import EmailAttachment, OutgoingEmail, get_email_sender
 from app.core.errors import AppError, not_found_error
-from app.core.news_alerts import fetch_news_alerts
 from app.database.models import ReportDraft, ReportKind
 from app.database.queries import analysis as analysis_queries
 from app.database.queries import audit as audit_queries
@@ -55,6 +54,7 @@ from app.schemas.reports import (
 )
 from app.schemas.trade_map import OrderListItemOut, RequirementSourceOut
 from app.services import trade_map as trade_map_service
+from app.services.news_alerts import fetch_news_alerts
 
 FONT_DIR = Path(__file__).resolve().parents[1] / "assets" / "fonts"
 FONT = "NotoSans"
@@ -506,9 +506,7 @@ def _news_section(
     )
 
 
-def build_company_report_content(
-    db: Session, ctx: CompanyContext, days: int, authorization: str | None
-) -> ReportContent:
+def build_company_report_content(db: Session, ctx: CompanyContext, days: int) -> ReportContent:
     today = clock.today()
     since, until = today - timedelta(days=days), today + timedelta(days=days)
     market_names = {m.code: m.name for m in map_queries.list_markets(db)}
@@ -525,7 +523,7 @@ def build_company_report_content(
 
     changes = _change_section(db, ctx, open_orders, today, until, citations, facts)
     news = _news_section(
-        fetch_news_alerts(authorization),
+        fetch_news_alerts(ctx),
         since,
         facts,
         news_queries.list_confirmed_news_by_impact(db, ctx.company_id),
@@ -1076,15 +1074,13 @@ def _as_json(content: ReportContent) -> dict:
     return content.model_dump(mode="json", by_alias=True)
 
 
-def create_report_draft(
-    db: Session, ctx: CompanyContext, body: ReportCreateIn, authorization: str | None
-) -> ReportDraftOut:
+def create_report_draft(db: Session, ctx: CompanyContext, body: ReportCreateIn) -> ReportDraftOut:
     if body.kind == ReportKind.order:
         assert body.order_id is not None
         content = build_order_report_content(db, ctx, body.order_id)
         scope = {"orderId": body.order_id}
     else:
-        content = build_company_report_content(db, ctx, body.days, authorization)
+        content = build_company_report_content(db, ctx, body.days)
         scope = {"days": body.days}
     draft = report_queries.add_report_draft(
         db,

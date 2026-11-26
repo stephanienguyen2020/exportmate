@@ -7,8 +7,6 @@ import urllib.error
 import pytest
 
 from app.core import email as email_module
-from app.core import news_alerts
-from app.core.config import get_settings
 from app.core.email import EmailAttachment, OutgoingEmail, ResendEmailSender
 from app.core.errors import AppError
 
@@ -83,46 +81,3 @@ def test_resend_refusal_is_logged_with_its_reason_but_no_address(monkeypatch, ca
     assert rejected.provider_error == "validation_error"
     assert "domain is not verified" in rejected.provider_message
     assert "@" not in rejected.provider_message and "[address]" in rejected.provider_message
-
-
-@pytest.fixture
-def ai_service_url(monkeypatch: pytest.MonkeyPatch):
-    def use(url: str) -> None:
-        monkeypatch.setenv("AI_SERVICE_URL", url)
-        get_settings.cache_clear()
-
-    yield use
-    monkeypatch.delenv("AI_SERVICE_URL", raising=False)
-    get_settings.cache_clear()
-
-
-def test_news_alerts_forward_the_callers_token(monkeypatch, ai_service_url):
-    ai_service_url("https://ai.example.run.app/")
-    seen = {}
-
-    def fake_urlopen(request, timeout):
-        seen["url"] = request.full_url
-        seen["auth"] = request.get_header("Authorization")
-        return FakeResponse(b'{"impacts": [{"headline": "A"}, "junk"], "scan": null}')
-
-    monkeypatch.setattr(news_alerts.urllib.request, "urlopen", fake_urlopen)
-    assert news_alerts.fetch_news_alerts("Bearer t") == [{"headline": "A"}]
-    assert seen == {"url": "https://ai.example.run.app/api/impacts", "auth": "Bearer t"}
-
-
-def test_news_alerts_never_send_a_token_over_plain_http(monkeypatch, ai_service_url):
-    ai_service_url("http://ai.example.com")
-    monkeypatch.setattr(
-        news_alerts.urllib.request, "urlopen", lambda *a, **k: pytest.fail("no request")
-    )
-    assert news_alerts.fetch_news_alerts("Bearer t") is None
-
-
-def test_news_alerts_unreachable_is_none(monkeypatch, ai_service_url):
-    ai_service_url("http://127.0.0.1:8080")
-
-    def down(request, timeout):
-        raise urllib.error.URLError("refused")
-
-    monkeypatch.setattr(news_alerts.urllib.request, "urlopen", down)
-    assert news_alerts.fetch_news_alerts(None) is None

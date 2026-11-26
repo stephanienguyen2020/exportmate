@@ -4,8 +4,8 @@ import { test, expect, type Page } from "@playwright/test";
 test.use({ storageState: { cookies: [], origins: [] } });
 
 async function openDemo(page: Page) {
-  await page.route("**/api/impacts**", (route) =>
-    route.fulfill({ json: { impacts: [], scan: null } }),
+  await page.route("**/api/v1/news-alerts**", (route) =>
+    route.fulfill({ json: { data: { impacts: [], scan: null } } }),
   );
   await page.goto("/");
   await page.evaluate(() => sessionStorage.setItem("em-session", "demo"));

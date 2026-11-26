@@ -7,7 +7,7 @@
 // in, and only that company's owners and editors can switch it off or remove it.
 //
 // News alerts and stock items are about someone's goods: a company's own (they carry its
-// companyId; scan.js, goods.js) or the sample stock, which only the browser demo sees.
+// companyId; scan.js, the backend's GET /news-goods) or the sample stock, which only the browser demo sees.
 //
 // `access` is { companyId, disabled, skipOld }: the caller's company (null for the demo), the
 // shared sources that company switched off, and false when it switched the age rule off.

@@ -5,7 +5,7 @@ import { asData } from "../guard.js";
 import { STOCK_PROFILE } from "../seed/inventory.js";
 
 // Who the assistant works for. A signed-in company's profile comes from the backend
-// (GET /api/v1/company/knowledge) and its stock is its own goods (goods.js); without one, the
+// (GET /api/v1/company/knowledge) and its stock is its own goods (the backend's GET /news-goods); without one, the
 // demo company, which owns the sample stock (seed/inventory.js STOCK_PROFILE) and whose orders
 // and playbook the browser sends with the question (when it has them). `session` is
 // { company, orders, playbook, stock } (agent.js).

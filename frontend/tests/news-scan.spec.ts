@@ -17,7 +17,7 @@ const failedScan = {
 };
 
 async function openNews(page: import("@playwright/test").Page) {
-  await page.route("**/api/impacts**", (route) => route.fulfill({ json: { impacts: [], scan: failedScan } }));
+  await page.route("**/api/v1/news-alerts**", (route) => route.fulfill({ json: { data: { impacts: [], scan: failedScan } } }));
   await page.route("**/api/v1/news-sources", (route) =>
     route.fulfill({
       json: {

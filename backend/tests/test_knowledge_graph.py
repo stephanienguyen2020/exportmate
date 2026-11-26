@@ -41,8 +41,8 @@ ORDERS = (
 @pytest.fixture
 def news_watch(monkeypatch: pytest.MonkeyPatch) -> dict:
     world: dict = {"alerts": []}
-    monkeypatch.setattr(news_service, "fetch_news_alerts", lambda authorization: world["alerts"])
-    monkeypatch.setattr(news_service, "fetch_news_stock", lambda authorization: [])
+    monkeypatch.setattr(news_service, "fetch_news_alerts", lambda ctx: world["alerts"])
+    monkeypatch.setattr(news_service, "list_stock_items", lambda db, ctx: [])
     return world
 
 

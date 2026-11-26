@@ -27,6 +27,8 @@ from app.database.queries import users as user_queries
 from app.database.session import get_engine, open_session
 from app.main import create_app
 from app.services import market_requirements as requirement_service
+from app.services import news_alerts as news_alert_service
+from app.services import news_goods as news_goods_service
 from app.services import news_sources as news_source_service
 from app.services import regulations as regulation_service
 from app.services import supplier_documents as supplier_document_service
@@ -106,11 +108,15 @@ def file_storage(monkeypatch: pytest.MonkeyPatch) -> InMemoryFileStorage:
 
 
 class InMemoryNewsStore:
-    """Firestore's `sources` and `companySources` (app/database/news_store.py) in memory."""
+    """News watch's Firestore records (app/database/news_store.py) in memory."""
 
     def __init__(self):
         self.sources: dict[str, dict] = {}
         self.companies: dict[str, dict] = {}
+        self.alerts: dict[str, dict] = {}
+        self.scans: list[dict] = []
+        self.stock: list[dict] = []
+        self.goods: dict[str, dict] = {}
 
     def list_sources(self) -> list[dict]:
         return sorted(
@@ -145,11 +151,32 @@ class InMemoryNewsStore:
     def update_company_settings(self, company_id: str, fields: dict) -> None:
         self.companies.setdefault(company_id, {}).update(fields)
 
+    def list_recent_alerts(self, limit: int) -> list[dict]:
+        alerts = ({"id": i, **a} for i, a in self.alerts.items())
+        return sorted(alerts, key=lambda a: a.get("createdAt", ""), reverse=True)[:limit]
+
+    def list_company_alerts(self, company_id: str) -> list[dict]:
+        return [{"id": i, **a} for i, a in self.alerts.items() if a.get("companyId") == company_id]
+
+    def get_latest_scan(self) -> dict | None:
+        return max(self.scans, key=lambda s: s["startedAt"], default=None)
+
+    def list_sample_stock(self) -> list[dict]:
+        return sorted(self.stock, key=lambda i: i["sku"])
+
+    def get_company_goods(self, company_id: str) -> dict | None:
+        found = self.goods.get(company_id)
+        return dict(found) if found else None
+
+    def save_company_goods(self, company_id: str, fields: dict) -> None:
+        self.goods.setdefault(company_id, {}).update(fields)
+
 
 @pytest.fixture(autouse=True)
 def news_store(monkeypatch: pytest.MonkeyPatch) -> InMemoryNewsStore:
     store = InMemoryNewsStore()
-    monkeypatch.setattr(news_source_service, "get_news_store", lambda: store)
+    for service in (news_source_service, news_alert_service, news_goods_service):
+        monkeypatch.setattr(service, "get_news_store", lambda: store)
     return store
 
 

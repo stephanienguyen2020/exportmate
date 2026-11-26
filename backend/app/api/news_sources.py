@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import EditorContext, OptionalContext
 from app.database.session import get_db
 from app.schemas.common import SuccessResponse, success_response
+from app.schemas.news_alerts import NewsAlertsOut, NewsGoodsOut
 from app.schemas.news_sources import (
     NewsSettingsOut,
     NewsSettingsUpdate,
@@ -14,6 +15,8 @@ from app.schemas.news_sources import (
     NewsSourceOut,
     NewsSourceUpdate,
 )
+from app.services import news_alerts as news_alert_service
+from app.services import news_goods as news_goods_service
 from app.services import news_sources as news_service
 
 router = APIRouter(tags=["news watch"])
@@ -57,3 +60,16 @@ def get_news_settings(ctx: OptionalContext):
 def update_news_settings(payload: NewsSettingsUpdate, ctx: EditorContext, db: Db):
     """Switch the age rule off (or back on) for the company only."""
     return success_response(news_service.update_news_settings(db, ctx, payload.skip_old))
+
+
+@router.get("/news-alerts", response_model=SuccessResponse[NewsAlertsOut])
+def list_news_alerts(ctx: OptionalContext):
+    """The newest alerts about the caller's goods (signed out: the sample stock's) and the
+    latest scan, as the caller sees them."""
+    return success_response(news_alert_service.list_news_alerts(ctx))
+
+
+@router.get("/news-goods", response_model=SuccessResponse[NewsGoodsOut])
+def list_news_goods(ctx: OptionalContext, db: Db):
+    """What News watch reads the news against: the company's goods, or the sample stock."""
+    return success_response(news_goods_service.list_news_goods(db, ctx))

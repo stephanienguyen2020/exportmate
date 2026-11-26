@@ -27,10 +27,10 @@ const item = {
 };
 
 async function openDemo(page: Page, hash = "#/workspace") {
-  await page.route("**/api/impacts**", (route) =>
-    route.fulfill({ json: { impacts: [impact], scan: null } }),
+  await page.route("**/api/v1/news-alerts**", (route) =>
+    route.fulfill({ json: { data: { impacts: [impact], scan: null } } }),
   );
-  await page.route("**/api/inventory**", (route) => route.fulfill({ json: { items: [item] } }));
+  await page.route("**/api/v1/news-goods**", (route) => route.fulfill({ json: { data: { items: [item] } } }));
   await page.goto("/");
   await page.evaluate(() => sessionStorage.setItem("em-session", "demo"));
   await page.goto("/" + hash);
