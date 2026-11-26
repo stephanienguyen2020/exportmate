@@ -1,12 +1,10 @@
 import http from "node:http";
 import { createHash, randomUUID } from "node:crypto";
-import { OAuth2Client } from "google-auth-library";
-import { db, scans, companySources, locks, list } from "./db.js";
-import { runScan } from "./scan.js";
-import { runAgent, audits, clearCaches } from "./agent.js";
+import { companySources, list } from "./db.js";
+import { runAgent, audits } from "./agent.js";
 import { log } from "./log.js";
-import { ANONYMOUS, auditVisible, presentScan, publicAudit, publicStep } from "./access.js";
-import { readJson, scanBlocked } from "./limits.js";
+import { ANONYMOUS, auditVisible, publicAudit, publicStep } from "./access.js";
+import { readJson } from "./limits.js";
 import { deleteMemory, listMemories, memoryKeepDays, remembers, userKeyFor } from "./agents/platform.js";
 import { AGENTS_AT, callAgents, streamTurn } from "./agents/remote.js";
 import { demoOrders, demoPlaybook } from "./orders.js";
@@ -20,10 +18,6 @@ const ALLOWED_ORIGINS = (
 ).split(",");
 const MAX_MESSAGES = 20;
 const MAX_CHARS = 4000;
-// Cloud Scheduler signs its requests with this service account; those skip the cooldown.
-const SCHEDULER_SA = process.env.SCHEDULER_SA || "";
-const SCAN_AUDIENCE = process.env.SCAN_AUDIENCE || "";
-const authClient = new OAuth2Client();
 // Company backend (FastAPI) origin, for the signed-in company's profile and role. This service
 // never reads its database; it calls the API with the user's own token.
 const BACKEND_URL = (process.env.BACKEND_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
@@ -103,21 +97,6 @@ async function companyKnowledge(authorization) {
   return null;
 }
 
-// Starting a scan needs a signed-in company owner or editor; the backend
-// checks the token and reports the role. `action` completes "… can …", e.g. "run a scan".
-// Returns the company's access with userId for the change and its log, or { error: [status, payload] }.
-async function companyEditor(req, action) {
-  const { status, body, reason } = await callerAccount(req.headers.authorization);
-  const account = body.data;
-  if (status === 200 && account?.company && ["owner", "editor"].includes(account.role))
-    return { userId: account.user.id, ...(await companyAccess(account.company.id)) };
-  if (status === 200) return { error: [403, { error: `Only company owners and editors can ${action}.` }] };
-  if (status === 401) return { error: [401, { error: `Sign in to a company workspace to ${action}.` }] };
-  if (status === 403) return { error: [403, { error: body.error?.message || `Your account can't ${action}.` }] };
-  log("WARNING", "company_check.backend_unavailable", { action, reason: reason || status });
-  return { error: [503, { error: "This can't be changed right now. Please try again later." }] };
-}
-
 // The caller's address. The website's nginx passes X-Forwarded-For on and Cloud Run appends the
 // hops it saw, so the first entry is the visitor unless they sent the header themselves. A caller
 // can fake it, through the website or straight to Cloud Run; the per-instance cap still bounds
@@ -137,18 +116,6 @@ function chatLimited(client, now = Date.now()) {
     return "You've reached the limit of questions for this hour. Please try again later.";
   recentChats.push({ client, at: now });
   return null;
-}
-
-async function fromScheduler(req) {
-  const token = (req.headers.authorization || "").match(/^Bearer (.+)$/)?.[1];
-  if (!token || !SCHEDULER_SA || !SCAN_AUDIENCE) return false;
-  try {
-    const ticket = await authClient.verifyIdToken({ idToken: token, audience: SCAN_AUDIENCE });
-    const p = ticket.getPayload();
-    return p?.email === SCHEDULER_SA && p.email_verified === true;
-  } catch {
-    return false;
-  }
 }
 
 const SESSION = /^[A-Za-z0-9-]{8,64}$/;
@@ -297,42 +264,10 @@ async function oneAudit(id, query, access) {
   return [200, { audit: publicAudit(audit) }];
 }
 
-async function latestScan() {
-  const snap = await scans.orderBy("startedAt", "desc").limit(1).get();
-  return snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() };
-}
-
-// One scan at a time across instances: the lock document is claimed in a transaction, so two
-// requests (or the scheduler and a person) can't both pass the check and start.
-const scanLock = locks.doc("scan");
-async function scanNow(scheduled, who = {}) {
-  const blocked = await db.runTransaction(async (t) => {
-    const lock = (await t.get(scanLock)).data();
-    const refusal = scanBlocked(lock, { scheduled });
-    if (!refusal) t.set(scanLock, { startedAt: new Date().toISOString(), running: true, trigger: scheduled ? "schedule" : "manual", ...who });
-    return refusal;
-  });
-  // The caller sees the alerts raised for its own goods (access.js presentScan).
-  const viewer = { companyId: who.companyId ?? null };
-  if (blocked) return [blocked[0], { error: blocked[1], scan: presentScan(await latestScan(), viewer) }];
-  try {
-    const scan = await runScan({ trigger: scheduled ? "schedule" : "manual" });
-    clearCaches();
-    return [200, { scan: presentScan(scan, viewer) }];
-  } finally {
-    await scanLock.set({ running: false }, { merge: true }).catch((e) => log("ERROR", "scan.unlock_failed", { error: String(e?.message || e) }));
-  }
-}
-
 async function route(method, path, body, req, query) {
   if (method === "GET" && path === "/api/audits") return sessionAudits(query, await readerAccess(req));
   const a = path.match(/^\/api\/audits\/([\w-]{1,40})$/);
   if (method === "GET" && a) return oneAudit(a[1], query, await readerAccess(req));
-  if (method === "POST" && path === "/api/scan") {
-    if (await fromScheduler(req)) return scanNow(true);
-    const editor = await companyEditor(req, "run a scan");
-    return editor.error || scanNow(false, { userId: editor.userId, companyId: editor.companyId });
-  }
   // What Memory Bank remembers about the signed-in user (Account › What the assistant remembers).
   if (path === "/api/memories" || path.startsWith("/api/memories/")) return memoryRoute(method, path, req);
   return [404, { error: "Not found" }];

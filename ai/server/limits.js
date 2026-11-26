@@ -1,7 +1,6 @@
-// Request-size and scan-frequency limits. Pure or stream-only, so they can be tested alone.
+// Request-size limits. Stream-only, so they can be tested alone.
 
 export const MAX_BODY_BYTES = 100_000;
-export const SCAN_COOLDOWN_MS = 10 * 60_000;
 
 /**
  * Reads a JSON request body. Past `maxBytes` it stops keeping data (the rest is drained,
@@ -38,16 +37,3 @@ export function readJson(req, maxBytes = MAX_BODY_BYTES) {
   });
 }
 
-/**
- * Whether a scan may start, given the shared lock document ({ startedAt, running }).
- * Scheduled scans only wait for one that is still running; manual ones also wait out the
- * cooldown after any scan. Returns null to go ahead, or [status, message].
- */
-export function scanBlocked(lock, { scheduled, now = Date.now(), cooldownMs = SCAN_COOLDOWN_MS }) {
-  const started = lock?.startedAt ? Date.parse(lock.startedAt) : 0;
-  const recent = now - started < cooldownMs;
-  if (!recent) return null; // also frees a lock left "running" by a crashed scan
-  if (lock.running) return [scheduled ? 409 : 429, "A scan is already running."];
-  if (!scheduled) return [429, "A scan ran in the last 10 minutes."];
-  return null;
-}

@@ -17,6 +17,7 @@ from app.schemas.news_sources import (
 )
 from app.services import news_alerts as news_alert_service
 from app.services import news_goods as news_goods_service
+from app.services import news_scan_runs
 from app.services import news_sources as news_service
 
 router = APIRouter(tags=["news watch"])
@@ -73,3 +74,10 @@ def list_news_alerts(ctx: OptionalContext):
 def list_news_goods(ctx: OptionalContext, db: Db):
     """What News watch reads the news against: the company's goods, or the sample stock."""
     return success_response(news_goods_service.list_news_goods(db, ctx))
+
+
+@router.post("/news-scans", response_model=SuccessResponse[dict], status_code=202)
+def start_news_scan(ctx: EditorContext, db: Db):
+    """ "Scan now": starts a scan (one at a time; at most once per 10 minutes) and returns its
+    record, which GET /news-alerts follows until it ends."""
+    return success_response({"scan": news_scan_runs.request_scan(db, ctx)})

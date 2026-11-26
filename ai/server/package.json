@@ -12,13 +12,11 @@
     "runtime": "node runtime.js",
     "dev": "node --watch --env-file-if-exists=.env index.js",
     "seed": "node seed.js",
-    "scan": "node scan.js",
     "index": "node rag.js",
     "test": "node --test test/*.test.js",
     "eval": "node eval/run.js",
     "eval:vertex": "node eval/run.js --vertex",
     "exam": "node eval/run.js --company --engine",
-    "eval:scan": "node eval/scan-run.js",
     "ops": "node ops.js"
   },
   "dependencies": {

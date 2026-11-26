@@ -1377,8 +1377,8 @@ test("owners switch off the age rule for their company with their token", async 
   await expect(rule).not.toBeChecked();
 });
 
-// A scan runs inside its request. The website's proxy gives up on it after 120 s with a 502
-// (as on 17 October 2026, for a scan that took 274 s) while the scan carries on in the AI service.
+// "Scan now" starts the backend's scan job and gets the new record back; the page follows it
+// through /news-alerts until it ends. `starts: false`: the backend refuses (a scan is running).
 async function scanFixture(page: Page, { starts }: { starts: boolean }) {
   let latest: Record<string, unknown> = {
     id: "scan-1",
@@ -1403,14 +1403,16 @@ async function scanFixture(page: Page, { starts }: { starts: boolean }) {
     }
     await route.fulfill({ json: { data: { impacts: [], scan: latest } } });
   });
-  await page.route("**/api/scan", async (route) => {
-    if (starts) latest = { id: "scan-2", status: "running", startedAt: new Date().toISOString() };
-    await route.fulfill({ status: 502, contentType: "text/html", body: "<html>Bad gateway</html>" });
+  await page.route("**/api/v1/news-scans", async (route) => {
+    if (!starts)
+      return route.fulfill({ status: 429, json: { error: { code: "scan_blocked", message: "A scan is already running." } } });
+    latest = { id: "scan-2", status: "running", startedAt: new Date().toISOString() };
+    await route.fulfill({ status: 202, json: { data: { scan: latest } } });
   });
   return polls;
 }
 
-test("Scan now follows a scan that outlasts the website's proxy", async ({ page }) => {
+test("Scan now follows the scan it started until it ends", async ({ page }) => {
   test.setTimeout(60_000);
   await fixture(page);
   const polls = await scanFixture(page, { starts: true });
@@ -1425,7 +1427,7 @@ test("Scan now follows a scan that outlasts the website's proxy", async ({ page 
   expect(polls.after).toBeGreaterThanOrEqual(2);
 });
 
-test("Scan now keeps the proxy's error when no scan started", async ({ page }) => {
+test("Scan now says why no scan started", async ({ page }) => {
   test.setTimeout(60_000);
   await fixture(page);
   await scanFixture(page, { starts: false });
@@ -1433,7 +1435,7 @@ test("Scan now keeps the proxy's error when no scan started", async ({ page }) =
   await expect(page.getByText("CONNECTED WORKSPACE")).toBeVisible();
   await page.goto("/#/workspace/news");
   await page.getByRole("button", { name: "Scan now" }).click();
-  await expect(page.locator(".news-scanbar").getByRole("status")).toHaveText("Request failed (502)", { timeout: 20_000 });
+  await expect(page.locator(".news-scanbar").getByRole("status")).toHaveText("A scan is already running.", { timeout: 20_000 });
 });
 
 test("viewers and the sample demo can't change news sources", async ({

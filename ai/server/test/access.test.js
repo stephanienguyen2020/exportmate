@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ANONYMOUS, ageDays, auditVisible, presentScan, presentSources, publicAudit, scanRules, skipsOld, visibleItems } from "../access.js";
+import { ANONYMOUS, auditVisible, presentScan, presentSources, publicAudit, skipsOld, visibleItems } from "../access.js";
 
 const sources = [
   { id: "builtin", name: "Timber news", builtIn: true, enabled: true },
@@ -86,17 +86,6 @@ test("alerts from articles older than the age rule when scanned show only to com
 test("the age rule is on unless a company switches it off, and absent when not configured", () => {
   assert.ok(skipsOld(ANONYMOUS, 365));
   assert.ok(!skipsOld({ ...companyA, skipOld: false }, 365));
-  assert.deepEqual(scanRules(companyA, 365), { maxAgeDays: 365, skipOld: true });
-  assert.deepEqual(scanRules({ ...companyA, skipOld: false }, 365), { maxAgeDays: 365, skipOld: false });
-  assert.equal(scanRules(companyA, 0), null);
-});
-
-test("an article's age is whole days before the scan, null when undated", () => {
-  const at = Date.parse("2026-10-15T12:00:00Z");
-  assert.equal(ageDays("2026-10-14T13:00:00Z", at), 0);
-  assert.equal(ageDays("2025-10-14T12:00:00Z", at), 366);
-  assert.equal(ageDays(null, at), null);
-  assert.equal(ageDays("not a date", at), null);
 });
 
 test("a scan shows each caller its own alert count and only the sources it can see", () => {

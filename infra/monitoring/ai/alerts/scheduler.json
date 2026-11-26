@@ -2,7 +2,7 @@
   "displayName": "ExportMate AI service: daily news scan not started",
   "documentation": {
     "mimeType": "text/markdown",
-    "content": "Cloud Scheduler could not run a job (the daily news scan's POST /api/scan failed or was refused).\n\nLogs Explorer, project ${PROJECT_ID}: `resource.type=\"cloud_scheduler_job\" AND severity>=ERROR`"
+    "content": "Cloud Scheduler could not run a job (the daily news scan or the nightly link weights job could not be started).\n\nLogs Explorer, project ${PROJECT_ID}: `resource.type=\"cloud_scheduler_job\" AND severity>=ERROR`"
   },
   "combiner": "OR",
   "conditions": [

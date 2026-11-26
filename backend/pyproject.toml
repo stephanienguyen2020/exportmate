@@ -19,6 +19,8 @@ dependencies = [
     "neo4j>=6.4.1",
     "google-cloud-firestore>=2.19",
     "defusedxml>=0.7",
+    "requests>=2.32",
+    "google-auth>=2.30",
 ]
 
 [dependency-groups]

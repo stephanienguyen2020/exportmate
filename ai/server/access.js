@@ -7,13 +7,14 @@
 // in, and only that company's owners and editors can switch it off or remove it.
 //
 // News alerts and stock items are about someone's goods: a company's own (they carry its
-// companyId; scan.js, the backend's GET /news-goods) or the sample stock, which only the browser demo sees.
+// companyId; the backend's news scan and GET /news-goods) or the sample stock, which only the
+// browser demo sees. The backend applies the same rules (services/news_alerts.py, news_sources.py).
 //
 // `access` is { companyId, disabled, skipOld }: the caller's company (null for the demo), the
 // shared sources that company switched off, and false when it switched the age rule off.
 //
-// The age rule: by default a scan skips articles published more than MAX_AGE_DAYS before it
-// (SCAN_MAX_AGE_DAYS; 0 removes the rule for everyone). A company can switch it off for itself;
+// The age rule: by default the scan (backend services/news_scan.py) skips articles published
+// more than MAX_AGE_DAYS before it (SCAN_MAX_AGE_DAYS, the same on both; 0 removes the rule). A company can switch it off for itself;
 // the scan then also reads old articles from the sources that company reads, and only that
 // company sees what they raise. Undated articles have no known age and are always read.
 
@@ -25,28 +26,12 @@ export const MAX_AGE_DAYS = /^\d+$/.test(envDays || "") ? Number(envDays) : 365;
 /** Whether the age rule applies to this caller (on unless their company switched it off). */
 export const skipsOld = (access, maxAgeDays = MAX_AGE_DAYS) => maxAgeDays > 0 && access.skipOld !== false;
 
-/** The age rule as a caller sees it, for News watch: null when no rule is configured. */
-export const scanRules = (access, maxAgeDays = MAX_AGE_DAYS) =>
-  maxAgeDays > 0 ? { maxAgeDays, skipOld: skipsOld(access, maxAgeDays) } : null;
-
-/** Whole days between an article's publication and `at` (a scan's start), or null when undated. */
-export function ageDays(publishedAt, at) {
-  const published = Date.parse(publishedAt || "");
-  return Number.isNaN(published) ? null : Math.max(0, Math.floor((at - published) / 86_400_000));
-}
-
 export const isShared = (source) => Boolean(source.builtIn) || !source.companyId;
 
 export const sourceVisible = (source, access) => isShared(source) || (Boolean(access.companyId) && source.companyId === access.companyId);
 
 export const sourceEnabled = (source, access) =>
   Boolean(source.enabled) && !(isShared(source) && access.disabled.includes(source.id));
-
-/**
- * Whether a scan reads old articles from `source`: some company that switched the age rule off
- * (`oldReaders`, each an access) can see the source and has it switched on.
- */
-export const readsOld = (source, oldReaders) => oldReaders.some((access) => sourceVisible(source, access) && sourceEnabled(source, access));
 
 /** The sources a caller sees, with `enabled` as it applies to them and no owner ids. */
 export function presentSources(sources, access) {

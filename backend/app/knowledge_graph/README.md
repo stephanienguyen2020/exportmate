@@ -18,7 +18,7 @@ Target architecture (the finished system; section 1 says what's built today):
 | 2 | Seed data: EUDR Annex I parsed (93 codes, 7 commodities), the wood chain (14 products, 25 links, each citing FAO or the HS headings), 11 materials | `data/`, `build_eudr_products.py` |
 | 3 | Tables and loading: graph nodes, edges and sources (reference seed), supplier sourcing (company seeds) | `database/models/knowledge_graph.py`, `seed_reference_data.py`, `seed_demo_data.py` |
 | 4 | The walk, and News watch suggestions from it with a cited path; the HS-heading rule kept as one path | `services/knowledge_graph.py`, `services/news_matches.py` |
-| 5 | The news scan records what each article names (`mentions`) | `ai/server/scan.js`, `ai/server/mentions.js` |
+| 5 | The news scan records what each article names (`mentions`) | `backend/app/services/news_scan.py`, `news_scan_rules.py` (`clean_mentions`) |
 | 6 | News watch shows the path under each suggestion, with source links | `frontend/ai/news/NewsOrders.tsx` |
 | 7 | Deployed to `skilful-scarab-511320-q9` and checked live (16 Oct 2026): a real scan's alerts reached orders through suppliers | |
 | 8 | Broad words ("timber", "hardwood") and product words ("plywood", "logs") | `genericTerms`, `aliases` in `material_chain.json`; `services/graph_words.py` |
@@ -86,7 +86,7 @@ orders: PO-2291 acacia plywood (HS 4412.33) → EU
 | The chain (product → product) | Written from official sources, checked by AI (`aiCheck`), loaded by the reference seed | Shared |
 | Supplier sourcing | The supplier form, certificates (AI suggests, a person keeps), demo seeds | Per company |
 | Orders, suppliers | The company's own records | Per company |
-| What an article names | Gemini in each news scan (`mentions`), cleaned by `mentions.js` | Per alert |
+| What an article names | Gemini in each news scan (`mentions`), cleaned by `clean_mentions` (`services/news_scan_rules.py`) | Per alert |
 
 There is no public dataset of "HS code A is made from HS code B", so the chain is built from
 official anchors and every link cites one:
@@ -161,7 +161,7 @@ Every rule and number the graph uses, with where it lives in code. Change both t
 
 | Stage | Rule | In code |
 | --- | --- | --- |
-| What an article names | At most 8 of each kind; a material is 2–60 letters; an HS code 4–10 digits; countries and markets are 2-letter codes; anything else is dropped | `ai/server/mentions.js` (`MAX_PER_KIND`, patterns) |
+| What an article names | At most 8 of each kind; a material is 2–60 letters; an HS code 4–10 digits; countries and markets are 2-letter codes; anything else is dropped | `backend/app/services/news_scan_rules.py` (`MAX_PER_MENTION`, patterns) |
 | Words → materials | A named species wins; otherwise a broad word stands for its materials ("timber": every wood; "hardwood": non-coniferous and tropical; "softwood": coniferous); in one phrase the more specific broad word wins ("tropical timber" over "timber"); words are matched whole | `services/graph_words.py`; `genericTerms` in `material_chain.json` |
 | Words → products | A product word ("plywood", "logs", "MDF") counts like an HS code the article names | `aliases` in `material_chain.json` |
 | HS code → product | The product with the longest matching HS prefix ("4412.33" → plywood, 4412) | `product_of_hs_code` |
@@ -180,7 +180,7 @@ Every rule and number the graph uses, with where it lives in code. Change both t
 
 | Step | LLM? | |
 | --- | --- | --- |
-| What an article names | Yes, Gemini in the scan | Code keeps only well-formed values (`mentions.js`) and only nodes the graph knows |
+| What an article names | Yes, Gemini in the scan | Code keeps only well-formed values (`clean_mentions`) and only nodes the graph knows |
 | Sourcing from certificates | Yes, Gemini reading the file | Matched to graph materials; a person ticks what to keep |
 | Checking links | Yes: the pipeline's reviewer (`aiCheck`) and code checks on every quote | Section 7 |
 | The walk | No | SQL and code: repeatable, every path citable |
@@ -354,6 +354,6 @@ next step is the whole path in one Cypher query, then graph algorithms.
 | GraphRAG | `services/graph_query.py` (`GET /knowledge-graph/query`); `ai/server/agents/tools.js` (`query_graph`), `agents/assistant.js`, `review.js` (path check), `critic.js`, `policy.js` (`graph-paths`) |
 | Loading, versions | `seed_reference_data.py` (versions from the files, then the graph), `services/chain_versions.py` (`sync_from_files`, `published_chain`, `rebuild_graph`, publish and reject), `knowledge_graph/__init__.py` (`layer_vocabulary`), `seed_demo_data.py` (sourcing) |
 | Building chains | `knowledge_graph/build_chain.py`, `knowledge_graph/__init__.py` (`load_chain`) |
-| Scan and eval | `ai/server/scan.js`, `ai/server/mentions.js`, `ai/server/eval/scan-*.js` |
+| Scan and eval | `backend/app/services/news_scan.py`, `news_scan_rules.py`, `news_scan_exam.py`, `app/news_scan_eval.py` |
 | Screens | `frontend/ai/news/NewsOrders.tsx` (path), `frontend/src/trade-map/` (sourcing), `frontend/src/MaterialChain.tsx`, `frontend/src/ChainReview.tsx` (chain admins) |
 | Tests | `tests/test_build_chain.py`, `tests/test_knowledge_graph.py`, `tests/test_chain_versions.py`, `tests/test_graph_sync.py`, `tests/test_suppliers_and_sites.py`, `tests/test_supplier_documents.py`, `ai/server/test/mentions.test.js`, `ai/server/test/scan-eval.test.js`, `ai/server/test/graph.test.js` |

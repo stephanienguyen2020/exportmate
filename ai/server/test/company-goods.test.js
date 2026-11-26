@@ -1,7 +1,5 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { catalog } from "../scan.js";
-import { decide } from "../relevance.js";
 import { REGISTRY, makeRefs } from "../agents/tools.js";
 import { generateInventory } from "../seed/inventory.js";
 // A company's goods as the backend builds them (GET /api/v1/news-goods), newest ship date first.
@@ -9,24 +7,6 @@ const goods = [
   { sku: "G-15881E", name: "Wool scarf", hsCode: "6117.10", markets: ["UK"], orders: ["PO-2"], source: "orders", supplier: "Mill B" },
   { sku: "G-3D9799", name: "Cotton T-shirt", hsCode: "6109.10", markets: ["EU"], orders: ["PO-1"], source: "orders", supplier: "Mill A" },
 ];
-
-test("the scan's stock lines show what each item has", () => {
-  const [tee] = goods.filter((i) => i.name === "Cotton T-shirt");
-  assert.equal(catalog([tee]), `${tee.sku} | Cotton T-shirt | HS 6109.10 | supplier Mill A | sells to EU`);
-  const [sample] = generateInventory();
-  assert.equal(
-    catalog([sample]),
-    `${sample.sku} | ${sample.name} | ${sample.category} | HS ${sample.hsCode} | ${sample.material} from ${sample.materialOrigin} | supplier ${sample.supplier} | sells to ${sample.markets.join("/")} | certs ${sample.certifications.join("+") || "none"} | origin trace ${sample.originTraced ? "on file" : "MISSING"} | ${sample.qtyOnHand} ${sample.unit}`,
-  );
-});
-
-test("an alert on a company's goods names them without a stock value", () => {
-  const bySku = new Map(goods.map((i) => [i.sku, i]));
-  const [tee] = goods;
-  const verdict = decide({ title: "EU tightens textile labelling", snippet: "" }, { relevant: true, affected: [{ sku: tee.sku, reason: "EU-bound" }] }, 0, bySku, { company: "Saigon Knit Co." });
-  assert.deepEqual(verdict.affected, [{ sku: tee.sku, name: tee.name, reason: "EU-bound" }]);
-  assert.equal(verdict.relevant, true);
-});
 
 test("query_inventory reads the turn's own stock: a company's goods have no values", async () => {
   const refs = makeRefs();

@@ -79,8 +79,13 @@ def generate_json(
     prompt: str,
     schema: type[AnswerT],
     file: tuple[bytes, str] | None = None,
+    *,
+    thinking_level: str | None = None,
+    max_output_tokens: int | None = None,
+    timeout_seconds: int | None = None,
 ) -> AnswerT:
     """Ask Gemini for one `schema` object. `file` is (bytes, MIME type), sent before the prompt.
+    The thinking level and timeout default to the settings'; the news scan asks for more.
 
     `task` names the job in logs (e.g. "supplier_document_reading"); prompts and answers are not
     logged, since they hold company documents."""
@@ -96,7 +101,13 @@ def generate_json(
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
                 response_schema=schema,
-                thinking_config=_thinking(settings.gemini_model, settings.gemini_thinking_level),
+                thinking_config=_thinking(
+                    settings.gemini_model, thinking_level or settings.gemini_thinking_level
+                ),
+                max_output_tokens=max_output_tokens,
+                http_options=types.HttpOptions(timeout=timeout_seconds * 1000)
+                if timeout_seconds
+                else None,
             ),
         )
         result = schema.model_validate_json(response.text or "")
@@ -107,7 +118,9 @@ def generate_json(
             "gemini.failed",
             extra={"task": task, "model": settings.gemini_model, "error": type(error).__name__},
         )
-        raise AppError(503, "ai_unavailable", "The AI step failed. Try again in a minute.")
+        raise AppError(
+            503, "ai_unavailable", "The AI step failed. Try again in a minute."
+        ) from error
     log.info(
         "gemini.completed",
         extra={

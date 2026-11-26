@@ -64,10 +64,24 @@ class Settings(BaseSettings):
     graph_events_topic: str = ""
     graph_sync_audience: str = ""
     graph_sync_invoker: str = ""
-    # News watch (services/news_sources.py): sources and each company's settings are in the
-    # Firestore of google_cloud_project, which the AI service's news scan also reads. A scan
-    # skips articles older than this many days unless a company switched that off (0: no rule).
+    # News watch (services/news_sources.py, news_scan.py): its records are in the Firestore of
+    # google_cloud_project, which the AI service's assistant also reads. A scan skips articles
+    # older than this many days unless a company switched that off (0: no rule).
     scan_max_age_days: int = 365
+    # The Cloud Run job that runs a scan ("projects/<p>/locations/<r>/jobs/<name>"); "Scan now"
+    # starts it. Empty (locally): the scan runs in this process.
+    news_scan_job: str = ""
+    # The scan's Gemini calls think longer than the backend's other steps, and take longer.
+    gemini_thinking_scan: str = "MEDIUM"
+    scan_gemini_timeout_seconds: int = 240
+    # Model Armor screens new articles ("projects/<p>/locations/<l>/templates/<id>"); empty: off.
+    model_armor_template: str = ""
+    # The assistant's search (core/rag_index.py): RAG Engine corpora and the bucket they import
+    # from, as the AI service's RAG_BUCKET / RAG_LOCATION / RAG_EMBED_MODEL. No bucket: the
+    # scan doesn't index.
+    rag_bucket: str = ""
+    rag_location: str = "asia-southeast1"
+    rag_embed_model: str = "text-multilingual-embedding-002"
     # Gemini on Vertex AI (core/gemini.py), in the project above. Production sets GEMINI_MODEL
     # from Terraform's gemini_model, the model the AI service's news scan uses.
     gemini_model: str = "gemini-3.5-flash"

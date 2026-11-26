@@ -14,7 +14,14 @@ locals {
     GEMINI_PROJECT             = var.gemini_project
     CONTACT_INBOX              = var.contact_inbox
     CHAIN_ADMIN_EMAILS         = var.chain_admin_emails
+    # The news scan (services/news_scan.py): the job "Scan now" starts, the Model Armor template
+    # that screens articles, and the bucket the assistant's search imports from.
+    NEWS_SCAN_JOB        = "projects/${var.project_id}/locations/${var.region}/jobs/exportmate-backend-news-scan"
+    MODEL_ARMOR_TEMPLATE = local.model_armor_template
+    RAG_BUCKET           = google_storage_bucket.kb.name
   }, local.graph_env)
+
+  news_scan_logs = "resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"exportmate-backend-news-scan\""
 }
 
 # Resend key for emailed order reports. Terraform makes the empty secret; add the key by hand
@@ -37,11 +44,18 @@ resource "google_secret_manager_secret_iam_member" "backend_reads_resend_api_key
   member    = "serviceAccount:${google_service_account.backend.email}"
 }
 
-# News watch's records (/news-sources, /news-settings, /news-alerts, /news-goods) are in the
-# AI service's Firestore, where its news scan reads and writes them.
+# News watch's records (/news-sources, /news-settings, /news-alerts, /news-goods and the news
+# scan) are in the Firestore the AI service's assistant also reads.
 resource "google_project_iam_member" "backend_firestore" {
   project = var.project_id
   role    = "roles/datastore.user"
+  member  = "serviceAccount:${google_service_account.backend.email}"
+}
+
+# The news scan screens new articles with Model Armor (ai_service.tf's template).
+resource "google_project_iam_member" "backend_modelarmor" {
+  project = var.project_id
+  role    = "roles/modelarmor.user"
   member  = "serviceAccount:${google_service_account.backend.email}"
 }
 
@@ -339,4 +353,99 @@ resource "google_cloud_scheduler_job" "nightly_link_weights" {
   }
 
   depends_on = [google_cloud_run_v2_job_iam_member.scheduler_runs_link_weights]
+}
+
+# The daily news scan (app/run_news_scan.py, services/news_scan.py): same image and env as the
+# service. Cloud Scheduler starts it every morning, and "Scan now" (POST /news-scans) starts it
+# as the backend's service account; backend/deploy.sh sets its image.
+resource "google_cloud_run_v2_job" "news_scan" {
+  name                = "exportmate-backend-news-scan"
+  location            = var.region
+  deletion_protection = false
+
+  template {
+    task_count = 1
+
+    template {
+      service_account = google_service_account.backend.email
+      max_retries     = 0
+      timeout         = "1800s"
+
+      containers {
+        image   = local.placeholder_image
+        command = ["python", "-m", "app.run_news_scan"]
+
+        resources {
+          limits = {
+            cpu    = "1"
+            memory = "1Gi"
+          }
+        }
+
+        dynamic "env" {
+          for_each = local.backend_env
+          content {
+            name  = env.key
+            value = env.value
+          }
+        }
+      }
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
+  }
+
+  depends_on = [
+    google_project_iam_member.backend_firestore,
+    google_project_iam_member.backend_modelarmor,
+    google_storage_bucket_iam_member.kb_backend_writer,
+  ]
+}
+
+# "Scan now": the backend starts the job.
+resource "google_cloud_run_v2_job_iam_member" "backend_runs_news_scan" {
+  name     = google_cloud_run_v2_job.news_scan.name
+  location = var.region
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.backend.email}"
+}
+
+resource "google_cloud_run_v2_job_iam_member" "scheduler_runs_news_scan" {
+  name     = google_cloud_run_v2_job.news_scan.name
+  location = var.region
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.scheduler.email}"
+}
+
+resource "google_cloud_scheduler_job" "daily_news_scan" {
+  name             = "exportmate-daily-news-scan"
+  region           = var.region
+  schedule         = "0 7 * * *"
+  time_zone        = "Asia/Ho_Chi_Minh"
+  attempt_deadline = "320s"
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://run.googleapis.com/v2/projects/${var.project_id}/locations/${var.region}/jobs/${google_cloud_run_v2_job.news_scan.name}:run"
+
+    oauth_token {
+      service_account_email = google_service_account.scheduler.email
+      scope                 = "https://www.googleapis.com/auth/cloud-platform"
+    }
+  }
+
+  depends_on = [google_cloud_run_v2_job_iam_member.scheduler_runs_news_scan]
+}
+
+# The schedule used to start the scan in the AI service (ai_service.tf's daily_scan); it is the
+# same Cloud Scheduler job, now starting this one.
+moved {
+  from = google_cloud_scheduler_job.daily_scan
+  to   = google_cloud_scheduler_job.daily_news_scan
 }
