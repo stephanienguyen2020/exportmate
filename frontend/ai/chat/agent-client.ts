@@ -107,7 +107,12 @@ export type Audit = {
 
 export type Message = { role: "user" | "model"; text: string; citations?: Citation[]; audit?: Audit };
 
-export const API = (import.meta.env.VITE_CHAT_API_URL || "/api/chat").replace(/\/chat$/, "");
+// The assistant's routes are in the company backend (/api/v1/assistant), which relays each chat
+// to the agents on Agent Runtime.
+export const API = `${(import.meta.env.VITE_BACKEND_API_URL || "/api/v1").replace(/\/$/, "")}/assistant`;
+
+// The backend's errors are {error: {code, message}}.
+const errorText = (data: { error?: { message?: string } }, fallback: string) => data.error?.message || fallback;
 
 const SESSION_KEY = "em-chat-session";
 const newId = () =>
@@ -128,9 +133,8 @@ export function sessionId(reset = false) {
   }
 }
 
-// In a company workspace the AI service checks this token with the backend: chat
-// uses it to load the company profile, News watch to allow source changes. The
-// demo stays anonymous.
+// In a company workspace the backend checks this token: chat uses it to load the company
+// profile, News watch to allow source changes. The demo stays anonymous.
 export async function companyAuth(): Promise<Record<string, string>> {
   if (!isApiSession()) return {};
   try {
@@ -142,7 +146,7 @@ export async function companyAuth(): Promise<Record<string, string>> {
 
 // The browser demo's orders and playbook live in this browser, so the assistant can only
 // see them if they travel with the question. Orders needing action go first, then by ship
-// date, within the AI service's limits (ai/server/orders.js).
+// date, within the agents' limits (ai/server/orders.js).
 const DEMO_ORDERS_SENT = 100;
 export function demoWorkspace() {
   const orders = readSaved<Order[]>("em-orders", initialOrders, Array.isArray)
@@ -195,7 +199,7 @@ export async function askAgent(
   });
   if (!res.ok || !res.body) {
     const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `The assistant is unavailable (${res.status}).`);
+    throw new Error(errorText(data, `The assistant is unavailable (${res.status}).`));
   }
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
@@ -221,8 +225,8 @@ export async function askAgent(
 export async function sessionAudits(): Promise<Audit[]> {
   const res = await fetch(`${API}/audits?session=${encodeURIComponent(sessionId())}`, { headers: await companyAuth() });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || "Couldn't load the audit trail.");
-  return data.audits;
+  if (!res.ok) throw new Error(errorText(data, "Couldn't load the audit trail."));
+  return data.data;
 }
 
 export function downloadJson(filename: string, value: unknown) {
@@ -240,14 +244,12 @@ export type MemoryList = { memories: Memory[]; enabled: boolean; keepDays?: numb
 
 export async function listMemories(): Promise<MemoryList> {
   const res = await fetch(`${API}/memories`, { headers: await companyAuth() });
-  // An AI service from before Memory Bank has no such route: memory isn't on there.
-  if (res.status === 404) return { memories: [], enabled: false };
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || "Couldn't load what the assistant remembers.");
-  return data;
+  if (!res.ok) throw new Error(errorText(data, "Couldn't load what the assistant remembers."));
+  return data.data;
 }
 
 export async function deleteMemory(id: string): Promise<void> {
   const res = await fetch(`${API}/memories/${encodeURIComponent(id)}`, { method: "DELETE", headers: await companyAuth() });
-  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Couldn't forget that.");
+  if (!res.ok) throw new Error(errorText(await res.json().catch(() => ({})), "Couldn't forget that."));
 }

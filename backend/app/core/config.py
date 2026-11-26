@@ -68,6 +68,15 @@ class Settings(BaseSettings):
     # google_cloud_project, which the AI service's assistant also reads. A scan skips articles
     # older than this many days unless a company switched that off (0: no rule).
     scan_max_age_days: int = 365
+    # The assistant's agents (core/agents.py, ai/server/runtime.js): "runtime" for the Agent
+    # Runtime instance AGENT_RUNTIME (projects/<p>/locations/<l>/reasoningEngines/<id>), or the URL
+    # of a local runtime.js (`npm run runtime`, http://127.0.0.1:8080). Empty: no assistant.
+    agents_at: str = ""
+    agent_runtime: str = ""
+    # Chats per hour, counted in memory per instance: per client address, and in all. Each chat
+    # makes several Gemini calls and a signed-out visitor may chat too.
+    chat_limit_per_client: int = 40
+    chat_limit_per_instance: int = 200
     # Whose goods a signed-out visitor (the browser demo) watches: a company like any other in
     # Firestore (`companyGoods/<id>`, the AI service's `npm run seed` writes its sample stock),
     # with no Postgres account. The AI service's DEMO_COMPANY_ID must match.

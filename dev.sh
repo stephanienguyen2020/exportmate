@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Run the whole ExportMate stack locally with one command:
-#   Postgres (Docker, DB_PORT in backend/.env) -> backend API (:8000) -> AI service (:8080) -> frontend (:5173)
+#   Postgres (Docker, DB_PORT in backend/.env) -> backend API (:8000) -> AI service (:8080) and the
+#   assistant's agents (:8081, runtime.js, which the backend's /assistant routes call) -> frontend (:5173)
 #
 # Usage:  ./dev.sh        Ctrl+C stops everything except Postgres, which keeps its data.
 #         Stop Postgres too: docker compose -f backend/docker-compose.yml down
@@ -69,7 +70,7 @@ install_node_deps() {
 }
 
 # --- Preflight: fail now with a clear message instead of a confusing error later.
-for port in 5173 8000 8080; do
+for port in 5173 8000 8080 8081; do
   pid="$(lsof -ti "tcp:$port" -sTCP:LISTEN 2>/dev/null | head -1 || true)"
   [ -z "$pid" ] || die "port $port is already used by PID $pid ($(ps -o command= -p "$pid" | cut -c1-70)). Stop it first: kill $pid"
 done
@@ -108,8 +109,11 @@ uv run python -m app.sync_graph   # Neo4j, when backend/.env has NEO4J_URI
 
 # --- Services
 say "Starting services"
-start api 36 "$ROOT/backend" uv run uvicorn app.main:app --reload --port 8000
+# The backend's assistant routes call the agents below; `AGENTS_AT=runtime ./dev.sh` uses the
+# deployed ones instead (with AGENT_RUNTIME in backend/.env).
+start api 36 "$ROOT/backend" env AGENTS_AT="${AGENTS_AT:-http://127.0.0.1:8081}" uv run uvicorn app.main:app --reload --port 8000
 start ai 35 "$ROOT/ai/server" npm run dev
+start agents 33 "$ROOT/ai/server" env PORT=8081 BACKEND_URL=http://127.0.0.1:8000 npm run runtime
 start web 32 "$ROOT/frontend" env VITE_AUTH_MODE=dev npm run dev
 
 wait_for_url "Backend" "http://127.0.0.1:8000/api/v1/health"
@@ -119,6 +123,7 @@ printf '\n\033[1mExportMate is running\033[0m\n'
 printf '  App         http://127.0.0.1:5173/#/login   (%s, any password of 8+ characters)\n' "$DEMO_EMAIL"
 printf '  API docs    http://127.0.0.1:8000/api/v1/docs\n'
 printf '  AI service  http://127.0.0.1:8080\n'
+printf '  Agents      http://127.0.0.1:8081 (runtime.js)\n'
 printf 'Press Ctrl+C to stop.\n\n'
 
 # If any service exits, stop the rest rather than leave a half-working stack.

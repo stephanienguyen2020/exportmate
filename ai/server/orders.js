@@ -145,6 +145,13 @@ export function demoOrders(raw) {
 }
 
 /** The demo's playbook rules that are switched on, or null when there are none. */
+/**
+ * The browser demo's workspace as the browser sent it ({ orders, rules }), checked for the
+ * agents: { orders, playbook }. The agents run it on every demo turn (runtime.js); callers pass
+ * the browser's data on as it came. Not for its own output: an order's check would be lost.
+ */
+export const demoData = (raw) => ({ orders: demoOrders(raw?.orders), playbook: demoPlaybook(raw?.rules) });
+
 export function demoPlaybook(raw) {
   if (!Array.isArray(raw)) return null;
   const rules = raw

@@ -44,6 +44,21 @@ test("the user's backend token only reaches the backend reader, never the turn's
   assert.equal(chatInput({ messages: [{ role: "user", text: "hi" }], sessionId: "session-1234", backendToken: "x" }).backend, null);
 });
 
+test("the agents check the browser demo's orders and rules themselves; a company chat ignores them", () => {
+  const sent = {
+    orders: [
+      { id: "PO-1", value: 1200, shipDate: "2026-12-01", status: "exposed", check: { title: "EUDR (sample rule)", status: "missing", note: "No geolocation" } },
+      { id: "", value: -1 },
+    ],
+    rules: [{ id: "r1", category: "Policy", text: "Hold EU orders without geolocation", enabled: true }],
+  };
+  const demo = chatInput({ messages: [{ role: "user", text: "hi" }], sessionId: "session-1234", demo: sent }).demo;
+  assert.deepEqual(demo.orders.map((o) => [o.id, o.checks.map((c) => c.status)]), [["PO-1", ["missing"]]]);
+  assert.deepEqual(demo.playbook.map((r) => r.text), ["Hold EU orders without geolocation"]);
+  const company = chatInput({ messages: [{ role: "user", text: "hi" }], sessionId: "session-1234", company: { company: { id: "co-1" } }, demo: sent });
+  assert.equal(company.demo, null);
+});
+
 test("traces are filed under the Agent Runtime instance, and only there", () => {
   const resource = traceResource({ project: "exportmate-app", location: "asia-southeast1", id: "7999914662302842880" });
   assert.equal(resource["cloud.platform"], "gcp.agent_engine");

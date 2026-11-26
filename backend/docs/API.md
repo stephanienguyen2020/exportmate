@@ -810,6 +810,37 @@ old; `watchedSince` is when the scan first read back news for them (`null`: from
 `npm run seed` writes to `companyGoods/<DEMO_COMPANY_ID>`, read as stored (with quantities and
 values).
 
+## Assistant
+
+Moved from the AI service's `/api/chat`, `/api/audits` and `/api/memories` (Phase 2, step 4). The
+agents still run on Agent Runtime (`ai/server/runtime.js`); these routes pass each turn to them
+(`core/agents.py`: `AGENTS_AT=runtime` and `AGENT_RUNTIME`, or a local runtime.js's URL) and read
+the audits they store in Firestore `audits`. Frontend: `frontend/ai/chat/agent-client.ts`.
+
+### `POST /assistant/chat` (viewer, or signed out)
+`{sessionId, messages, demo?}`: the conversation (at most the last 20 turns, 4000 characters
+each), ending with the user's question. Streams NDJSON (`application/x-ndjson`): `{type: "step",
+step}` as the agents work, then `{type: "done", reply, citations, audit}` or `{type: "error",
+error}`. A company chat carries the company profile and sites, the company's News watch access
+and the member's own token, which the agents use to read the company's orders and playbook from
+this API; `demo` is ignored. Signed out it is the browser demo: the demo company's access and the
+`demo` orders and rules the browser sent, which the agents check. One `chat.completed` log line per
+answer (the chat metrics in `infra/terraform/ai_service.tf`). `400 invalid_chat`, `429
+rate_limited` (`CHAT_LIMIT_PER_CLIENT` per client address and `CHAT_LIMIT_PER_INSTANCE` per
+instance, per hour), `503 assistant_not_configured` (no `AGENTS_AT`).
+
+### `GET /assistant/audits?session=` (viewer, or signed out)
+The audit of every answer in a chat session, oldest first (steps without the model's raw
+reasoning, citations, checks, usage). A company chat's audits also need a member of that company.
+`400 invalid_session`.
+
+### `GET /assistant/memories` (viewer)
+`{memories: [{id, fact, updatedAt}], enabled, keepDays}`: what Memory Bank remembers about the
+caller (Account › What the assistant remembers), `enabled` false without `AGENT_RUNTIME`.
+
+### `DELETE /assistant/memories/{id}` (viewer)
+Forgets one of the caller's memories. `404 not_found` for one that isn't theirs.
+
 ## News watch and orders
 
 News watch (the AI service) matches each article to the company's goods (what its profile names and its orders ship), not straight to orders. The backend suggests which of the company's orders an alert may affect, and people decide (`news_order_reviews`, `services/news_matches.py`). Suggestions come from walking the knowledge graph (`services/knowledge_graph.py`, data in `app/knowledge_graph/`), only for orders that haven't shipped:

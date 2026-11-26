@@ -27,7 +27,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { runAgent } from "../agent.js";
 import { runtime } from "../agents/platform.js";
 import { callRuntime } from "../agents/remote.js";
-import { demoOrders, demoPlaybook } from "../orders.js";
+import { demoData } from "../orders.js";
 import { GEMINI_PROJECT, PROJECT, db, storedGoods, list } from "../db.js";
 import { DEMO_COMPANY_ID } from "../access.js";
 import { ASSISTANT, GEMINI_LOCATION, SCAN_MODEL } from "../models.js";
@@ -177,11 +177,11 @@ const scored = [];
 const results = [];
 for (const [i, c] of cases.entries()) {
   if (i && GAP_MS) await new Promise((resolve) => setTimeout(resolve, GAP_MS));
-  // A demo case's orders and playbook go through the same checks as a demo chat's (index.js).
-  const demo = c.demo ? { orders: demoOrders(c.demo.orders), playbook: demoPlaybook(c.demo.rules) } : null;
+  // A demo case's orders and playbook go through the same checks as a demo chat's: the deployed
+  // agents check what they're sent (runtime.js); in this process, demoData does.
   const result = onEngine
-    ? (await callRuntime("query", { messages: c.messages, sessionId, channel: "eval", tier, demo, ...(company && { ...company, backendToken: exam.token }) })).result
-    : await runAgent({ messages: c.messages, sessionId, channel: "eval", withEvidence: true, tier, demo, ...(company && { ...company, backend: exam.backend }) });
+    ? (await callRuntime("query", { messages: c.messages, sessionId, channel: "eval", tier, demo: c.demo ?? null, ...(company && { ...company, backendToken: exam.token }) })).result
+    : await runAgent({ messages: c.messages, sessionId, channel: "eval", withEvidence: true, tier, demo: c.demo ? demoData(c.demo) : null, ...(company && { ...company, backend: exam.backend }) });
   const verdict = useJudge ? await judge(c, result).catch((e) => ({ faithfulness: null, relevance: null, reason: `judge failed: ${e.message}` })) : null;
   const s = scoreCase(c, result, verdict);
   results.push(result);

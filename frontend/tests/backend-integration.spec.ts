@@ -1503,15 +1503,15 @@ test("a company user sees what the assistant remembers and can make it forget", 
     { id: "102", fact: "Keep answers to short bullet points.", updatedAt: "2026-10-14T20:50:00Z" },
   ];
   const calls: { method: string; path: string; auth?: string }[] = [];
-  await page.route("**/api/memories**", async (route) => {
+  await page.route("**/api/v1/assistant/memories**", async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
     calls.push({ method: request.method(), path, auth: request.headers().authorization });
     if (request.method() === "DELETE") {
       memories = memories.filter((m) => !path.endsWith(`/${m.id}`));
-      return route.fulfill({ json: { ok: true } });
+      return route.fulfill({ json: { data: { deleted: true } } });
     }
-    return route.fulfill({ json: { memories, enabled: true, keepDays: 180 } });
+    return route.fulfill({ json: { data: { memories, enabled: true, keepDays: 180 } } });
   });
   await login(page);
   await page.goto("/#/workspace/account");
@@ -1521,13 +1521,15 @@ test("a company user sees what the assistant remembers and can make it forget", 
   await panel.getByRole("button", { name: "Forget: Keep answers to short bullet points." }).click();
   await expect(panel.getByText("Forgotten.")).toBeVisible();
   await expect(panel.getByText("Keep answers to short bullet points.")).toHaveCount(0);
-  expect(calls.find((c) => c.method === "DELETE")?.path).toBe("/api/memories/102");
+  expect(calls.find((c) => c.method === "DELETE")?.path).toBe("/api/v1/assistant/memories/102");
   expect(calls.every((c) => c.auth?.startsWith("Bearer "))).toBe(true);
 });
 
-test("an AI service without Memory Bank shows memory as switched off, not an error", async ({ page }) => {
+test("without Memory Bank, memory shows as switched off, not an error", async ({ page }) => {
   await fixture(page);
-  await page.route("**/api/memories**", (route) => route.fulfill({ status: 404, json: { error: "Not found" } }));
+  await page.route("**/api/v1/assistant/memories**", (route) =>
+    route.fulfill({ json: { data: { memories: [], enabled: false, keepDays: null } } }),
+  );
   await login(page);
   await page.goto("/#/workspace/account");
   const panel = page.getByRole("region", { name: "What the assistant remembers" });

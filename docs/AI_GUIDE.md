@@ -174,9 +174,9 @@ Viewers can read solutions and notes but not change them. The browser-only demo 
 
 ### One question to the assistant
 
-1. The browser sends the conversation to `POST /api/chat`, with your sign-in token if you're in a company workspace. The browser demo sends its orders and switched-on playbook rules instead; the service checks and trims them, and a company chat never uses them.
-2. With a token, the Cloud Run service fetches your company profile from the company backend (`GET /api/v1/company/knowledge`) using that token, and who you are (`GET /api/v1/me`). The profile is how the assistant knows who it works for.
-3. The service passes the question to the agents on Agent Runtime (`runtime.js`) and relays each step back to your browser as it happens. Your token goes along only so the agents can read your orders and playbook with it; it is never stored.
+1. The browser sends the conversation to the company backend's `POST /api/v1/assistant/chat`, with your sign-in token if you're in a company workspace. The browser demo sends its orders and switched-on playbook rules instead; the agents check and trim them, and a company chat never uses them.
+2. With a token, the backend adds your company profile and sites and who you are. The profile is how the assistant knows who it works for.
+3. The backend passes the question to the agents on Agent Runtime (`runtime.js`, `backend/app/core/agents.py`) and relays each step back to your browser as it happens. Your token goes along only so the agents can read your orders and playbook with it; it is never stored.
 4. If the same question was answered against the same data today, that answer is reused (`answer-cache.js`).
 5. The assistant continues your Agent Platform session, and in a company workspace recalls what Memory Bank remembers about you that bears on the question.
 6. The **router** (`router.js`) picks the agent. Both use the same model (`GEMINI_MODEL`). Lookups and how-to questions go to *Quick answer*, which has every tool. A question goes to the *Analyst*, which also has every tool and works through questions with several parts, if it:

@@ -7,7 +7,7 @@ import { ANONYMOUS, auditVisible, publicAudit, publicStep } from "./access.js";
 import { readJson } from "./limits.js";
 import { deleteMemory, listMemories, memoryKeepDays, remembers, userKeyFor } from "./agents/platform.js";
 import { AGENTS_AT, callAgents, streamTurn } from "./agents/remote.js";
-import { demoOrders, demoPlaybook } from "./orders.js";
+import { demoData } from "./orders.js";
 import { ASSISTANT, SCAN_MODEL } from "./models.js";
 
 const PORT = Number(process.env.PORT || 8080);
@@ -210,8 +210,9 @@ async function streamChat(req, res, body, origin, requestId) {
       access,
       user: user && { id: user.id },
       requestId,
-      // The browser demo sends its own orders and playbook; a company chat never uses what the client sends.
-      demo: company ? null : { orders: demoOrders(body.demo?.orders), playbook: demoPlaybook(body.demo?.rules) },
+      // The browser demo sends its own orders and playbook, checked where the agents run; a company
+      // chat never uses what the client sends.
+      demo: company ? null : body.demo,
     };
     if (AGENTS_AT) {
       // The agents run on Agent Runtime (agents/remote.js): relay their events. The user's token
@@ -225,6 +226,7 @@ async function streamChat(req, res, body, origin, requestId) {
     } else {
       const result = await runAgent({
         ...turn,
+        demo: company ? null : demoData(body.demo),
         // The company's orders and playbook are read with the caller's own token (query_orders, get_playbook).
         backend: company ? (path) => backendGet(path, req.headers.authorization) : null,
         onStep: (step) => write({ type: "step", step: publicStep(step) }),
