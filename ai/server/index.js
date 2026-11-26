@@ -1,16 +1,13 @@
 import http from "node:http";
 import { createHash, randomUUID } from "node:crypto";
-import { FieldValue } from "@google-cloud/firestore";
 import { OAuth2Client } from "google-auth-library";
 import { db, inventory, sources, impacts, scans, companySources, locks, list } from "./db.js";
 import { STOCK_PROFILE } from "./seed/inventory.js";
 import { companyStock, goodsReader } from "./goods-store.js";
-import { fetchFeed } from "./feeds.js";
 import { runScan } from "./scan.js";
 import { runAgent, audits, clearCaches } from "./agent.js";
-import { indexDocs, removeDocs, toDoc } from "./rag.js";
 import { log } from "./log.js";
-import { ANONYMOUS, auditVisible, isShared, presentScan, presentSources, publicAudit, publicStep, scanRules, sourceVisible, visibleItems } from "./access.js";
+import { ANONYMOUS, auditVisible, presentScan, publicAudit, publicStep, visibleItems } from "./access.js";
 import { readJson, scanBlocked } from "./limits.js";
 import { deleteMemory, listMemories, memoryKeepDays, remembers, userKeyFor } from "./agents/platform.js";
 import { AGENTS_AT, callAgents, streamTurn } from "./agents/remote.js";
@@ -25,9 +22,6 @@ const ALLOWED_ORIGINS = (
 ).split(",");
 const MAX_MESSAGES = 20;
 const MAX_CHARS = 4000;
-// Custom feeds each company may add, and in all (every enabled feed is read by each scan).
-const MAX_COMPANY_SOURCES = 10;
-const MAX_SOURCES = 100;
 // Cloud Scheduler signs its requests with this service account; those skip the cooldown.
 const SCHEDULER_SA = process.env.SCHEDULER_SA || "";
 const SCAN_AUDIENCE = process.env.SCAN_AUDIENCE || "";
@@ -111,8 +105,8 @@ async function companyKnowledge(authorization) {
   return null;
 }
 
-// Changing sources and starting a scan need a signed-in company owner or editor; the backend
-// checks the token and reports the role. `action` completes "… can …", e.g. "change news sources".
+// Starting a scan needs a signed-in company owner or editor; the backend
+// checks the token and reports the role. `action` completes "… can …", e.g. "run a scan".
 // Returns the company's access with userId for the change and its log, or { error: [status, payload] }.
 async function companyEditor(req, action) {
   const { status, body, reason } = await callerAccount(req.headers.authorization);
@@ -332,59 +326,6 @@ async function scanNow(scheduled, who = {}) {
   }
 }
 
-// A custom source belongs to the company that adds it (access.js).
-async function addSource(body, editor) {
-  const name = typeof body.name === "string" ? body.name.trim().slice(0, 80) : "";
-  const url = typeof body.url === "string" ? body.url.trim() : "";
-  if (!name || !url) return [400, { error: "Name and feed URL are required." }];
-  const existing = await list(sources);
-  if (existing.filter((s) => s.companyId === editor.companyId).length >= MAX_COMPANY_SOURCES)
-    return [400, { error: `Up to ${MAX_COMPANY_SOURCES} custom sources per company.` }];
-  if (existing.length >= MAX_SOURCES) return [400, { error: "No more sources can be added right now." }];
-  if (existing.some((s) => s.url === url && sourceVisible(s, editor))) return [409, { error: "That feed is already a source." }];
-  let sample;
-  try {
-    sample = await fetchFeed(url, { limit: 3 });
-  } catch (e) {
-    return [400, { error: `Couldn't read that feed: ${e.message}` }];
-  }
-  const source = {
-    name,
-    url,
-    kind: "Custom",
-    builtIn: false,
-    enabled: true,
-    companyId: editor.companyId,
-    addedBy: editor.userId,
-    addedAt: new Date().toISOString(),
-  };
-  const ref = await sources.add(source);
-  await indexDocs([toDoc.source({ id: ref.id, ...source })]).catch((e) => log("ERROR", "index.failed", { sourceId: ref.id, error: String(e?.message || e) }));
-  clearCaches();
-  log("INFO", "source.added", { sourceId: ref.id, userId: editor.userId, companyId: editor.companyId });
-  const [shown] = presentSources([{ id: ref.id, ...source }], editor);
-  return [201, { source: shown, sample }];
-}
-
-// Switching a shared source off only affects the caller's company; a company's own source is
-// switched off for real (it is the only one reading it).
-async function setSourceEnabled(source, enabled, editor) {
-  if (isShared(source)) {
-    await companySources
-      .doc(editor.companyId)
-      .set(
-        { disabled: enabled ? FieldValue.arrayRemove(source.id) : FieldValue.arrayUnion(source.id), updatedAt: new Date().toISOString(), updatedBy: editor.userId },
-        { merge: true },
-      );
-    settingsCache.delete(editor.companyId);
-  } else {
-    await sources.doc(source.id).update({ enabled });
-    await indexDocs([toDoc.source({ ...source, enabled })]).catch((e) => log("ERROR", "index.failed", { sourceId: source.id, error: String(e?.message || e) }));
-  }
-  clearCaches();
-  log("INFO", enabled ? "source.enabled" : "source.disabled", { sourceId: source.id, shared: isShared(source), userId: editor.userId, companyId: editor.companyId });
-}
-
 // The newest alerts about the caller's goods: a company's own (by companyId alone, which needs no
 // composite index, then sorted here), or the newest of all for the demo, filtered by visibleItems.
 const RECENT_ALERTS = 120;
@@ -419,17 +360,6 @@ async function stockList(req) {
   ];
 }
 
-// The age rule (access.js) for the caller's company only; the scan reads old articles from the
-// sources a company that switched it off reads, and only that company sees what they raise.
-async function setSkipOld(skipOld, editor) {
-  await companySources
-    .doc(editor.companyId)
-    .set({ skipOld, updatedAt: new Date().toISOString(), updatedBy: editor.userId }, { merge: true });
-  settingsCache.delete(editor.companyId);
-  clearCaches();
-  log("INFO", skipOld ? "scan_rules.skip_old_on" : "scan_rules.skip_old_off", { userId: editor.userId, companyId: editor.companyId });
-}
-
 async function route(method, path, body, req, query) {
   if (method === "GET" && path === "/api/audits") return sessionAudits(query, await readerAccess(req));
   const a = path.match(/^\/api\/audits\/([\w-]{1,40})$/);
@@ -444,42 +374,6 @@ async function route(method, path, body, req, query) {
     if (await fromScheduler(req)) return scanNow(true);
     const editor = await companyEditor(req, "run a scan");
     return editor.error || scanNow(false, { userId: editor.userId, companyId: editor.companyId });
-  }
-  if (method === "GET" && path === "/api/sources") {
-    const [access, all] = await Promise.all([readerAccess(req), list(sources.orderBy("name"))]);
-    return [200, { sources: presentSources(all, access), scanRules: scanRules(access) }];
-  }
-  if (method === "PATCH" && path === "/api/scan-rules") {
-    const editor = await companyEditor(req, "change scan rules");
-    if (editor.error) return editor.error;
-    if (!scanRules(editor)) return [400, { error: "No scan rules are set on this service." }];
-    if (typeof body.skipOld !== "boolean") return [400, { error: "Expected { skipOld: boolean }" }];
-    await setSkipOld(body.skipOld, editor);
-    return [200, { scanRules: scanRules({ ...editor, skipOld: body.skipOld }) }];
-  }
-  if (method === "POST" && path === "/api/sources") {
-    const editor = await companyEditor(req, "change news sources");
-    return editor.error || addSource(body, editor);
-  }
-  const m = path.match(/^\/api\/sources\/([\w-]{1,40})$/);
-  if (m && (method === "PATCH" || method === "DELETE")) {
-    const editor = await companyEditor(req, "change news sources");
-    if (editor.error) return editor.error;
-    const doc = await sources.doc(m[1]).get();
-    const source = doc.exists ? { id: doc.id, ...doc.data() } : null;
-    // Another company's source answers like a missing one.
-    if (!source || !sourceVisible(source, editor)) return [404, { error: "Source not found" }];
-    if (method === "DELETE") {
-      if (source.builtIn) return [400, { error: "Built-in sources can be turned off, not deleted." }];
-      if (isShared(source)) return [400, { error: "This source is shared by every workspace. Switch it off instead." }];
-      await Promise.all([sources.doc(m[1]).delete(), removeDocs([`source:${m[1]}`])]);
-      clearCaches();
-      log("INFO", "source.deleted", { sourceId: m[1], userId: editor.userId, companyId: editor.companyId });
-      return [200, { ok: true }];
-    }
-    if (typeof body.enabled !== "boolean") return [400, { error: "Expected { enabled: boolean }" }];
-    await setSourceEnabled(source, body.enabled, editor);
-    return [200, { ok: true }];
   }
   // What Memory Bank remembers about the signed-in user (Account › What the assistant remembers).
   if (path === "/api/memories" || path.startsWith("/api/memories/")) return memoryRoute(method, path, req);

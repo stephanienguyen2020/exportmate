@@ -64,6 +64,10 @@ class Settings(BaseSettings):
     graph_events_topic: str = ""
     graph_sync_audience: str = ""
     graph_sync_invoker: str = ""
+    # News watch (services/news_sources.py): sources and each company's settings are in the
+    # Firestore of google_cloud_project, which the AI service's news scan also reads. A scan
+    # skips articles older than this many days unless a company switched that off (0: no rule).
+    scan_max_age_days: int = 365
     # AI service origin; company reports read its news alerts with the caller's token.
     ai_service_url: str = "http://127.0.0.1:8080"
     # Gemini on Vertex AI (core/gemini.py), in the project above. Production sets GEMINI_MODEL

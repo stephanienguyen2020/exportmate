@@ -108,6 +108,19 @@ async function api<T>(path: string, init?: Omit<RequestInit, "headers">): Promis
   return data as T;
 }
 
+// News sources and the age rule are in the company backend (/api/v1/news-sources,
+// /api/v1/news-settings); the demo reads them signed out.
+const BACKEND = (import.meta.env.VITE_BACKEND_API_URL || "/api/v1").replace(/\/$/, "");
+async function backend<T>(path: string, init?: Omit<RequestInit, "headers">): Promise<T> {
+  const res = await fetch(BACKEND + path, {
+    ...init,
+    headers: { ...(init?.body ? { "Content-Type": "application/json" } : {}), ...(await companyAuth()) },
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError(body.error?.message || `Request failed (${res.status})`, res.status);
+  return body.data as T;
+}
+
 // A scan runs inside its POST and can outlast the website's proxy (its nginx gives up on the AI
 // service after 300 s with a 504) while it carries on in the AI service. "Scan now" then
 // follows the scan record until it ends, for as long as Cloud Run lets a request run.
@@ -561,7 +574,7 @@ function StockTable({ impacts }: { impacts: Impact[] }) {
   );
 }
 
-// Only signed-in owners and editors can change sources (the AI service checks the token).
+// Only signed-in owners and editors can change sources (the backend checks the role).
 // `locked` explains why this session can't change them.
 function Sources({ locked }: { locked?: string }) {
   const [list, setList] = useState<Source[] | null>(null);
@@ -571,23 +584,23 @@ function Sources({ locked }: { locked?: string }) {
   const [url, setUrl] = useState("");
   const [adding, setAdding] = useState(false);
   const load = () =>
-    api<{ sources: Source[]; scanRules?: ScanRules }>("/sources")
-      .then((d) => {
-        setList(d.sources);
-        setRules(d.scanRules ?? null);
+    Promise.all([backend<Source[]>("/news-sources"), backend<ScanRules>("/news-settings")])
+      .then(([sources, settings]) => {
+        setList(sources);
+        setRules(settings ?? null);
       })
       .catch((e) => setError(e.message));
   useEffect(() => {
     load();
   }, []);
   const change = (path: string, method: string, body?: unknown) =>
-    api(path, { method, body: body === undefined ? undefined : JSON.stringify(body) });
+    backend(path, { method, body: body === undefined ? undefined : JSON.stringify(body) });
   const add = async (e: React.FormEvent) => {
     e.preventDefault();
     setAdding(true);
     setError("");
     try {
-      await change("/sources", "POST", { name, url });
+      await change("/news-sources", "POST", { name, url });
       setName("");
       setUrl("");
       await load();
@@ -599,20 +612,20 @@ function Sources({ locked }: { locked?: string }) {
   };
   const toggle = async (s: Source) => {
     setList((l) => l && l.map((x) => (x.id === s.id ? { ...x, enabled: !s.enabled } : x)));
-    await change(`/sources/${s.id}`, "PATCH", { enabled: !s.enabled }).catch((e) => {
+    await change(`/news-sources/${s.id}`, "PATCH", { enabled: !s.enabled }).catch((e) => {
       setError(e.message);
       load();
     });
   };
   const toggleSkipOld = async (r: NonNullable<ScanRules>) => {
     setRules({ ...r, skipOld: !r.skipOld });
-    await change("/scan-rules", "PATCH", { skipOld: !r.skipOld }).catch((e) => {
+    await change("/news-settings", "PATCH", { skipOld: !r.skipOld }).catch((e) => {
       setError(e.message);
       load();
     });
   };
   const remove = async (s: Source) => {
-    await change(`/sources/${s.id}`, "DELETE").catch((e) => setError(e.message));
+    await change(`/news-sources/${s.id}`, "DELETE").catch((e) => setError(e.message));
     load();
   };
   if (!list) return error ? <div className="news-error">{error}</div> : <Loading />;

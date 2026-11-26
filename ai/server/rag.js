@@ -219,6 +219,18 @@ export async function removeDocs(ids) {
   return records.length;
 }
 
+/**
+ * Brings the sources' records in search up to date with Firestore (the backend adds, switches
+ * and removes sources, POST/PATCH/DELETE /api/v1/news-sources): unchanged ones are skipped,
+ * removed ones dropped. Each scan runs it.
+ */
+export async function syncSourceDocs(all) {
+  const result = await indexDocs(all.map(toDoc.source));
+  const keep = new Set(all.map((s) => `source:${s.id}`));
+  const stale = (await ragFiles.where("type", "==", "source").select().get()).docs.map((d) => d.id).filter((id) => !keep.has(id));
+  return { ...result, removed: await removeDocs(stale) };
+}
+
 /** Rebuilds the index from every collection and removes stale documents. */
 export async function reindexAll() {
   const [items, srcs, arts, alerts] = await Promise.all([list(inventory), list(sources), list(articles), list(impacts)]);

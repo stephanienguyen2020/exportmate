@@ -429,9 +429,11 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "alembic" },
+    { name = "defusedxml" },
     { name = "fastapi" },
     { name = "firebase-admin" },
     { name = "fpdf2" },
+    { name = "google-cloud-firestore" },
     { name = "google-cloud-storage" },
     { name = "google-genai" },
     { name = "neo4j" },
@@ -454,9 +456,11 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "alembic", specifier = ">=1.14" },
+    { name = "defusedxml", specifier = ">=0.7" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "firebase-admin", specifier = ">=6.6" },
     { name = "fpdf2", specifier = ">=2.8" },
+    { name = "google-cloud-firestore", specifier = ">=2.19" },
     { name = "google-cloud-storage", specifier = ">=2.18" },
     { name = "google-genai", specifier = ">=1.0" },
     { name = "neo4j", specifier = ">=6.4.1" },

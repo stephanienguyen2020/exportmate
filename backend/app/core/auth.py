@@ -160,3 +160,20 @@ CurrentClaims = Annotated[TokenClaims, Depends(current_claims)]
 ViewerContext = Annotated[CompanyContext, Depends(require_role(Role.viewer))]
 EditorContext = Annotated[CompanyContext, Depends(require_role(Role.editor))]
 OwnerContext = Annotated[CompanyContext, Depends(require_role(Role.owner))]
+
+
+def optional_context(
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    authorization: Annotated[str | None, Header()] = None,
+) -> CompanyContext | None:
+    """The caller's company context, or None when no token was sent (the browser demo). A token
+    that is sent must be valid, as for every other route."""
+    if not authorization:
+        return None
+    user = current_user(request, current_claims(authorization), db)
+    return current_context(request, user, db)
+
+
+# Routes the browser demo also reads (signed out): None without a token.
+OptionalContext = Annotated[CompanyContext | None, Depends(optional_context)]

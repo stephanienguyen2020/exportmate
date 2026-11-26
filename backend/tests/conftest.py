@@ -27,6 +27,7 @@ from app.database.queries import users as user_queries
 from app.database.session import get_engine, open_session
 from app.main import create_app
 from app.services import market_requirements as requirement_service
+from app.services import news_sources as news_source_service
 from app.services import regulations as regulation_service
 from app.services import supplier_documents as supplier_document_service
 from app.services import suppliers as supplier_service
@@ -102,6 +103,54 @@ def file_storage(monkeypatch: pytest.MonkeyPatch) -> InMemoryFileStorage:
     for module in FILE_STORAGE_USERS:
         monkeypatch.setattr(module, "get_file_storage", lambda: storage)
     return storage
+
+
+class InMemoryNewsStore:
+    """Firestore's `sources` and `companySources` (app/database/news_store.py) in memory."""
+
+    def __init__(self):
+        self.sources: dict[str, dict] = {}
+        self.companies: dict[str, dict] = {}
+
+    def list_sources(self) -> list[dict]:
+        return sorted(
+            ({"id": i, **s} for i, s in self.sources.items()), key=lambda s: s.get("name", "")
+        )
+
+    def get_source(self, source_id: str) -> dict | None:
+        found = self.sources.get(source_id)
+        return {"id": source_id, **found} if found else None
+
+    def add_source(self, data: dict) -> str:
+        source_id = f"src{len(self.sources) + 1}"
+        self.sources[source_id] = dict(data)
+        return source_id
+
+    def update_source(self, source_id: str, fields: dict) -> None:
+        self.sources[source_id].update(fields)
+
+    def delete_source(self, source_id: str) -> None:
+        del self.sources[source_id]
+
+    def get_company_settings(self, company_id: str) -> dict:
+        return dict(self.companies.get(company_id, {}))
+
+    def set_source_disabled(
+        self, company_id: str, source_id: str, disabled: bool, fields: dict
+    ) -> None:
+        company = self.companies.setdefault(company_id, {})
+        ids = [i for i in company.get("disabled", []) if i != source_id]
+        company.update(fields, disabled=ids + ([source_id] if disabled else []))
+
+    def update_company_settings(self, company_id: str, fields: dict) -> None:
+        self.companies.setdefault(company_id, {}).update(fields)
+
+
+@pytest.fixture(autouse=True)
+def news_store(monkeypatch: pytest.MonkeyPatch) -> InMemoryNewsStore:
+    store = InMemoryNewsStore()
+    monkeypatch.setattr(news_source_service, "get_news_store", lambda: store)
+    return store
 
 
 def fake_official_text(url: str, accept: str | None) -> bytes:

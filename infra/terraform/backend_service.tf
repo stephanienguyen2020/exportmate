@@ -40,6 +40,14 @@ resource "google_secret_manager_secret_iam_member" "backend_reads_resend_api_key
   member    = "serviceAccount:${google_service_account.backend.email}"
 }
 
+# News watch's sources and settings (/news-sources, /news-settings) are in the AI service's
+# Firestore, where its news scan reads them.
+resource "google_project_iam_member" "backend_firestore" {
+  project = var.project_id
+  role    = "roles/datastore.user"
+  member  = "serviceAccount:${google_service_account.backend.email}"
+}
+
 resource "google_cloud_run_v2_service" "backend" {
   name                = "exportmate-backend"
   location            = var.region
