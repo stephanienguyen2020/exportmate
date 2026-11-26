@@ -8,7 +8,7 @@
 import crypto from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { GoogleAuth } from "google-auth-library";
-import { db, PROJECT, inventory, sources, articles, impacts, list } from "./db.js";
+import { db, PROJECT, sources, articles, impacts, goodsByCompany, list } from "./db.js";
 import { GUIDES } from "./seed/guides.js";
 import { rerank } from "./rerank.js";
 import { isShared } from "./access.js";
@@ -101,34 +101,53 @@ const origin = (r) => ({
   ...(Number.isFinite(r.ageDays) ? { ageDays: r.ageDays } : {}),
 });
 
+const sentence = (parts, sep = ", ") => (parts.filter(Boolean).length ? `${parts.filter(Boolean).join(sep)}.` : "");
+function itemText(i) {
+  const has = (v) => v !== undefined && v !== null && v !== "";
+  return [
+    `Stock item ${i.sku}: ${i.name}.`,
+    sentence([has(i.category) && `Category ${i.category}`, has(i.hsCode) && `HS code ${i.hsCode}`]),
+    sentence([has(i.material) && `Made of ${i.material}${has(i.materialOrigin) ? ` from ${i.materialOrigin}` : ""}`, has(i.supplier) && `supplier ${i.supplier}`], "; "),
+    i.markets?.length ? `Sold to ${i.markets.join(", ")}.` : "",
+    Array.isArray(i.certifications) ? `Certifications: ${i.certifications.join(", ") || "none"}.` : "",
+    typeof i.originTraced === "boolean" ? `Origin trace ${i.originTraced ? "on file" : "missing"}.` : "",
+    Number.isFinite(i.qtyOnHand) && Number.isFinite(i.unitCostUsd)
+      ? `${i.qtyOnHand} ${i.unit} on hand at ${i.warehouse}, unit cost USD ${i.unitCostUsd}, stock value USD ${Math.round(i.qtyOnHand * i.unitCostUsd)}.`
+      : "",
+    i.orders?.length ? `Orders: ${i.orders.join(", ")}.` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
 // One searchable document per record. `text` is what gets embedded.
 export const toDoc = {
+  // An item of a company's goods ({ ...item, companyId }): only that company sees it. The text says
+  // what the item has (the sample stock has quantities and costs; a company's goods have orders).
+  // The backend's core/rag_index.py goods_doc writes the same.
   item: (i) => ({
-    id: `item:${i.sku}`,
+    id: `item:${i.companyId}~${i.sku}`,
     type: "item",
     refId: i.sku,
+    companyId: i.companyId,
     title: `${i.sku} · ${i.name}`,
     url: "#/workspace/news",
-    text:
-      `Stock item ${i.sku}: ${i.name}. Category ${i.category}, HS code ${i.hsCode}. ` +
-      `Made of ${i.material} from ${i.materialOrigin}; supplier ${i.supplier}. Sold to ${i.markets.join(", ")}. ` +
-      `Certifications: ${i.certifications.join(", ") || "none"}. Origin trace ${i.originTraced ? "on file" : "missing"}. ` +
-      `${i.qtyOnHand} ${i.unit} on hand at ${i.warehouse}, unit cost USD ${i.unitCostUsd}, stock value USD ${Math.round(i.qtyOnHand * i.unitCostUsd)}.`,
+    text: itemText(i),
   }),
-  // A company's alert (scan.js) has an id of its own and its companyId: only it sees the alert.
+  // An alert carries its companyId: only that company sees it.
   alert: (a) => ({
     id: `alert:${a.impactId ?? a.articleId}`,
     type: "alert",
     refId: a.impactId ?? a.articleId,
     ...origin(a),
-    ...(a.companyId ? { companyId: a.companyId } : {}),
+    companyId: a.companyId,
     title: a.headline,
     url: a.url,
     publishedAt: a.publishedAt,
     source: a.publisher,
     text:
       `News alert, ${a.severity} severity, ${a.direction}: ${a.headline}. ${a.why} ` +
-      `Affected ${a.companyId ? "goods" : "stock"}: ${a.affected.map((x) => `${x.sku} ${x.name} (${x.reason})`).join("; ")}. ` +
+      `Affected goods: ${a.affected.map((x) => `${x.sku} ${x.name} (${x.reason})`).join("; ")}. ` +
       `${Number.isFinite(a.stockValueUsd) ? `Stock value exposed USD ${a.stockValueUsd}. ` : ""}Next step: ${a.action} Source article: "${a.title}", ${a.publisher}, ${day(a.publishedAt)}.`,
   }),
   article: (a) => ({
@@ -233,9 +252,9 @@ export async function syncSourceDocs(all) {
 
 /** Rebuilds the index from every collection and removes stale documents. */
 export async function reindexAll() {
-  const [items, srcs, arts, alerts] = await Promise.all([list(inventory), list(sources), list(articles), list(impacts)]);
+  const [goods, srcs, arts, alerts] = await Promise.all([list(goodsByCompany), list(sources), list(articles), list(impacts)]);
   const docs = [
-    ...items.map(toDoc.item),
+    ...goods.flatMap((g) => (g.items || []).map((i) => toDoc.item({ ...i, companyId: g.id }))),
     ...srcs.map(toDoc.source),
     ...arts.map(toDoc.article),
     ...alerts.map((a) => toDoc.alert({ ...a, impactId: a.id, articleId: a.articleId || a.id })),

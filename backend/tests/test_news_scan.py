@@ -6,6 +6,7 @@ import pytest
 from conftest import add_member, onboard
 
 from app.core import rag_index
+from app.core.errors import AppError
 from app.core.model_armor import ArmorError, verdict
 from app.core.untrusted_text import as_data, find_injection
 from app.database.models import Role
@@ -17,7 +18,6 @@ from app.services.news_scan_exam import (
     summarize_scan_run,
 )
 from app.services.news_scan_rules import (
-    SAMPLE_STOCK_PROFILE,
     age_days,
     article_id,
     clean_mentions,
@@ -44,6 +44,13 @@ PLYWOOD = {
     "qtyOnHand": 10,
     "unitCostUsd": 410.5,
     "unit": "m3",
+}
+# The demo company's goods profile: how news talks about its stock (decide()'s word lists).
+SAMPLE_PROFILE = {
+    "company": "Binh Duong Wood Co.",
+    "about": "a wood-products exporter",
+    "goodsTerms": ["plywood", "timber"],
+    "otherGoods": ["cocoa"],
 }
 TEE = {"sku": "G-3D9799", "name": "Cotton T-shirt", "hsCode": "6109.10", "markets": ["EU"]}
 FEEDS = {
@@ -124,13 +131,18 @@ def world(news_store, fake_gemini, monkeypatch):
         "broken": {"name": "Broken", "url": "https://broken.example/feed", "enabled": True},
         "off": {"name": "Off", "url": "https://off.example/feed", "enabled": False},
     }
-    news_store.stock = [PLYWOOD]
     news_store.goods = {
+        "sample": {
+            "profile": SAMPLE_PROFILE,
+            "items": [PLYWOOD],
+            "updatedAt": iso(30),
+            "backfilledAt": iso(30),
+        },
         "company-a": {
             "profile": {"company": "Knit Co.", "about": "a knitwear maker"},
             "items": [TEE],
             "updatedAt": iso(0),
-        }
+        },
     }
 
     def read(url, limit=25):
@@ -148,11 +160,11 @@ def test_a_scan_records_articles_alerts_and_each_sources_health(world, fake_gemi
     assert scan["status"] == "done" and scan["trigger"] == "schedule"
     assert (scan["articlesFetched"], scan["articlesTooOld"]) == (3, 1)
     assert scan["articlesWithheld"] == 1 and scan["articlesAnalysed"] == 3
-    assert scan["impactsFound"] == 1 and scan["companyImpacts"] == {"company-a": 1}
+    assert scan["companyImpacts"] == {"company-a": 1, "sample": 1}
     assert world.lock["running"] is False
 
     plywood = article_id("https://n.example/1")
-    sample, company = world.alerts[plywood], world.alerts[f"{plywood}~company-a"]
+    sample, company = world.alerts[f"{plywood}~sample"], world.alerts[f"{plywood}~company-a"]
     # Only stock the scan knows is named, with its value; company goods have none.
     assert sample["affected"] == [
         {
@@ -163,6 +175,7 @@ def test_a_scan_records_articles_alerts_and_each_sources_health(world, fake_gemi
         }
     ]
     assert sample["stockValueUsd"] == 4105 and sample["sourceIds"] == ["ttj"]
+    assert sample["companyId"] == "sample"
     assert sample["mentions"] == {
         "materials": ["acacia logs"],
         "hsCodes": [],
@@ -171,9 +184,11 @@ def test_a_scan_records_articles_alerts_and_each_sources_health(world, fake_gemi
     }
     assert company["companyId"] == "company-a" and "stockValueUsd" not in company
     assert [a["sku"] for a in company["affected"]] == ["G-3D9799"]
-    # Cocoa: the model said relevant, the code check didn't.
+    # Cocoa: the model said relevant, the code check didn't (the demo's profile names cocoa
+    # as goods it doesn't stock), and no company got an alert from it.
     cocoa = world.articles[article_id("https://n.example/2")]
-    assert cocoa["relevant"] is False and cocoa["filteredOut"] == "other_commodity"
+    assert cocoa["relevant"] is False
+    assert world.articles[plywood]["relevant"] is True
     assert world.articles[article_id("https://n.example/3")]["withheld"]
     # The withheld article never reached Gemini; the scan thinks at its own level.
     assert all("Ignore previous" not in c["prompt"] for c in fake_gemini.calls)
@@ -186,6 +201,19 @@ def test_a_scan_records_articles_alerts_and_each_sources_health(world, fake_gemi
     world.lock = None
     again = news_scan_runs.run_claimed_scan()
     assert again["articlesAnalysed"] == 0 and len(world.scan_records) == 2
+
+
+def test_an_article_one_company_couldnt_assess_is_tried_again(world, fake_gemini):
+    def tee_fails(prompt, file):
+        if "G-3D9799" in prompt:
+            raise AppError(503, "ai_unavailable", "quota")
+        return answer_by_title(prompt)
+
+    fake_gemini.answers["news_scan"] = tee_fails
+    scan = news_scan_runs.run_claimed_scan()
+    assert scan["status"] == "done" and scan["articlesFailed"] == 2
+    assert scan["companyImpacts"] == {"sample": 1}
+    assert article_id("https://n.example/1") not in world.articles
 
 
 def test_a_scan_with_no_answer_from_gemini_failed(world, fake_gemini):
@@ -217,18 +245,23 @@ def test_new_articles_alerts_and_sources_become_searchable(world, monkeypatch):
     monkeypatch.setenv("RAG_BUCKET", "kb")
     news_scan.get_settings.cache_clear()
     world.rag["source:gone"] = {"type": "source", "gcsPath": "kb/source/old/gone.txt"}
+    world.rag["item:PLY-18"] = {"type": "item", "gcsPath": "kb/item/old/PLY-18.txt"}
     try:
         scan = news_scan_runs.run_claimed_scan()
     finally:
         news_scan.get_settings.cache_clear()
     # Two articles (not the withheld one) and two alerts; every source once, the removed one gone.
     assert scan["indexed"] == 4
-    assert sorted(imported) == ["alert", "article", "removed", "source"]
+    assert sorted(imported) == ["alert", "article", "item", "removed", "source"]
+    # Every company's goods are searchable by that company alone.
+    tee = world.rag["item:company-a~G-3D9799"]
+    assert tee["companyId"] == "company-a" and tee["text"].startswith("Stock item G-3D9799")
+    assert "stock value USD 4105" in world.rag["item:sample~PLY-18"]["text"]
     alert = world.rag[f"alert:{article_id('https://n.example/1')}~company-a"]
     assert alert["companyId"] == "company-a" and alert["textHash"] and alert["ragFile"]
     assert "Affected goods: G-3D9799 Cotton T-shirt (x)." in alert["text"]
     assert set(world.rag) >= {"source:ttj", "source:broken", "source:off"}
-    assert "source:gone" not in world.rag
+    assert "source:gone" not in world.rag and "item:PLY-18" not in world.rag
 
 
 def test_scan_now_is_for_owners_and_editors_once_per_ten_minutes(client, world, monkeypatch):
@@ -306,16 +339,16 @@ def test_the_code_check_after_gemini():
     article = {"title": "EU plywood rules", "snippet": ""}
     relevant, affected, *_ = decide(
         article, {"relevant": True, "affected": [{"sku": "NOPE", "reason": "x"}]}, 0, by_sku,
-        SAMPLE_STOCK_PROFILE,
+        SAMPLE_PROFILE,
     )  # fmt: skip
     assert (relevant, affected) == (False, [])
     answer = {"relevant": True, "affected": [{"sku": "PLY-18", "reason": "x"}], "sameAs": 2}
-    assert decide(article, answer, 0, by_sku, SAMPLE_STOCK_PROFILE)[2] is True
-    assert decide(article, {**answer, "sameAs": 0}, 0, by_sku, SAMPLE_STOCK_PROFILE)[0] is True
+    assert decide(article, answer, 0, by_sku, SAMPLE_PROFILE)[2] is True
+    assert decide(article, {**answer, "sameAs": 0}, 0, by_sku, SAMPLE_PROFILE)[0] is True
     cocoa = {"title": "Ghana's cocoa faces EU deforestation test", "snippet": ""}
-    assert decide(cocoa, answer | {"sameAs": None}, 0, by_sku, SAMPLE_STOCK_PROFILE)[3] is True
+    assert decide(cocoa, answer | {"sameAs": None}, 0, by_sku, SAMPLE_PROFILE)[3] is True
     both = {"title": "Cocoa and timber face EU deforestation rules", "snippet": ""}
-    assert decide(both, answer | {"sameAs": None}, 0, by_sku, SAMPLE_STOCK_PROFILE)[0] is True
+    assert decide(both, answer | {"sameAs": None}, 0, by_sku, SAMPLE_PROFILE)[0] is True
 
 
 def test_mentions_keep_only_well_formed_values():

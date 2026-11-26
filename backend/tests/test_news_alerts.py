@@ -21,7 +21,13 @@ from app.services.news_goods import (
     profile_products,
 )
 
-SAMPLE_ALERT = {"headline": "Sample", "createdAt": "2026-11-20T00:00:00Z", "affected": []}
+DEMO = "sample"
+SAMPLE_ALERT = {
+    "headline": "Sample",
+    "createdAt": "2026-11-20T00:00:00Z",
+    "affected": [],
+    "companyId": DEMO,
+}
 
 
 def company(**fields) -> CompanyOut:
@@ -116,12 +122,17 @@ def test_goods_are_capped_and_a_sparse_profile_still_describes_the_company():
     )
 
 
-def test_signed_out_sees_the_sample_stock(client, news_store):
-    news_store.stock = [{"id": "PLY-18", "sku": "PLY-18", "name": "Acacia plywood 18 mm"}]
+def test_signed_out_sees_the_demo_companys_goods_as_stored(client, news_store):
+    assert client.get("/api/v1/news-goods").json()["data"]["items"] == []  # not seeded yet
+    items = [{"sku": "PLY-18", "name": "Acacia plywood 18 mm", "qtyOnHand": 120}]
+    profile = {"company": "Binh Duong Wood Co.", "about": "a furniture maker", "goodsTerms": []}
+    news_store.goods[DEMO] = {"profile": profile, "items": items, "updatedAt": "2026-01-01"}
     goods = client.get("/api/v1/news-goods").json()["data"]
     assert goods["kind"] == "sample"
-    assert goods["items"] == news_store.stock
-    assert goods["owner"]["company"] == "Binh Duong Wood Co."
+    assert goods["items"] == items
+    assert goods["owner"] == {"company": "Binh Duong Wood Co.", "about": "a furniture maker"}
+    # It has no account to rebuild it from, however old it is.
+    assert news_store.goods[DEMO]["updatedAt"] == "2026-01-01"
 
 
 def test_a_company_reads_news_against_its_own_goods(client, news_store):
@@ -167,6 +178,7 @@ def test_each_caller_sees_alerts_about_its_own_goods(client, news_store):
     }
     news_store.alerts = {
         "sample": {**SAMPLE_ALERT, "sourceIds": ["ttj"]},
+        "unowned": {**SAMPLE_ALERT, "headline": "Nobody's", "companyId": None},
         f"x~{a_id}": {
             **SAMPLE_ALERT,
             "headline": "A's",
@@ -186,8 +198,7 @@ def test_each_caller_sees_alerts_about_its_own_goods(client, news_store):
         {
             "id": "s1",
             "startedAt": "2026-11-26T00:00:00Z",
-            "impactsFound": 3,
-            "companyImpacts": {a_id: 1},
+            "companyImpacts": {a_id: 1, DEMO: 3},
             "sources": [{"id": "ttj", "name": "TTJ"}, {"id": "own", "companyId": "company-b"}],
         }
     ]
@@ -216,15 +227,15 @@ def test_each_caller_sees_alerts_about_its_own_goods(client, news_store):
 
 
 def test_alerts_unreachable_are_none(monkeypatch, news_store):
-    def down(limit):
+    def down(company_id):
         raise ServiceUnavailable("firestore")
 
-    monkeypatch.setattr(news_store, "list_recent_alerts", down)
+    monkeypatch.setattr(news_store, "list_company_alerts", down)
     assert news_alert_service.fetch_news_alerts(None) is None
 
 
 @pytest.mark.parametrize(("age", "shown"), [(None, True), (365, True), (366, False)])
 def test_the_age_rule_hides_alerts_older_than_it(age, shown):
-    access = news_alert_service.NewsAccess()
-    alert = {"affected": [], **({"ageDays": age} if age is not None else {})}
+    access = news_alert_service.NewsAccess(DEMO)
+    alert = {"affected": [], "companyId": DEMO, **({"ageDays": age} if age is not None else {})}
     assert news_alert_service.alert_visible(alert, {}, access, 365) is shown

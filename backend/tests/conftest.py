@@ -117,7 +117,6 @@ class InMemoryNewsStore:
         self.companies: dict[str, dict] = {}
         self.alerts: dict[str, dict] = {}
         self.scans: list[dict] = []
-        self.stock: list[dict] = []
         self.goods: dict[str, dict] = {}
         self.articles: dict[str, dict] = {}
         self.scan_records: dict[str, dict] = {}
@@ -157,18 +156,11 @@ class InMemoryNewsStore:
     def update_company_settings(self, company_id: str, fields: dict) -> None:
         self.companies.setdefault(company_id, {}).update(fields)
 
-    def list_recent_alerts(self, limit: int) -> list[dict]:
-        alerts = ({"id": i, **a} for i, a in self.alerts.items())
-        return sorted(alerts, key=lambda a: a.get("createdAt", ""), reverse=True)[:limit]
-
     def list_company_alerts(self, company_id: str) -> list[dict]:
         return [{"id": i, **a} for i, a in self.alerts.items() if a.get("companyId") == company_id]
 
     def get_latest_scan(self) -> dict | None:
         return max(self.scans, key=lambda s: s["startedAt"], default=None)
-
-    def list_sample_stock(self) -> list[dict]:
-        return sorted(self.stock, key=lambda i: i["sku"])
 
     def get_company_goods(self, company_id: str) -> dict | None:
         found = self.goods.get(company_id)
@@ -180,9 +172,8 @@ class InMemoryNewsStore:
     def list_company_settings(self) -> dict[str, dict]:
         return {i: dict(c) for i, c in self.companies.items()}
 
-    def list_goods_for_scan(self, limit: int) -> list[dict]:
-        goods = ({"id": i, **g} for i, g in self.goods.items())
-        return sorted(goods, key=lambda g: g.get("updatedAt", ""), reverse=True)[:limit]
+    def list_all_goods(self) -> list[dict]:
+        return [{"id": i, **g} for i, g in self.goods.items()]
 
     def find_analysed_articles(self, ids: list[str]) -> set[str]:
         return set(ids) & set(self.articles)

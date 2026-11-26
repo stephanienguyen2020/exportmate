@@ -1,6 +1,6 @@
-"""Adds the news scan's articles and alerts, and the news sources, to the assistant's search on
-Agent Platform RAG Engine. The AI service (ai/server/rag.js) searches it and also indexes stock
-items and help guides; both write the same records.
+"""Adds the news scan's articles and alerts, every company's goods and the news sources to the
+assistant's search on Agent Platform RAG Engine. The AI service (ai/server/rag.js) searches it
+and also indexes help guides; both write the same records.
 
 Each record is one text file in Cloud Storage (RAG_BUCKET), imported into the corpus for its
 type (`exportmate-kb-<type>`, made by the AI service), and Firestore `rag_files` keeps its
@@ -9,6 +9,7 @@ a result. Only records whose text changed are written and imported; the files th
 then removed."""
 
 import hashlib
+import math
 import secrets
 import time
 from collections.abc import Iterable
@@ -68,7 +69,7 @@ def article_doc(article: dict) -> dict:
 
 
 def alert_doc(alert: dict) -> dict:
-    """A company's alert has an id of its own and its companyId: only it sees the alert."""
+    """An alert carries its companyId: only that company sees it."""
     ref = alert.get("impactId") or alert["articleId"]
     affected = "; ".join(f"{x['sku']} {x['name']} ({x['reason']})" for x in alert["affected"])
     value = alert.get("stockValueUsd")
@@ -78,16 +79,76 @@ def alert_doc(alert: dict) -> dict:
         "type": "alert",
         "refId": ref,
         **_origin(alert),
-        **({"companyId": alert["companyId"]} if alert.get("companyId") else {}),
+        "companyId": alert.get("companyId"),
         "title": alert.get("headline"),
         "url": alert.get("url"),
         "publishedAt": alert.get("publishedAt"),
         "source": alert.get("publisher"),
         "text": f"News alert, {alert['severity']} severity, {alert['direction']}: "
         f"{alert['headline']}. {alert['why']} "
-        f"Affected {'goods' if alert.get('companyId') else 'stock'}: {affected}. "
+        f"Affected goods: {affected}. "
         f'{exposed}Next step: {alert["action"]} Source article: "{alert.get("title")}", '
         f"{alert.get('publisher')}, {_day(alert.get('publishedAt'))}.",
+    }
+
+
+def _js_number(value: float) -> str:
+    """A number as JavaScript prints it (rag.js writes the same text): 400, not 400.0."""
+    return str(int(value)) if isinstance(value, float) and value.is_integer() else str(value)
+
+
+def _sentence(parts: list, sep: str = ", ") -> str:
+    kept = [p for p in parts if p]
+    return f"{sep.join(kept)}." if kept else ""
+
+
+def goods_doc(company_id: str, item: dict) -> dict:
+    """An item of a company's goods: only that company sees it. The text says what the item has
+    (the sample stock has quantities and costs; a company's goods have orders), word for word as
+    rag.js itemText."""
+
+    def has(key: str) -> bool:
+        return item.get(key) not in (None, "")
+
+    material = ""
+    if has("material"):
+        origin = f" from {item['materialOrigin']}" if has("materialOrigin") else ""
+        material = f"Made of {item['material']}{origin}"
+    qty, cost = item.get("qtyOnHand"), item.get("unitCostUsd")
+    stock = ""
+    if _number(qty) and _number(cost):
+        value = math.floor(qty * cost + 0.5)
+        stock = (
+            f"{_js_number(qty)} {item.get('unit')} on hand at {item.get('warehouse')}, unit cost "
+            f"USD {_js_number(cost)}, stock value USD {value}."
+        )
+    certifications = item.get("certifications")
+    traced = item.get("originTraced")
+    parts = [
+        f"Stock item {item['sku']}: {item.get('name')}.",
+        _sentence(
+            [
+                has("category") and f"Category {item['category']}",
+                has("hsCode") and f"HS code {item['hsCode']}",
+            ]
+        ),
+        _sentence([material, has("supplier") and f"supplier {item['supplier']}"], "; "),
+        f"Sold to {', '.join(item['markets'])}." if item.get("markets") else "",
+        f"Certifications: {', '.join(certifications) or 'none'}."
+        if isinstance(certifications, list)
+        else "",
+        f"Origin trace {'on file' if traced else 'missing'}." if isinstance(traced, bool) else "",
+        stock,
+        f"Orders: {', '.join(item['orders'])}." if item.get("orders") else "",
+    ]
+    return {
+        "id": f"item:{company_id}~{item['sku']}",
+        "type": "item",
+        "refId": item["sku"],
+        "companyId": company_id,
+        "title": f"{item['sku']} · {item.get('name')}",
+        "url": "#/workspace/news",
+        "text": " ".join(p for p in parts if p),
     }
 
 
@@ -293,6 +354,19 @@ def sync_source_docs(sources: list[dict], records: RagRecords, files: RagFiles) 
     result = index_docs([source_doc(s) for s in sources], records, files)
     keep = {f"source:{s['id']}" for s in sources}
     stale = [i for i in records.list_rag_ids("source") if i not in keep]
+    gone = records.get_rag_records(stale)
+    files.remove_files(gone.values())
+    records.delete_rag_records(list(gone))
+    return {**result, "removed": len(gone)}
+
+
+def sync_goods_docs(goods: list[dict], records: RagRecords, files: RagFiles) -> dict:
+    """Brings every company's goods' search records up to date (`goods`: companyGoods documents
+    with their id): unchanged items are skipped, items no longer in any company's goods dropped."""
+    docs = [goods_doc(g["id"], i) for g in goods for i in g.get("items") or []]
+    result = index_docs(docs, records, files)
+    keep = {d["id"] for d in docs}
+    stale = [i for i in records.list_rag_ids("item") if i not in keep]
     gone = records.get_rag_records(stale)
     files.remove_files(gone.values())
     records.delete_rag_records(list(gone))

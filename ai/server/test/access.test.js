@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ANONYMOUS, auditVisible, presentScan, presentSources, publicAudit, skipsOld, visibleItems } from "../access.js";
+import { ANONYMOUS, DEMO_COMPANY_ID, auditVisible, presentScan, presentSources, publicAudit, skipsOld, visibleItems } from "../access.js";
 
 const sources = [
   { id: "builtin", name: "Timber news", builtIn: true, enabled: true },
@@ -44,12 +44,13 @@ test("index hits for a source document use its refId", () => {
   assert.deepEqual(visibleItems(hits, sources, companyA).map((h) => h.refId), ["a-feed"]);
 });
 
-test("alerts and stock items are for whose goods they are about: a company's, or the demo's sample", () => {
+test("alerts and stock items are for the company whose goods they are about; the demo is a company too", () => {
   const records = [
-    { id: "sample-alert", affected: [], sourceId: "builtin" },
+    { id: "sample-alert", affected: [], sourceId: "builtin", companyId: DEMO_COMPANY_ID },
+    { id: "unowned-alert", affected: [], sourceId: "builtin" },
     { id: "a-alert", affected: [], sourceId: "builtin", companyId: "A" },
     { id: "b-alert", affected: [], sourceId: "builtin", companyId: "B" },
-    { id: "sample-item", type: "item", refId: "PLY-101" },
+    { id: "sample-item", type: "item", refId: "PLY-101", companyId: DEMO_COMPANY_ID },
     { id: "a-alert-hit", type: "alert", sourceIds: ["builtin"], companyId: "A" },
     { id: "article", type: "article", sourceIds: ["builtin"] },
     { id: "guide", type: "guide" },
@@ -90,8 +91,7 @@ test("the age rule is on unless a company switches it off, and absent when not c
 
 test("a scan shows each caller its own alert count and only the sources it can see", () => {
   const scan = {
-    impactsFound: 3,
-    companyImpacts: { A: 2 },
+    companyImpacts: { A: 2, [DEMO_COMPANY_ID]: 3 },
     sources: [
       { id: "builtin", name: "Timber news", companyId: null, ok: true, count: 9 },
       { id: "a-feed", name: "A's feed", companyId: "A", ok: true, count: 20 },

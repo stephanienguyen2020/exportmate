@@ -1,11 +1,11 @@
 """The daily news scan (moved from the AI service's scan.js): read the enabled sources, ask Gemini
-which items each new article could affect, in the demo's sample stock and in each company's own
-goods (services/news_goods.py), and store the articles, alerts and scan in Firestore; then make
-them searchable by the assistant (core/rag_index.py).
+which items each new article could affect in each company's goods (services/news_goods.py; the
+demo company's are the sample stock), and store the articles, alerts and scan in Firestore; then
+make them searchable by the assistant (core/rag_index.py).
 
 Articles are assessed once: a scan skips any article an earlier scan analysed, so it reads every
-article in the feeds it hasn't seen, back to the age rule. Articles Gemini couldn't assess, and
-those Model Armor couldn't screen, stay unseen, so the next scan retries them.
+article in the feeds it hasn't seen, back to the age rule. An article Gemini couldn't assess for
+some company, and one Model Armor couldn't screen, stays unseen, so the next scan retries it.
 
 It runs as the Cloud Run job exportmate-backend-news-scan (app/run_news_scan.py): Cloud Scheduler
 starts it daily, and "Scan now" (POST /news-scans) starts it after taking the lock. One scan runs
@@ -22,12 +22,18 @@ from app.core.config import get_settings
 from app.core.errors import AppError
 from app.core.feeds import fetch_feed
 from app.core.model_armor import ModelArmor, Screening
-from app.core.rag_index import RagEngine, alert_doc, article_doc, index_docs, sync_source_docs
+from app.core.rag_index import (
+    RagEngine,
+    alert_doc,
+    article_doc,
+    index_docs,
+    sync_goods_docs,
+    sync_source_docs,
+)
 from app.core.untrusted_text import find_injection
 from app.database.news_store import NewsStore, get_news_store
 from app.services.news_alerts import alert_visible
 from app.services.news_scan_rules import (
-    SAMPLE_STOCK_PROFILE,
     SCAN_POLICY_VERSION,
     Assessments,
     assessment_prompt,
@@ -46,8 +52,6 @@ PARALLEL_BATCHES = 4
 # (the articles it can see). The cap fits about two weeks of the default sources.
 BACKFILL_DAYS = 14
 MAX_BACKFILL_ARTICLES = 160
-# Companies whose goods one scan reads news for, most recently refreshed first.
-MAX_COMPANIES = 100
 MAX_OUTPUT_TOKENS = 16384
 FEED_READERS = 16
 
@@ -83,7 +87,7 @@ def error_text(error: Exception) -> str:
 def assess_all(articles: list[dict], items: list[dict], profile: dict, scan_id: str, on_verdict):
     """Gemini's verdict on each article, BATCH per call and PARALLEL_BATCHES calls at once;
     `on_verdict(article, assessment, index in its batch)`. A batch that fails is logged and
-    skipped. Returns how many articles went unassessed and the first error."""
+    skipped. Returns the ids of the articles that went unassessed and the first error."""
     batches = [articles[i : i + BATCH] for i in range(0, len(articles), BATCH)]
 
     def one(batch: list[dict]) -> list[dict] | Exception:
@@ -92,11 +96,12 @@ def assess_all(articles: list[dict], items: list[dict], profile: dict, scan_id: 
         except AppError as error:
             return error
 
-    failed, first_error = 0, None
+    failed: set[str] = set()
+    first_error = None
     with ThreadPoolExecutor(max_workers=PARALLEL_BATCHES) as pool:
         for batch, result in zip(batches, pool.map(one, batches), strict=True):
             if isinstance(result, Exception):
-                failed += len(batch)
+                failed.update(a["id"] for a in batch)
                 first_error = first_error or error_text(result)
                 log.error(
                     "scan.batch_failed",
@@ -115,14 +120,14 @@ def assess_all(articles: list[dict], items: list[dict], profile: dict, scan_id: 
     return failed, first_error
 
 
-def alert_of(article: dict, r: dict, affected: list[dict], scan_id: str, company_id=None) -> dict:
-    """The alert for an article and Gemini's assessment `r`. A company's alert carries its
-    companyId (only that company sees it) and an id of its own; the sample stock's is keyed by
-    the article."""
+def alert_of(article: dict, r: dict, affected: list[dict], scan_id: str, company_id: str) -> dict:
+    """The alert for an article and Gemini's assessment `r` of a company's goods: it carries the
+    companyId (only that company sees it) and an id of its own. Alerts from before the demo's
+    sample stock was a company's goods are keyed by the article alone."""
     values = [x["stockValueUsd"] for x in affected if "stockValueUsd" in x]
     alert = {
-        "impactId": f"{article['id']}~{company_id}" if company_id else article["id"],
-        **({"companyId": company_id} if company_id else {}),
+        "impactId": f"{article['id']}~{company_id}",
+        "companyId": company_id,
         "articleId": article["id"],
         "title": article.get("title"),
         "url": article.get("url"),
@@ -157,13 +162,17 @@ def _access(company_id: str, settings: dict) -> NewsAccess:
     )
 
 
-def scan_companies(
+def scan_goods(
     store: NewsStore, scan_id: str, fresh: list[dict], sources_by_id: dict, settings_of: dict
 ) -> dict:
-    """Each company's own goods against the articles it can see (its sources and age rule):
-    this scan's new articles, and on its first scan the recent stored ones too."""
-    lists = [g for g in store.list_goods_for_scan(MAX_COMPANIES) if g.get("items")]
-    result = {"companies": len(lists), "found": [], "failed": 0, "error": None}
+    """Each company's goods against the articles it can see (its sources and age rule): this
+    scan's new articles, and on its first scan the recent stored ones too. Returns the alerts,
+    the ids of the articles assessed and of those that failed, and the first error."""
+    lists = [g for g in store.list_all_goods() if g.get("items")]
+    found: list[dict] = []
+    assessed: set[str] = set()
+    failed: set[str] = set()
+    first_error = None
     max_age_days = get_settings().scan_max_age_days
     backlog = None
     for goods in lists:
@@ -185,16 +194,24 @@ def scan_companies(
         by_sku = {i["sku"]: i for i in goods["items"]}
 
         def on_verdict(article, r, n, goods=goods, profile=profile, by_sku=by_sku):
+            assessed.add(article["id"])
             relevant, affected, _, _ = decide(article, r, n, by_sku, profile)
             if relevant:
-                result["found"].append(alert_of(article, r, affected, scan_id, goods["id"]))
+                found.append(alert_of(article, r, affected, scan_id, goods["id"]))
 
-        failed, error = assess_all(reading, goods["items"], profile, scan_id, on_verdict)
-        result["failed"] += failed
-        result["error"] = result["error"] or error
+        unassessed, error = assess_all(reading, goods["items"], profile, scan_id, on_verdict)
+        failed |= unassessed
+        first_error = first_error or error
         if not goods.get("backfilledAt"):
             store.save_company_goods(goods["id"], {"backfilledAt": _now_iso()})
-    return result
+    return {
+        "lists": lists,
+        "companies": len(lists),
+        "found": found,
+        "assessed": assessed,
+        "failed": failed,
+        "error": first_error,
+    }
 
 
 def _read_feeds(sources: list[dict]) -> tuple[list[list[dict] | None], list[dict]]:
@@ -238,9 +255,12 @@ def _screen(articles: list[dict]) -> list[Screening]:
     return ModelArmor(template).screen_each(texts)
 
 
-def _index(store: NewsStore, analysed: list[dict], found: list[dict]) -> dict | None:
-    """Makes the new articles and alerts searchable, and catches up the sources' records
-    (the backend changes sources without indexing them). None when no bucket is set."""
+def _index(
+    store: NewsStore, analysed: list[dict], found: list[dict], goods: list[dict]
+) -> dict | None:
+    """Makes the new articles and alerts searchable, and catches up the records of every
+    company's goods and of the sources (both change without being indexed). None when no
+    bucket is set."""
     settings = get_settings()
     if not settings.rag_bucket:
         return None
@@ -253,6 +273,7 @@ def _index(store: NewsStore, analysed: list[dict], found: list[dict]) -> dict | 
     docs = [article_doc(a) for a in analysed if not a.get("withheld")]
     docs += [alert_doc(f) for f in found]
     indexed = index_docs(docs, store, engine)
+    indexed["goods"] = sync_goods_docs(goods, store, engine)
     indexed["sources"] = sync_source_docs(store.list_sources(), store, engine)
     return indexed
 
@@ -284,9 +305,7 @@ def run_scan(trigger: str = "manual", scan_id: str | None = None) -> dict:
         raise
     store.update_scan(scan_id, summary)
     level = logging.ERROR if summary["status"] == "failed" else logging.INFO
-    if summary["status"] != "failed" and (
-        summary["articlesFailed"] or summary["companyArticlesFailed"] or "indexError" in summary
-    ):
+    if summary["status"] != "failed" and (summary["articlesFailed"] or "indexError" in summary):
         level = logging.WARNING
     log.log(
         level,
@@ -300,7 +319,6 @@ def run_scan(trigger: str = "manual", scan_id: str | None = None) -> dict:
 def _scan(store: NewsStore, scan_id: str, started: datetime, max_age_days: int) -> dict:
     all_sources = store.list_sources()
     sources = [s for s in all_sources if s.get("enabled") is True]
-    items = store.list_sample_stock()
     company_settings = store.list_company_settings()
     # Companies that switched the age rule off read old articles from their sources.
     old_readers = (
@@ -350,31 +368,19 @@ def _scan(store: NewsStore, scan_id: str, started: datetime, max_age_days: int) 
             extra={"scan_id": scan_id, "articles": len(unscreened), "error": unscreened[0]},
         )
 
-    # 4. Ask Gemini which sample stock each article touches. Articles of a batch that fails
-    # stay unrecorded, so the next scan retries them.
-    found: list[dict] = []
-    by_sku = {i["sku"]: i for i in items}
-
-    def on_sample(article, r, n):
-        relevant, affected, _, other = decide(article, r, n, by_sku, SAMPLE_STOCK_PROFILE)
-        analysed.append(
-            {
-                **article,
-                "relevant": relevant,
-                **({"filteredOut": "other_commodity"} if other else {}),
-            }
-        )
-        if relevant:
-            found.append(alert_of(article, r, affected, scan_id))
-
-    failed, sample_error = assess_all(fresh, items, SAMPLE_STOCK_PROFILE, scan_id, on_sample)
-    sample_alerts = len(found)
-    # 4b. The same articles (and on a company's first scan, recent ones) for each company.
+    # 4. Ask Gemini which goods of each company each article it can see touches. An article
+    # in a batch that failed stays unrecorded, so the next scan retries it (the alerts it
+    # raised for other companies are then written again under the same ids).
     sources_by_id = {s["id"]: s for s in all_sources}
-    companies = scan_companies(store, scan_id, fresh, sources_by_id, company_settings)
-    found += companies["found"]
+    goods = scan_goods(store, scan_id, fresh, sources_by_id, company_settings)
+    found = goods["found"]
+    alerted = {f["articleId"] for f in found}
+    failed = [a for a in fresh if a["id"] in goods["failed"]]
+    analysed += [
+        {**a, "relevant": a["id"] in alerted} for a in fresh if a["id"] not in goods["failed"]
+    ]
     company_impacts: dict[str, int] = {}
-    for alert in companies["found"]:
+    for alert in found:
         company_impacts[alert["companyId"]] = company_impacts.get(alert["companyId"], 0) + 1
 
     # 5. Store articles and alerts.
@@ -393,7 +399,7 @@ def _scan(store: NewsStore, scan_id: str, started: datetime, max_age_days: int) 
     # the scan record's indexError is what tells ops to run it.
     indexed, index_error = None, None
     try:
-        indexed = _index(store, analysed, found)
+        indexed = _index(store, analysed, found, goods["lists"])
     except Exception as error:  # noqa: BLE001 (recorded on the scan)
         index_error = str(error)
         log.error("scan.index_failed", extra={"scan_id": scan_id, "error": index_error})
@@ -413,35 +419,30 @@ def _scan(store: NewsStore, scan_id: str, started: datetime, max_age_days: int) 
         except NotFound:  # removed during the scan
             log.warning("scan.source_status_skipped", extra={"source_id": status["id"]})
 
-    # A scan that had articles to assess and got no answer for any of them failed; one that
-    # lost some batches is done and says how many.
-    assessed = len(fresh) - failed
+    # A scan whose Gemini calls all failed failed; one that lost some batches is done and says
+    # how many articles the next scan tries again.
     summary = {
-        "status": "failed" if fresh and not assessed else "done",
+        "status": "failed" if failed and not goods["assessed"] else "done",
         "finishedAt": now,
         "maxAgeDays": max_age_days or None,
         "sources": source_status,
         "articlesFetched": len(candidates),
         "articlesTooOld": too_old,
         "articlesAnalysed": len(analysed),
-        "articlesFailed": failed,
+        "articlesFailed": len(failed),
         "articlesWithheld": sum(1 for a in analysed if a.get("withheld")),
         "articlesUnscreened": len(unscreened),
         "modelArmor": bool(get_settings().model_armor_template),
-        # Sample-stock alerts; each company's own are counted in companyImpacts.
-        "impactsFound": sample_alerts,
-        "companiesScanned": companies["companies"],
+        "companiesScanned": goods["companies"],
+        # Alerts per company; each caller is shown its own count (news_alerts.present_scan).
         "companyImpacts": company_impacts,
-        "companyArticlesFailed": companies["failed"],
         # Records sent to RAG Engine (new or changed); None when the import failed or is off.
         "indexed": indexed["imported"] if indexed else None,
     }
-    if sample_error:
+    if goods["error"]:
         summary["error"] = (
-            f"Gemini couldn't assess {failed} of {len(fresh)} articles: {sample_error[:300]}"
+            f"Gemini couldn't assess {len(failed)} of {len(fresh)} articles: {goods['error'][:300]}"
         )
-    if companies["error"]:
-        summary["companyError"] = companies["error"][:300]
     if index_error:
         summary["indexError"] = index_error[:300]
     return summary

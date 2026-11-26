@@ -11,14 +11,14 @@
 import { FieldValue } from "@google-cloud/firestore";
 import { Runner, createEvent, LogLevel, setLogger } from "@google/adk";
 import { FunctionCallingConfigMode } from "@google/genai";
-import { db, inventory, sources, answerCache, goodsByCompany, list } from "./db.js";
+import { db, sources, answerCache, storedGoods, list } from "./db.js";
 import { EMBED_MODEL } from "./rag.js";
 import { toolGateway } from "./gateway.js";
 import { POLICY_VERSION } from "./policy.js";
 import { review, stripRefs, toEvidence } from "./review.js";
 import { critique, graphPaths } from "./critic.js";
 import { log } from "./log.js";
-import { ANONYMOUS, presentSources } from "./access.js";
+import { ANONYMOUS, DEMO_COMPANY_ID, presentSources } from "./access.js";
 import { ASSISTANT, assistantThinking } from "./models.js";
 import { routeQuestion } from "./router.js";
 import { answerKey, cacheable, cachedAudit, fingerprint, CACHE_TTL_MS } from "./answer-cache.js";
@@ -63,26 +63,33 @@ async function dataVersion(company, access, session) {
   const stored = await cached("sources", () => list(sources));
   // Which order and playbook tools were offered: they change the prompt, though what they read is live.
   const tools = { orders: Boolean(session.orders), playbook: Boolean(session.playbook) };
-  return fingerprint({ items: session.stock, sources: presentSources(stored, access), scan: scan?.id ?? null, company, tools, guides: GUIDES_VERSION });
+  return fingerprint({ items: session.stock, stockOwner: session.stockOwner, sources: presentSources(stored, access), scan: scan?.id ?? null, company, tools, guides: GUIDES_VERSION });
 }
 
-// What query_inventory and get_alerts read: a company's own goods (the backend's
+// What query_inventory and get_alerts read: the company's goods (the backend's
 // GET /api/v1/news-goods with the member's token, which rebuilds them when stale; without a
-// token, as last stored in companyGoods), or the sample stock in the browser demo. Unread, the
+// token, as last stored in companyGoods), the demo company's in the browser demo. Unread, the
 // tools get nothing and the stock filters are free text.
 async function companyGoodsItems(companyId, backend) {
-  if (!backend) return (await goodsByCompany.doc(companyId).get()).get("items") ?? [];
+  if (!backend) return (await storedGoods(companyId)).items;
   const { status, body } = await backend("/api/v1/news-goods");
   if (status !== 200) throw new Error(`news-goods ${status}`);
   return body.data?.items ?? [];
 }
 async function stockFor(company, backend) {
-  const load = company ? companyGoodsItems(company.company.id, backend) : cached("inventory", () => list(inventory));
+  const load = company ? companyGoodsItems(company.company.id, backend) : cached("goods", async () => (await storedGoods(DEMO_COMPANY_ID)).items);
   return load.catch((e) => {
     log("WARNING", "stock.unavailable", { companyId: company?.company.id, error: String(e?.message || e) });
     return [];
   });
 }
+
+// Whose goods the browser demo watches ({ company, about }), as `npm run seed` stored them.
+const demoProfile = () =>
+  cached("goods-profile", async () => (await storedGoods(DEMO_COMPANY_ID)).profile).catch((e) => {
+    log("WARNING", "stock.unavailable", { companyId: DEMO_COMPANY_ID, error: String(e?.message || e) });
+    return {};
+  });
 
 // The audit that answered this key before, if it is still there and still fit to reuse.
 async function cachedAnswer(key, companyId = null) {
@@ -125,7 +132,9 @@ export async function runAgent({
   const companyId = company?.company.id;
   const readers = workspaceReaders(backend, company ? null : demo);
   // What this turn's tools and rules may use (gateway.js scopes, policy.js `when`).
-  const session = { company, orders: readers.orders, playbook: readers.playbook, graph: readers.graph, whatIf: readers.whatIf, changes: readers.changes, stock: await stockFor(company, backend), memories: [] };
+  // The demo has no company profile: its prompt names the demo company from its goods' profile.
+  const [stock, stockOwner] = await Promise.all([stockFor(company, backend), company ? null : demoProfile()]);
+  const session = { company, orders: readers.orders, playbook: readers.playbook, graph: readers.graph, whatIf: readers.whatIf, changes: readers.changes, stock, stockOwner, memories: [] };
   // Who this chat runs as (agents/platform.js): Agent Platform session and Memory Bank scope.
   const userKey = userKeyFor({ company, user, sessionId });
 

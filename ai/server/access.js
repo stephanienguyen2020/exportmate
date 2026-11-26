@@ -6,19 +6,22 @@
 // belongs to the company that added it: only that company sees it and what it brought
 // in, and only that company's owners and editors can switch it off or remove it.
 //
-// News alerts and stock items are about someone's goods: a company's own (they carry its
-// companyId; the backend's news scan and GET /news-goods) or the sample stock, which only the
-// browser demo sees. The backend applies the same rules (services/news_alerts.py, news_sources.py).
+// News alerts and stock items are about one company's goods and carry its companyId (the
+// backend's news scan and GET /news-goods): only that company sees them. The browser demo is the
+// demo company (DEMO_COMPANY_ID, no account), whose goods are the sample stock (seed.js). The
+// backend applies the same rules (services/news_alerts.py, news_sources.py).
 //
-// `access` is { companyId, disabled, skipOld }: the caller's company (null for the demo), the
-// shared sources that company switched off, and false when it switched the age rule off.
+// `access` is { companyId, disabled, skipOld }: the caller's company (the demo company signed
+// out), the shared sources it switched off, and false when it switched the age rule off.
 //
 // The age rule: by default the scan (backend services/news_scan.py) skips articles published
 // more than MAX_AGE_DAYS before it (SCAN_MAX_AGE_DAYS, the same on both; 0 removes the rule). A company can switch it off for itself;
 // the scan then also reads old articles from the sources that company reads, and only that
 // company sees what they raise. Undated articles have no known age and are always read.
 
-export const ANONYMOUS = Object.freeze({ companyId: null, disabled: [] });
+// The backend's DEMO_COMPANY_ID must match.
+export const DEMO_COMPANY_ID = process.env.DEMO_COMPANY_ID || "sample";
+export const ANONYMOUS = Object.freeze({ companyId: DEMO_COMPANY_ID, disabled: [] });
 
 const envDays = process.env.SCAN_MAX_AGE_DAYS;
 export const MAX_AGE_DAYS = /^\d+$/.test(envDays || "") ? Number(envDays) : 365;
@@ -28,7 +31,7 @@ export const skipsOld = (access, maxAgeDays = MAX_AGE_DAYS) => maxAgeDays > 0 &&
 
 export const isShared = (source) => Boolean(source.builtIn) || !source.companyId;
 
-export const sourceVisible = (source, access) => isShared(source) || (Boolean(access.companyId) && source.companyId === access.companyId);
+export const sourceVisible = (source, access) => isShared(source) || source.companyId === access.companyId;
 
 export const sourceEnabled = (source, access) =>
   Boolean(source.enabled) && !(isShared(source) && access.disabled.includes(source.id));
@@ -54,7 +57,7 @@ export function goodsVisible(item, access) {
   // Stored alerts carry no type; index hits do.
   const aboutGoods = item.type ? item.type === "alert" || item.type === "item" : Array.isArray(item.affected);
   if (!aboutGoods) return true;
-  return item.companyId ? item.companyId === access.companyId : !access.companyId;
+  return item.companyId === access.companyId;
 }
 
 /**
@@ -84,8 +87,7 @@ export const visibleItems = (items, sources, access, maxAgeDays = MAX_AGE_DAYS) 
 
 /**
  * A scan record as a caller sees it: `impactsFound` is the alerts it raised for the caller's
- * goods (the sample stock's in the demo, the company's own otherwise); other companies' counts
- * stay on the server.
+ * goods; other companies' counts stay on the server.
  */
 export function presentScan(scan, access) {
   if (!scan) return scan;
@@ -94,7 +96,7 @@ export function presentScan(scan, access) {
   // (null when shared); scans recorded before that show every source.
   if (Array.isArray(shown.sources))
     shown.sources = shown.sources.filter((s) => sourceVisible(s, access)).map(({ companyId, ...s }) => s);
-  return access.companyId ? { ...shown, impactsFound: companyImpacts?.[access.companyId] ?? 0 } : shown;
+  return { ...shown, impactsFound: companyImpacts?.[access.companyId] ?? 0 };
 }
 
 // Audits: an anonymous (demo) chat's audit is readable with its session id, as before.

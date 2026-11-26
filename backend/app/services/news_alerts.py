@@ -1,12 +1,12 @@
 """News watch's alerts as the caller may see them (moved from the AI service's GET /api/impacts
-and access.js). The AI service's news scan writes them to Firestore `impacts` and `scans`;
-the backend only reads them.
+and access.js). The news scan (services/news_scan.py) writes them to Firestore `impacts` and
+`scans`.
 
-An alert is about someone's goods: a company's own (it carries the company's id) or the sample
-stock, which only the signed-out demo sees. It must also pass the caller's age rule, and come
-from a source the caller sees and has switched on (services/news_sources.py). An alert whose
-sources were deleted falls back to the owners stored with it (`sourceCompanyIds`); one from
-before sources had owners is shared."""
+An alert is about one company's goods and carries its id: only that company sees it (signed
+out, the demo company, services/news_sources.py news_access). It must also pass the caller's
+age rule, and come from a source the caller sees and has switched on. An alert whose sources
+were deleted falls back to the owners stored with it (`sourceCompanyIds`); one from before
+sources had owners is shared."""
 
 import logging
 
@@ -40,12 +40,10 @@ def _source_ids(item: dict) -> list[str]:
 
 
 def goods_visible(item: dict, access: NewsAccess) -> bool:
-    """A company's own alert only to that company; the sample stock's only to the demo."""
+    """An alert only to the company whose goods it is about; other records pass."""
     if not isinstance(item.get("affected"), list):
         return True
-    if item.get("companyId"):
-        return item["companyId"] == access.company_id
-    return access.company_id is None
+    return item.get("companyId") == access.company_id
 
 
 def alert_visible(
@@ -70,7 +68,7 @@ def alert_visible(
 
 def present_scan(scan: dict | None, access: NewsAccess) -> dict | None:
     """A scan as the caller sees it: `impactsFound` counts the alerts raised for the caller's
-    goods, and other companies' own sources are neither named nor counted."""
+    goods, and other companies' counts and own sources are neither named nor counted."""
     if not scan:
         return scan
     shown = {k: v for k, v in scan.items() if k != "companyImpacts"}
@@ -80,16 +78,12 @@ def present_scan(scan: dict | None, access: NewsAccess) -> dict | None:
             for s in shown["sources"]
             if source_visible(s, access)
         ]
-    if access.company_id:
-        shown["impactsFound"] = (scan.get("companyImpacts") or {}).get(access.company_id, 0)
+    shown["impactsFound"] = (scan.get("companyImpacts") or {}).get(access.company_id, 0)
     return shown
 
 
 def _recent_alerts(access: NewsAccess) -> list[dict]:
-    store = get_news_store()
-    if access.company_id is None:
-        return store.list_recent_alerts(RECENT_ALERTS)
-    own = store.list_company_alerts(access.company_id)
+    own = get_news_store().list_company_alerts(access.company_id)
     return sorted(own, key=lambda a: str(a.get("createdAt", "")), reverse=True)[:RECENT_ALERTS]
 
 

@@ -8,7 +8,7 @@
 
 // Whose stock this is and how news talks about it. `goodsTerms` are the words news uses for
 // these goods; `otherGoods` are goods that rules covering them also cover, which this company
-// doesn't stock (relevance.js drops an article that names only those). Singular words; plurals
+// doesn't stock (the backend's news_scan_rules.py decide() drops an article that names only those). Singular words; plurals
 // match too.
 export const STOCK_PROFILE = {
   company: "Binh Duong Wood Co.",
