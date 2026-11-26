@@ -29,7 +29,7 @@ const has = (value, wanted) => !wanted || String(value).toLowerCase().includes(S
 // An item's stock value; a company's goods have no quantity or cost, so none.
 const stockValue = (i) => (Number.isFinite(i?.qtyOnHand * i?.unitCostUsd) ? Math.round(i.qtyOnHand * i.unitCostUsd) : undefined);
 // The turn's stock (agent.js): the company's goods, the demo company's in the browser demo.
-const stockOf = async (ctx) => ctx.stock ?? (await cached("goods", () => storedGoods(DEMO_COMPANY_ID)));
+const stockOf = async (ctx) => ctx.stock ?? (await cached("goods", async () => (await storedGoods(DEMO_COMPANY_ID)).items));
 const ageDays = (iso) => (iso && !isNaN(Date.parse(iso)) ? Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / 86_400_000)) : undefined);
 const SEVERITY = { high: 0, medium: 1, low: 2 };
 // Document types whose text comes from third parties (news feeds, or alerts written from them).

@@ -172,9 +172,8 @@ class InMemoryNewsStore:
     def list_company_settings(self) -> dict[str, dict]:
         return {i: dict(c) for i, c in self.companies.items()}
 
-    def list_goods_for_scan(self, limit: int) -> list[dict]:
-        goods = ({"id": i, **g} for i, g in self.goods.items())
-        return sorted(goods, key=lambda g: g.get("updatedAt", ""), reverse=True)[:limit]
+    def list_all_goods(self) -> list[dict]:
+        return [{"id": i, **g} for i, g in self.goods.items()]
 
     def find_analysed_articles(self, ids: list[str]) -> set[str]:
         return set(ids) & set(self.articles)

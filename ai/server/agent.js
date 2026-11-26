@@ -63,7 +63,7 @@ async function dataVersion(company, access, session) {
   const stored = await cached("sources", () => list(sources));
   // Which order and playbook tools were offered: they change the prompt, though what they read is live.
   const tools = { orders: Boolean(session.orders), playbook: Boolean(session.playbook) };
-  return fingerprint({ items: session.stock, sources: presentSources(stored, access), scan: scan?.id ?? null, company, tools, guides: GUIDES_VERSION });
+  return fingerprint({ items: session.stock, stockOwner: session.stockOwner, sources: presentSources(stored, access), scan: scan?.id ?? null, company, tools, guides: GUIDES_VERSION });
 }
 
 // What query_inventory and get_alerts read: the company's goods (the backend's
@@ -71,18 +71,25 @@ async function dataVersion(company, access, session) {
 // token, as last stored in companyGoods), the demo company's in the browser demo. Unread, the
 // tools get nothing and the stock filters are free text.
 async function companyGoodsItems(companyId, backend) {
-  if (!backend) return storedGoods(companyId);
+  if (!backend) return (await storedGoods(companyId)).items;
   const { status, body } = await backend("/api/v1/news-goods");
   if (status !== 200) throw new Error(`news-goods ${status}`);
   return body.data?.items ?? [];
 }
 async function stockFor(company, backend) {
-  const load = company ? companyGoodsItems(company.company.id, backend) : cached("goods", () => storedGoods(DEMO_COMPANY_ID));
+  const load = company ? companyGoodsItems(company.company.id, backend) : cached("goods", async () => (await storedGoods(DEMO_COMPANY_ID)).items);
   return load.catch((e) => {
     log("WARNING", "stock.unavailable", { companyId: company?.company.id, error: String(e?.message || e) });
     return [];
   });
 }
+
+// Whose goods the browser demo watches ({ company, about }), as `npm run seed` stored them.
+const demoProfile = () =>
+  cached("goods-profile", async () => (await storedGoods(DEMO_COMPANY_ID)).profile).catch((e) => {
+    log("WARNING", "stock.unavailable", { companyId: DEMO_COMPANY_ID, error: String(e?.message || e) });
+    return {};
+  });
 
 // The audit that answered this key before, if it is still there and still fit to reuse.
 async function cachedAnswer(key, companyId = null) {
@@ -125,7 +132,9 @@ export async function runAgent({
   const companyId = company?.company.id;
   const readers = workspaceReaders(backend, company ? null : demo);
   // What this turn's tools and rules may use (gateway.js scopes, policy.js `when`).
-  const session = { company, orders: readers.orders, playbook: readers.playbook, graph: readers.graph, whatIf: readers.whatIf, changes: readers.changes, stock: await stockFor(company, backend), memories: [] };
+  // The demo has no company profile: its prompt names the demo company from its goods' profile.
+  const [stock, stockOwner] = await Promise.all([stockFor(company, backend), company ? null : demoProfile()]);
+  const session = { company, orders: readers.orders, playbook: readers.playbook, graph: readers.graph, whatIf: readers.whatIf, changes: readers.changes, stock, stockOwner, memories: [] };
   // Who this chat runs as (agents/platform.js): Agent Platform session and Memory Bank scope.
   const userKey = userKeyFor({ company, user, sessionId });
 

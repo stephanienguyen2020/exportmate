@@ -20,5 +20,8 @@ export const goodsByCompany = db.collection("companyGoods");
 export const answerCache = db.collection("answer_cache");
 
 export const list = async (query) => (await query.get()).docs.map((d) => ({ id: d.id, ...d.data() }));
-/** A company's goods as last stored (no refresh): its items, or none. */
-export const storedGoods = async (companyId) => (await goodsByCompany.doc(companyId).get()).get("items") ?? [];
+/** A company's goods as last stored (no refresh): { profile, items }, empty when none. */
+export async function storedGoods(companyId) {
+  const goods = (await goodsByCompany.doc(companyId).get()).data() ?? {};
+  return { profile: goods.profile ?? {}, items: goods.items ?? [] };
+}

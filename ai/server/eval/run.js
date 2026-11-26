@@ -164,7 +164,7 @@ async function companyExam() {
 }
 
 const exam = asCompany ? await companyExam() : null;
-const cases = (exam ? exam.cases : goldenCases(await storedGoods(DEMO_COMPANY_ID))).filter((c) => !only || only.includes(c.id));
+const cases = (exam ? exam.cases : goldenCases((await storedGoods(DEMO_COMPANY_ID)).items)).filter((c) => !only || only.includes(c.id));
 const sessionId = `eval-${Date.now().toString(36)}`;
 console.log(
   `${asCompany ? `Exam as ${exam.profile.company.name}` : "Eval"} ${sessionId}${onEngine ? ` on ${runtime.name}` : ""}: ${cases.length} cases, policy ${POLICY_VERSION}${tier ? `, all on ${tier}` : ""}, model ${ASSISTANT.model}${GEMINI_PROJECT !== PROJECT ? ` in ${GEMINI_PROJECT}` : ""}${useJudge ? `, judge ${JUDGE_MODEL}` : ""}`,

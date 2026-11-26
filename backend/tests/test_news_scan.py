@@ -245,18 +245,23 @@ def test_new_articles_alerts_and_sources_become_searchable(world, monkeypatch):
     monkeypatch.setenv("RAG_BUCKET", "kb")
     news_scan.get_settings.cache_clear()
     world.rag["source:gone"] = {"type": "source", "gcsPath": "kb/source/old/gone.txt"}
+    world.rag["item:PLY-18"] = {"type": "item", "gcsPath": "kb/item/old/PLY-18.txt"}
     try:
         scan = news_scan_runs.run_claimed_scan()
     finally:
         news_scan.get_settings.cache_clear()
     # Two articles (not the withheld one) and two alerts; every source once, the removed one gone.
     assert scan["indexed"] == 4
-    assert sorted(imported) == ["alert", "article", "removed", "source"]
+    assert sorted(imported) == ["alert", "article", "item", "removed", "source"]
+    # Every company's goods are searchable by that company alone.
+    tee = world.rag["item:company-a~G-3D9799"]
+    assert tee["companyId"] == "company-a" and tee["text"].startswith("Stock item G-3D9799")
+    assert "stock value USD 4105" in world.rag["item:sample~PLY-18"]["text"]
     alert = world.rag[f"alert:{article_id('https://n.example/1')}~company-a"]
     assert alert["companyId"] == "company-a" and alert["textHash"] and alert["ragFile"]
     assert "Affected goods: G-3D9799 Cotton T-shirt (x)." in alert["text"]
     assert set(world.rag) >= {"source:ttj", "source:broken", "source:off"}
-    assert "source:gone" not in world.rag
+    assert "source:gone" not in world.rag and "item:PLY-18" not in world.rag
 
 
 def test_scan_now_is_for_owners_and_editors_once_per_ten_minutes(client, world, monkeypatch):

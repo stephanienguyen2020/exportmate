@@ -1,7 +1,6 @@
 // Help guides indexed for the assistant. Keep these in step with the app (docs/AI_GUIDE.md
 // describes the AI features in more detail); after changing them, run `npm run index`.
 import { MAX_AGE_DAYS } from "../access.js";
-import { STOCK_PROFILE, generateInventory } from "./inventory.js";
 
 // The scan's age rule (access.js), as the deployed service sets it.
 const AGE_RULE = MAX_AGE_DAYS
@@ -73,7 +72,7 @@ export const GUIDES = [
     id: "demo-data",
     title: "Sample data, the browser demo and limits",
     url: "#/workspace",
-    text: `ExportMate's stock list is synthetic: ${generateInventory().length} items of ${STOCK_PROFILE.company}, ${STOCK_PROFILE.about}, used by News watch and the assistant in the browser demo; a signed-in company's News watch reads the news for its own goods instead. News articles are real and come only from the approved sources. 'Explore the demo' opens a sample workspace with no account: its orders, playbook rules and profile are stored in your browser, and its order checks cover one sample rule change. A signed-in company workspace keeps its orders, playbook, company profile, suppliers, sites, regulations and reports in ExportMate's database. Alerts and answers are AI assessments, not legal advice; check regulations against the official source.`,
+    text: `In the browser demo, News watch and the assistant use a synthetic stock list: the goods of a fictional sample company; a signed-in company's News watch reads the news for its own goods instead. News articles are real and come only from the approved sources. 'Explore the demo' opens a sample workspace with no account: its orders, playbook rules and profile are stored in your browser, and its order checks cover one sample rule change. A signed-in company workspace keeps its orders, playbook, company profile, suppliers, sites, regulations and reports in ExportMate's database. Alerts and answers are AI assessments, not legal advice; check regulations against the official source.`,
   },
   {
     id: "views-account",

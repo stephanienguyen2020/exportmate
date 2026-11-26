@@ -22,7 +22,14 @@ from app.core.config import get_settings
 from app.core.errors import AppError
 from app.core.feeds import fetch_feed
 from app.core.model_armor import ModelArmor, Screening
-from app.core.rag_index import RagEngine, alert_doc, article_doc, index_docs, sync_source_docs
+from app.core.rag_index import (
+    RagEngine,
+    alert_doc,
+    article_doc,
+    index_docs,
+    sync_goods_docs,
+    sync_source_docs,
+)
 from app.core.untrusted_text import find_injection
 from app.database.news_store import NewsStore, get_news_store
 from app.services.news_alerts import alert_visible
@@ -45,8 +52,6 @@ PARALLEL_BATCHES = 4
 # (the articles it can see). The cap fits about two weeks of the default sources.
 BACKFILL_DAYS = 14
 MAX_BACKFILL_ARTICLES = 160
-# Companies whose goods one scan reads news for, most recently refreshed first.
-MAX_COMPANIES = 100
 MAX_OUTPUT_TOKENS = 16384
 FEED_READERS = 16
 
@@ -163,7 +168,7 @@ def scan_goods(
     """Each company's goods against the articles it can see (its sources and age rule): this
     scan's new articles, and on its first scan the recent stored ones too. Returns the alerts,
     the ids of the articles assessed and of those that failed, and the first error."""
-    lists = [g for g in store.list_goods_for_scan(MAX_COMPANIES) if g.get("items")]
+    lists = [g for g in store.list_all_goods() if g.get("items")]
     found: list[dict] = []
     assessed: set[str] = set()
     failed: set[str] = set()
@@ -200,6 +205,7 @@ def scan_goods(
         if not goods.get("backfilledAt"):
             store.save_company_goods(goods["id"], {"backfilledAt": _now_iso()})
     return {
+        "lists": lists,
         "companies": len(lists),
         "found": found,
         "assessed": assessed,
@@ -249,9 +255,12 @@ def _screen(articles: list[dict]) -> list[Screening]:
     return ModelArmor(template).screen_each(texts)
 
 
-def _index(store: NewsStore, analysed: list[dict], found: list[dict]) -> dict | None:
-    """Makes the new articles and alerts searchable, and catches up the sources' records
-    (the backend changes sources without indexing them). None when no bucket is set."""
+def _index(
+    store: NewsStore, analysed: list[dict], found: list[dict], goods: list[dict]
+) -> dict | None:
+    """Makes the new articles and alerts searchable, and catches up the records of every
+    company's goods and of the sources (both change without being indexed). None when no
+    bucket is set."""
     settings = get_settings()
     if not settings.rag_bucket:
         return None
@@ -264,6 +273,7 @@ def _index(store: NewsStore, analysed: list[dict], found: list[dict]) -> dict | 
     docs = [article_doc(a) for a in analysed if not a.get("withheld")]
     docs += [alert_doc(f) for f in found]
     indexed = index_docs(docs, store, engine)
+    indexed["goods"] = sync_goods_docs(goods, store, engine)
     indexed["sources"] = sync_source_docs(store.list_sources(), store, engine)
     return indexed
 
@@ -389,7 +399,7 @@ def _scan(store: NewsStore, scan_id: str, started: datetime, max_age_days: int) 
     # the scan record's indexError is what tells ops to run it.
     indexed, index_error = None, None
     try:
-        indexed = _index(store, analysed, found)
+        indexed = _index(store, analysed, found, goods["lists"])
     except Exception as error:  # noqa: BLE001 (recorded on the scan)
         index_error = str(error)
         log.error("scan.index_failed", extra={"scan_id": scan_id, "error": index_error})
