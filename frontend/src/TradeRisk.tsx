@@ -23,6 +23,33 @@ const KINDS: Record<string, string> = {
   CVD: "Anti-subsidy",
 };
 const MONTHS = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split(" ");
+// Markets that are customs unions; anything else is an alpha-2 country code.
+const UNIONS: Record<string, string> = {
+  EU: "the European Union",
+  EAEU: "the Eurasian Economic Union",
+  GCC: "the Gulf states",
+};
+const regionNames = new Intl.DisplayNames(["en"], { type: "region" });
+// Country names said with "the": the United States, the Netherlands, the Czech Republic.
+const WITH_THE =
+  /^(United |Netherlands|Philippines|Bahamas|Gambia|Maldives)|(Republic|Islands|Emirates)$/;
+
+// "VN" → "Vietnam", "US" → "the United States", "EU" → "the European Union".
+function placeName(code: string) {
+  if (UNIONS[code]) return UNIONS[code];
+  let name = code;
+  try {
+    name = regionNames.of(code) ?? code;
+  } catch {
+    return code;
+  }
+  return WITH_THE.test(name) ? `the ${name}` : name;
+}
+
+// The credit lines in one sentence, UN Comtrade's first as its terms ask.
+function creditLine(sources: string[]) {
+  return sources.length ? `${sources.join("; ")}.` : "";
+}
 
 // "2025-09" → "Sep 2025"; a year stays as it is.
 function period(value: string) {
@@ -113,10 +140,11 @@ export default function OrderTradeRisk({ orderId }: { orderId: string }) {
     <section className="panel trade-risk" aria-label="Trade defence risk">
       <h2>Trade defence risk</h2>
       <p>
-        How likely {risk?.market ?? "the destination market"} is to open an
-        anti-dumping or anti-subsidy case on this product from{" "}
-        {risk?.exporter ?? "your country"} in the next 12 months, ranked against
-        every trade flow the model scores.
+        How likely{" "}
+        {risk?.market ? placeName(risk.market) : "the destination market"} is
+        to open an anti-dumping or anti-subsidy case on this product from{" "}
+        {risk?.exporter ? placeName(risk.exporter) : "your country"} in the
+        next 12 months, ranked against every trade flow the model scores.
       </p>
       {!state && (
         <p className="tm-muted" role="status">
@@ -152,8 +180,9 @@ export default function OrderTradeRisk({ orderId }: { orderId: string }) {
                 {risk.similarCases.slice(0, 3).map((c) => (
                   <li key={c.caseId + c.market + c.exporter + c.hs6}>
                     <b>
-                      {KINDS[c.kind] ?? c.kind} case by {c.market} on{" "}
-                      {c.product || `HS ${c.hs6}`} from {c.exporter}, {c.year}
+                      {KINDS[c.kind] ?? c.kind} case by {placeName(c.market)}{" "}
+                      on {c.product || `HS ${c.hs6}`} from{" "}
+                      {placeName(c.exporter)}, {c.year}
                     </b>
                     <span>
                       {c.outcome}
@@ -170,7 +199,7 @@ export default function OrderTradeRisk({ orderId }: { orderId: string }) {
       {risk && (
         <p className="fine-print">
           A ranking from past cases and trade figures, not a forecast of any one
-          case, and not legal advice. {risk.sources.join(" ")}
+          case, and not legal advice. {creditLine(risk.sources)}
         </p>
       )}
     </section>
