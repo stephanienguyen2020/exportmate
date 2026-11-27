@@ -19,6 +19,8 @@ locals {
     NEWS_SCAN_JOB        = "projects/${var.project_id}/locations/${var.region}/jobs/exportmate-backend-news-scan"
     MODEL_ARMOR_TEMPLATE = local.model_armor_template
     RAG_BUCKET           = google_storage_bucket.kb.name
+    # Trade defence risk: the job the backend starts when orders bring new pairs (trade_risk.tf).
+    TRADE_RISK_JOB = "projects/${var.project_id}/locations/${var.region}/jobs/${local.order_features_job}"
     # The assistant's routes (/assistant/*) relay each chat to the agents on Agent Runtime.
     AGENT_RUNTIME = var.agent_runtime
     AGENTS_AT     = var.agent_runtime == "" ? "" : "runtime"

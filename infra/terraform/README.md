@@ -20,6 +20,11 @@ Creates everything ExportMate runs on Google Cloud (website, backend and AI serv
 | Cloud Run job (same image, one command) | `exportmate-ai-task` |
 | Model Armor template | `exportmate-untrusted-text` (prompt injection and jailbreak at medium confidence and above, malicious links, any language), screens each new news article; set on the service as `MODEL_ARMOR_TEMPLATE`. In `us-central1` (`model_armor_region`): `asia-southeast1` lacks the malicious-link filter and multi-language detection, and only public news articles are sent to it |
 | Cloud Run job + Cloud Scheduler (daily) | `exportmate-backend-news-scan` (`python -m app.run_news_scan`: the news scan), started by `exportmate-daily-news-scan` at 07:00 Asia/Ho_Chi_Minh and by "Scan now" (`POST /news-scans`, as the backend's service account); `backend/deploy.sh` keeps its image current |
+| **Trade defence risk** (`trade_risk.tf`) | |
+| Bucket (private) | `exportmate-ml-dev`: the trade risk model's prepared data, raw sources and trained models (`data/…`, `models/trade_risk/<date>/`), copied by `ml/upload.sh` |
+| Service account | `exportmate-order-features` (reads the ML bucket, Cloud SQL client, reads `backend-database-url` and the Comtrade key) |
+| Secret | `trade-risk-comtrade-api-key` (empty; add the UN Comtrade key by hand, see `ml/README.md`) |
+| Cloud Run job + Cloud Scheduler (monthly) | `exportmate-order-features` (`python -m trade_risk.order_features`, the ML bucket mounted read-only at `/mnt/ml`): scores orders' trade pairs into the app database. The backend starts it for new pairs (`TRADE_RISK_JOB`, as its service account with `run.jobsExecutorWithOverrides`), and `exportmate-monthly-order-features` runs it on the 1st of each month at 06:00 Asia/Ho_Chi_Minh; `ml/deploy.sh` builds its image |
 | Log-based metrics | `exportmate_ai/chat_answers` (by status, policy version), `chat_latency`, `guard_withheld`, `armor_failures`, `scan_failures` |
 | **Website** (`web_service.tf`) | |
 | Service account | `exportmate-web` (no roles) |

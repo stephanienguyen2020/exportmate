@@ -1,0 +1,9 @@
+# What `gcloud builds submit` leaves out of the job's image build (ml/deploy.sh).
+.venv
+.env*
+data
+models
+tests
+docs
+**/__pycache__
+.pytest_cache
