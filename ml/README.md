@@ -19,6 +19,9 @@ ml/
     raw/         # files exactly as downloaded, one folder per source
     interim/     # prepared tables (parquet)
   models/        # git-ignored: trained models and their reports, one folder per date
+  Dockerfile     # the Order features job's image (code only)
+  deploy.sh      # build it on Cloud Build and roll it out to the Cloud Run job
+  upload.sh      # copy data/ and models/ to the ML bucket
 ```
 
 `data/` and `models/` are never committed. Each person downloads the files themselves.
@@ -73,8 +76,33 @@ months not yet reported); the free key allows 500 a day. US imports have no repo
 Comtrade (its weights are estimated from one price per product), so their price and tonnage
 features are left empty.
 
-## Moving to GCP later
+### On Google Cloud
 
-Training runs on a laptop first. Later, the raw files go to a Cloud Storage
-bucket and training runs on Vertex AI (custom training job), reading from
-that bucket instead of `data/`.
+The job runs as the Cloud Run job `exportmate-order-features` (`infra/terraform/trade_risk.tf`). Its
+image holds only the code (`Dockerfile`); the data and the model are in the bucket
+`exportmate-ml-dev`, mounted read-only at `/mnt/ml` (`ML_DATA_DIR`, `ML_MODELS_DIR`). The backend
+starts it for new pairs (`TRADE_RISK_JOB`), and Cloud Scheduler runs it on the 1st of each month.
+
+First time:
+
+```sh
+PROJECT_ID=skilful-scarab-511320-q9
+# 1. The Comtrade key (from ml/.env), never in Terraform state. The job reads it, so the secret
+#    gets its value before the job is created:
+terraform -chdir=infra/terraform apply -target=google_secret_manager_secret.comtrade_api_key
+printf %s "$COMTRADE_API_KEY" | gcloud secrets versions add trade-risk-comtrade-api-key --project $PROJECT_ID --data-file=-
+terraform -chdir=infra/terraform apply
+# 2. The data and the model (about 2.3 GB the first time; later only changed files):
+PROJECT_ID=$PROJECT_ID ml/upload.sh
+# 3. The image:
+PROJECT_ID=$PROJECT_ID ml/deploy.sh
+# 4. The case list into the app database, then score the orders' pairs:
+gcloud run jobs execute exportmate-order-features --project $PROJECT_ID --region asia-southeast1 --args=--cases --wait
+gcloud run jobs execute exportmate-order-features --project $PROJECT_ID --region asia-southeast1 --args=--new --wait
+```
+
+After preparing new data or training a new model, run `ml/upload.sh` again (the job picks the
+newest model folder); after changing the code, `ml/deploy.sh`.
+
+Training still runs on a laptop. Later it moves to Vertex AI (a custom training job reading the
+same bucket instead of `data/`).
