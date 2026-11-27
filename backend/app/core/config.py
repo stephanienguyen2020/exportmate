@@ -128,6 +128,13 @@ class Settings(BaseSettings):
     rule_watch_days: int = 90
     # The most orders one status change by hand may set at once (PATCH /orders/status).
     max_status_change_orders: int = 500
+    # Trade risk backfill (core/trade_risk_job.py): a pair with no score yet starts the Order
+    # features job for it. In production the Cloud Run job ("projects/<p>/locations/<l>/jobs/<j>");
+    # locally a command run in trade_risk_job_dir, e.g.
+    # "uv run python -m trade_risk.order_features". Neither: nothing starts, the monthly run scores it.
+    trade_risk_job: str = ""
+    trade_risk_job_command: str = ""
+    trade_risk_job_dir: str = "../ml"
 
     @model_validator(mode="after")
     def no_dev_auth_in_production(self):

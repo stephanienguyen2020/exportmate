@@ -63,15 +63,17 @@ export function workspaceReaders(backend, demo) {
         return body.data;
       },
       changes: async (days) => read(`/api/v1/market-requirements/changes${days ? `?days=${days}` : ""}`, "rule changes"),
+      tradeRisk: async (args) => read(tradeRiskPath(args), "trade risk"),
     };
   }
-  // The browser demo has no backend, so no knowledge graph to walk.
+  // The browser demo has no backend, so no knowledge graph to walk and no trade risk scores.
   return {
     orders: demo?.orders ? async (args = {}) => matchOrders(demo.orders, args) : null,
     playbook: demo?.playbook ? async () => demo.playbook : null,
     graph: null,
     whatIf: null,
     changes: null,
+    tradeRisk: null,
   };
 }
 
@@ -82,6 +84,14 @@ export function graphQuery({ materials = [], countries = [], hsCodes = [], marke
     for (const value of values) params.append(name, value);
   if (includeShipped) params.set("includeShipped", "true");
   return params.toString();
+}
+
+// get_trade_risk's arguments as the backend's path: an order's risk, or a destination's.
+export function tradeRiskPath({ orderId, destination, hsCode, exporter }) {
+  if (orderId) return `/api/v1/trade-risk/orders/${encodeURIComponent(orderId)}`;
+  const params = new URLSearchParams({ destination, hsCode });
+  if (exporter) params.set("exporter", exporter);
+  return `/api/v1/trade-risk?${params}`;
 }
 
 function citeAlert(refs, a) {
@@ -668,6 +678,54 @@ REGISTRY.query_graph = {
         ],
       },
     };
+  },
+};
+
+REGISTRY.get_trade_risk = {
+  scope: "tradeRisk",
+  // Scores the Order features job saves monthly, read live from the backend.
+  live: true,
+  declaration: {
+    name: "get_trade_risk",
+    description:
+      "The trade defence risk: how likely the market is to open an anti-dumping or anti-subsidy case against the exporting country on the product in the next 12 months, from a model trained on past cases and trade figures. Give orderId for an order (its destination, the company's country, its HS code), or destination and hsCode for any market, e.g. a what-if (\"would Korea be safer for our plywood?\"). Returns status (scored, pending: being scored now, or no_data with a note), level (high = the top 1% of all trade flows the model ranks, medium = the next 4%, low = the rest), the reasons that raised it, the period and source of the figures, and the closest past cases.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        orderId: { type: Type.STRING, description: "An order id, e.g. PO-2291" },
+        destination: { type: Type.STRING, description: "Destination country, ISO alpha-2 (US, KR, DE; EU members count as the EU)" },
+        hsCode: { type: Type.STRING, description: "HS code, at least 6 digits (4412.33)" },
+        exporter: { type: Type.STRING, description: "Exporting country, ISO alpha-2; default the company's own" },
+      },
+    },
+  },
+  async run(args, { refs, tradeRisk }) {
+    if (!args.orderId && !(args.destination && args.hsCode))
+      throw new ToolError("invalid_args", "Give an orderId, or a destination and an hsCode.");
+    const risk = await tradeRisk(args);
+    const pair = `${risk.market ?? "?"} ← ${risk.exporter ?? "?"}, HS ${risk.hs6 ?? "?"}`;
+    const what = risk.status === "scored" ? `${risk.level} risk` : risk.status === "pending" ? "being scored" : "no data";
+    const ref = refs.cite(`trade-risk:${risk.orderId ?? ""}:${pair}`, {
+      type: "trade_risk",
+      id: risk.orderId ?? pair,
+      title: `Trade risk${risk.orderId ? ` of ${risk.orderId}` : ""} (${pair}): ${what}${risk.modelVersion ? `, model ${risk.modelVersion}` : ""}`,
+      url: risk.orderId ? `#/workspace/orders/${encodeURIComponent(risk.orderId)}` : "#/workspace/map",
+    });
+    const output = {
+      ref,
+      orderId: risk.orderId ?? undefined,
+      market: risk.market,
+      exporter: risk.exporter,
+      hs6: risk.hs6,
+      status: risk.status,
+      level: risk.level ?? undefined,
+      reasons: (risk.reasons || []).map((r) => r.text),
+      note: risk.note ?? undefined,
+      figures: risk.dataSource ? { source: risk.dataSource === "comtrade" ? "UN Comtrade (monthly)" : "CEPII BACI (yearly, older)", from: risk.dataFrom, to: risk.dataTo } : undefined,
+      similarCases: (risk.similarCases || []).map((c) => ({ market: c.market, exporter: c.exporter, year: c.year, kind: c.kind === "CVD" ? "anti-subsidy" : "anti-dumping", product: c.product, outcome: c.outcome, dutyPct: c.dutyPct ?? undefined })),
+      credit: risk.sources?.[0],
+    };
+    return { output, audit: { count: 1, results: [{ ref, type: "trade_risk", title: `${pair}: ${what}` }] } };
   },
 };
 

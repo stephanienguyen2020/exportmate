@@ -429,6 +429,33 @@ async function openMap(
           unknown: [],
           dropped: ["Old market checklist item"],
         };
+    } else if (path.startsWith("/trade-risk")) {
+      // The order's own market (EU), or a market the what-if compares with.
+      const toUs = url.searchParams.get("destination") === "US";
+      data = {
+        orderId: toUs ? null : order.id,
+        market: toUs ? "US" : "EU",
+        exporter: "VN",
+        hs6: "441233",
+        status: "scored",
+        level: toUs ? "high" : "low",
+        percentile: toUs ? 0.995 : 0.6,
+        reasons: [
+          {
+            feature: toUs ? "cases_market_hs4_5y" : "exporter_share",
+            text: toUs
+              ? "The US opened 3 cases on related products in the last 5 years."
+              : "Vietnam is a small supplier of this product to the EU.",
+          },
+        ],
+        note: null,
+        dataFrom: "2025-09",
+        dataTo: "2026-08",
+        dataSource: "comtrade",
+        scoredAt: "2026-11-26T08:00:00Z",
+        similarCases: [],
+        sources: ["Source: UN Comtrade."],
+      };
     } else
       return route.fulfill({ status: 404, json: { error: { message: path } } });
     await route.fulfill({ json: { data, meta: {} } });
@@ -500,6 +527,13 @@ test("comparison preserves IDs containing delimiters and route visibility in bot
   expect(decodeURIComponent(comparisons.at(-1)?.pathname ?? "")).toBe(
     "/api/v1/orders/PO|42/what-if",
   );
+  // The trade defence risk of the order's market and of the market compared with.
+  const risk = page.locator(".trade-risk-line");
+  await expect(risk).toHaveCount(2);
+  await expect(risk.first()).toContainText("Low");
+  await expect(risk.first()).toContainText("a small supplier");
+  await expect(risk.last()).toContainText("United States");
+  await expect(risk.last().locator(".risk-level.high")).toHaveText("High");
   await expect(globe.getByText("2 TRADE CONNECTIONS")).toBeVisible();
   await page.getByRole("button", { name: "Routes", exact: true }).click();
   await expect(globe.getByText("0 TRADE CONNECTIONS")).toBeVisible();
