@@ -1,12 +1,10 @@
 import pytest
-from conftest import add_member, auth_header, onboard
+from conftest import auth_header, onboard
 
 from app.core.context import CompanyContext
-from app.database.models import Role
 from app.database.queries import users as user_queries
 from app.database.session import open_session
-from app.seed_demo_data import DEMO_PROFILE, seed_company_map_data, seed_company_profile
-from app.seed_reference_data import seed_reference_data
+from app.seed_demo_data import DEMO_PROFILE, seed_company_profile
 
 PROFILE = {
     "description": "We make acacia plywood and garden furniture for EU buyers.",
@@ -90,36 +88,6 @@ def test_onboarding_needs_a_description(client):
     )
     assert response.status_code == 422
     assert "description" in response.json()["error"]["fieldErrors"]
-
-
-def test_knowledge_has_profile_and_sites_for_the_callers_company_only(client):
-    with open_session() as db:
-        seed_reference_data(db)
-    lan = onboard(client, "lan@example.com")
-    client.patch("/api/v1/company", headers=lan, json=PROFILE)
-    _, _, company = company_of("lan@example.com")
-    with open_session() as db:
-        seed_company_map_data(db, company.id)
-    viewer = add_member(client, "lan@example.com", "vy@example.com", Role.viewer)
-    other = onboard(client, "mai@example.com", company="Other Co")
-
-    response = client.get("/api/v1/company/knowledge", headers=viewer)
-    assert response.status_code == 200, response.text
-    data = response.json()["data"]
-    assert data["company"]["name"] == "Binh Duong Wood Co."
-    assert data["company"]["certifications"] == "FSC Mix, VNTLAS"
-    assert {"name": "Your factory", "kind": "factory", "place": "Thu Dau Mot, Binh Duong"} in data[
-        "sites"
-    ]
-
-    theirs = client.get("/api/v1/company/knowledge", headers=other).json()["data"]
-    assert theirs["company"]["name"] == "Other Co"
-    assert theirs["sites"] == []
-
-    no_company = client.get(
-        "/api/v1/company/knowledge", headers=auth_header("new@example.com")
-    ).json()
-    assert no_company["error"]["code"] == "onboarding_required"
 
 
 def test_demo_seed_fills_only_empty_profile_fields(client):

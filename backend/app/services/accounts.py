@@ -114,7 +114,8 @@ def update_company_profile(db: Session, ctx: CompanyContext, payload: CompanyUpd
 
 
 def build_company_knowledge(db: Session, ctx: CompanyContext) -> CompanyKnowledgeOut:
-    """The company profile and sites, for the AI assistant. Read through the API only."""
+    """The company profile and sites the assistant gets with each company chat
+    (services/assistant.py)."""
     sites = map_queries.list_company_sites(db, ctx.company_id)
     company = CompanyOut.model_validate(ctx.company)
     profile_fields = ("description", "products", "materials", "certifications", "website")

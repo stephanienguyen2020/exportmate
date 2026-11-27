@@ -4,10 +4,15 @@ which audit, and whose memories."""
 import json
 
 import pytest
-from conftest import onboard
+from conftest import add_member, onboard
 
 from app.core.agents import AgentsError, keep_days_of
 from app.core.rate_limit import RateLimiter
+from app.database.models import Role
+from app.database.queries import users as user_queries
+from app.database.session import open_session
+from app.seed_demo_data import seed_company_map_data
+from app.seed_reference_data import seed_reference_data
 from app.services import assistant as assistant_service
 
 QUESTION = {"messages": [{"role": "user", "text": "Which items lack geolocation?"}]}
@@ -110,6 +115,27 @@ def test_a_company_chat_carries_its_profile_and_token_never_the_browsers_data(cl
     assert turn["user"] == {"id": me["user"]["id"]}
     assert turn["backendToken"] == lan["Authorization"].partition(" ")[2]
     assert turn["access"]["companyId"] == me["company"]["id"] and "demo" not in turn
+
+
+def test_a_company_chat_carries_the_callers_company_profile_and_sites(client, agents):
+    with open_session() as db:
+        seed_reference_data(db)
+    lan = onboard(client, "lan@example.com")
+    client.patch("/api/v1/company", headers=lan, json={"certifications": "FSC Mix, VNTLAS"})
+    with open_session() as db:
+        user = user_queries.get_user_by_firebase_uid(db, "dev:lan@example.com")
+        _, company = user_queries.get_user_company_membership(db, user.id)
+        seed_company_map_data(db, company.id)
+    viewer = add_member(client, "lan@example.com", "vy@example.com", Role.viewer)
+    other = onboard(client, "mai@example.com", company="Other Co")
+
+    chat(client, viewer)
+    chat(client, other)
+    ours, theirs = (t["company"] for t in agents.turns)
+    assert ours["company"]["certifications"] == "FSC Mix, VNTLAS"
+    site = {"name": "Your factory", "kind": "factory", "place": "Thu Dau Mot, Binh Duong"}
+    assert site in ours["sites"]
+    assert theirs["company"]["name"] == "Other Co" and theirs["sites"] == []
 
 
 def test_a_chat_must_end_with_the_users_question_and_name_its_session(client, agents):
