@@ -40,7 +40,6 @@ What each endpoint does and where the app uses it. The live contract (exact fiel
 | `POST /me/logout` | signed in | `#/logout` |
 | `POST /onboarding` | signed in, no company | Onboarding wizard |
 | `PATCH /company` | owner | Account settings (About company) |
-| `GET /company/knowledge` | viewer | `ai/server` chat only |
 | **Team** | | |
 | `GET /company/members` | viewer | Account: Team |
 | `PATCH /company/members/{userId}` | owner | Account: Team, role menu |
@@ -216,11 +215,6 @@ Changes only the fields sent. Optional fields (`website`, `foundedYear`, `teamSi
 - Returns the company. Editors and viewers get `403 forbidden` and see these fields read-only.
 
 Account settings → About company. The frontend sends every field, with empty optional ones as `null`.
-
-### `GET /company/knowledge` (viewer)
-`{"company": {…same as GET /me…}, "sites": [{"name": "Cat Lai bonded warehouse", "kind": "warehouse", "place": "…"}]}`
-
-Not called by the frontend. When a signed-in user chats, `ai/server` calls it with the user's token (`BACKEND_URL`) and gives the profile to the agent's `get_company_profile` tool. If it fails, the chat falls back to the anonymous demo.
 
 ## Team
 

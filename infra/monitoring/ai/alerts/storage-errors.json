@@ -1,8 +1,8 @@
 {
-  "displayName": "ExportMate AI service: file storage refused or failing",
+  "displayName": "ExportMate assistant and news: file storage refused or failing",
   "documentation": {
     "mimeType": "text/markdown",
-    "content": "Requests to the AI service's bucket gs://${BUCKET} were refused (permission) or failed on Google's side. A refused write means files never land: check the service account's role on the bucket. GetBucketMetadata refusals are left out: the client asks for them, the object-only role refuses, and reads still work."
+    "content": "Requests to the assistant's search bucket gs://${BUCKET} (RAG Engine imports from it; the news scan and `npm run index` write to it) were refused (permission) or failed on Google's side. A refused write means files never land: check the writer's role on the bucket (the backend's for the scan, exportmate-ai's for the AI job). GetBucketMetadata refusals are left out: the client asks for them, the object-only role refuses, and reads still work."
   },
   "combiner": "OR",
   "conditions": [

@@ -150,8 +150,9 @@ async function companyExam() {
     if (status !== 200) throw new Error(`GET ${path}: ${status} ${body.error?.code || ""}`);
     return body.data;
   };
-  const [profile, map, orders, suppliers, changes, rules, acacia] = await Promise.all([
-    read("/api/v1/company/knowledge"),
+  const [me, sites, map, orders, suppliers, changes, rules, acacia] = await Promise.all([
+    read("/api/v1/me"),
+    read("/api/v1/sites"),
     read("/api/v1/trade-map"),
     read("/api/v1/orders?checklist=all&limit=200"),
     read("/api/v1/suppliers"),
@@ -159,6 +160,8 @@ async function companyExam() {
     read("/api/v1/playbook/rules"),
     read("/api/v1/knowledge-graph/query?material=acacia&country=VN"),
   ]);
+  // The company's profile and sites, as the backend sends them with each company chat.
+  const profile = { company: me.company, sites: sites.map(({ name, kind, place }) => ({ name, kind, place })) };
   const data = { markets: map.markets, orders, suppliers, changes: changes.changes, rules: rules.filter((r) => r.enabled), acacia, today: new Date().toISOString().slice(0, 10) };
   return { token, backend, profile, cases: examCases(data) };
 }
@@ -169,7 +172,7 @@ const sessionId = `eval-${Date.now().toString(36)}`;
 console.log(
   `${asCompany ? `Exam as ${exam.profile.company.name}` : "Eval"} ${sessionId}${onEngine ? ` on ${runtime.name}` : ""}: ${cases.length} cases, policy ${POLICY_VERSION}${tier ? `, all on ${tier}` : ""}, model ${ASSISTANT.model}${GEMINI_PROJECT !== PROJECT ? ` in ${GEMINI_PROJECT}` : ""}${useJudge ? `, judge ${JUDGE_MODEL}` : ""}`,
 );
-// A company case runs as a signed-in chat does (index.js): the profile, the company's view of the
+// A company case runs as a signed-in chat does (the backend's /assistant/chat): the profile, the company's view of the
 // news sources, and its backend read with the owner's own token.
 const company = exam ? { company: exam.profile, access: { companyId: exam.profile.company.id, disabled: [] } } : null;
 

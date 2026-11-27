@@ -6,4 +6,4 @@ if [ -n "$AGENT_GATEWAY_CA" ]; then
   printf '%s\n' "$AGENT_GATEWAY_CA" > /tmp/agent-gateway-ca.pem
   export NODE_EXTRA_CA_CERTS=/tmp/agent-gateway-ca.pem
 fi
-exec node main.js
+exec node runtime.js

@@ -3,14 +3,13 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "main": "index.js",
+  "main": "runtime.js",
   "engines": {
     "node": ">=20"
   },
   "scripts": {
-    "start": "node main.js",
-    "runtime": "node runtime.js",
-    "dev": "node --watch --env-file-if-exists=.env index.js",
+    "start": "node runtime.js",
+    "dev": "node --watch --env-file-if-exists=.env runtime.js",
     "seed": "node seed.js",
     "index": "node rag.js",
     "test": "node --test test/*.test.js",

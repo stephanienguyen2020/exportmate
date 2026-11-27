@@ -1,30 +1,34 @@
 #!/usr/bin/env bash
-# Monitoring for one ExportMate service: log-based metrics, an email channel, an uptime check,
-# alert policies (errors, 5xx, file storage, ...) and a dashboard, from the JSON files in ai/ or backend/. Safe to run again:
-# each item is found by its name and updated in place.
+# Monitoring for one part of ExportMate: log-based metrics, an email channel, an uptime check,
+# alert policies (errors, 5xx, file storage, ...) and a dashboard, from the JSON files in ai/ or
+# backend/ (a part without metrics/ or uptime.json skips them). Safe to run again: each item is
+# found by its name and updated in place.
 #
-#   PROJECT_ID=skilful-scarab-511320-q9 PART=ai SERVICE=exportmate-ai ALERT_EMAIL=you@example.com ./apply.sh
+#   PROJECT_ID=skilful-scarab-511320-q9 PART=ai ALERT_EMAIL=you@example.com ./apply.sh
 #   PROJECT_ID=skilful-scarab-511320-q9 PART=backend SERVICE=exportmate-backend \
 #     WEBSITE_HOST=exportmate-web-3v6cd2xhpq-as.a.run.app ALERT_EMAIL=you@example.com ./apply.sh
 #
-# The AI part's uptime check calls the Cloud Run service directly; the backend's goes through the
-# website (WEBSITE_HOST), so it also fails when the website or its /api/v1 forwarding does. Needs
-# monitoring and logging write access (Editor is enough). `npm run ops` in ai/server reads the
-# same picture from Firestore.
+# ai/ is the assistant and News watch: answers (the backend's chat.completed lines) and the news
+# scan's failures, whose log metrics are in infra/terraform/ai_service.tf, the scheduler and the
+# search bucket. The backend's uptime check goes through the website (WEBSITE_HOST), so it also
+# fails when the website or its /api/v1 forwarding does. CHANNEL (an existing notification
+# channel's name) can stand in for ALERT_EMAIL. Needs monitoring and logging write access (Editor
+# is enough). `npm run ops` in ai/server reads the same picture from Firestore.
 set -euo pipefail
 
-: "${PROJECT_ID:?set PROJECT_ID}" "${PART:?set PART (ai or backend)}" "${SERVICE:?set SERVICE (the Cloud Run service)}" "${ALERT_EMAIL:?set ALERT_EMAIL}"
+: "${PROJECT_ID:?set PROJECT_ID}" "${PART:?set PART (ai or backend)}"
+[[ -n "${ALERT_EMAIL:-}${CHANNEL:-}" ]] || { echo "set ALERT_EMAIL (or CHANNEL)" >&2; exit 1; }
 REGION="${REGION:-asia-southeast1}"
 DIR="$(cd "$(dirname "$0")" && pwd)/$PART"
 [[ -d "$DIR" ]] || { echo "No monitoring files for PART=$PART" >&2; exit 1; }
 
 if [[ "$PART" == backend ]]; then
+  : "${SERVICE:?set SERVICE (the Cloud Run service)}"
   HOST="${WEBSITE_HOST:?set WEBSITE_HOST (the website the backend is reached through)}"
-else
-  HOST="$(gcloud run services describe "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format='value(status.url)' | sed 's|https://||')"
 fi
-# The service's data bucket, from its own settings (the AI service's RAG_BUCKET defaults to
-# <project>-kb, as in ai/server/rag.js).
+SERVICE="${SERVICE:-}" HOST="${HOST:-}"
+# The part's data bucket: the backend's from its settings; the search bucket is <project>-kb
+# (RAG_BUCKET, as in ai/server/rag.js).
 env_of() {
   gcloud run services describe "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format=json |
     jq -r --arg n "$1" '.spec.template.spec.containers[0].env[]? | select(.name == $n) | .value // empty'
@@ -32,7 +36,6 @@ env_of() {
 if [[ "$PART" == backend ]]; then
   BUCKET="${BUCKET:-$(env_of REGULATION_DOCUMENT_BUCKET)}"
 else
-  BUCKET="${BUCKET:-$(env_of RAG_BUCKET)}"
   BUCKET="${BUCKET:-$PROJECT_ID-kb}"
 fi
 : "${BUCKET:?no data bucket found; set BUCKET}"
@@ -60,6 +63,7 @@ fill() {
 
 echo "Log-based metrics"
 for f in "$DIR"/metrics/*.json; do
+  [[ -e "$f" ]] || continue
   name="$(jq -r .name "$f")"
   url="$LOGGING/metrics/$(jq -rn --arg s "$name" '$s|@uri')"
   body="$(fill "$f")"
@@ -71,7 +75,7 @@ for f in "$DIR"/metrics/*.json; do
 done
 
 echo "Email channel"
-CHANNEL="$(api GET "$MONITORING/notificationChannels?filter=$(jq -rn --arg e "$ALERT_EMAIL" '"type=\"email\" AND labels.email_address=\"\($e)\""|@uri')" | jq -r '.notificationChannels[0].name // empty')"
+[[ -n "${CHANNEL:-}" ]] || CHANNEL="$(api GET "$MONITORING/notificationChannels?filter=$(jq -rn --arg e "$ALERT_EMAIL" '"type=\"email\" AND labels.email_address=\"\($e)\""|@uri')" | jq -r '.notificationChannels[0].name // empty')"
 if [[ -z "$CHANNEL" ]]; then
   CHANNEL="$(api POST "$MONITORING/notificationChannels" "$(jq -n --arg e "$ALERT_EMAIL" '{type: "email", displayName: "ExportMate ops (\($e))", labels: {email_address: $e}}')" | jq -r .name)"
   echo "  created $CHANNEL"
@@ -79,6 +83,7 @@ else
   echo "  using $CHANNEL"
 fi
 
+if [[ -f "$DIR/uptime.json" ]]; then
 echo "Uptime check ($HOST)"
 uptime_name="$(jq -r .displayName "$DIR/uptime.json")"
 existing="$(api GET "$MONITORING/uptimeCheckConfigs" | jq -r --arg n "$uptime_name" '.uptimeCheckConfigs[]? | select(.displayName == $n) | .name' | head -1)"
@@ -90,6 +95,7 @@ else
   echo "  created $existing"
 fi
 UPTIME_ID="${existing##*/}"
+fi
 
 echo "Alert policies"
 policies="$(api GET "$MONITORING/alertPolicies?pageSize=200")"

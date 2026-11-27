@@ -1,8 +1,8 @@
 {
-  "displayName": "ExportMate AI service: assistant answers failing",
+  "displayName": "ExportMate assistant and news: assistant answers failing",
   "documentation": {
     "mimeType": "text/markdown",
-    "content": "Three or more assistant answers in an hour ended other than ok (error, max_steps, needs_review). `npm run ops -- --days=1` lists why; each audit is in Firestore `audits`.\n\nLogs Explorer, project ${PROJECT_ID}: `resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"${SERVICE}\" AND jsonPayload.message=\"chat.completed\" AND jsonPayload.status!=\"ok\"`"
+    "content": "Three or more assistant answers in an hour ended other than ok (error, max_steps, needs_review). `npm run ops -- --days=1` lists why; each audit is in Firestore `audits`.\n\nLogs Explorer, project ${PROJECT_ID}: `resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"exportmate-backend\" AND jsonPayload.message=\"chat.completed\" AND jsonPayload.status!=\"ok\"`"
   },
   "combiner": "OR",
   "conditions": [

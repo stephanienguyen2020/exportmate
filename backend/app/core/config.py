@@ -70,7 +70,7 @@ class Settings(BaseSettings):
     scan_max_age_days: int = 365
     # The assistant's agents (core/agents.py, ai/server/runtime.js): "runtime" for the Agent
     # Runtime instance AGENT_RUNTIME (projects/<p>/locations/<l>/reasoningEngines/<id>), or the URL
-    # of a local runtime.js (`npm run runtime`, http://127.0.0.1:8080). Empty: no assistant.
+    # of a local runtime.js (`npm run dev` in ai/server, http://127.0.0.1:8080). Empty: no assistant.
     agents_at: str = ""
     agent_runtime: str = ""
     # Chats per hour, counted in memory per instance: per client address, and in all. Each chat

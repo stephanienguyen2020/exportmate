@@ -99,10 +99,6 @@ export function presentScan(scan, access) {
   return { ...shown, impactsFound: companyImpacts?.[access.companyId] ?? 0 };
 }
 
-// Audits: an anonymous (demo) chat's audit is readable with its session id, as before.
-// One made in a company workspace also needs a token from that company.
-export const auditVisible = (audit, access) => !audit.companyId || audit.companyId === access.companyId;
-
 // The model's raw reasoning stays in the stored audit for reviewers; the app shows step
 // summaries only.
 export const publicStep = ({ thought, ...step }) => step;

@@ -1256,7 +1256,8 @@ test("new accounts onboard through the API and the sample demo stays local", asy
   );
   await page.goto("/#/logout");
   await expect(page.getByText("Your workspace is saved.")).toBeVisible();
-  expect(requests.some((r) => r.path === "/me/logout")).toBeTruthy();
+  // The page says so as soon as it opens; the sign-out request follows.
+  await expect.poll(() => requests.some((r) => r.path === "/me/logout")).toBeTruthy();
   const count = requests.length;
   await page.goto("/#/login");
   await page.getByRole("button", { name: /demo/i }).click();

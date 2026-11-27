@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build the website image on Cloud Build and roll it out to the Cloud Run service exportmate-web.
-# The service, its settings (BACKEND_HOST, AI_HOST) and its public access come from
+# The service, its setting (BACKEND_HOST) and its public access come from
 # infra/terraform (web_service.tf); run `terraform apply` first.
 #
 # Usage (from anywhere):  PROJECT_ID=my-project frontend/deploy.sh

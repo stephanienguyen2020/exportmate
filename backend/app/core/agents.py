@@ -2,12 +2,11 @@
 
   "runtime"    the Agent Runtime instance AGENT_RUNTIME, through Agent Platform's
                reasoningEngines streamQuery / query APIs with this service's identity
-  http(s) URL  a runtime.js running elsewhere (locally: `npm run runtime` in ai/server)
+  http(s) URL  a runtime.js running elsewhere (locally: `npm run dev` in ai/server)
   empty        not set up: the assistant's routes answer 503
 
 The agents answer a chat turn as NDJSON events ({type: "step" | "done" | "error", ...}) and the
-class methods query, list_memories and delete_memory as {output}. The same contract as the AI
-service's agents/remote.js."""
+class methods query, list_memories and delete_memory as {output}."""
 
 import json
 import re

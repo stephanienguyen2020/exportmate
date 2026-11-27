@@ -13,7 +13,7 @@ ARG VITE_FIREBASE_APP_ID
 RUN npm run build
 
 FROM nginx:1.27-alpine
-# Rendered at start (envsubst) with PORT, set by Cloud Run, and BACKEND_HOST and AI_HOST.
+# Rendered at start (envsubst) with PORT, set by Cloud Run, and BACKEND_HOST.
 COPY nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=build /app/dist /usr/share/nginx/html
 ENV PORT=8080

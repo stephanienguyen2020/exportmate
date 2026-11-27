@@ -41,10 +41,6 @@ resource "google_cloud_run_v2_service" "web" {
         name  = "BACKEND_HOST"
         value = trimprefix(google_cloud_run_v2_service.backend.uri, "https://")
       }
-      env {
-        name  = "AI_HOST"
-        value = trimprefix(local.ai_url, "https://")
-      }
     }
   }
 
