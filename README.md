@@ -93,6 +93,8 @@ trade map, News watch and the assistant with the knowledge graph. Please don't c
   the checks, live and saved.
 - **Memory:** remembers a signed-in user's preferences and work; Account › What the assistant remembers
   lists them and forgets any on request.
+- **What to ask:** [docs/ASSISTANT_QUESTIONS.md](docs/ASSISTANT_QUESTIONS.md) lists tested questions
+  by use case: orders, missing documents, suppliers, connections, what-ifs, the playbook, news and more.
 
 ### 👥 Team and accounts
 
