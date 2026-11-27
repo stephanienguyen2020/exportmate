@@ -32,6 +32,7 @@ from app.api import (
     supplier_messages,
     suppliers,
     trade_map,
+    trade_risk,
 )
 from app.core.config import get_settings
 from app.core.errors import register_error_handlers
@@ -145,6 +146,7 @@ def create_app() -> FastAPI:
         knowledge_graph,
         members,
         graph_sync,
+        trade_risk,
     ):
         api.include_router(module.router)
     app.include_router(api)

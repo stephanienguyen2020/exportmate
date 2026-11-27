@@ -18,6 +18,7 @@ from app.database.queries import imports as import_queries
 from app.database.queries import orders as order_queries
 from app.schemas.imports import CommitOut, ImportOut, PreviewRowOut
 from app.services import analysis as analysis_service
+from app.services import trade_risk as trade_risk_service
 from app.services.order_csv import parse_order_csv, reject_existing_order_ids
 
 PREVIEW_LIMIT = 200
@@ -211,6 +212,7 @@ def commit_order_import(db: Session, ctx: CompanyContext, import_id: uuid.UUID) 
             "orders_created": len(orders),
         },
     )
+    trade_risk_service.record_order_pairs(db, ctx, orders)
     # Analyse the new orders straight away. The orders are already saved: if the run fails,
     # it is recorded as failed and the orders wait for "Analyse orders".
     try:

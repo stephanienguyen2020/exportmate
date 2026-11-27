@@ -30,6 +30,7 @@ import { Button, PageHeading, go, orderPath, type Notify } from "./ui";
 
 const OrderAnalysis = lazy(() => import("../Analysis"));
 const OrderStatusPanel = lazy(() => import("../OrderStatus"));
+const OrderTradeRisk = lazy(() => import("../TradeRisk"));
 const costMoney = (n: number) => money(n, sampleCosts.maker.currency);
 
 function OrderHeading({
@@ -150,6 +151,23 @@ export function CompanyOrder({
             if (location.hash.endsWith("/" + orderPath(orderId)))
               setDetail(next);
           }}
+        />
+      </Suspense>
+      <Suspense
+        fallback={
+          <section className="panel" role="status">
+            Loading the trade defence risk…
+          </section>
+        }
+      >
+        {/* Keyed by the fields its pair comes from, so an edit reads it again. */}
+        <OrderTradeRisk
+          key={[
+            detail.order.id,
+            detail.order.destination,
+            detail.order.hsCode,
+          ].join("|")}
+          orderId={detail.order.id}
         />
       </Suspense>
       <section className="panel report-actions">

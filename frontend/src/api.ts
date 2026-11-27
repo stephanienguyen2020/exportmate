@@ -702,6 +702,35 @@ export type MarketComparison = {
   dropped: string[];
   assumptions?: string[];
 };
+// The risk that a market opens an anti-dumping or anti-subsidy case on a product from an
+// exporting country in the next 12 months (GET /trade-risk…). pending: being scored, ask again.
+export type TradeRisk = {
+  orderId: string | null;
+  market: string | null;
+  exporter: string | null;
+  hs6: string | null;
+  status: "scored" | "pending" | "no_data";
+  level: "high" | "medium" | "low" | null;
+  percentile: number | null;
+  reasons: { feature: string; text: string }[];
+  note: string | null;
+  dataFrom: string | null;
+  dataTo: string | null;
+  dataSource: "comtrade" | "baci" | null;
+  scoredAt: string | null;
+  similarCases: {
+    caseId: string;
+    kind: string;
+    market: string;
+    exporter: string;
+    hs6: string;
+    year: number;
+    product: string | null;
+    outcome: "duty imposed" | "pending" | "no duty";
+    dutyPct: number | null;
+  }[];
+  sources: string[];
+};
 export type ScenarioKind = "market" | "ship_date" | "route";
 export type SavedScenario = {
   id: string;
@@ -1254,6 +1283,16 @@ export const api = {
   compareRoute: (orderId: string, via: string, signal?: AbortSignal) =>
     request<MarketComparison>(
       `/orders/${encodeURIComponent(orderId)}/what-if?${new URLSearchParams({ via })}`,
+      { signal },
+    ).then((r) => r.data),
+  orderTradeRisk: (orderId: string, signal?: AbortSignal) =>
+    request<TradeRisk>(`/trade-risk/orders/${encodeURIComponent(orderId)}`, {
+      signal,
+    }).then((r) => r.data),
+  // Any destination (a country or market code) for the company's own country.
+  tradeRisk: (destination: string, hsCode: string, signal?: AbortSignal) =>
+    request<TradeRisk>(
+      `/trade-risk?${new URLSearchParams({ destination, hsCode })}`,
       { signal },
     ).then((r) => r.data),
   // What-ifs saved with a note; saving changes nothing on the order.
