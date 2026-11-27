@@ -8,6 +8,12 @@ anti-subsidy case against an exporting country on a product next year?
 - Design (use case, data, features, training, how it is served): [`docs/TRADE_DEFENCE_RISK_MODEL.md`](docs/TRADE_DEFENCE_RISK_MODEL.md)
 - What each test found: [`docs/TRADE_DEFENCE_RISK_RESULTS.md`](docs/TRADE_DEFENCE_RISK_RESULTS.md)
 
+The **harshness model** (`trade_risk/harshness*.py`, severity model v2): once a case is opened, how
+badly will it cut imports of that product from that origin into that market? Offline only so far.
+
+- Design: [`docs/HARSHNESS_MODEL.md`](docs/HARSHNESS_MODEL.md)
+- What each test found: [`docs/HARSHNESS_RESULTS.md`](docs/HARSHNESS_RESULTS.md)
+
 ## Layout
 
 ```
@@ -106,3 +112,23 @@ newest model folder); after changing the code, `ml/deploy.sh`.
 
 Training still runs on a laptop. Later it moves to Vertex AI (a custom training job reading the
 same bucket instead of `data/`).
+
+## Harshness model
+
+Uses the trade risk model's prepared data (`cases`, `trade_flows` and `features` first) and two more
+sources:
+
+| Source | Folder in `data/raw/` | Download | Terms |
+| --- | --- | --- | --- |
+| WTO Trade Remedies Data Portal: anti-dumping and anti-subsidy investigations, HS codes, conclusions, dates duties came into force | `wto_trade_remedies/` | `uv run python -m trade_risk.harshness_cases download` | WTO public data; cite "WTO Trade Remedies Data Portal" |
+| EU TRON: EU trade defence cases, CN codes, provisional and final duty dates | `eu_tron/` | the same step | European Commission public data |
+
+TTBD's safeguards (`Global safeguard measures`) come from the TTBD download above.
+
+```sh
+uv run python -m trade_risk.harshness_cases download   # WTO portal and EU TRON pages (cached; about 1 h the first time)
+uv run python -m trade_risk.harshness_cases build      # one case table, outcomes from all sources -> harshness_cases.parquet
+uv run python -m trade_risk.harshness build            # rows, labels, features -> harshness.parquet
+uv run python -m trade_risk.harshness tune             # model settings, picked on 2015-2017
+uv run python -m trade_risk.harshness compare          # walk-forward test of every label -> models/harshness/<run>/ (HARSHNESS_RUN names the run)
+```
