@@ -455,7 +455,7 @@ test("an order's trade defence risk is scored on first read, then shows its leve
   ).toBeVisible();
   await expect(
     risk.getByText(
-      "Anti-dumping case by US on Wooden bedroom furniture from CN, 2019",
+      "Anti-dumping case by the United States on Wooden bedroom furniture from China, 2019",
     ),
   ).toBeVisible();
   await expect(risk.getByText("duty imposed (216%)")).toBeVisible();
