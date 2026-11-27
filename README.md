@@ -93,6 +93,15 @@ trade map, News watch and the assistant with the knowledge graph. Please don't c
   the checks, live and saved.
 - **Memory:** remembers a signed-in user's preferences and work; Account › What the assistant remembers
   lists them and forgets any on request.
+- **How it works:** a team of agents built with **Google ADK** on **Agent Platform's Agent Runtime**.
+  A router sends each question to a quick-answer agent or an analyst; they call read-only tools
+  (orders, playbook, news, stock, **RAG Engine** search, the knowledge graph); an auditor and a critic
+  check the draft. **Sessions** and **Memory Bank** keep context, and the agents run under their own
+  **Agent Identity** through **Agent Gateway** with **Model Armor**. Details:
+  [docs/AGENT_HARNESS.md](docs/AGENT_HARNESS.md); how to use it: [docs/AI_GUIDE.md](docs/AI_GUIDE.md).
+- **Gemini outside the chat**, always with code checking its answer before it's saved: drafting
+  requirements, reading certificates, assessing news, writing solutions and supplier emails, reading
+  what-ifs and building the material chain.
 - **What to ask:** [docs/ASSISTANT_QUESTIONS.md](docs/ASSISTANT_QUESTIONS.md) lists tested questions
   by use case: orders, missing documents, suppliers, connections, what-ifs, the playbook, news and more.
 
@@ -102,50 +111,6 @@ trade map, News watch and the assistant with the knowledge graph. Please don't c
   viewer roles.
 - An **activity log** of every change, exportable as CSV.
 - **Browser demo:** the full workspace in the browser with sample orders, no account needed.
-
----
-
-## 🤖 How It Uses AI Agents
-
-The assistant is a multi-agent team built with **Google ADK** and running on **Agent Platform's Agent
-Runtime**.
-
-1. **Router**
-   - Picks the agent for each question: a **quick-answer agent** for lookups, or an **analyst** for
-     questions with several parts. Both use the same Gemini model. Connection questions ("depends
-     on", "made from", "which orders", "restricts") go to the analyst.
-
-2. **Tools**
-   - Both agents call read-only tools themselves: **orders** (checklists, read with the user's own
-     token), **playbook**, **company profile**, **news** (alerts and scans), **stock**, **search**
-     (**RAG Engine**, then a BM25 rerank) and **graph** (`query_graph`, the knowledge graph's paths
-     from material to order).
-
-3. **Auditor**
-   - Checks every draft: citations resolve, figures appear in what the tools returned, news carries its
-     date, links are real sources, and every order the graph reached that the answer names cites its
-     path. A failing draft goes back to the analyst once.
-
-4. **Critic**
-   - A Gemini check after the auditor: order by order, it compares what the answer says connects the
-     order with its path and the order's own facts. An added supplier, country or step, or a
-     contradiction, sends the draft back once; still failing, the answer is flagged for review.
-
-5. **Sessions and Memory Bank**
-   - Keep each chat's context and what a user asked the assistant to remember.
-
-6. **Governance and evaluation**
-   - The agents run as their own **Agent Identity**, call only endpoints listed in **Agent Registry**,
-     and send their traffic through **Agent Gateway** with **Model Armor**.
-   - A golden set of questions is scored after changes, also on **Agent Platform › Evaluation** with
-     managed judges.
-
-Gemini also works outside the chat, always with code checking its answer before it's saved: drafting
-requirements from regulations, reading supplier certificates, assessing news, writing solutions,
-drafting supplier emails, reading what-if comparisons, and building the material chain.
-
-📖 How to use the AI features: [docs/AI_GUIDE.md](docs/AI_GUIDE.md). The harness around the agents
-(policy, tools, guard, auditor, evals): [docs/AGENT_HARNESS.md](docs/AGENT_HARNESS.md).
 
 ---
 
