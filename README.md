@@ -84,17 +84,20 @@ trade map, News watch and the assistant with the knowledge graph. Please don't c
 ### 💬 The assistant
 
 - Opens from every screen: ask about your orders, rules, news, stock, or how to use the app.
-- **Ask about connections:** "what if Vietnam restricts acacia log exports?" or "which orders depend on
-  acacia?" The assistant walks the knowledge graph and names each order with the path that reaches it
-  (**GraphRAG**).
-- Every fact carries a **numbered citation**; an auditor checks citations and figures, and a critic
-  checks that each connection it claims matches its path, before the answer is shown.
-- **Audit trail:** each answer's steps, the agent behind each one, the tools called, the evidence and
-  the checks, live and saved.
-- **Memory:** remembers a signed-in user's preferences and work; Account › What the assistant remembers
-  lists them and forgets any on request.
-- **What to ask:** [docs/ASSISTANT_QUESTIONS.md](docs/ASSISTANT_QUESTIONS.md) lists tested questions
-  by use case: orders, missing documents, suppliers, connections, what-ifs, the playbook, news and more.
+  [Questions to try](docs/ASSISTANT_QUESTIONS.md), by use case.
+- **Connections (GraphRAG):** "what if Vietnam restricts acacia log exports?" The assistant walks the
+  knowledge graph and names each order with the path that reaches it.
+- **Checked answers:** every fact carries a **numbered citation**. An auditor checks citations and
+  figures, and a critic checks each claimed connection against its path; a failing draft is redone once.
+- **Audit trail:** each answer's steps, the agent and tools behind them, and the checks, live and saved.
+- **Memory:** remembers a signed-in user's preferences (**Memory Bank**); Account › What the assistant
+  remembers lists them and forgets any on request.
+- **How it works:** **Google ADK** agents on **Agent Platform's Agent Runtime**. A router sends each
+  question to a quick-answer agent or an analyst, which call read-only tools (orders, playbook, news,
+  stock, **RAG Engine** search, the knowledge graph) through **Agent Gateway** with **Model Armor**.
+  More in [docs/AI_GUIDE.md](docs/AI_GUIDE.md) and [docs/AGENT_HARNESS.md](docs/AGENT_HARNESS.md).
+- **Beyond the chat**, Gemini drafts requirements, reads certificates, assesses news, writes solutions
+  and supplier emails, and builds the material chain, with code checking each answer before it's saved.
 
 ### 👥 Team and accounts
 
@@ -105,60 +108,10 @@ trade map, News watch and the assistant with the knowledge graph. Please don't c
 
 ---
 
-## 🤖 How It Uses AI Agents
-
-The assistant is a multi-agent team built with **Google ADK** and running on **Agent Platform's Agent
-Runtime**.
-
-1. **Router**
-   - Picks the agent for each question: a **quick-answer agent** for lookups, or an **analyst** for
-     questions with several parts. Both use the same Gemini model. Connection questions ("depends
-     on", "made from", "which orders", "restricts") go to the analyst.
-
-2. **Tools**
-   - Both agents call read-only tools themselves: **orders** (checklists, read with the user's own
-     token), **playbook**, **company profile**, **news** (alerts and scans), **stock**, **search**
-     (**RAG Engine**, then a BM25 rerank) and **graph** (`query_graph`, the knowledge graph's paths
-     from material to order).
-
-3. **Auditor**
-   - Checks every draft: citations resolve, figures appear in what the tools returned, news carries its
-     date, links are real sources, and every order the graph reached that the answer names cites its
-     path. A failing draft goes back to the analyst once.
-
-4. **Critic**
-   - A Gemini check after the auditor: order by order, it compares what the answer says connects the
-     order with its path and the order's own facts. An added supplier, country or step, or a
-     contradiction, sends the draft back once; still failing, the answer is flagged for review.
-
-5. **Sessions and Memory Bank**
-   - Keep each chat's context and what a user asked the assistant to remember.
-
-6. **Governance and evaluation**
-   - The agents run as their own **Agent Identity**, call only endpoints listed in **Agent Registry**,
-     and send their traffic through **Agent Gateway** with **Model Armor**.
-   - A golden set of questions is scored after changes, also on **Agent Platform › Evaluation** with
-     managed judges.
-
-Gemini also works outside the chat, always with code checking its answer before it's saved: drafting
-requirements from regulations, reading supplier certificates, assessing news, writing solutions,
-drafting supplier emails, reading what-if comparisons, and building the material chain.
-
-📖 How to use the AI features: [docs/AI_GUIDE.md](docs/AI_GUIDE.md). The harness around the agents
-(policy, tools, guard, auditor, evals): [docs/AGENT_HARNESS.md](docs/AGENT_HARNESS.md).
-
----
-
 ## 🧩 The Knowledge Graph
 
 News rarely names your order. A story about **acacia logs from Vietnam** never mentions plywood or
 PO-2291, yet the order depends on it. The knowledge graph connects them.
-
-- **Nodes:** materials (acacia, rubberwood), products (each an HS heading: logs, veneer, plywood,
-  furniture), suppliers and orders.
-- **Links:** a product is *used to make* another (each link quoting an official text), a supplier
-  *buys* a material from a country in a form, a supplier *supplies* an order, and an order *is* a
-  product through its HS code.
 
 ```
 Binh Phu Wood ──BUYS (Vietnam, logs)──► acacia
@@ -166,68 +119,31 @@ logs ──USED_TO_MAKE──► veneer ──USED_TO_MAKE──► plywood
 PO-2291 ──IS_PRODUCT──► plywood        Binh Phu Wood ──SUPPLIES──► PO-2291
 ```
 
-The material chain covers **every commodity in the EU deforestation rule** (wood, cocoa, coffee, oil
-palm, soya, rubber, cattle). It is built offline by a **Gemini writer** that proposes links with quotes
-from official texts, **code checks** on each quote and HS code, and a **Gemini reviewer** that flags
-doubtful links for a person.
+- **What's in it:** materials, products (HS headings), suppliers and orders. Every *used to make* link
+  quotes an official text, covering every commodity in the EU deforestation rule.
+- **How it's built:** offline, a **Gemini writer** proposes links, code checks each quote and HS code,
+  and a **Gemini reviewer** flags doubtful ones; a chain admin publishes each new version.
+- **Where it lives:** **Cloud SQL Postgres** is the source of truth; **Neo4j AuraDB** holds a copy that
+  the walk queries with **Cypher**.
+- **How it learns:** people confirm or reject the orders it suggests, and a nightly job turns those
+  verdicts into link weights.
 
-**How the graph is used:**
-
-- **Neo4j AuraDB** holds the graph as a read model: products, materials and chain links with their
-  weights, and each company's suppliers (*buys*) and orders (*supplies*, *is*). **Cloud SQL Postgres**
-  stays the source of truth.
-- **The walk** runs as a **Cypher** query on Neo4j while its copy matches Postgres (a fingerprint of
-  the chain), and falls back to a recursive SQL query otherwise. The query reports where it walked.
-- **Ranking:** between paths of equal length, the walk prefers fewer doubted links, then fewer less
-  common routes, then links with higher weights.
-- **Learning from verdicts:** a nightly job counts every company's confirms and rejects per chain link
-  into a weight. A link a company keeps rejecting is doubted for that company straight away.
-- **Chain versions:** each industry's chain is versioned in Postgres. A new build arrives as a draft
-  with what it changes and what the pipeline flagged; a **chain admin** reviews it on the Material
-  chain page and publishes or rejects it. Publishing rebuilds the graph.
+📖 Details (data model, the walk, verdicts, the builder, Neo4j):
+[backend/app/knowledge_graph/README.md](backend/app/knowledge_graph/README.md).
 
 ### 🚀 Architecture
 
 ![Knowledge graph and GraphRAG architecture by flow](docs/images/knowledge-graph-architecture.png)
 
-#### 🩵 1. News watch
-
-- **Cloud Scheduler** starts the news scan on **Cloud Run**; Gemini assesses each article and the alert
-  is saved in **Firestore**.
-- The **News matches API** reads the alerts, walks the graph on **Neo4j** for the orders each one
-  reaches, returns them with their paths, and saves each verdict in Postgres.
-- The **link weights job** (a Cloud Run job, started by Cloud Scheduler every night) turns verdicts
-  into link weights.
-
-#### 📘 2. Material chain builder (offline)
-
-- The Gemini writer, code checks and Gemini reviewer turn official texts into links, each quoting its
-  source.
-- The result is saved as a draft **chain version**; a chain admin reviews the changes and flags, and
-  publishes or rejects it.
-- A **source finder agent** that collects new official texts into Cloud Storage is the next addition.
-
-#### 🏭 3. Supplier sourcing
-
-- An uploaded certificate is read by Gemini, the user confirms the suggestions, and they're saved as
-  the supplier's sourcing: each one a *buys* link from the supplier to a material.
-
-#### 🧠 4. Assistant (GraphRAG)
-
-- The router sends a connection question to the analyst.
-- The analyst's `query_graph` call goes through **Agent Gateway** and **Model Armor** to the **Graph query API**
-  on Cloud Run, which reads what the question names (materials, countries, HS codes, markets), walks
-  the graph for the user's company with a **Cypher** query on **Neo4j AuraDB**, and returns each order
-  with its cited path and what it did and didn't recognise.
-- The answer cites each order's path and each link's official text. The **auditor** checks every
-  order named cites its path, and the **critic** checks the claims match the paths.
-
-#### 🗄️ Data
-
-- **Cloud SQL Postgres** is the source of truth, one block per table.
-- After each change (the chain, or a company's suppliers, sourcing or orders), an event goes to
-  **Pub/Sub**; its push subscription calls the **graph sync** endpoint, which rewrites that part of
-  **Neo4j** from Postgres. Failed syncs are retried, and deploys and the nightly job run a full sync.
+1. **News watch:** the daily scan saves alerts; the News matches API walks the graph for the orders
+   each alert reaches and keeps the user's verdicts.
+2. **Material chain builder (offline):** official texts become cited links, published as a reviewed
+   version.
+3. **Supplier sourcing:** Gemini reads an uploaded certificate, and what the user confirms becomes
+   the supplier's *buys* links.
+4. **Assistant (GraphRAG):** the agents ask the Graph query API for paths, through Agent Gateway and
+   Model Armor, and cite each order's path in the answer.
+5. **Data:** each change in Postgres goes through **Pub/Sub** to a sync endpoint that updates Neo4j.
 
 ---
 
