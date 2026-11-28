@@ -69,6 +69,7 @@ from app.database.models.trade_map import (
 )
 from app.database.models.trade_risk import (
     ImportFigure,
+    MeasureScore,
     OrderTradePair,
     TradeCase,
     TradeFlowFeatures,
@@ -105,6 +106,7 @@ __all__ = [
     "ImportStatus",
     "Market",
     "MarketRequirement",
+    "MeasureScore",
     "Membership",
     "NewsOrderReview",
     "NewsVerdict",

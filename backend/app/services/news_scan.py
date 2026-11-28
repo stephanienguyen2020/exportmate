@@ -30,18 +30,21 @@ from app.core.rag_index import (
     sync_goods_docs,
     sync_source_docs,
 )
+from app.core.trade_risk_job import start_measures
 from app.core.untrusted_text import find_injection
 from app.database.news_store import NewsStore, get_news_store
 from app.services.news_alerts import alert_visible
 from app.services.news_scan_rules import (
     SCAN_POLICY_VERSION,
     Assessments,
+    article_measures,
     assessment_prompt,
     clean_measure,
     clean_mentions,
     collect_candidates,
     company_reading,
     decide,
+    measures_to_score,
 )
 from app.services.news_sources import NewsAccess
 
@@ -377,9 +380,13 @@ def _scan(store: NewsStore, scan_id: str, started: datetime, max_age_days: int) 
     goods = scan_goods(store, scan_id, fresh, sources_by_id, company_settings)
     found = goods["found"]
     alerted = {f["articleId"] for f in found}
+    measures = article_measures(found)
     failed = [a for a in fresh if a["id"] in goods["failed"]]
     analysed += [
-        {**a, "relevant": a["id"] in alerted} for a in fresh if a["id"] not in goods["failed"]
+        {**a, "relevant": a["id"] in alerted}
+        | ({"measure": measures[a["id"]]} if a["id"] in measures else {})
+        for a in fresh
+        if a["id"] not in goods["failed"]
     ]
     company_impacts: dict[str, int] = {}
     for alert in found:
@@ -405,6 +412,12 @@ def _scan(store: NewsStore, scan_id: str, started: datetime, max_age_days: int) 
     except Exception as error:  # noqa: BLE001 (recorded on the scan)
         index_error = str(error)
         log.error("scan.index_failed", extra={"scan_id": scan_id, "error": index_error})
+
+    # 7. Score the trade measures the new articles report, once per article for every company
+    # (the Order features job's harshness model; it skips an article it already scored).
+    fresh_ids = {a["id"] for a in fresh}
+    to_score = measures_to_score({k: v for k, v in measures.items() if k in fresh_ids})
+    measures_started = start_measures(to_score) if to_score else False
 
     now = _now_iso()
     for status in source_status:
@@ -440,6 +453,8 @@ def _scan(store: NewsStore, scan_id: str, started: datetime, max_age_days: int) 
         "companyImpacts": company_impacts,
         # Records sent to RAG Engine (new or changed); None when the import failed or is off.
         "indexed": indexed["imported"] if indexed else None,
+        # Trade measures sent to the harshness model (0 when none, or no job is set up).
+        "measuresToScore": len(to_score) if measures_started else 0,
     }
     if goods["error"]:
         summary["error"] = (

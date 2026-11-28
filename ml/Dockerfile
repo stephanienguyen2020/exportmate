@@ -27,4 +27,4 @@ RUN useradd --create-home appuser
 USER appuser
 
 # The backend and the monthly schedule only pass arguments (--new, --pair US:VN:441231, none).
-ENTRYPOINT ["python", "-m", "trade_risk.order_features"]
+ENTRYPOINT ["python", "-m", "trade_risk.job"]

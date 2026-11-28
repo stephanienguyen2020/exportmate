@@ -74,8 +74,11 @@ uv run python -m trade_risk.order_features --no-comtrade --pair … # BACI only
 uv run pytest                                                    # unit tests
 ```
 
-The backend starts it after saving orders with new pairs, and for a what-if pair with no score: locally set `TRADE_RISK_JOB_COMMAND="uv run
-python -m trade_risk.order_features"` in `backend/.env` (it runs in `../ml`).
+The backend starts it after saving orders with new pairs, and for a what-if pair with no score; the
+news scan starts it with the trade measures new articles report (`--measure`, scored by the harshness
+model). The image's entry point is `trade_risk.job`, which sends `--measure` to the harshness model and
+everything else to `order_features`. Locally set `TRADE_RISK_JOB_COMMAND="uv run python -m trade_risk.job"`
+in `backend/.env` (it runs in `../ml`).
 
 A pair costs about 5 Comtrade calls the first time (51 months, 12 a call) and 1 a month after (the
 months not yet reported); the free key allows 500 a day. US imports have no reported weight on
@@ -131,4 +134,16 @@ uv run python -m trade_risk.harshness_cases build      # one case table, outcome
 uv run python -m trade_risk.harshness build            # rows, labels, features -> harshness.parquet
 uv run python -m trade_risk.harshness tune             # model settings, picked on 2015-2017
 uv run python -m trade_risk.harshness compare          # walk-forward test of every label -> models/harshness/<run>/ (HARSHNESS_RUN names the run)
+uv run python -m trade_risk.harshness final            # the app's model: level cut-offs from the walk-forward scores, trained on every case
 ```
+
+The Order features job scores the measures the news scan writes down (`harshness_scoring.py`), into
+`measure_scores`:
+
+```sh
+uv run python -m trade_risk.job --measure '{"articleId": "a1", "kind": "anti_dumping", "stage": "opening",
+  "markets": ["US"], "origins": ["VN"], "productHs": ["4412"]}'      # --no-comtrade: BACI only
+```
+
+It needs the trade risk model and the harshness model (`models/harshness/<run>/`), and the prepared
+tables `harshness_cases.parquet` and `harshness.parquet`; `ml/upload.sh` sends all of them to the bucket.

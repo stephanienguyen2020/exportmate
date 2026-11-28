@@ -349,6 +349,29 @@ def clean_mentions(raw: object) -> dict:
     }
 
 
+# The kinds the harshness model scores (ml/trade_risk/harshness_scoring.py); Gemini rates the rest.
+HARSHNESS_MODEL_KINDS = {"anti_dumping", "anti_subsidy", "safeguard"}
+
+
+def article_measures(alerts: list[dict]) -> dict[str, dict]:
+    """One measure per article: the first that a company's assessment of it wrote down. An article is
+    scored once for every company; each alert keeps its own copy as Gemini read it for that company."""
+    measures: dict[str, dict] = {}
+    for alert in alerts:
+        if alert.get("measure") and alert["articleId"] not in measures:
+            measures[alert["articleId"]] = alert["measure"]
+    return measures
+
+
+def measures_to_score(measures: dict[str, dict]) -> dict[str, dict]:
+    """The measures the harshness model scores: its kinds, with a market and an HS code to make rows of."""
+    return {
+        article_id: m
+        for article_id, m in measures.items()
+        if m["kind"] in HARSHNESS_MODEL_KINDS and m["markets"] and m["productHs"]
+    }
+
+
 _MEASURE_HS = re.compile(r"^\d{4}(\d{2})?$")
 _MEASURE_KINDS = set(MeasureKind.__args__)
 _MEASURE_STAGES = set(MeasureStage.__args__)

@@ -76,8 +76,13 @@ checked for form only there: the scan job has no database, so whether a code exi
 **Step 3, the rows.** "US opens a case on plywood from Vietnam and China" gives two rows: US, VN,
 441231 and US, CN, 441231. If the article names only a heading (4412, plywood), code takes the HS 6
 codes under it that the market really imports from that origin (from BACI), so each row has trade
-figures. A cap (say 20 rows per article) keeps a vague article from making hundreds. A safeguard
-names no origin, so it gives a row for each of the market's 10 biggest suppliers of the product.
+figures (the 5 codes it imports most from the named origins). A cap of 20 rows per article keeps a
+vague article from making hundreds. A safeguard names no origin, so it gives a row for each of the
+market's 10 biggest suppliers of the product. Built: `ml/trade_risk/harshness_scoring.py`; the scan
+starts the job with each new article's measure (`--measure`), and an article already scored by the
+same model version is skipped. Each row's features come from the functions that built the training
+rows (`past_duty_rates`, `past_fall_rates`, `market_shape` in `harshness.py`), so training and scoring
+can't drift apart.
 
 **Step 7, which row.** An order's row is its own pair: destination market, the company's country,
 the order's HS 6 (the same pair the trade risk model scores, `order_trade_pairs`). If the article has
@@ -152,7 +157,10 @@ Five candidates are built and tested; the results doc says which one won.
 4. **Both:** ended in a duty and imports fell.
 5. **Both, compared with the rest.**
 
-Output: a probability, turned into low, medium or high with thresholds, like the trade risk model.
+Output: a probability, turned into low, medium or high. The cut-offs come from the walk-forward
+scores of 2018-2022, which no model saw in training: the top quarter is high, the bottom quarter low
+(`harshness final`, saved in the model's `report.json`). On those years imports fell after 57% of the
+high cases, 34% of the medium and 19% of the low.
 
 ### Features
 
@@ -273,8 +281,9 @@ Drop:
 
 ## Where it runs and where it is stored
 
-- **Code:** in `ml/trade_risk/` (`harshness_cases.py`, `harshness.py`), next to the trade risk model,
-  sharing its features and training code.
+- **Code:** in `ml/trade_risk/` (`harshness_cases.py`, `harshness.py`, `harshness_scoring.py`), next
+  to the trade risk model, sharing its features and training code. The job's entry point,
+  `trade_risk/job.py`, sends `--measure` to the harshness model and everything else to trade risk.
 - **Stored:** a Postgres table `measure_scores`, one row per article x market x origin x HS 6: the
   measure's kind and stage, harshness (score and level), who scored it (model or Gemini), the model
   version and the date. Scored once, shared by every company. The per-company severity is worked out
@@ -285,9 +294,9 @@ Drop:
   two models; the backend image doesn't need LightGBM, XGBoost or CatBoost.
 - **First stage (simple):** the job loads the model files itself. Until an alert's rows are saved,
   News watch says "The harshness score is being worked out. Check again later."
-- **Model files:** training writes them to `ml/models/harshness/<run>/` (git-ignored), and the job
-  loads the newest. In production they go into the job's Docker image or a Cloud Storage bucket; in
-  the target design, Vertex AI Model Registry holds them and an endpoint loads them.
+- **Model files:** `harshness final` writes them to `ml/models/harshness/<run>/` (git-ignored), and the
+  job loads the newest. In production `ml/upload.sh` sends them to the bucket the job mounts; in the
+  target design, Vertex AI Model Registry holds them and an endpoint loads them.
 - **Target (diagram):** the Order features job calls two Vertex AI endpoints, trade risk and
   harshness (`docs/architecture/trade-defence-risk-architecture.excalidraw`, with the news part).
 

@@ -34,5 +34,10 @@ done
 echo "==> Models"
 gcloud storage rsync --project "$PROJECT_ID" --recursive \
   "$MODELS/trade_risk" "$BUCKET/models/trade_risk"
+# The harshness model (`harshness final`), which scores the news scan's trade measures.
+if [ -d "$MODELS/harshness" ]; then
+  gcloud storage rsync --project "$PROJECT_ID" --recursive \
+    "$MODELS/harshness" "$BUCKET/models/harshness"
+fi
 
 echo "==> Done: $BUCKET"

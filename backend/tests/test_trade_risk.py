@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, date, datetime, timedelta
 
 import pytest
@@ -267,3 +268,21 @@ def test_the_job_starts_once_per_pair_in_ten_minutes(monkeypatch):
         ["--pair", "IN:VN:441192"],
         ["--new"],
     ]
+
+
+def test_the_news_scans_measures_start_the_job_at_once(monkeypatch):
+    """The scan's process ends with the scan, so the job is started before it returns."""
+    calls: list[tuple[str, list[str]]] = []
+    monkeypatch.setattr(
+        trade_risk_job, "_run_cloud_job", lambda job, args: calls.append((job, args))
+    )
+    settings = trade_risk_job.get_settings()
+    monkeypatch.setattr(settings, "trade_risk_job_command", "")
+    monkeypatch.setattr(settings, "trade_risk_job", "")
+    measure = {"kind": "anti_dumping", "markets": ["US"], "origins": ["VN"], "productHs": ["4412"]}
+    assert trade_risk_job.start_measures({"a1": measure}) is False
+    monkeypatch.setattr(settings, "trade_risk_job", "projects/p/locations/l/jobs/j")
+    assert trade_risk_job.start_measures({"a1": measure}) is True
+    job, args = calls[0]
+    assert job == "projects/p/locations/l/jobs/j" and args[0] == "--measure"
+    assert json.loads(args[1]) == {"articleId": "a1", **measure}
