@@ -78,6 +78,8 @@ What each endpoint does and where the app uses it. The live contract (exact fiel
 | `PATCH /what-ifs/{id}` | editor | (not yet: the panel re-saves through `POST`) |
 | `DELETE /what-ifs/{id}` | editor | Trade map: "Saved what-ifs", delete |
 | `GET /suppliers` | viewer | Trade map, workspace search, an order's analysis report (supplier form) |
+| `GET /trade-risk/orders/{id}` | viewer | Order page: "Trade defence risk" (asks again every 10 s while pending); trade map: "What if" panel, the order's own market; assistant (`get_trade_risk`) |
+| `GET /trade-risk` | viewer | Trade map: "What if" panel, the market compared with; assistant (`get_trade_risk`) |
 | `POST /suppliers` | editor | Trade map: "Add supplier" / "Add a supplier record"; an order's analysis report: "Add … with its documents" |
 | `PATCH /suppliers/{id}` | editor | Trade map: "Edit supplier"; an order's analysis report: "Record documents from …" |
 | `DELETE /suppliers/{id}` | editor | Trade map: "Delete supplier" |
@@ -521,6 +523,31 @@ Only `name` (1–300) is required. `place` ≤200, `supplies` ≤1000 (blank is 
 `PATCH /sites/{id}` changes only the fields sent; only `country` can be `null`. `DELETE /sites/{id}` → `{"deleted": true}`; deleting the route origin leaves the map to start routes from the company profile's origin.
 
 Both: `404` for another company's supplier or site.
+
+## Trade defence risk
+How likely a market is to open an anti-dumping or anti-subsidy case against the exporting country on a product in the next 12 months. The scores are made by the Order features job (`ml/trade_risk/order_features.py`), which writes `import_figures`, `trade_flow_features`, `trade_risk_scores` and `trade_cases`; these routes only read them (`services/trade_risk.py`). Saving, editing or importing an order keeps its pair (market, exporter, HS 6) in `order_trade_pairs` and starts the job (`--new`) for pairs with no score yet, so the score is usually ready before anyone asks; the row is deleted with the order. The exporting country is the company's route-origin site's country, else any site's, else the profile's origin. EU members are one market (`EU`), and so are the Eurasian Economic Union (`EAEU`) and the Gulf states (`GCC`). Scores and reasons only: the trade figures are never returned (UN Comtrade's terms); `sources` holds the credit lines.
+
+### `GET /trade-risk/orders/{id}` (viewer)
+The risk for the order's destination, the company's country and the order's HS code (first 6 digits). `404` for an unknown order.
+```json
+{"data": {"orderId": "PO-1", "market": "EU", "exporter": "VN", "hs6": "441233",
+  "status": "scored", "level": "high", "score": 0.0143, "percentile": 0.991,
+  "reasons": [{"feature": "import_value_vs_last_year", "text": "Imports grew 4.0× in a year"}],
+  "note": null, "backfillStarted": false, "modelVersion": "2026-11-24",
+  "dataFrom": "2025-09", "dataTo": "2026-08", "dataSource": "comtrade", "scoredAt": "…",
+  "similarCases": [{"caseId": "…", "kind": "AD", "market": "EU", "exporter": "CN", "hs6": "441233",
+    "year": 2024, "product": "Plywood", "outcome": "duty imposed", "dutyPct": 25.5}],
+  "sources": ["Source: UN Comtrade", "CEPII BACI", "…"]}}
+```
+- `status: "scored"`: `level` is `high` (the top 1% of the model's reference rows: every trade flow of its latest year), `medium` (the next 4%) or `low`. `score` is the probability the model gives; it is small even when high, so show the level, not the number.
+- `status: "pending"`: the pair has no score yet; the job is (re)started for it (`TRADE_RISK_JOB` in production, `TRADE_RISK_JOB_COMMAND` locally; `backfillStarted` false when neither is set, and the monthly run scores it). Ask again after about 10 seconds; a pair starts the job at most once in 10 minutes per instance. Reading an order's risk also updates its saved pair when it changed (e.g. the company's country).
+- `status: "no_data"`: `note` says why (no 6-digit HS code, no company country, no recent imports of the product from that country, or imports under $1M a year).
+- A market that has never opened a case is `level: "low"` with no `score` and a `note`.
+- `dataSource` is `comtrade` (the latest 12 months, `dataFrom`/`dataTo` as months) or `baci` (a year, when Comtrade has no complete recent months).
+- `similarCases`: up to 3 earlier cases, closest first (this market on the product against this exporter, then against others, then other markets on it, then related products in this market). `outcome` is `duty imposed`, `pending` (opened this year or last, no duty yet) or `no duty`.
+
+### `GET /trade-risk` (viewer)
+`?destination=KR&hsCode=4412.33[&exporter=ID]`: the same for any destination (a country code, or "Busan, KR"), from the company's country unless `exporter` (alpha-2) is given; `orderId` is null; a pair with no score starts the job with `--pair`. `422 bad_destination` without a country code.
 
 ## Supplier documents
 

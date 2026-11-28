@@ -134,7 +134,7 @@ export async function runAgent({
   // What this turn's tools and rules may use (gateway.js scopes, policy.js `when`).
   // The demo has no company profile: its prompt names the demo company from its goods' profile.
   const [stock, stockOwner] = await Promise.all([stockFor(company, backend), company ? null : demoProfile()]);
-  const session = { company, orders: readers.orders, playbook: readers.playbook, graph: readers.graph, whatIf: readers.whatIf, changes: readers.changes, stock, stockOwner, memories: [] };
+  const session = { company, orders: readers.orders, playbook: readers.playbook, graph: readers.graph, whatIf: readers.whatIf, changes: readers.changes, tradeRisk: readers.tradeRisk, stock, stockOwner, memories: [] };
   // Who this chat runs as (agents/platform.js): Agent Platform session and Memory Bank scope.
   const userKey = userKeyFor({ company, user, sessionId });
 

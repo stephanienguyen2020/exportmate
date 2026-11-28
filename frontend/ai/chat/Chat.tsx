@@ -56,7 +56,7 @@ function load(): Message[] {
 }
 
 // Citation types shown in words; others are shown as they are (item, alert, order, …).
-const TYPE_LABELS: Record<string, string> = { path: "graph path", chain_source: "official text" };
+const TYPE_LABELS: Record<string, string> = { path: "graph path", chain_source: "official text", trade_risk: "trade risk" };
 const typeLabel = (type: string) => TYPE_LABELS[type] ?? type;
 
 function CiteLink({ n, citation }: { n: number; citation?: Citation }) {

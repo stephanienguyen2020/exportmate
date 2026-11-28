@@ -38,6 +38,7 @@ from app.schemas.overview import OverviewOut
 from app.schemas.trade_map import ChecklistDetail, OrderListItemOut
 from app.services import analysis as analysis_service
 from app.services import trade_map as trade_map_service
+from app.services import trade_risk as trade_risk_service
 
 log = logging.getLogger(__name__)
 
@@ -159,6 +160,7 @@ def update_order(
             "fields": sorted(changes),
         },
     )
+    trade_risk_service.record_order_pairs(db, ctx, [order])
     # Saved either way: if the run fails, it is recorded as failed and the order waits for
     # "Analyse orders", as after an import.
     try:

@@ -67,6 +67,13 @@ from app.database.models.trade_map import (
     SupplierDocumentUpload,
     SupplierDocumentUploadStatus,
 )
+from app.database.models.trade_risk import (
+    ImportFigure,
+    OrderTradePair,
+    TradeCase,
+    TradeFlowFeatures,
+    TradeRiskScore,
+)
 
 __all__ = [
     "EMBEDDING_DIMENSIONS",
@@ -93,6 +100,7 @@ __all__ = [
     "HsHeading",
     "HsSuggestionStatus",
     "Import",
+    "ImportFigure",
     "ImportRow",
     "ImportStatus",
     "Market",
@@ -107,6 +115,7 @@ __all__ = [
     "OrderStatus",
     "OrderStatusChange",
     "OrderStatusDefinition",
+    "OrderTradePair",
     "PlaybookRevision",
     "PlaybookRule",
     "Port",
@@ -135,5 +144,8 @@ __all__ = [
     "SupplierMessage",
     "SupplierMessageStatus",
     "SupplierSourcing",
+    "TradeCase",
+    "TradeFlowFeatures",
+    "TradeRiskScore",
     "User",
 ]

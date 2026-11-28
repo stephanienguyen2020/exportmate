@@ -11,6 +11,7 @@ import { api, type MapMarket, type MarketComparison } from "../api";
 import { errorMessage } from "../auth";
 import { type Row, type Scenario, type ScenarioMode } from "./model";
 import ScenarioNotes from "../ScenarioNotes";
+import { TradeRiskLine } from "../TradeRisk";
 import { PanelHead } from "./panels";
 
 const ROUTE_OPTIONS = [
@@ -316,6 +317,27 @@ export function ScenarioPanel({
             {row.order.supplier}. Illustrative, not legal guidance.
           </p>
         </>
+      )}
+      {scenario.mode === "market" && scenario.target && row.order.hsCode && (
+        <section className="tm-section tm-compare">
+          <h3>Trade defence risk</h3>
+          <ul>
+            <TradeRiskLine
+              label={`Now: ${nameOf(from)}`}
+              orderId={row.order.id}
+              hsCode={row.order.hsCode}
+            />
+            <TradeRiskLine
+              label={nameOf(scenario.target)}
+              destination={scenario.target}
+              hsCode={row.order.hsCode}
+            />
+          </ul>
+          <p className="fine-print">
+            How likely each market is to open an anti-dumping or anti-subsidy
+            case on this product from your country in the next 12 months.
+          </p>
+        </section>
       )}
       <ScenarioNotes
         orderId={row.order.id}

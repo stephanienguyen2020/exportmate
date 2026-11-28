@@ -9,6 +9,7 @@ dependencies = [
     "numpy>=2.0",
     "openpyxl>=3.1",
     "pandas>=2.2,<3",
+    "psycopg[binary]>=3.2",
     "pyarrow>=17",
     "scikit-learn>=1.5",
     "xgboost>=2.1",
@@ -17,3 +18,12 @@ dependencies = [
 
 [tool.uv]
 package = false
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

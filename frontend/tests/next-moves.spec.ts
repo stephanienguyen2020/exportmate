@@ -144,9 +144,69 @@ const report = (
   feedback: { useful: 0, notUseful: 0, mine: null, myNote: null },
 });
 
+// GET /trade-risk/orders/{id}: PO-3101's pair is scored by the job after the first read.
+const pendingRisk = {
+  orderId: "PO-3101",
+  market: "US",
+  exporter: "VN",
+  hs6: "940360",
+  status: "pending",
+  level: null,
+  score: null,
+  percentile: null,
+  reasons: [],
+  note: null,
+  backfillStarted: true,
+  modelVersion: null,
+  dataFrom: null,
+  dataTo: null,
+  dataSource: null,
+  scoredAt: null,
+  similarCases: [],
+  sources: [
+    "Source: UN Comtrade.",
+    "Past cases: World Bank Temporary Trade Barriers Database.",
+  ],
+};
+const scoredRisk = {
+  ...pendingRisk,
+  status: "scored",
+  level: "high",
+  score: 0.031,
+  percentile: 0.996,
+  reasons: [
+    {
+      feature: "cases_market_hs4_5y",
+      text: "The US opened 3 cases on related products in the last 5 years.",
+    },
+    {
+      feature: "exporter_share",
+      text: "Vietnam is a large supplier of this product to the US.",
+    },
+  ],
+  dataFrom: "2025-09",
+  dataTo: "2026-08",
+  dataSource: "comtrade",
+  scoredAt: "2026-11-26T08:00:00Z",
+  similarCases: [
+    {
+      caseId: "USA-AD-1612",
+      kind: "AD",
+      market: "US",
+      exporter: "CN",
+      hs6: "940360",
+      year: 2019,
+      product: "Wooden bedroom furniture",
+      outcome: "duty imposed",
+      dutyPct: 216,
+    },
+  ],
+};
+
 async function fixture(page: Page) {
   const requests: { method: string; path: string; body: any }[] = [];
   let supplierSaved = false;
+  let riskReads = 0;
   await page.route("**/api/v1/**", async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname.replace("/api/v1", "");
@@ -227,6 +287,16 @@ async function fixture(page: Page) {
         exposures: [],
         latestReportId: "report-3",
         statusChanges: [],
+      };
+    else if (path === "/trade-risk/orders/PO-3101")
+      // A new pair: pending on the first read, scored on the next.
+      data = (riskReads += 1) === 1 ? pendingRisk : scoredRisk;
+    else if (path === "/trade-risk/orders/PO-3120")
+      data = {
+        ...pendingRisk,
+        hs6: null,
+        status: "no_data",
+        note: "The HS code needs at least 6 digits to score.",
       };
     else if (path === "/reports/report-1")
       data = report("report-1", table, "before");
@@ -363,4 +433,41 @@ test("a missing HS code opens the order's form at that field, also at phone widt
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth),
   ).toBeLessThanOrEqual(390);
+});
+
+test("an order's trade defence risk is scored on first read, then shows its level, reasons and past cases", async ({
+  page,
+}) => {
+  await fixture(page);
+  await login(page);
+  await page.goto("/#/workspace/orders/PO-3101");
+  const risk = page.getByRole("region", { name: "Trade defence risk" });
+  await expect(
+    risk.getByText("Scoring this market and product for the first time."),
+  ).toBeVisible();
+  // The panel asks again every 10 seconds while the pair is pending.
+  await expect(risk.locator(".risk-level.high")).toHaveText("High", {
+    timeout: 15_000,
+  });
+  await expect(risk.getByText("in the top 1% of trade flows")).toBeVisible();
+  await expect(
+    risk.getByText("Vietnam is a large supplier of this product to the US."),
+  ).toBeVisible();
+  await expect(
+    risk.getByText(
+      "Anti-dumping case by the United States on Wooden bedroom furniture from China, 2019",
+    ),
+  ).toBeVisible();
+  await expect(risk.getByText("duty imposed (216%)")).toBeVisible();
+  await expect(
+    risk.getByText("Import figures: UN Comtrade, Sep 2025 to Aug 2026."),
+  ).toBeVisible();
+  await expect(risk.getByText(/Source: UN Comtrade\./)).toBeVisible();
+
+  await page.goto("/#/workspace/orders/PO-3120");
+  await expect(
+    page
+      .getByRole("region", { name: "Trade defence risk" })
+      .getByText("The HS code needs at least 6 digits to score."),
+  ).toBeVisible();
 });

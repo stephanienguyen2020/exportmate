@@ -45,6 +45,7 @@ from app.seed_reference_data import seed_reference_data
 from app.services import accounts, chain_versions
 from app.services import analysis as analysis_service
 from app.services import playbook as playbook_service
+from app.services import trade_risk as trade_risk_service
 from app.services.trade_map import supplier_name_key
 
 log = logging.getLogger(__name__)
@@ -352,6 +353,8 @@ def seed_demo_data(email: str, firebase_uid: str, company_key: str = "binh-duong
                 playbook_service.create_playbook_rule(db, ctx, rule)
         profile_fields = seed_company_profile(db, ctx, seed.profile)
         suppliers, sites = seed_company_map_data(db, company.id, seed.seed_file)
+        # After the sites: the company's country is the route-origin site's.
+        trade_risk_service.record_order_pairs(db, ctx, new_orders)
         analysed = analyse_unanalysed_orders(db, ctx)
         log.info(
             "seed.demo_loaded",
