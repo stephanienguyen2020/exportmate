@@ -20,6 +20,7 @@ from app.services.news_scan_exam import (
 from app.services.news_scan_rules import (
     age_days,
     article_id,
+    clean_measure,
     clean_mentions,
     collect_candidates,
     company_reading,
@@ -113,6 +114,14 @@ def answer_by_title(prompt: str) -> dict:
                         "materials": ["Acacia  Logs", "1234"],
                         "markets": ["eu", "Europe"],
                     },
+                    "measure": {
+                        "kind": "anti_dumping",
+                        "stage": "opening",
+                        "markets": ["eu"],
+                        "origins": ["vn", "Vietnam"],
+                        "product": "Plywood  of acacia",
+                        "productHs": ["4412.33", "4412.31.05", "44"],
+                    },
                 }
             )
         elif "Cocoa" in title:
@@ -181,6 +190,15 @@ def test_a_scan_records_articles_alerts_and_each_sources_health(world, fake_gemi
         "hsCodes": [],
         "originCountries": [],
         "markets": ["EU"],
+    }
+    # The measure, for the harshness model: codes well formed, a national tariff line cut to HS 6.
+    assert sample["measure"] == {
+        "kind": "anti_dumping",
+        "stage": "opening",
+        "markets": ["EU"],
+        "origins": ["VN"],
+        "product": "Plywood of acacia",
+        "productHs": ["441233", "441231"],
     }
     assert company["companyId"] == "company-a" and "stockValueUsd" not in company
     assert [a["sku"] for a in company["affected"]] == ["G-3D9799"]
@@ -366,6 +384,25 @@ def test_mentions_keep_only_well_formed_values():
         "markets": ["EU", "US"],
     }
     assert clean_mentions(None)["materials"] == []
+
+
+def test_a_measure_is_kept_only_when_its_kind_is_known():
+    assert clean_measure(None) is None
+    assert clean_measure({"kind": "embargo", "stage": "final"}) is None
+    measure = clean_measure(
+        {"kind": "tariff", "stage": "soon", "origins": [], "productHs": ["9403"], "dutyPercent": 25}
+    )
+    assert measure == {
+        "kind": "tariff",
+        "stage": "unknown",
+        "markets": [],
+        "origins": [],
+        "product": "",
+        "productHs": ["9403"],
+        "dutyPercent": 25.0,
+    }
+    assert "dutyPercent" not in clean_measure({"kind": "ban", "dutyPercent": True})
+    assert "dutyPercent" not in clean_measure({"kind": "tariff", "dutyPercent": 5000})
 
 
 def test_untrusted_text_is_withheld_or_fenced():

@@ -821,6 +821,14 @@ Firestore `impacts` (fields passed through as they are), and the latest scan. An
 from a source the caller sees and has switched on and pass the caller's age rule. In `scan`,
 `impactsFound` counts the caller's alerts and other companies' own sources are left out.
 
+An alert about a trade measure also carries `measure` (`news_scan_rules.clean_measure`), for the
+harshness model: `kind` (`anti_dumping`, `anti_subsidy`, `safeguard`, `tariff`, `ban`, `quota`,
+`other`), `stage` (`petition`, `opening`, `preliminary`, `final`, `review`, `revoked`, `unknown`),
+`markets` and `origins` (2-letter codes; no origins: every country), `product` (the article's
+words), `productHs` (4- or 6-digit codes, from Gemini's knowledge of the HS when the article
+doesn't state them; unlike `mentions.hsCodes`), and `dutyPercent` when the article states one.
+Nothing scores it yet.
+
 ### `GET /news-goods` (viewer, or signed out)
 Moved from the AI service's `/api/inventory`. `{kind, items, owner, updatedAt, watchedSince}`.
 `company`: one item per product and HS code from the company profile's products and its orders

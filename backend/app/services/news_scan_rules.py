@@ -36,7 +36,8 @@ RULES = (
     "  - medium: a real effect that is uncertain, partial, further off or indirect. E.g. a proposed or consulted rule; an investigation opened but not decided; a date more than about 90 days away; a postponement or a debate on weakening a rule; a measure on its materials' supply (a log export ban by a supplier country); a duty on these goods into its markets from other origins (competitors' prices change and transshipment checks follow); a broad tariff in one of its markets that doesn't name these goods, or on a big competitor; an explainer or commentary on a rule or tariff that already hits these goods.\n"
     "  - low: worth knowing, little direct effect. E.g. grants, loans or tax relief to firms elsewhere; procurement rules; a market it doesn't sell to (unless its materials come from there); company or market news with no measure in it; a measure that was removed (unless the removal is the news).\n"
     "  - Rate as of the article's own date. When unsure between two levels, pick the lower.\n"
-    '- mentions (relevant articles only): what the article itself names, not what STOCK holds. materials = raw materials or species ("acacia logs"); hsCodes = codes the article states or that plainly cover the goods it names (logs 4403, plywood 4412); originCountries = where the goods or materials come from (a country banning its own exports is an origin); markets = importing markets a measure covers. Leave a list empty rather than guess.'
+    '- mentions (relevant articles only): what the article itself names, not what STOCK holds. materials = raw materials or species ("acacia logs"); hsCodes = codes the article states or that plainly cover the goods it names (logs 4403, plywood 4412); originCountries = where the goods or materials come from (a country banning its own exports is an origin); markets = importing markets a measure covers. Leave a list empty rather than guess.\n'
+    "- measure (relevant articles that report a trade measure only; leave it out otherwise): the measure itself, for scoring how harsh it is. kind = anti_dumping, anti_subsidy (countervailing duties), safeguard, tariff, ban, quota or other; stage = petition, opening (an investigation started), preliminary, final, review, revoked or unknown; markets = the importing markets that apply it; origins = ISO alpha-2 codes of the countries it targets (empty when it covers every country, as a safeguard does); product = the goods it covers, in the article's words; productHs = the HS codes of those goods, 6 digits where you can tell, else 4. Unlike mentions.hsCodes, give productHs from your knowledge of the HS when the article doesn't state the codes. dutyPercent = the duty rate the article states, if any."
 )
 
 MAX_PER_MENTION = 8
@@ -76,6 +77,36 @@ class Mentions(BaseModel):
     )
 
 
+MeasureKind = Literal[
+    "anti_dumping", "anti_subsidy", "safeguard", "tariff", "ban", "quota", "other"
+]
+MeasureStage = Literal[
+    "petition", "opening", "preliminary", "final", "review", "revoked", "unknown"
+]
+
+
+class Measure(BaseModel):
+    """The trade measure an article reports, for the harshness model (ml/docs/HARSHNESS_MODEL.md):
+    each market x origin x productHs code is one row it scores."""
+
+    kind: MeasureKind
+    stage: MeasureStage
+    markets: list[str] | None = Field(
+        default=None, description="Codes of the importing markets that apply it, e.g. EU, US, IN"
+    )
+    origins: list[str] | None = Field(
+        default=None,
+        description="ISO alpha-2 codes of the countries it targets; empty when it covers all",
+    )
+    product: str | None = Field(default=None, description="The goods it covers, as named")
+    productHs: list[str] | None = Field(
+        default=None,
+        description="HS codes of those goods, 6 digits where possible, else 4; from knowledge "
+        "of the HS when the article doesn't state them",
+    )
+    dutyPercent: float | None = Field(default=None, description="The duty rate stated, if any")
+
+
 class Assessment(BaseModel):
     index: int = Field(description="Article number from the list")
     relevant: bool
@@ -88,6 +119,7 @@ class Assessment(BaseModel):
     affected: list[AffectedItem] | None = None
     action: str | None = Field(default=None, description="One concrete next step")
     mentions: Mentions | None = None
+    measure: Measure | None = None
     sameAs: int | None = Field(
         default=None, description="Index of an article reporting the same event, if any"
     )
@@ -315,3 +347,42 @@ def clean_mentions(raw: object) -> dict:
         "originCountries": _keep(m.get("originCountries"), _CODE, str.upper),
         "markets": _keep(m.get("markets"), _CODE, str.upper),
     }
+
+
+_MEASURE_HS = re.compile(r"^\d{4}(\d{2})?$")
+_MEASURE_KINDS = set(MeasureKind.__args__)
+_MEASURE_STAGES = set(MeasureStage.__args__)
+MAX_DUTY_PERCENT = 1000
+
+
+def clean_measure(raw: object) -> dict | None:
+    """The measure an article reports, as stored on an alert, or None when it reports none or the
+    kind isn't one we know. Codes are kept only when well formed (HS codes as 4 or 6 digits);
+    whether an HS code exists is checked where the rows are scored, which reads the tariff lines.
+    """
+    m = raw if isinstance(raw, dict) else {}
+    if m.get("kind") not in _MEASURE_KINDS:
+        return None
+    product = m.get("product")
+    duty = m.get("dutyPercent")
+    return {
+        "kind": m["kind"],
+        "stage": m.get("stage") if m.get("stage") in _MEASURE_STAGES else "unknown",
+        "markets": _keep(m.get("markets"), _CODE, str.upper),
+        "origins": _keep(m.get("origins"), _CODE, str.upper),
+        "product": re.sub(r"\s+", " ", product.strip())[:200] if isinstance(product, str) else "",
+        "productHs": _keep(m.get("productHs"), _MEASURE_HS, _hs6),
+        **(
+            {"dutyPercent": float(duty)}
+            if isinstance(duty, int | float)
+            and not isinstance(duty, bool)
+            and 0 <= duty <= MAX_DUTY_PERCENT
+            else {}
+        ),
+    }
+
+
+def _hs6(code: str) -> str:
+    """Digits only; a national tariff line (8 or 10 digits) becomes its HS 6-digit code."""
+    digits = re.sub(r"\D", "", code)
+    return digits[:6] if len(digits) > 6 else digits

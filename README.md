@@ -81,6 +81,17 @@ trade map, News watch and the assistant with the knowledge graph. Please don't c
   and a source on every link. The team confirms or rejects each match, and links people keep rejecting
   are avoided.
 
+### ⚖️ Trade defence risk and severity
+
+- **Duty risk on every order:** how likely the destination market is to open an anti-dumping or
+  anti-subsidy case on the order's product from the company's country in the next 12 months: low,
+  medium or high, with its top reasons ("imports grew 4× in a year", "India cased the same product
+  against two other countries"). On the order's page, in the trade map's what-ifs ("would Korea be
+  safer?"), and in the assistant ("Is PO-2291 at risk of anti-dumping duties?").
+- **How harsh a case will be** (tested, coming to News watch): when the news reports a case, a second
+  model rates how badly it will cut that country's sales of the product to that market, and the
+  alert's severity follows from it and the company's orders.
+
 ### 💬 The assistant
 
 - Opens from every screen: ask about your orders, rules, news, stock, or how to use the app.
@@ -105,6 +116,40 @@ trade map, News watch and the assistant with the knowledge graph. Please don't c
   viewer roles.
 - An **activity log** of every change, exportable as CSV.
 - **Browser demo:** the full workspace in the browser with sample orders, no account needed.
+
+---
+
+## 📈 Trade Defence Models
+
+Two models trained on official records of past trade defence cases (World Bank TTBD, the WTO's trade
+remedies data, the EU's case list) and world trade figures (**CEPII BACI**, recent months from **UN
+Comtrade**). They give the number and the reasons; Gemini never makes up the number.
+
+**Trade defence risk: will a case come?**
+
+1. **What it reads:** for one market, one exporting country and one product (HS 6 digits), last year's
+   trade figures: how fast imports grew, the exporter's share and price, and the market's history of
+   cases on that product and country (33 features).
+2. **What it learned:** which flows had a case the next year, 2013–2023. Three boosted-tree models
+   (**LightGBM, XGBoost, CatBoost**) are averaged; **SHAP** turns each score into its reasons.
+3. **How well:** tested year by year on years it never saw, its top 5% of trade flows held 76% of the
+   cases that really opened the next year.
+4. **In the app:** the **Order features job** (Cloud Run, monthly and for new orders) fetches each
+   order's figures, scores them and saves them in Postgres; the Trade risk API serves them.
+
+**Severity (harshness): how bad will a case be?**
+
+1. **What it reads:** an opened case's market, origin and product, the same trade figures, how much of
+   the market the named countries supply, and what happened after the market's past cases.
+2. **What it learned:** whether the origin's sales of the product fell by half within 2 years,
+   compared with the market's other suppliers, after 3,474 past cases.
+3. **How well:** on 1,278 cases it never saw (2018–2022), it ranked the ones that cut sales above the
+   ones that didn't 69% of the time. Gemini rating the same cases from their headlines: 49%, a coin
+   toss.
+4. **In News watch (next):** Gemini reads the article and writes down the case; the model rates its
+   harshness; a rule turns that and the company's orders into the alert's low, medium or high.
+
+📖 Design and results: [`ml/docs/`](ml/docs/) (trade defence risk and harshness).
 
 ---
 
@@ -179,5 +224,6 @@ Outside Google Cloud: **Neo4j AuraDB** holds the graph read model, and Firebase 
 | [`frontend/`](frontend/) | React 19 + TypeScript + Vite app; the chat and News watch UI live in [`frontend/ai/`](frontend/ai/) |
 | [`backend/`](backend/) | FastAPI + Postgres company API; see [`backend/README.md`](backend/README.md) |
 | [`ai/server/`](ai/server/) | Node service: the ADK agents, News watch and search |
+| [`ml/`](ml/) | The trade defence models: data preparation, training, and the Order features job; see [`ml/README.md`](ml/README.md) |
 | [`infra/`](infra/) | Terraform, Agent Platform governance, monitoring |
 | [`docs/`](docs/) | AI guide, agent harness, architecture diagrams |

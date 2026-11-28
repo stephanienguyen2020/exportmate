@@ -117,6 +117,28 @@ Catches:
 - We tried Google News for non-US cases: it keeps few 2018-2022 articles (6 found in 80 searches,
   2 of them about another case), too few to test.
 
+### HS codes by lookup instead of memory (27 Nov 2026)
+
+The same 76 notices, done the way the order HS suggestions work: embed the product the notice
+names, take the 12 closest official tariff lines (`hs_headings`, all 6,573 embedded), and Gemini
+picks from them.
+
+| Right in | Gemini from memory | Lookup | The 12 lines found contain it |
+|---|---|---|---|
+| HS heading (4 digits) | **92%** | 91% | 89% |
+| HS subheading (6 digits) | **84%** | 80% | 76% |
+
+What it shows:
+- **The lookup doesn't help.** The search often doesn't bring up the right line (89%), and Gemini
+  already knows the codes. Both miss the same hard products (corrosion inhibitors, steel wheels,
+  aluminum wire and cable).
+- So the scan takes Gemini's own codes, and code keeps only those that exist in `hs_headings`.
+
+Found on the way: the backend asks for embeddings at the `global` location, where the Gemini
+project in use doesn't serve `gemini-embedding-001` (it does in `us-central1`). That is likely why
+only 2,506 of the 6,573 tariff lines have an embedding in the local database; the order HS
+suggestions search the rest by words.
+
 ## Against Gemini (27 Nov 2026)
 
 The question: for anti-dumping, anti-subsidy and safeguard cases, should the model give harshness

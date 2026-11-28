@@ -40,7 +40,8 @@ learned our rubric back.
 News scan job (the backend's daily Cloud Run job, exportmate-backend-news-scan; not new), once per article
   1. Read articles from the news feeds
   2. Gemini: is it relevant, which goods, what it names (mentions),
-     and the measure: kind, stage, market, origins, HS codes, duty if given      (Gemini, as today, plus the measure)
+     and the measure: kind, stage, markets, origins, product, its HS codes,
+     duty if given; saved on the alert as `measure`                              (built)
   3. Code turns the measure into rows: every market x origin x HS 6 it names     (new)
   4. Start the Order features job with the rows (as an order's new pair does)    (new)
         │
@@ -49,7 +50,8 @@ Order features job (ml/, the trade risk job: it owns both models)
   5. Build each row's features (Comtrade, or BACI), as it does for order pairs
      Harshness for each row:                                                      (new)
      - anti-dumping, anti-subsidy, safeguard: the model
-     - any other kind: Gemini's rubric level, passed on from the scan
+     - any other kind: Gemini, given the row's trade figures and the rules
+       the model learned
      Save the rows in Postgres (measure_scores), one set per article,
      shared by every company
         │
@@ -63,6 +65,13 @@ Backend, per company (when News watch or the report reads the alert)
         ▼
 News watch, company report, the assistant
 ```
+
+**Step 2, the measure.** The scan assesses each article once per company that may be affected,
+so each company's alert carries its own copy of the measure (`clean_measure` in
+`backend/app/services/news_scan_rules.py` keeps only well-formed values; the fields are in
+`backend/docs/API.md`, `GET /news-alerts`). The scoring step takes one per article. Codes are
+checked for form only there: the scan job has no database, so whether a code exists in
+`hs_headings` is checked where the rows are scored.
 
 **Step 3, the rows.** "US opens a case on plywood from Vietnam and China" gives two rows: US, VN,
 441231 and US, CN, 441231. If the article names only a heading (4412, plywood), code takes the HS 6
