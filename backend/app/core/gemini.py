@@ -31,21 +31,22 @@ RETRY_STATUS_CODES = [408, 429, 499, 500, 502, 503, 504]
 
 
 _client_lock = threading.Lock()
-_cached_client: genai.Client | None = None
+_cached_clients: dict[str, genai.Client] = {}
 
 
-def _client() -> genai.Client:
-    """One client for the process, made under a lock: two threads making one each would leave
-    one unreferenced, and a garbage-collected client closes its connection while the other's
-    request is still using it ("the client has been closed")."""
-    global _cached_client
+def _client(location: str | None = None) -> genai.Client:
+    """One client per location for the process (the models' location, or `location`), made under
+    a lock: two threads making one each would leave one unreferenced, and a garbage-collected
+    client closes its connection while the other's request is still using it ("the client has
+    been closed")."""
+    location = location or get_settings().gemini_location
     with _client_lock:
-        if _cached_client is None:
-            _cached_client = _new_client()
-        return _cached_client
+        if location not in _cached_clients:
+            _cached_clients[location] = _new_client(location)
+        return _cached_clients[location]
 
 
-def _new_client() -> genai.Client:
+def _new_client(location: str) -> genai.Client:
     settings = get_settings()
     project = settings.gemini_project or settings.google_cloud_project
     if not project:
@@ -53,7 +54,7 @@ def _new_client() -> genai.Client:
     return genai.Client(
         vertexai=True,
         project=project,
-        location=settings.gemini_location,
+        location=location,
         http_options=types.HttpOptions(
             timeout=settings.gemini_timeout_seconds * 1000,
             retry_options=types.HttpRetryOptions(
@@ -140,7 +141,7 @@ def embed_texts(texts: list[str], task_type: str) -> list[list[float]]:
     started = time.perf_counter()
     try:
         for i in range(0, len(texts), EMBED_BATCH):
-            response = _client().models.embed_content(
+            response = _client(settings.embedding_location).models.embed_content(
                 model=settings.embedding_model,
                 contents=texts[i : i + EMBED_BATCH],
                 config=types.EmbedContentConfig(

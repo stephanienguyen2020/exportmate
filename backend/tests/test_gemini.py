@@ -35,7 +35,7 @@ def test_missing_google_credentials_mean_ai_is_not_configured(monkeypatch, ask):
             generate_content=fail_without_credentials, embed_content=fail_without_credentials
         )
     )
-    monkeypatch.setattr(gemini, "_client", lambda: client)
+    monkeypatch.setattr(gemini, "_client", lambda location=None: client)
     with pytest.raises(AppError) as raised:
         ask()
     assert (raised.value.status, raised.value.code) == (503, "ai_not_configured")
@@ -49,7 +49,7 @@ def test_stalled_and_transient_calls_are_tried_again(monkeypatch):
     monkeypatch.setenv("GEMINI_ATTEMPTS", "3")
     get_settings.cache_clear()
     try:
-        gemini._new_client()
+        gemini._new_client("global")
     finally:
         monkeypatch.undo()
         get_settings.cache_clear()
@@ -83,3 +83,32 @@ def test_answers_are_asked_for_at_the_set_thinking_level(monkeypatch, model, lev
         get_settings.cache_clear()
     thinking = seen["config"].thinking_config
     assert (thinking.thinking_level.value if thinking else None) == level
+
+
+def test_embeddings_run_in_their_own_location(monkeypatch):
+    """The global endpoint doesn't serve the embedding model, so embeddings get a client in
+    EMBEDDING_LOCATION while text generation stays on GEMINI_LOCATION."""
+    made = []
+
+    def fake_client(**kwargs):
+        made.append(kwargs["location"])
+        embedding = SimpleNamespace(values=[0.0] * gemini.EMBEDDING_DIMENSIONS)
+        return SimpleNamespace(
+            models=SimpleNamespace(
+                embed_content=lambda **_: SimpleNamespace(embeddings=[embedding])
+            )
+        )
+
+    monkeypatch.setattr(gemini.genai, "Client", fake_client)
+    monkeypatch.setattr(gemini, "_cached_clients", {})
+    settings = get_settings().model_copy(
+        update={
+            "google_cloud_project": "home",
+            "gemini_location": "global",
+            "embedding_location": "asia-southeast1",
+        }
+    )
+    monkeypatch.setattr(gemini, "get_settings", lambda: settings)
+    embed_texts(["plywood"], "RETRIEVAL_QUERY")
+    gemini._client()
+    assert made == ["asia-southeast1", "global"]
