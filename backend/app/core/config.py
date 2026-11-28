@@ -112,6 +112,9 @@ class Settings(BaseSettings):
     gemini_attempts: int = 2
     # Embeddings for HS heading and document search; same model as ai/server's vector index.
     embedding_model: str = "gemini-embedding-001"
+    # Where embeddings run: the global endpoint doesn't serve the embedding model (404), so
+    # embeddings run in a region, the one everything else runs in.
+    embedding_location: str = "asia-southeast1"
     # Per user per hour.
     supplier_document_uploads_per_hour: int = 60
     # Each one is an AI call.
