@@ -28,7 +28,12 @@ from app.services.news_scan_exam import (
     score_scan_cases,
     summarize_scan_run,
 )
-from app.services.news_scan_rules import SCAN_POLICY_VERSION, clean_mentions, decide
+from app.services.news_scan_rules import (
+    SCAN_POLICY_VERSION,
+    clean_measure,
+    clean_mentions,
+    decide,
+)
 
 
 def _pct(x: float | None) -> str:
@@ -62,6 +67,7 @@ def run_once(cases: list[dict], items: list[dict], profile: dict) -> list[dict]:
                 "headline": r.get("headline"),
                 "why": r.get("why"),
                 "mentions": clean_mentions(r.get("mentions")),
+                "measure": clean_measure(r.get("measure")),
             }
     return score_scan_cases(cases, outcomes)
 
@@ -104,6 +110,12 @@ def main() -> None:
                 line += f"\n     {c['name']}: {c['detail']}"
         if s["mentions"] and s["mentions"]["missing"]:
             line += f"\n     mentions missed: {', '.join(s['mentions']['missing'])}"
+        if o.get("relevant") and (m := o.get("measure")):
+            line += (
+                f"\n     measure: {m['kind']}, {m['stage']}, {'/'.join(m['markets']) or '-'} <- "
+                f"{'/'.join(m['origins']) or 'all'}, {m['product'] or '-'} "
+                f"HS {' '.join(m['productHs']) or '-'}"
+            )
         print(line)
 
     passed = sum(1 for s in scored if s["pass"])
