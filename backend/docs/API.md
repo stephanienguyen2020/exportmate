@@ -827,7 +827,11 @@ harshness model: `kind` (`anti_dumping`, `anti_subsidy`, `safeguard`, `tariff`, 
 `markets` and `origins` (2-letter codes; no origins: every country), `product` (the article's
 words), `productHs` (4- or 6-digit codes, from Gemini's knowledge of the HS when the article
 doesn't state them; unlike `mentions.hsCodes`), and `dutyPercent` when the article states one.
-Nothing scores it yet.
+The article keeps the first measure any company's assessment gave (Firestore `articles`), and the
+scan starts the Order features job with the anti-dumping, anti-subsidy and safeguard ones
+(`core/trade_risk_job.start_measures`; the scan record's `measuresToScore`); the job's harshness model
+writes `measure_scores`, one row per market, exporter and HS 6, shared by every company. No route
+serves them yet.
 
 ### `GET /news-goods` (viewer, or signed out)
 Moved from the AI service's `/api/inventory`. `{kind, items, owner, updatedAt, watchedSince}`.

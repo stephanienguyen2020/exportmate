@@ -134,7 +134,7 @@ class Settings(BaseSettings):
     # Trade risk backfill (core/trade_risk_job.py): a pair with no score yet starts the Order
     # features job for it. In production the Cloud Run job ("projects/<p>/locations/<l>/jobs/<j>");
     # locally a command run in trade_risk_job_dir, e.g.
-    # "uv run python -m trade_risk.order_features". Neither: nothing starts, the monthly run scores it.
+    # "uv run python -m trade_risk.job". Neither: nothing starts, the monthly run scores it.
     trade_risk_job: str = ""
     trade_risk_job_command: str = ""
     trade_risk_job_dir: str = "../ml"

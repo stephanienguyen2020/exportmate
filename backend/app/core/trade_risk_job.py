@@ -1,12 +1,14 @@
 """Start the Order features job (ml/trade_risk/order_features.py) for pairs that have no score yet.
 
 Orders' pairs are in `order_trade_pairs`, so for them the job runs with `--new` and finds the
-unscored pairs itself; a pair no order has (a what-if) is passed with `--pair`. Production runs
+unscored pairs itself; a pair no order has (a what-if) is passed with `--pair`. The news scan sends
+the trade measures articles report (`--measure`, as JSON) for the job's harshness model. Production runs
 the Cloud Run job `TRADE_RISK_JOB`; locally `TRADE_RISK_JOB_COMMAND` runs in `TRADE_RISK_JOB_DIR`.
 Each start runs in the background, so the request that asked never waits for it. A pair asked for
 again within `REPEAT_AFTER_SECONDS` doesn't start the job again (per instance).
 """
 
+import json
 import logging
 import shlex
 import subprocess
@@ -52,7 +54,7 @@ def _run_local_command(command: str, directory: str, args: list[str]) -> None:
     )
 
 
-def _start(args: list[str]) -> None:
+def _start(args: list[str]) -> bool:
     settings = get_settings()
     try:
         if settings.trade_risk_job:
@@ -60,9 +62,11 @@ def _start(args: list[str]) -> None:
         else:
             _run_local_command(settings.trade_risk_job_command, settings.trade_risk_job_dir, args)
         log.info("trade_risk.backfill_started", extra={"arguments": len(args)})
+        return True
     # requests' errors are OSErrors. The monthly run scores the pair anyway.
     except (GoogleAuthError, OSError, ValueError) as error:
         log.warning("trade_risk.backfill_failed", extra={"error_type": type(error).__name__})
+        return False
 
 
 def _request(pairs: list[str], args_for) -> bool:
@@ -85,6 +89,21 @@ def _request(pairs: list[str], args_for) -> bool:
 def start_new_order_pairs(pairs: list[str]) -> bool:
     """Orders' pairs just saved in order_trade_pairs without a score: the job finds them itself."""
     return _request(pairs, lambda _: ["--new"])
+
+
+def start_measures(measures: dict[str, dict]) -> bool:
+    """The trade measures new articles report (article id -> the alert's `measure`), scored by the
+    job's harshness model. Started at once, not in the background: the news scan's process ends
+    with the scan. False when no job is configured or it couldn't start."""
+    settings = get_settings()
+    if not (settings.trade_risk_job or settings.trade_risk_job_command):
+        return False
+    args = [
+        arg
+        for article_id, measure in measures.items()
+        for arg in ("--measure", json.dumps({"articleId": article_id, **measure}))
+    ]
+    return _start(args)
 
 
 def start_pairs(pairs: list[str]) -> bool:

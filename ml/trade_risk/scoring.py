@@ -2,7 +2,9 @@
 
 A model version is a folder `models/trade_risk/<date>/` with the three boosted models
 (LightGBM, XGBoost, CatBoost), `features.json`, and `report.json` with the score cut-offs of the
-top 1% and top 5% of the latest year's rows (`thresholds_2024`). The score is the probability
+top 1% and top 5% of the latest year's rows (`thresholds_2024`). The harshness model's folders
+(`models/harshness/<run>/`, written by `harshness final`) have the same files, with its cut-offs in
+`thresholds`. The score is the probability
 whose log-odds is the average of the three models' log-odds; its explanation (SHAP) is the average
 of theirs, exactly, since SHAP values add up.
 """
@@ -22,11 +24,11 @@ from trade_risk.train import log_odds_average
 QUANTILES_FILE = "score_quantiles.json"  # 1,001 quantiles of the latest year's scores, for the percentile
 
 
-def latest_version_dir() -> Path:
+def latest_version_dir(models_dir: Path = MODELS_DIR) -> Path:
     """The newest model folder that holds a saved model."""
-    folders = sorted(p for p in MODELS_DIR.iterdir() if (p / "report.json").exists() and (p / "features.json").exists())
+    folders = sorted(p for p in models_dir.iterdir() if (p / "report.json").exists() and (p / "features.json").exists())         if models_dir.exists() else []
     if not folders:
-        raise FileNotFoundError(f"no saved model in {MODELS_DIR}; run `python -m trade_risk.final_model` first")
+        raise FileNotFoundError(f"no saved model in {models_dir}; train one first (final_model, or harshness final)")
     return folders[-1]
 
 
@@ -36,7 +38,7 @@ class SavedModel:
         self.version = folder.name
         self.features: list[str] = json.loads((folder / "features.json").read_text())
         report = json.loads((folder / "report.json").read_text())
-        self.thresholds: dict[str, float] = report["thresholds_2024"]
+        self.thresholds: dict[str, float] = report.get("thresholds") or report["thresholds_2024"]
         self.lightgbm = lgb.Booster(model_file=str(folder / "model_lightgbm.txt"))
         self.xgboost = xgb.Booster()
         self.xgboost.load_model(str(folder / "model_xgboost.json"))

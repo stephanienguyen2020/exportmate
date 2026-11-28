@@ -5,6 +5,7 @@ hurt trade on its market, origin and product? Design: ml/docs/HARSHNESS_MODEL.md
     uv run python -m trade_risk.harshness build         # rows, labels and features -> data/interim/trade_risk/harshness.parquet
     uv run python -m trade_risk.harshness tune          # model settings, picked on 2015-2017 (before every test year)
     uv run python -m trade_risk.harshness compare       # walk-forward test of every label, against simple baselines
+    uv run python -m trade_risk.harshness final         # the app's model: levels from the walk-forward scores, trained on all
 
 One row per (case, market, origin, HS 6) opened 2013-2025, dated the day the case was opened (a
 safeguard: one row per the market's biggest suppliers). Features: the trade risk model's features for
@@ -23,6 +24,7 @@ import argparse
 import json
 import os
 from datetime import date
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -35,7 +37,8 @@ from trade_risk.harshness_cases import HARSHNESS_CASES_FILE
 from trade_risk.train import BOOSTED_TREES, Ensemble, Model, metrics
 
 HARSHNESS_FILE = INTERIM_DIR / "harshness.parquet"
-RUN_DIR = MODELS_DIR.parent / "harshness" / os.environ.get("HARSHNESS_RUN", date.today().isoformat())
+HARSHNESS_MODELS_DIR = MODELS_DIR.parent / "harshness"
+RUN_DIR = HARSHNESS_MODELS_DIR / os.environ.get("HARSHNESS_RUN", date.today().isoformat())
 # Features need the year before the opening (BACI 2012-2024), so cases opened 2013-2025; the import labels
 # need 2 years after, so only to 2022.
 FIRST_YEAR, LAST_YEAR = 2013, LAST_TRADE_YEAR + 1
@@ -70,6 +73,9 @@ TUNE_LABELS = ("imports_fell_vs_rest", "ended_in_duty")
 TUNE_VALID_YEARS = (2015, 2016, 2017)  # before every test year
 TUNE_TRIALS = 20
 TUNED_FILE = RUN_DIR / "tuned.json"
+# The model the app uses (`final`): the label that tested best, and its levels by share of scores.
+FINAL_LABEL = "imports_fell_vs_rest"
+LEVEL_SHARES = {"high": 0.25, "low": 0.25}
 # Model settings: the trade risk model's defaults, smaller (there are far fewer rows).
 PARAMS = {
     "lightgbm": {"n_estimators": 300, "learning_rate": 0.03, "num_leaves": 15, "min_child_samples": 40,
@@ -124,11 +130,13 @@ def past_duty_rates(cases: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(out).reset_index().rename(columns={"index": "case_id"})
 
 
-def past_fall_rates(rows: pd.DataFrame) -> pd.DataFrame:
-    """For each case, the share of earlier cases whose named imports fell against the rest of the market
-    (imports_fell_vs_rest, the case's average over its products): in its market, against its origin, and
-    in its HS chapter. A case counts from the start of its opening year + 3, when its 2 years after are known."""
-    labelled = rows[rows["imports_fell_vs_rest"].notna()].assign(chapter=lambda f: f["hs6"].str[:2])
+def past_fall_rates(rows: pd.DataFrame, history_rows: pd.DataFrame | None = None) -> pd.DataFrame:
+    """For each case in `rows`, the share of earlier cases whose named imports fell against the rest of the
+    market (imports_fell_vs_rest, the case's average over its products): in its market, against its origin,
+    and in its HS chapter. A case counts from the start of its opening year + 3, when its 2 years after are
+    known. The earlier cases are `history_rows` (the feature file, when scoring a new case), else `rows`."""
+    history_rows = rows if history_rows is None else history_rows
+    labelled = history_rows[history_rows["imports_fell_vs_rest"].notna()].assign(chapter=lambda f: f["hs6"].str[:2])
     history = labelled.groupby("case_id").agg(market=("market", "first"), exporter=("exporter", "first"), chapter=("chapter", "first"),
                                               year=("year", "first"), fell=("imports_fell_vs_rest", "mean")).reset_index()
     history["known_from"] = pd.to_datetime((history["year"] + 3).astype(str) + "-01-01")
@@ -168,6 +176,24 @@ def named_origins(cases: pd.DataFrame) -> dict[tuple, set]:
     return named
 
 
+def market_shape(before_flows: dict[str, float], names: set[str], exporter: str) -> tuple[float, float, float, float]:
+    """The market the year before the opening (origin -> imports): the share the named origins supply, this
+    origin's part of that, the biggest other supplier's share, and how many other suppliers have 1%+. With a
+    safeguard ("ALL" named) every origin is named. In MARKET_SHAPE_FEATURES' order."""
+    before_total = sum(before_flows.values())
+    if before_total <= 0:
+        return (np.nan,) * 4
+    rest_flows = {} if "ALL" in names else {o: v for o, v in before_flows.items() if o not in names}
+    named_before = before_total - sum(rest_flows.values())
+    own = before_flows.get(exporter, 0.0)
+    return (
+        named_before / before_total,
+        own / named_before if named_before > 0 else np.nan,
+        max(rest_flows.values(), default=0.0) / before_total,
+        float(sum(v >= 0.01 * before_total for v in rest_flows.values())),
+    )
+
+
 def import_changes(cases: pd.DataFrame, imports: pd.DataFrame, all_cases: pd.DataFrame) -> pd.DataFrame:
     """For each row: the named origin's imports the year before and the best of the 2 years after (no
     BACI row counts as 0: the flow stopped), and the same for the origins no case named (the rest of the
@@ -181,18 +207,9 @@ def import_changes(cases: pd.DataFrame, imports: pd.DataFrame, all_cases: pd.Dat
     for market, exporter, hs6, year in cases[["market", "exporter", "hs6", "year"]].itertuples(index=False):
         y = int(year)
         names = named.get((market, hs6, y), {exporter})
-        before_total = total.get((market, hs6, y - 1), 0.0)
-        before_flows = per_market_origin.get((market, hs6, y - 1), {})
         own = [by_origin_lookup.get((market, hs6, exporter, t), 0.0) for t in (y - 1, y + 1, y + 2)]
         safeguard = "ALL" in names  # a safeguard hit every origin: no rest of the market to compare with
-        rest_flows = {} if safeguard else {o: v for o, v in before_flows.items() if o not in names}
-        named_before = before_total - sum(rest_flows.values())
-        features = (
-            named_before / before_total if before_total > 0 else np.nan,  # named_share_of_market
-            own[0] / named_before if named_before > 0 else np.nan,  # own_share_of_named
-            max(rest_flows.values(), default=0.0) / before_total if before_total > 0 else np.nan,  # top_rest_share_of_market
-            float(sum(v >= 0.01 * before_total for v in rest_flows.values())) if before_total > 0 else np.nan,  # rest_suppliers_over_1pct
-        )
+        features = market_shape(per_market_origin.get((market, hs6, y - 1), {}), names, exporter)
         if y + 2 > LAST_TRADE_YEAR:
             out.append((np.nan,) * 4 + features)
             continue
@@ -395,11 +412,62 @@ def compare() -> None:
     print(f"\nsaved {RUN_DIR / 'compare.json'}")
 
 
+# ---------------------------------------------------------------- final
+
+def save_ensemble(model: Ensemble, folder: Path) -> list[str]:
+    """One file per member, the names `scoring.SavedModel` loads."""
+    files = []
+    for member in model.members:
+        if member.kind == "lightgbm":
+            files.append("model_lightgbm.txt")
+            member.estimator.booster_.save_model(str(folder / files[-1]))
+        elif member.kind == "xgboost":
+            files.append("model_xgboost.json")
+            member.estimator.save_model(str(folder / files[-1]))
+        else:
+            files.append("model_catboost.cbm")
+            member.estimator.save_model(str(folder / files[-1]))
+    return files
+
+
+def final() -> None:
+    """The model the app scores with: FINAL_LABEL, every feature, the default settings (tuning didn't help
+    on the test years). Its levels come from the walk-forward scores of IMPORT_TEST_YEARS, which no model saw
+    in training: the top LEVEL_SHARES["high"] of them are high, the bottom LEVEL_SHARES["low"] low. Then it is
+    trained on every labelled case and saved with its cut-offs to models/harshness/<run>/."""
+    rows = pd.read_parquet(HARSHNESS_FILE)
+    features = CASE_FEATURES + NEW_FEATURES + FEATURES
+    labelled = rows[rows[FINAL_LABEL].notna()]
+    walk_forward = []
+    for year in IMPORT_TEST_YEARS:
+        train, test = labelled[labelled["year"] < year], labelled[labelled["year"] == year]
+        walk_forward.append(test.assign(score=ensemble(train, FINAL_LABEL, features, np.ones(len(train))).score(test)))
+    scored = pd.concat(walk_forward, ignore_index=True)
+    thresholds = {"high": float(scored["score"].quantile(1 - LEVEL_SHARES["high"])),
+                  "medium": float(scored["score"].quantile(LEVEL_SHARES["low"]))}
+    scored["level"] = np.where(scored["score"] >= thresholds["high"], "high",
+                               np.where(scored["score"] >= thresholds["medium"], "medium", "low"))
+    scored["weight"] = case_weights(scored)
+    levels = {level: {"cases": int(group["case_id"].nunique()),
+                      "share_fell": float(np.average(group[FINAL_LABEL], weights=group["weight"]))}
+              for level, group in scored.groupby("level")}
+    print("levels (walk-forward 2018-2022):", json.dumps(levels))
+    model = ensemble(labelled, FINAL_LABEL, features, np.ones(len(labelled)))
+    RUN_DIR.mkdir(parents=True, exist_ok=True)
+    report = {"label": FINAL_LABEL, "params": PARAMS, "trained_on_years": [int(labelled["year"].min()), int(labelled["year"].max())],
+              "rows": len(labelled), "cases": int(labelled["case_id"].nunique()), "thresholds": thresholds, "levels": levels,
+              "walk_forward": per_case_metrics(scored["score"].to_numpy(), scored, FINAL_LABEL),
+              "model_files": save_ensemble(model, RUN_DIR)}
+    (RUN_DIR / "features.json").write_text(json.dumps(features, indent=1))
+    (RUN_DIR / "report.json").write_text(json.dumps(report, indent=1))
+    print(f"saved the model to {RUN_DIR}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("step", choices=["build", "tune", "compare"])
+    parser.add_argument("step", choices=["build", "tune", "compare", "final"])
     args = parser.parse_args()
-    {"build": build, "tune": tune, "compare": compare}[args.step]()
+    {"build": build, "tune": tune, "compare": compare, "final": final}[args.step]()
 
 
 if __name__ == "__main__":

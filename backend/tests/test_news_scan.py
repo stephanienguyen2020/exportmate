@@ -20,11 +20,13 @@ from app.services.news_scan_exam import (
 from app.services.news_scan_rules import (
     age_days,
     article_id,
+    article_measures,
     clean_measure,
     clean_mentions,
     collect_candidates,
     company_reading,
     decide,
+    measures_to_score,
 )
 from app.services.news_sources import NewsAccess
 
@@ -219,6 +221,34 @@ def test_a_scan_records_articles_alerts_and_each_sources_health(world, fake_gemi
     world.lock = None
     again = news_scan_runs.run_claimed_scan()
     assert again["articlesAnalysed"] == 0 and len(world.scan_records) == 2
+
+
+def test_a_trade_measure_is_saved_once_per_article_and_sent_to_be_scored(world, monkeypatch):
+    sent = []
+    monkeypatch.setattr(news_scan, "start_measures", lambda measures: sent.append(measures) or True)
+    scan = news_scan_runs.run_claimed_scan()
+    plywood = article_id("https://n.example/1")
+    # Two companies' alerts carry it; the article keeps one, and the job gets it once.
+    sample, company = world.alerts[f"{plywood}~sample"], world.alerts[f"{plywood}~company-a"]
+    assert sample["measure"] == company["measure"]
+    assert world.articles[plywood]["measure"]["kind"] == "anti_dumping"
+    assert "measure" not in world.articles[article_id("https://n.example/2")]
+    assert sent == [{plywood: world.articles[plywood]["measure"]}]
+    assert scan["measuresToScore"] == 1
+
+
+def test_only_the_models_kinds_with_a_market_and_a_code_are_scored():
+    measure = {"kind": "anti_dumping", "markets": ["EU"], "productHs": ["441233"]}
+    alerts = [
+        {"articleId": "a", "measure": measure},
+        {"articleId": "a", "measure": {**measure, "productHs": ["4412"]}},
+        {"articleId": "b", "measure": {**measure, "kind": "tariff"}},
+        {"articleId": "c", "measure": {**measure, "markets": []}},
+        {"articleId": "d"},
+    ]
+    measures = article_measures(alerts)
+    assert measures["a"] == measure and set(measures) == {"a", "b", "c"}
+    assert measures_to_score(measures) == {"a": measure}
 
 
 def test_an_article_one_company_couldnt_assess_is_tried_again(world, fake_gemini):

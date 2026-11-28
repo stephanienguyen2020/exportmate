@@ -117,3 +117,40 @@ class TradeCase(Base):
         Index("ix_trade_cases_market_hs6", "market", "hs6"),
         Index("ix_trade_cases_hs6", "hs6"),
     )
+
+
+class MeasureScore(Base):
+    """One scoring of one row of a trade measure a news article reports: how harsh it is for that
+    market, exporting country and product (the harshness model, ml/trade_risk/harshness_scoring.py).
+    The news scan writes the measure down once per article (Firestore `articles`, `measure`) and
+    starts the Order features job with it; rows are only added. Every company's alert about the
+    article reads the same rows. Design: ml/docs/HARSHNESS_MODEL.md."""
+
+    __tablename__ = "measure_scores"
+    id: Mapped[uuid.UUID] = id_column()
+    article_id: Mapped[str] = mapped_column(String(40), nullable=False)
+    # The scan's words: anti_dumping, anti_subsidy, safeguard (the model's kinds); petition, opening, ...
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    stage: Mapped[str] = mapped_column(String(20), nullable=False)
+    market: Mapped[str] = mapped_column(String(4), nullable=False)
+    exporter: Mapped[str] = mapped_column(String(2), nullable=False)
+    hs6: Mapped[str] = mapped_column(String(6), nullable=False)
+    model_hs6: Mapped[str | None] = mapped_column(String(6))
+    # high, medium, low, or no_data (no recent figures, or a flow too small to score).
+    level: Mapped[str] = mapped_column(String(10), nullable=False)
+    # The model's probability that the exporter's imports into the market fall by half against
+    # the rest of the market within 2 years.
+    score: Mapped[float | None] = mapped_column(Float)
+    reasons: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    note: Mapped[str | None] = mapped_column(Text)
+    # model, or gemini for the kinds the model doesn't cover.
+    scored_by: Mapped[str] = mapped_column(String(10), nullable=False)
+    model_version: Mapped[str] = mapped_column(String(40), nullable=False)
+    data_from: Mapped[str | None] = mapped_column(String(7))
+    data_to: Mapped[str | None] = mapped_column(String(7))
+    data_source: Mapped[str | None] = mapped_column(String(10))
+    scored_at: Mapped[datetime] = created_column()
+    __table_args__ = (
+        Index("ix_measure_scores_article", "article_id", "scored_at"),
+        Index("ix_measure_scores_pair", "market", "exporter", "hs6"),
+    )

@@ -314,7 +314,10 @@ def baci_figures(market: str, model_hs6: str, baci: pd.DataFrame) -> Figures:
     return Figures(rows, totals, LAST_TRADE_YEAR, year, year, "baci", to_save)
 
 
-def reasons_for(row: pd.Series, contributions: np.ndarray, features: list[str], names: dict) -> list[dict]:
+def reasons_for(row: pd.Series, contributions: np.ndarray, features: list[str], names: dict,
+                extra_text: dict | None = None) -> list[dict]:
+    """Up to REASON_LIMIT sentences for the features that raised the score most; `extra_text` words
+    another model's features (the harshness model's)."""
     worded = row.copy()
     worded["market"] = names.get(row["market"], row["market"])
     worded["exporter"] = names.get(row["exporter"], row["exporter"])
@@ -326,7 +329,8 @@ def reasons_for(row: pd.Series, contributions: np.ndarray, features: list[str], 
         value = row[feature]
         if value is None or (isinstance(value, float) and np.isnan(value)):
             continue
-        text = (NO_FIGURES_TEXT.get(feature) or REASON_TEXT.get(feature, lambda x, r: None))(value, worded)
+        worder = NO_FIGURES_TEXT.get(feature) or (extra_text or {}).get(feature) or REASON_TEXT.get(feature)
+        text = worder(value, worded) if worder else None
         if text:
             result.append({"feature": feature, "text": text[0].upper() + text[1:], "contribution": round(float(contributions[index]), 4)})
     return result
@@ -436,33 +440,45 @@ class Job:
             name = self.countries.names.get(market, market)
             return self.no_data(pair, f"{name} has opened no anti-dumping or anti-subsidy cases in our records.",
                                 model_hs6, level="low")
-        baci = baci_rows(market, model_hs6)
+        figures = self.pair_figures(db, pair, market, model_hs6)
+        return self.score(db, pair, market, exporter, model_hs6, figures)
+
+    def pair_figures(self, db: psycopg.Connection, pair: Pair, market: str, model_hs6: str) -> Figures:
+        """The market's imports of the product from every exporter: Comtrade's latest 12 months (and the
+        windows before them), saved to import_figures, else BACI's latest year."""
         figures = comtrade_figures(pair, market, pair.hs6, stored_months(db, pair), self.countries, self.key, self.today)
         save_figures(db, pair, figures.to_save, self.countries)
         if figures.trade.empty:
             # Comtrade's latest 12 months aren't complete or recent: BACI's latest year.
-            figures = baci_figures(market, model_hs6, baci)
+            figures = baci_figures(market, model_hs6, baci_rows(market, model_hs6))
             save_figures(db, pair, figures.to_save, self.countries)
         else:
             figures.trade["hs6"] = model_hs6
-        return self.score(db, pair, market, exporter, model_hs6, figures)
+        return figures
 
-    def score(self, db, pair: Pair, market: str, exporter: str, model_hs6: str, figures: Figures) -> dict:
+    def flow_row(self, db: psycopg.Connection, pair: Pair, exporter: str, model_hs6: str,
+                 figures: Figures) -> tuple[pd.DataFrame | None, str]:
+        """The pair's features (a one-row frame of FEATURES), saved to trade_flow_features; or None and why."""
         panel = trade_features(figures.trade, figures.exporter_totals, years=[figures.year]) if not figures.trade.empty else None
         match = panel[panel["exporter"] == exporter] if panel is not None and not panel.empty else None
         if match is None or match.empty:
             sold = figures.trade[(figures.trade["exporter"] == exporter) & (figures.trade["year"] == figures.year)]["value_usd"].sum() \
                 if not figures.trade.empty else 0
-            note = ("Imports under $1M a year: too small for the model to score." if sold > 0
-                    else "No recorded imports of this product from this country in the latest figures.")
             # Older features would otherwise be scored again by --rescore.
             db.execute("DELETE FROM trade_flow_features WHERE market = %s AND exporter = %s AND hs6 = %s",
                        (pair.market, pair.exporter, pair.hs6))
+            return None, ("Imports under $1M a year: too small for the model to score." if sold > 0
+                          else "No recorded imports of this product from this country in the latest figures.")
+        frame = history_features(match.reset_index(drop=True), self.cases, self.today.year)
+        save_features(db, pair, model_hs6, frame.iloc[0], figures)
+        return frame, ""
+
+    def score(self, db, pair: Pair, market: str, exporter: str, model_hs6: str, figures: Figures) -> dict:
+        frame, note = self.flow_row(db, pair, exporter, model_hs6, figures)
+        if frame is None:
             return {**self.no_data(pair, note, model_hs6), "data_from": figures.data_from or None,
                     "data_to": figures.data_to or None, "data_source": figures.data_source or None}
-        frame = history_features(match.reset_index(drop=True), self.cases, self.today.year)
         row = frame.iloc[0]
-        save_features(db, pair, model_hs6, row, figures)
         score = float(self.model.score(frame)[0])
         percentile = self.model.percentile(np.array([score]))
         contributions = self.model.contributions(frame)[0]
